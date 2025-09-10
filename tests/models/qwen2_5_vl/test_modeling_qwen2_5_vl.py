@@ -30,7 +30,6 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    is_flaky,
     require_cv2,
     require_flash_attn,
     require_torch,
@@ -445,10 +444,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     @unittest.skip(reason="We cannot configure to output a smaller model.")
     def test_model_is_small(self):
         pass
-
-    @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        super().test_prompt_lookup_decoding_matches_greedy_search()
 
 
 @require_torch

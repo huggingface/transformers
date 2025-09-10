@@ -32,7 +32,8 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
@@ -333,17 +334,17 @@ class Ovis2VisionEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         norm_hidden_states = self.rms_norm1(hidden_states)
-        attn_output, attn_weights = self.attention(hidden_states=norm_hidden_states, attention_mask=attention_mask)
+        attn_output, _ = self.attention(hidden_states=norm_hidden_states, attention_mask=attention_mask, **kwargs)
 
         hidden_states = hidden_states + attn_output
         norm_hidden_states = self.rms_norm2(hidden_states)
         mlp_output = self.ffn(norm_hidden_states)
 
         hidden_states = hidden_states + mlp_output
-        return (hidden_states, attn_weights) if output_attentions else (hidden_states, None)
+        return hidden_states
 
 
 class Ovis2VisionEncoder(nn.Module):
@@ -363,67 +364,18 @@ class Ovis2VisionEncoder(nn.Module):
 
     # Ignore copy
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
+            hidden_states = encoder_layer(hidden_states, attention_mask, **kwargs)
 
-            layer_outputs = encoder_layer(
-                hidden_states,
-                attention_mask,
-                output_attentions=output_attentions,
-            )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=encoder_states,
-            attentions=all_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class Ovis2VisionTransformer(nn.Module):
@@ -440,32 +392,20 @@ class Ovis2VisionTransformer(nn.Module):
         self,
         pixel_values,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         hidden_states = self.embeddings(pixel_values)
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
 
-        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.rms_norm(last_hidden_state)
 
-        return BaseModelOutput(
-            last_hidden_state=last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return BaseModelOutput(last_hidden_state=last_hidden_state)
 
 
 class Ovis2VisualEmbeddingTable(nn.Embedding):
@@ -516,10 +456,9 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> tuple[torch.Tensor, torch.Tensor]:
-        outputs = self.transformer(pixel_values)
-        last_hidden_state = outputs.last_hidden_state
-
+    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+        outputs = self.transformer(pixel_values, **kwargs)
+        last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
             num_images, seq_len, hidden_dim = last_hidden_state.shape
             hidden_stride = self.config.hidden_stride
@@ -653,8 +592,8 @@ class Ovis2Model(Ovis2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
@@ -774,8 +713,8 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
