@@ -228,8 +228,6 @@ def _test_eager_matches_sdpa_inference(
             ("cuda", True, torch.float16): 5e-3,
         }
 
-    set_model_tester_for_less_flaky_test(self)
-
     for model_class in self.all_model_classes:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
