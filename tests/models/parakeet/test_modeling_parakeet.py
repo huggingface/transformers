@@ -33,7 +33,7 @@ if is_torch_available():
 
     from transformers import (
         AutoProcessor,
-        ParakeetConfig,
+        ParakeetCTCConfig,
         ParakeetEncoder,
         ParakeetEncoderConfig,
         ParakeetForCTC,
@@ -213,7 +213,7 @@ class ParakeetForCTCModelTester:
         return config, input_features, attention_mask
 
     def get_config(self):
-        return ParakeetConfig.from_encoder_config(
+        return ParakeetCTCConfig.from_encoder_config(
             encoder_config=self.encoder_model_tester.get_config(),
             vocab_size=self.vocab_size,
             blank_token_id=self.blank_token_id,
@@ -261,7 +261,7 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ParakeetForCTCModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ParakeetConfig)
+        self.config_tester = ConfigTester(self, config_class=ParakeetCTCConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -313,7 +313,7 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = "bezzam/parakeet-ctc-1.1b-hf"
-        cls.dtype = torch.float32
+        cls.dtype = torch.bfloat16
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
     def tearDown(self):

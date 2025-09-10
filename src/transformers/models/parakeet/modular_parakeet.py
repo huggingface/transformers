@@ -30,30 +30,7 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ...utils.generic import check_model_inputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
-from ..wav2vec2.processing_wav2vec2 import Wav2Vec2Processor
-from .configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig
-
-
-class ParakeetProcessor(Wav2Vec2Processor):
-    feature_extractor_class = "ParakeetFeatureExtractor"
-    tokenizer_class = "ParakeetCTCTokenizer"
-
-    def decode(self, token_ids, **kwargs):
-        if token_ids.shape[0] != 1:
-            raise ValueError(
-                f"Expecting a single output to be decoded but received {token_ids.shape[0]} samples instead."
-            )
-        # Default to grouping tokens for CTC duplicate removal
-        group_tokens = kwargs.pop("group_tokens", True)
-        return self.tokenizer.decode(token_ids[0], group_tokens=group_tokens, **kwargs)
-
-    def batch_decode(self, *args, **kwargs):
-        # Default to grouping tokens for CTC duplicate removal
-        group_tokens = kwargs.pop("group_tokens", True)
-        return self.tokenizer.batch_decode(*args, group_tokens=group_tokens, **kwargs)
-
-    def pad(self):
-        raise AttributeError("Not needed for Parakeet")
+from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
@@ -317,7 +294,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class ParakeetPreTrainedModel(PreTrainedModel):
-    config: ParakeetConfig
+    config: ParakeetCTCConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
@@ -348,7 +325,7 @@ class ParakeetPreTrainedModel(PreTrainedModel):
             module.bias_v.data.normal_(mean=0.0, std=std)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
-        encoder_config = self.config.encoder_config if isinstance(self.config, ParakeetConfig) else self.config
+        encoder_config = self.config.encoder_config if isinstance(self.config, ParakeetCTCConfig) else self.config
 
         kernel_size = encoder_config.subsampling_conv_kernel_size
         stride = encoder_config.subsampling_conv_stride
@@ -489,7 +466,7 @@ class ParakeetGenerateOutput(ModelOutput):
     """
 )
 class ParakeetForCTC(ParakeetPreTrainedModel):
-    def __init__(self, config: ParakeetConfig):
+    def __init__(self, config: ParakeetCTCConfig):
         super().__init__(config)
         self.encoder = ParakeetEncoder(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
@@ -583,4 +560,4 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         return sequences
 
 
-__all__ = ["ParakeetForCTC", "ParakeetEncoder", "ParakeetPreTrainedModel", "ParakeetProcessor"]
+__all__ = ["ParakeetForCTC", "ParakeetEncoder", "ParakeetPreTrainedModel"]

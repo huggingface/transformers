@@ -34,7 +34,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
-from .configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig
+from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
@@ -92,10 +92,10 @@ class ParakeetEncoderFeedForward(nn.Module):
 
 
 class ParakeetEncoderConvolutionModule(nn.Module):
-    def __init__(self, config: ParakeetConfig, module_config=None):
+    def __init__(self, config: ParakeetCTCConfig, module_config=None):
         """
         Args:
-            config (ParakeetEncoderConfig): Configuration for the model.
+            config (ParakeetEncoderCTCConfig): Configuration for the model.
             module_config (dict): Configuration for the module (e.g., encoder or decoder).
         """
         super().__init__()
@@ -411,7 +411,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class ParakeetPreTrainedModel(PreTrainedModel):
-    config: ParakeetConfig
+    config: ParakeetCTCConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
@@ -442,7 +442,7 @@ class ParakeetPreTrainedModel(PreTrainedModel):
             module.bias_v.data.normal_(mean=0.0, std=std)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
-        encoder_config = self.config.encoder_config if isinstance(self.config, ParakeetConfig) else self.config
+        encoder_config = self.config.encoder_config if isinstance(self.config, ParakeetCTCConfig) else self.config
 
         kernel_size = encoder_config.subsampling_conv_kernel_size
         stride = encoder_config.subsampling_conv_stride
@@ -583,7 +583,7 @@ class ParakeetGenerateOutput(ModelOutput):
     """
 )
 class ParakeetForCTC(ParakeetPreTrainedModel):
-    def __init__(self, config: ParakeetConfig):
+    def __init__(self, config: ParakeetCTCConfig):
         super().__init__(config)
         self.encoder = ParakeetEncoder(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer

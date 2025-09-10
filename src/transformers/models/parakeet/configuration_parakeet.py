@@ -176,13 +176,13 @@ class ParakeetCTCConfig(PretrainedConfig):
 
     Example:
         ```python
-        >>> from transformers import ParakeetForCTC, ParakeetConfig
+        >>> from transformers import ParakeetForCTC, ParakeetCTCConfig
 
         >>> # Initializing a Parakeet configuration
-        >>> configuration = ParakeetConfig()
+        >>> configuration = ParakeetCTCConfig()
 
         >>> # Initializing a model from the configuration
-        >>> model = ParakeetConfig(configuration)
+        >>> model = ParakeetCTCConfig(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
@@ -211,15 +211,14 @@ class ParakeetCTCConfig(PretrainedConfig):
         self.blank_token_id = blank_token_id
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
-        self.use_bias = self.encoder_config.use_bias
-        self.initializer_range = self.encoder_config.initializer_range
 
         if isinstance(encoder_config, dict):
-            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
+            self.encoder_config = ParakeetEncoderConfig(**encoder_config)
         elif encoder_config is None:
             self.encoder_config = ParakeetEncoderConfig()
 
         self.encoder_config = self.encoder_config
+        self.initializer_range = self.encoder_config.initializer_range
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -231,10 +230,10 @@ class ParakeetCTCConfig(PretrainedConfig):
     @classmethod
     def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):
         r"""
-        Instantiate a [`ParakeetConfig`] (or a derived class) from parakeet encoder model configuration.
+        Instantiate a [`ParakeetCTCConfig`] (or a derived class) from parakeet encoder model configuration.
 
         Returns:
-            [`ParakeetConfig`]: An instance of a configuration object
+            [`ParakeetCTCConfig`]: An instance of a configuration object
         """
 
         return cls(encoder_config=encoder_config.to_dict(), **kwargs)
