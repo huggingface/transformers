@@ -230,3 +230,11 @@ class LongcatFlashModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     @unittest.skip("LongcatFlash buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_to_base(self):
         pass
+
+    def _get_cache_shapes(self, config, inputs, num_decoder_layers):
+        batch_size, seq_length = inputs["input_ids"].shape[:2]
+        num_key_value_heads = config.num_key_value_heads
+        per_head_embed_dim = config.v_head_dim + config.qk_rope_head_dim
+
+        default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
+        return [[default_self_attention_shape, default_self_attention_shape] for _ in range(num_decoder_layers)]
