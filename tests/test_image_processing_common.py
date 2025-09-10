@@ -16,10 +16,12 @@ import inspect
 import json
 import os
 import pathlib
+import subprocess
 import tempfile
 import time
 import warnings
 from copy import deepcopy
+from datetime import datetime
 
 import numpy as np
 import pytest
@@ -28,6 +30,7 @@ from packaging import version
 
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, AnnotionFormat
+from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     is_flaky,
@@ -631,6 +634,61 @@ class ImageProcessingTestMixin:
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
         self._assert_slow_fast_tensors_equivalence(
             output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
+        )
+
+    def test_new_models_require_fast_image_processor(self):
+        if self.fast_image_processing_class is not None:
+            return
+        if self.image_processing_class is None:
+            self.skipTest("No image processing class defined")
+
+        def _is_new_model_by_commit_date(model_type, date_cutoff=(2019, 1, 1)):
+            try:
+                # Convert model_type to directory name and construct file path
+                model_dir = model_type.replace("-", "_")
+                slow_processor_file = f"src/transformers/models/{model_dir}/image_processing_{model_dir}.py"
+                # Check if the file exists otherwise skip the test
+                if not os.path.exists(slow_processor_file):
+                    return None
+                # Get the first commit date of the slow processor file
+                result = subprocess.run(
+                    ["git", "log", "--reverse", "--pretty=format:%ad", "--date=iso", slow_processor_file],
+                    capture_output=True,
+                    text=True,
+                    cwd=os.getcwd(),
+                )
+                if result.returncode != 0 or not result.stdout.strip():
+                    return None
+                # Parse the first line (earliest commit)
+                first_line = result.stdout.strip().split("\n")[0]
+                date_part = first_line.split(" ")[0]  # Extract just the date part
+                commit_date = datetime.strptime(date_part, "%Y-%m-%d")
+                # Check if committed after the cutoff date
+                cutoff_date = datetime(*date_cutoff)
+                return commit_date >= cutoff_date
+
+            except Exception:
+                # If any error occurs, conservatively skip the test
+                return None
+
+        image_processor_name = self.image_processing_class.__name__
+        model_type = None
+        for mapping_model_type, (slow_class, fast_class) in IMAGE_PROCESSOR_MAPPING_NAMES.items():
+            if slow_class == image_processor_name:
+                model_type = mapping_model_type
+                break
+
+        if model_type is None:
+            self.skipTest(f"Could not find model type for {image_processor_name} in IMAGE_PROCESSOR_MAPPING_NAMES")
+        # Check if this is a new model (added after 2024-01-01) based on git history
+        is_new_model = _is_new_model_by_commit_date(model_type)
+        if is_new_model is None:
+            self.skipTest(f"Could not determine if {model_type} is new based on git history")
+        # New models must have fast processors
+        self.assertTrue(
+            is_new_model,
+            f"Model '{model_type}' (processor: {image_processor_name}) was added after the cutoff date and must have "
+            f"a fast image processor implementation. Please implement the corresponding fast processor.",
         )
 
 
