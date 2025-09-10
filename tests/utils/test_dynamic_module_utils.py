@@ -139,7 +139,7 @@ def test_model_with_dotted_name_and_relative_imports():
 
     Without the fix, this raises: ModuleNotFoundError: No module named 'transformers_modules.test-model_v1'
     """
-    model_id = "August4293/test-model_v1.0"
+    model_id = "hf-internal-testing/remote_code_model_with_dots"
 
     model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
     assert model is not None
