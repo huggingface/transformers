@@ -646,7 +646,7 @@ def load_video(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        tuple[`np.array`, Dict]: A tuple containing:
+        tuple[`np.ndarray`, Dict]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - Metadata dictionary.
     """
@@ -721,7 +721,7 @@ def convert_to_rgb(
     Convert video to RGB by blending the transparency layer if it's in RGBA format, otherwise simply returns it.
 
     Args:
-        video (`np.array`):
+        video (`np.ndarray`):
             The video to convert.
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output video. If unset, will use the inferred format from the input.
