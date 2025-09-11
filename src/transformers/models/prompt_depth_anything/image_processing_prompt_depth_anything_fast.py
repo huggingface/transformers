@@ -223,25 +223,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         return padded_image
 
-    def _further_process_kwargs(
-        self,
-        prompt_depth: Optional[ImageInput] = None,
-        prompt_scale_to_meter: Optional[float] = None,
-        **kwargs,
-    ) -> dict:
-        """
-        Override the base method to handle custom PromptDepthAnything parameters.
-        No significant processing is needed here, but we just need to store parameters for later use in _preprocess.
-        """
-        kwargs = super()._further_process_kwargs(**kwargs)
-
-        # Handle prompt_depth by storing it for later use in _preprocess
-        if prompt_depth is not None:
-            kwargs["prompt_depth"] = prompt_depth
-        if prompt_scale_to_meter is not None:
-            kwargs["prompt_scale_to_meter"] = prompt_scale_to_meter
-
-        return kwargs
 
     def _validate_preprocess_kwargs(
         self,
