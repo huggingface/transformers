@@ -2206,7 +2206,7 @@ class WordpieceTokenizer:
         return output_tokens
 
 
-# Below: utilities for TAPAS tokenizer (independent from PyTorch/Tensorflow).
+# Below: utilities for TAPAS tokenizer
 # This includes functions to parse numeric values (dates and numbers) from both the table and questions in order
 # to create the column_ranks, inv_column_ranks, numeric_values, numeric values_scale and numeric_relations in
 # prepare_for_model of TapasTokenizer.

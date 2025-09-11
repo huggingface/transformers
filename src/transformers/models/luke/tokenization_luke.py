@@ -1412,8 +1412,8 @@ class LukeTokenizer(PreTrainedTokenizer):
                 Tokenized inputs. Can represent one input ([`BatchEncoding`] or `dict[str, list[int]]`) or a batch of
                 tokenized inputs (list of [`BatchEncoding`], *dict[str, list[list[int]]]* or *list[dict[str,
                 list[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
-                collate function. Instead of `list[int]` you can have tensors (numpy arrays, PyTorch tensors or
-                TensorFlow tensors), see the note above for the return type.
+                collate function. Instead of `list[int]` you can have tensors (numpy arrays, or PyTorch tensors),
+                see the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:

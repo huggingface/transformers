@@ -882,14 +882,12 @@ def find_all_documented_objects() -> list[str]:
 
 # One good reason for not being documented is to be deprecated. Put in this list deprecated objects.
 DEPRECATED_OBJECTS = [
-    "AdamWeightDecay",  # TensorFlow object, support is deprecated
     "AutoModelWithLMHead",
     "BartPretrainedModel",
     "DataCollator",
     "DataCollatorForSOP",
     "GlueDataset",
     "GlueDataTrainingArguments",
-    "GradientAccumulator",  # TensorFlow object, support is deprecated
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
@@ -906,10 +904,8 @@ DEPRECATED_OBJECTS = [
     "SquadV2Processor",
     "TextDataset",
     "TextDatasetForNextSentencePrediction",
-    "WarmUp",  # TensorFlow object, support is deprecated
     "Wav2Vec2ForMaskedLM",
     "Wav2Vec2Tokenizer",
-    "create_optimizer",  # TensorFlow object, support is deprecated
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",

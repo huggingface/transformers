@@ -142,7 +142,6 @@ class Pix2StructVisionAttention(nn.Module):
         self.dropout = config.attention_dropout
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.key = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
@@ -649,7 +648,6 @@ class Pix2StructTextAttention(nn.Module):
                 "when creating this class."
             )
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.key = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.hidden_size, bias=False)

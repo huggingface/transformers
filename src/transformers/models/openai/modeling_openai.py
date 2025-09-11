@@ -107,11 +107,11 @@ class Attention(nn.Module):
     def merge_heads(self, x):
         x = x.permute(0, 2, 1, 3).contiguous()
         new_x_shape = x.size()[:-2] + (x.size(-2) * x.size(-1),)
-        return x.view(*new_x_shape)  # in Tensorflow implementation: fct merge_states
+        return x.view(*new_x_shape)
 
     def split_heads(self, x, k=False):
         new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
-        x = x.view(*new_x_shape)  # in Tensorflow implementation: fct split_states
+        x = x.view(*new_x_shape)
         if k:
             return x.permute(0, 2, 3, 1)
         else:

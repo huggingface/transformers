@@ -2379,8 +2379,6 @@ def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_b
     Space to depth transform. Rearranges blocks of spatial data, into depth.
 
     This function assumes the channels to be first, but will place the channels last after transformation.
-
-    Based on https://discuss.pytorch.org/t/is-there-any-layer-like-tensorflows-space-to-depth-function/3487/15.
     """
     if len(frames.shape) == 4:
         batch_size, num_channels, height, width = frames.shape
