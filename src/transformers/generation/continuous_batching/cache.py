@@ -198,7 +198,7 @@ class PagedAttentionCache:
         # Add the inferred attributes to the class
         self.num_blocks = num_blocks
         self.max_batch_tokens = max_batch_tokens
-        logger.warning(
+        logger.debug(
             f"PagedAttentionCache initialized with {self.num_blocks = }, {self.block_size = }, {page_size = }, "
             f"{self.max_batch_tokens = } {num_attention_masks = }"
         )
@@ -464,7 +464,7 @@ class PagedAttentionMemoryHandler:
         ])
         """
         cache_memory = self.get_available_memory(max_memory_percent)
-        logger.info(f"Cache memory: {cache_memory}")
+        logger.debug(f"Cache memory: {cache_memory}")
 
         # Compute second-degree polynomial coefficients
         a = m * self.num_attention_masks * self._activation_dtype.itemsize
@@ -485,11 +485,11 @@ class PagedAttentionMemoryHandler:
         num_pages = floor(greatest_solution)
         num_blocks = num_pages // self.block_size
         if num_blocks > self._upper_bound_num_blocks:
-            logger.warning(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
+            logger.debug(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
             num_blocks = self._upper_bound_num_blocks
         max_batch_tokens = int(greatest_solution * m)
         if max_batch_tokens > self._upper_bound_max_batch_tokens:
-            logger.warning(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
+            logger.debug(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
             max_batch_tokens = self._upper_bound_max_batch_tokens
         return num_blocks, max_batch_tokens
 
