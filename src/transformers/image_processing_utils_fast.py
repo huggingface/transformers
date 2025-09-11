@@ -650,7 +650,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         if crop_size is not None:
             crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
         if pad_size is not None:
-            size = SizeDict(**get_size_dict(size=pad_size), param_name="pad_size")
+            size = SizeDict(**get_size_dict(size=pad_size, param_name="pad_size"))
         if isinstance(image_mean, list):
             image_mean = tuple(image_mean)
         if isinstance(image_std, list):
