@@ -18,10 +18,14 @@ from collections.abc import Sequence
 from typing import Optional
 
 import numpy as np
-import torch
-import torch.nn.functional as F
 
 from ...processing_utils import AudioKwargs, BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
+from ...utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
+    import torch.nn.functional as F
 
 
 class VocosAudioKwargs(AudioKwargs, total=False):

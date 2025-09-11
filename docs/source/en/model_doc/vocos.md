@@ -138,7 +138,7 @@ audio = model(codes=audio_codes, bandwidth=6.0)
 ## VocosProcessor
 
 [[autodoc]] VocosProcessor
-    - call
+    - __call__
 ## VocosModel
 
 [[autodoc]] VocosModel
