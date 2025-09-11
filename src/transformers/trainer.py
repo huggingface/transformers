@@ -3794,7 +3794,7 @@ class Trainer:
         """
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
-        if self.args.include_num_input_tokens_seen:
+        if self.args.include_num_input_tokens_seen != "no":
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
             if start_time is not None:
                 logs.update(speed_metrics("train", start_time, num_tokens=self.state.num_input_tokens_seen))
