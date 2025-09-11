@@ -162,7 +162,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
     model_input_names = ["pixel_values", "prompt_depth"]
 
-    # Default values - match the classical processor
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
