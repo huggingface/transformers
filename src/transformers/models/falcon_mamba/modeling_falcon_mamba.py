@@ -35,6 +35,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.import_utils import (
     is_causal_conv1d_available,
+    is_kernels_available,
     is_mamba_ssm_available,
     is_mambapy_available,
 )
@@ -54,6 +55,18 @@ if is_mamba_ssm_available():
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
+if is_kernels_available():
+    from kernels import get_kernel
+
+    kernel_causal_conv1d = get_kernel("kernels-community/causal-conv1d")
+    causal_conv1d_update, causal_conv1d_fn = (
+        kernel_causal_conv1d.causal_conv1d_update,
+        kernel_causal_conv1d.causal_conv1d_fn,
+    )
+elif is_causal_conv1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    causal_conv1d_update, causal_conv1d_fn = None, None
 if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
