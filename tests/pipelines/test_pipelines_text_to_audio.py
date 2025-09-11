@@ -247,7 +247,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_csm_model_pt(self):
-        speech_generator = pipeline(task="text-to-audio", model="sesame/csm-1b", framework="pt")
+        speech_generator = pipeline(task="text-to-audio", model="sesame/csm-1b")
 
         outputs = speech_generator("[0]This is a test")
         self.assertEqual(outputs["sampling_rate"], 24000)
