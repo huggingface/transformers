@@ -2465,19 +2465,8 @@ class GenerationMixin(ContinuousMixin):
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
-        # Expand inputs depending on the generation mode
-        input_ids, model_kwargs = self._expand_inputs_for_generation(
-            input_ids=input_ids,
-            expand_size=max(generation_config.num_beams, generation_config.num_return_sequences),
-            is_encoder_decoder=self.config.is_encoder_decoder,
-            **model_kwargs,
-        )
-
         if generation_config.token_healing:
             input_ids = self.heal_tokens(input_ids, generation_mode_kwargs.get("tokenizer"))
-
-        if streamer is not None:
-            streamer.put(input_ids.cpu())
 
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[1]
@@ -2546,11 +2535,6 @@ class GenerationMixin(ContinuousMixin):
 
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
-
-        # 8b. Prefill pass
-        # Some decoding methods (e.g. assisted generation) do not admit the prefill pass
-        if "prefill_outputs" in inspect.signature(decoding_method).parameters:
-            generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
 
         # 9. Call generation mode
         result = decoding_method(
@@ -2683,7 +2667,6 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        prefill_outputs: torch.FloatTensor = None,
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -2718,8 +2701,6 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        if prefill_outputs is None:
-            raise ValueError("Prefill outputs must be provided.")
         # init values
         pad_token_id = generation_config._pad_token_tensor
         output_attentions = generation_config.output_attentions
@@ -2737,6 +2718,19 @@ class GenerationMixin(ContinuousMixin):
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
+        # Expand inputs depending on the generation mode
+        input_ids, model_kwargs = self._expand_inputs_for_generation(
+            input_ids=input_ids,
+            expand_size=generation_config.num_return_sequences,
+            is_encoder_decoder=self.config.is_encoder_decoder,
+            **model_kwargs,
+        )
+
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
+
+        model_kwargs = self._prefill(input_ids, generation_config, model_kwargs)
+
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
             encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
@@ -2752,12 +2746,8 @@ class GenerationMixin(ContinuousMixin):
         model_forward = self.maybe_get_compiled_call(model_kwargs, generation_config)
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            if prefill_outputs is not None:
-                outputs = prefill_outputs
-                prefill_outputs = None
-            else:
-                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-                outputs = model_forward(**model_inputs, return_dict=True)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            outputs = model_forward(**model_inputs, return_dict=True)
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
@@ -3182,6 +3172,16 @@ class GenerationMixin(ContinuousMixin):
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
+        # Expand inputs depending on the generation mode
+        input_ids, model_kwargs = self._expand_inputs_for_generation(
+            input_ids=input_ids,
+            expand_size=generation_config.num_beams,
+            is_encoder_decoder=self.config.is_encoder_decoder,
+            **model_kwargs,
+        )
+
+        model_kwargs = self._prefill(input_ids, generation_config, model_kwargs)
+
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
             encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
@@ -3516,6 +3516,9 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
             )
 
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
+
         # keep track of which sequences are already finished
         batch_size, cur_len = input_ids.shape[:2]
         if batch_size > 1:
@@ -3712,22 +3715,26 @@ class GenerationMixin(ContinuousMixin):
             return input_ids
 
     def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
-        output_attentions = generation_config.output_attentions
-        output_hidden_states = generation_config.output_hidden_states
-
         if generation_config.prefill_chunk_size is None:
-            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-            return self(**model_inputs, return_dict=True)
+            prefill_input_ids = input_ids[:, :-1, ...]
+            model_kwargs = self._get_initial_cache_position(prefill_input_ids.shape[1], input_ids.device, model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(prefill_input_ids, **model_kwargs)
+            outputs = self(**model_inputs, return_dict=True)
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+            )
+            return model_kwargs
         else:  # Chunked prefill
             # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
             # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
             torch._dynamo.config.cache_size_limit = 64
 
             chunk_size = generation_config.prefill_chunk_size
-            input_chunks = torch.split(input_ids, chunk_size, dim=-1)
+            # Only chunk up the token just before last, so that decoding is completely performed outside this function
+            # (here we simply prefill the cache)
+            input_chunks = torch.split(input_ids[:, :-1], chunk_size, dim=-1)
 
             if "past_key_values" not in model_kwargs:
                 raise ValueError("Cannot use prefill chunking without a cache")
@@ -3745,8 +3752,6 @@ class GenerationMixin(ContinuousMixin):
                 )
                 model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
                 model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
-                model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-                model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
                 outputs = model_forward(**model_inputs, return_dict=True)
 
@@ -3757,7 +3762,7 @@ class GenerationMixin(ContinuousMixin):
             model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
             _ = model_kwargs.pop("position_ids", None)
             # Latest outputs contain next token logits
-            return outputs
+            return model_kwargs
 
 
 def _speculative_sampling(
