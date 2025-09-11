@@ -605,12 +605,12 @@ class TopHLogitsWarper(LogitsProcessor):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B")
+    >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
 
     >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
 
-    >>> outputs = model.generate(**inputs, do_sample=True, top_h=0.1)
+    >>> outputs = model.generate(**inputs, do_sample=True, top_h=0.4)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
     A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
     ```
