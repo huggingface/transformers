@@ -222,9 +222,21 @@ class Entry:
     conversation_id: str
     expiry_task: asyncio.Task
     evict_callback: Optional[EvictCallback] = None
+    lease: int = 0
+    _lease_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
 
 class ConversationTTLCache:
+    """
+    A simple TTL (time to live) cache for conversations, with a maximum number of entries. Each entry has a TTL, after which it is
+    evicted from the cache. The cache is implemented as a dictionary, with the conversation ID as the key and an
+    Entry object as the value. The Entry object contains the conversation ID, the expiry task, and an optional
+    eviction callback.
+
+    We use this TTL cache to track conversations across http requests and manually evict KV Cache entries handled by the `ContinuousBatchingManager`
+    by setting the CBM's `manual_eviction` flag to `True` and using the `evict_callback` of this cache's entries.
+    """
+
     def __init__(self, entry_timeout_seconds: int, max_entries: int = 512):
         if max_entries <= 0:
             raise ValueError("max_entries must be greater than 0")
@@ -232,6 +244,29 @@ class ConversationTTLCache:
         self.conversation_cache: dict[str, Entry] = {}
         self.max_entries = max_entries
         self.ttl = float(entry_timeout_seconds)
+
+    def acquire_lease(self, conversation_id: str, evict_callback: Optional[EvictCallback] = None):
+        """
+        Acquire a lease on a given cache entry, incrementing its lease counter to prevent the entry from being evicted when in use.
+        """
+        self.touch(conversation_id, evict_callback)  # ensure entry exists
+        entry = self.conversation_cache.get(conversation_id)
+        if entry is not None:
+            with entry._lease_lock:
+                entry.lease += 1
+
+    def release_lease(self, conversation_id: str):
+        """
+        Release a lease on a cache entry, decrementing its lease counter which allows for eviction when lease == 0.
+        """
+        entry = self.conversation_cache.get(conversation_id)
+        if entry is not None:
+            with entry._lease_lock:
+                entry.lease -= 1
+                if entry.lease < 0:
+                    logger.warning(f"Lease for conversation {conversation_id} is negative")
+                    entry.lease = 0
+                self.touch(conversation_id)  # reset the TTL on release
 
     def touch(self, conversation_id: str, evict_callback: Optional[EvictCallback] = None):
         """
@@ -263,15 +298,23 @@ class ConversationTTLCache:
             self.conversation_cache[conversation_id] = entry
 
     async def evict_entry_after_expiry(self, conversation_id: str, ttl: float):
-        """Evict an entry after its TTL has expired."""
+        """Schedules an entry to be evicted after a given TTL."""
+        entry = self.conversation_cache.get(conversation_id)
+        if entry is None:
+            logger.warning(f"Tried to schedule eviction for non-existent conversation {conversation_id}")
+            return
         try:
-            await asyncio.sleep(ttl)
+            while True:
+                await asyncio.sleep(ttl)
+                with entry._lease_lock:
+                    if entry.lease <= 0:
+                        break
         except asyncio.CancelledError:
             return
         self.evict_entry(conversation_id)
+        gc.collect()
 
     def evict_entry(self, conversation_id: str):
-        """Evict an entry from the conversation cache."""
         if conversation_id in self.conversation_cache:
             entry = self.conversation_cache.pop(conversation_id)
             if entry.expiry_task is not asyncio.current_task():
@@ -283,7 +326,7 @@ class ConversationTTLCache:
                     logger.error(f"Error in evict callback for conversation {conversation_id}: {e}")
             logger.info(f"Evicted conversation {conversation_id} from cache")
 
-    async def close(self) -> None:
+    def close(self) -> None:
         self._closed = True
         for e in list(self.conversation_cache.values()):
             if e.expiry_task and not e.expiry_task.cancelled():
@@ -291,7 +334,6 @@ class ConversationTTLCache:
         self.conversation_cache.clear()
 
     def stats(self):
-        """Return stats about the conversation cache."""
         return {
             "active_conversations": len(self.conversation_cache),
         }
@@ -779,6 +821,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 model.delete_model()
             if self.running_continuous_batching_manager is not None:
                 self.running_continuous_batching_manager.stop(block=True, timeout=5)
+            self.conversation_cache.close()
 
         self.conversation_cache = ConversationTTLCache(entry_timeout_seconds=self.args.cache_timeout)
 
@@ -1006,12 +1049,13 @@ class ServeCommand(BaseTransformersCLICommand):
                 request_id = self.running_continuous_batching_manager.add_request(
                     _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens
                 )
+                self.conversation_cache.acquire_lease(
+                    request_id, self.running_continuous_batching_manager.evict_request_from_cache
+                )
                 for chunk in stream_chat_completion(request_id, decode_stream):
                     yield chunk
                     await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
-                self.conversation_cache.touch(
-                    request_id, self.running_continuous_batching_manager.evict_request_from_cache
-                )
+                self.conversation_cache.release_lease(request_id)
             except asyncio.CancelledError:
                 self.running_continuous_batching_manager.cancel_request(request_id)
                 logger.warning(f"Request {request_id} was cancelled.")
