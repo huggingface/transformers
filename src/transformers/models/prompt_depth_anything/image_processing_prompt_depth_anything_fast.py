@@ -224,33 +224,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         return padded_image
 
 
-    def _validate_preprocess_kwargs(
-        self,
-        keep_aspect_ratio: Optional[bool] = None,
-        ensure_multiple_of: Optional[int] = None,
-        do_pad: Optional[bool] = None,
-        size_divisor: Optional[int] = None,
-        prompt_depth: Optional[ImageInput] = None,
-        prompt_scale_to_meter: Optional[float] = None,
-        **kwargs,
-    ):
-        """
-        Overrides the base method to add custom validation.
-        Validate the kwargs for the preprocess method, including PromptDepthAnything-specific parameters.
-        """
-        # Call parent validation
-        super()._validate_preprocess_kwargs(**kwargs)
-
-        # Custom validation for PromptDepthAnything parameters
-        if do_pad and size_divisor is None:
-            raise ValueError("size_divisor must be provided when do_pad is True")
-
-        if ensure_multiple_of is not None and ensure_multiple_of < 1:
-            raise ValueError("ensure_multiple_of must be >= 1")
-
-        if prompt_scale_to_meter is not None and prompt_scale_to_meter <= 0:
-            raise ValueError("prompt_scale_to_meter must be > 0")
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
