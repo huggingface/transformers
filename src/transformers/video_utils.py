@@ -867,7 +867,8 @@ def group_videos_by_shape(
 
 
 def reorder_videos(
-    processed_videos: dict[tuple[int, int], "torch.Tensor"], grouped_videos_index: dict[int, tuple[tuple[int, int], int]]
+    processed_videos: dict[tuple[int, int], "torch.Tensor"],
+    grouped_videos_index: dict[int, tuple[tuple[int, int], int]],
 ) -> list["torch.Tensor"]:
     """
     Reconstructs a list of videos in the original order.
