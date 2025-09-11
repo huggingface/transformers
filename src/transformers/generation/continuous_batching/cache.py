@@ -481,7 +481,7 @@ class PagedAttentionMemoryHandler:
         b = 2 * (self.group_size * self.page_size * cache_dtype.itemsize + 2 * self.num_groups)
         b += m * (self.peak_activation_per_token * self._activation_dtype.itemsize + 28 + 4 * self.num_groups)
         c = -cache_memory
-        logger.info(f"Coefficients of 2nd degree polynomial: {a = }, {b = }, {c = }")
+        logger.debug(f"Coefficients of 2nd degree polynomial: {a = }, {b = }, {c = }")
 
         # Compute discriminant and greatest solution
         discriminant = b**2 - 4 * a * c
@@ -495,11 +495,11 @@ class PagedAttentionMemoryHandler:
         num_pages = floor(greatest_solution)
         num_blocks = num_pages // self.block_size
         if num_blocks > self._upper_bound_num_blocks:
-            logger.warning(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
+            logger.info(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
             num_blocks = self._upper_bound_num_blocks
         max_batch_tokens = int(greatest_solution * m)
         if max_batch_tokens > self._upper_bound_max_batch_tokens:
-            logger.warning(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
+            logger.info(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
             max_batch_tokens = self._upper_bound_max_batch_tokens
         return num_blocks, max_batch_tokens
 
@@ -527,7 +527,7 @@ class PagedAttentionMemoryHandler:
         # Compute max batch tokens and return
         max_batch_tokens = floor(num / denum)
         if max_batch_tokens > self._upper_bound_max_batch_tokens:
-            logger.warning(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
+            logger.info(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
             max_batch_tokens = self._upper_bound_max_batch_tokens
         return max_batch_tokens
 
@@ -555,7 +555,7 @@ class PagedAttentionMemoryHandler:
         num_pages = floor(num / denum)
         num_blocks = num_pages // self.block_size
         if num_blocks > self._upper_bound_num_blocks:
-            logger.warning(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
+            logger.info(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
             num_blocks = self._upper_bound_num_blocks
         return num_blocks
 
