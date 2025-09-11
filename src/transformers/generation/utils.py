@@ -3707,13 +3707,8 @@ class GenerationMixin(ContinuousMixin):
             return input_ids
 
     def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
-        # Only prefill up to the token just before last, so that decoding is completely performed outside this function
-        # (here we simply prefill the cache)
-        prefill_input_ids = input_ids[:, :-1, ...]
-
         if generation_config.prefill_chunk_size is None:
-            if (attention_mask := model_kwargs.pop("attention_mask", None)) is not None:
-                model_kwargs["attention_mask"] = attention_mask[:, : prefill_input_ids.shape[1], ...]
+            prefill_input_ids = input_ids[:, :-1, ...]
             model_kwargs = self._get_initial_cache_position(prefill_input_ids.shape[1], input_ids.device, model_kwargs)
             model_inputs = self.prepare_inputs_for_generation(prefill_input_ids, **model_kwargs)
             outputs = self(**model_inputs, return_dict=True)
@@ -3729,7 +3724,9 @@ class GenerationMixin(ContinuousMixin):
             torch._dynamo.config.cache_size_limit = 64
 
             chunk_size = generation_config.prefill_chunk_size
-            input_chunks = torch.split(prefill_input_ids, chunk_size, dim=-1)
+            # Only chunk up the token just before last, so that decoding is completely performed outside this function
+            # (here we simply prefill the cache)
+            input_chunks = torch.split(input_ids[:, :-1], chunk_size, dim=-1)
 
             if "past_key_values" not in model_kwargs:
                 raise ValueError("Cannot use prefill chunking without a cache")
