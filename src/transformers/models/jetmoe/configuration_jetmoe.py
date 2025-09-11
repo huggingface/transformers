@@ -94,6 +94,10 @@ class JetMoeConfig(PretrainedConfig):
 
     model_type = "jetmoe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_experts": "num_local_experts",
+        "num_experts_per_tok": "top_k",
+    }
 
     def __init__(
         self,

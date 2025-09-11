@@ -139,6 +139,9 @@ class DogeConfig(PretrainedConfig):
 
     model_type = "doge"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_experts_per_tok": "top_k",
+    }
     # Default tensor parallel plan for base model `DogeModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

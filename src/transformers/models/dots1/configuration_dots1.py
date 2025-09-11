@@ -105,6 +105,9 @@ class Dots1Config(PretrainedConfig):
 
     model_type = "dots1"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_experts_per_tok": "top_k",
+    }
 
     base_model_tp_plan = {  # TODO: only replicate attention layers when > first_k_dense_replace
         "layers.*.self_attn.q_proj": "colwise",

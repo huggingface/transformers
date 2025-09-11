@@ -132,6 +132,9 @@ class DeepseekV3Config(PretrainedConfig):
 
     model_type = "deepseek_v3"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_experts_per_tok": "top_k",
+    }
     base_model_tp_plan = {  # TODO: only replicate attention layers when > first_k_dense_replace
         "layers.*.mlp.experts.*.gate_proj": "local_colwise",
         "layers.*.mlp.experts.*.up_proj": "local_colwise",
