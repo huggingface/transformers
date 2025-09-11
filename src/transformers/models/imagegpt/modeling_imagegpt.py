@@ -646,9 +646,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 )
                 use_cache = False
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
