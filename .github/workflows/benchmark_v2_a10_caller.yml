@@ -14,9 +14,6 @@ jobs:
     uses: ./.github/workflows/benchmark_v2.yml
     with:
       runner: aws-g5-4xlarge-cache-use1-public-80
-      warmup_iterations: 3
-      measurement_iterations: 5
-      num_tokens_to_generate: 100
       commit_sha: ${{ github.sha }}
       upload_to_hub: true
       run_id: ${{ github.run_id }}
