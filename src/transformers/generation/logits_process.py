@@ -641,7 +641,7 @@ class TopHLogitsWarper(LogitsProcessor):
         Return:
             `torch.FloatTensor`: Scalar entropy value.
         """
-
+        probs = probs [probs > 0]
         probs = probs/torch.sum(probs) 
         return -torch.sum(probs * torch.log2(probs))
 
