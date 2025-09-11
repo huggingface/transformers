@@ -77,7 +77,7 @@ class MimiOutput(ModelOutput):
 class MimiConv1dPaddingCache:
     """
     Padding cache for MimiConv1d causal convolutions in order to support streaming via cache padding.
-    See: https://arxiv.org/pdf/2005.06720 & https://arxiv.org/pdf/2204.07064
+    See: https://huggingface.co/papers/2005.06720 & https://huggingface.co/papers/2204.07064
 
     A padding cache is a list of cached partial hidden states for each convolution layer.
     Hidden states are cached from the previous call to the MimiConv1d forward pass, given the padding size.
@@ -314,10 +314,10 @@ class MimiConv1d(nn.Module):
         input_length = input_length + padding_left + padding_right
 
         # conv
-        output_lenght = (
+        output_length = (
             input_length + 2 * self.conv.padding[0] - self.conv.dilation[0] * (self.conv.kernel_size[0] - 1) - 1
         ) // self.conv.stride[0] + 1
-        return output_lenght
+        return output_length
 
     def forward(self, hidden_states, padding_cache=None):
         extra_padding = self._get_extra_padding_for_conv1d(hidden_states)
@@ -1098,12 +1098,8 @@ class MimiTransformerModel(nn.Module):
             )
             use_cache = False
 
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
-
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1454,9 +1450,6 @@ class MimiModel(MimiPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def _encode_frame(
         self,

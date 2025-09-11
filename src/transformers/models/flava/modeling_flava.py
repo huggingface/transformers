@@ -27,8 +27,9 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import ModelOutput, auto_docstring, filter_out_non_signature_kwargs, logging, torch_int
 from .configuration_flava import (
     FlavaConfig,
     FlavaImageCodebookConfig,
@@ -1080,16 +1081,14 @@ class FlavaModel(FlavaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_length)`):
@@ -1110,6 +1109,7 @@ class FlavaModel(FlavaPreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoProcessor, FlavaModel
 
         >>> model = FlavaModel.from_pretrained("{0}")
@@ -1118,35 +1118,30 @@ class FlavaModel(FlavaPreTrainedModel):
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], max_length=77, padding="max_length", return_tensors="pt"
         ... )
-        >>> text_features = model.get_text_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
         ```
         """
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-
-        pooled_output = text_outputs[0]  # last_hidden_state
+        pooled_output = text_outputs.last_hidden_state
         text_features = self.text_projection(pooled_output)
 
         return text_features
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
@@ -1159,33 +1154,30 @@ class FlavaModel(FlavaPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
         >>> from transformers import AutoProcessor, FlavaModel
+        >>> from transformers.image_utils import load_image
 
         >>> model = FlavaModel.from_pretrained("{0}")
         >>> processor = AutoProcessor.from_pretrained("{0}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> image_features = model.get_image_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     image_features = model.get_image_features(**inputs)
         ```
         """
-        image_outputs = self.image_model(
+        image_outputs: BaseModelOutputWithPooling = self.image_model(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
             attention_mask=attention_mask,
             head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
-
-        pooled_output = image_outputs[0]  # last_hidden_state
+        pooled_output = image_outputs.last_hidden_state
         image_features = self.image_projection(pooled_output)
 
         return image_features

@@ -632,7 +632,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = False
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     _supports_attention_backend = True
@@ -744,7 +744,7 @@ class AriaTextModel(AriaTextPreTrainedModel):
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -799,12 +799,6 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @auto_docstring
     def forward(
@@ -987,7 +981,7 @@ class AriaModel(AriaPreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -1011,9 +1005,9 @@ class AriaModel(AriaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1123,7 +1117,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             vision_feature_layer=vision_feature_layer,
         )
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -1140,9 +1134,9 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1177,7 +1171,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("Rhymes-AI/Aria")
-        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [

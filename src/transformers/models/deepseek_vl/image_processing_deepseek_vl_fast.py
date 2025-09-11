@@ -66,10 +66,10 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[DeepseekVLFastImageProcessorKwargs]):
         super().__init__(**kwargs)
-        if kwargs.get("image_mean", None) is None:
+        if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
-            background_color = tuple([int(x * 255) for x in kwargs.get("image_mean")])
+            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
         self.background_color = tuple(background_color)
 
     def resize(
@@ -77,7 +77,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         min_size: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -113,7 +113,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
 
         Returns:
             `torch.Tensor`: The padded images.

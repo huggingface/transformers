@@ -156,7 +156,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         self,
         video: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -246,11 +246,11 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
 
     def sample_frames(
         self,
-        video: "torch.Tensor",
-        metadata: Union[VideoMetadata, dict],
+        metadata: VideoMetadata,
         num_frames: Optional[int] = None,
         fps: Optional[Union[int, float]] = None,
         skip_secs: Optional[int] = 1,
+        **kwargs,
     ):
         """
         Video sampling function which:
@@ -260,8 +260,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
             - Uniformly samples the desired number of frames between the start and end indices.
 
         Args:
-            video (`torch.Tensor`):
-                Video that need to be sampled.
             metadata (`VideoMetadata`):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
@@ -272,13 +270,18 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Number of seconds to skip from the start and end if the video is long enough.
 
         Returns:
-            torch.Tensor:
-                Sampled video frames.
+            np.ndarray:
+                Indices to sample video frames.
         """
+        if metadata is None or getattr(metadata, "fps", None) is None:
+            raise ValueError(
+                "Asked to sample frames per second but no video metadata was provided which is required when sampling in SmolVLM. "
+                "Please pass in `VideoMetadata` object or set `do_sample_frames=False`"
+            )
+
         num_frames = num_frames if num_frames is not None else self.num_frames
         fps = fps if fps is not None else self.fps
-
-        total_num_frames = video.shape[0]
+        total_num_frames = metadata.total_num_frames
 
         # Step 1) Estimate how many frames we'd sample at `target_fps`, fallback if target_fps <= 0
         estimated_frames = int(round(fps * metadata["duration"]))
@@ -303,20 +306,12 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
 
         indices = np.linspace(start_idx, end_idx, desired_frames, dtype=int)
         indices = np.unique(indices)
-        video = video[indices].contiguous()
 
-        timestamps = []
-        for idx in indices:
-            sec = idx / metadata["fps"]
-            mm = int(sec // 60)
-            ss = int(sec % 60)
-            timestamps.append([mm, ss])
-        return video, timestamps, int(metadata["duration"])
+        return indices
 
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        video_metadata: Union[list[VideoMetadata], list[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -325,44 +320,12 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         rescale_factor: float,
         do_normalize: bool,
         do_pad: bool,
-        do_sample_frames: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        fps: Optional[Union[int, float]] = None,
-        num_frames: Optional[int] = None,
-        skip_secs: Optional[int] = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
-        # Group videos by size for batched resizing
-        if do_sample_frames:
-            if video_metadata[0] is None:
-                raise ValueError(
-                    "Frame sampling is enabled but no video metadata was found. SmolVLM requires metadata to correctly sample frames. "
-                    "Please pass in `VideoMetadata` object per each input video or set `do_sample_frames=False`"
-                )
-            processed_videos = []
-            timestamps_list, durations_list = [], []
-            for video, metadata in zip(videos, video_metadata):
-                video, timestamps, duration = self.sample_frames(video, metadata, num_frames, fps, skip_secs)
-                timestamps_list.append(timestamps)
-                durations_list.append(duration)
-                processed_videos.append(video)
-        else:
-            # Assume 24 fps by default and prepare timestamps for the whole video when all frames are sampled
-            processed_videos = videos
-            timestamps_list = [
-                [(int((idx / 24) // 60), int((idx / 24) % 60)) for idx in range(len(video))] for video in videos
-            ]
-            durations_list = [len(video) // 24 for video in videos]
-
-        # We need to sample frames first before moving to device, if `do_sample_frames=True`. Otherwise
-        # moving the whole video incurs high GPU mem usage for long videos
-        if device is not None:
-            videos = [video.to(device) for video in videos]
-
-        grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
+        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
             if do_convert_rgb:
@@ -400,7 +363,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
             pixel_attention_mask = reorder_videos(processed_padded_mask_grouped, grouped_videos_index)
 
         processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
-        data = {"pixel_values": processed_videos, "timestamps": timestamps_list, "durations": durations_list}
+        data = {"pixel_values": processed_videos}
 
         if do_pad:
             data["pixel_attention_mask"] = (

@@ -44,7 +44,7 @@ class MistralMLP(LlamaMLP):
 
 class MistralAttention(LlamaAttention):
     def __init__(self, config: MistralConfig, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
@@ -132,7 +132,7 @@ class MistralModel(LlamaModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

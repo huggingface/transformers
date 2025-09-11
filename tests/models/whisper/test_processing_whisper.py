@@ -124,18 +124,6 @@ class WhisperProcessorTest(unittest.TestCase):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
-    def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-
-        self.assertListEqual(
-            processor.model_input_names,
-            feature_extractor.model_input_names,
-            msg="`processor` and `feature_extractor` model input names do not match",
-        )
-
     def test_get_decoder_prompt_ids(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()

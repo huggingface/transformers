@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 
@@ -26,7 +27,6 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_large_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -42,6 +42,8 @@ if is_torch_available():
 
     from transformers import (
         DeepseekV3ForCausalLM,
+        DeepseekV3ForSequenceClassification,
+        DeepseekV3ForTokenClassification,
         DeepseekV3Model,
     )
     from transformers.models.deepseek_v3.modeling_deepseek_v3 import (
@@ -215,6 +217,8 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         (
             DeepseekV3Model,
             DeepseekV3ForCausalLM,
+            DeepseekV3ForSequenceClassification,
+            DeepseekV3ForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -223,7 +227,10 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekV3Model,
+            "text-classification": DeepseekV3ForSequenceClassification,
+            "token-classification": DeepseekV3ForTokenClassification,
             "text-generation": DeepseekV3ForCausalLM,
+            "zero-shot": DeepseekV3ForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -243,75 +250,21 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.model_tester = DeepseekV3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=37)
 
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_continue_from_inputs_embeds(self):
         pass
 
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
     def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
-    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
@@ -448,7 +401,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     @require_torch_large_accelerator
-    @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
@@ -460,14 +412,14 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         model_sdpa = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             attn_implementation="eager",
         ).to(torch_device)
 
@@ -524,6 +476,18 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
 
+    def test_deepseek_v3_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels)
+        model = DeepseekV3ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
 
 @require_torch_accelerator
 class DeepseekV3IntegrationTest(unittest.TestCase):
@@ -533,6 +497,7 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
@@ -555,7 +520,7 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
         ]
         tokenizer = AutoTokenizer.from_pretrained("bzantium/tiny-deepseek-v3", pad_token="</s>", padding_side="right")
         model = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/tiny-deepseek-v3", device_map=torch_device, torch_dtype=torch.float16
+            "bzantium/tiny-deepseek-v3", device_map=torch_device, dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 

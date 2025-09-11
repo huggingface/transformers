@@ -183,7 +183,7 @@ def tf_default_data_collator(features: list[InputDataClass]) -> dict[str, Any]:
     if label_col_name is not None:
         if isinstance(first[label_col_name], tf.Tensor):
             dtype = tf.int64 if first[label_col_name].dtype.is_integer else tf.float32
-        elif isinstance(first[label_col_name], np.ndarray) or isinstance(first[label_col_name], np.generic):
+        elif isinstance(first[label_col_name], (np.ndarray, np.generic)):
             dtype = tf.int64 if np.issubdtype(first[label_col_name].dtype, np.integer) else tf.float32
         elif isinstance(first[label_col_name], (tuple, list)):
             dtype = tf.int64 if isinstance(first[label_col_name][0], int) else tf.float32
@@ -2052,7 +2052,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             dtype_64 = np.int64
             dtype_32 = np.int32
         else:
-            raise ValueError(f'return_tensors must be one of ("pt", "np"), {return_tensors=} not suported')
+            raise ValueError(f'return_tensors must be one of ("pt", "np"), {return_tensors=} not supported')
 
         for k, v in batch.items():
             if k in self._batch_dim_keys:

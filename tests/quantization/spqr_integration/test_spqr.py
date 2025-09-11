@@ -16,6 +16,8 @@ import gc
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, SpQRConfig, StaticCache
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -179,6 +181,7 @@ class SpQRTest(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    @pytest.mark.torch_compile_test
     def test_quantized_model_compile(self):
         """
         Simple test that checks if the quantized model is working properly

@@ -15,13 +15,15 @@
 import unittest
 
 import numpy as np
-import requests
+import pytest
 from packaging import version
 
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -216,9 +218,7 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
 
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
@@ -263,6 +263,7 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @slow
     @require_torch_gpu
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")

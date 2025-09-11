@@ -319,9 +319,6 @@ The next step is to load a SegFormer image processor to prepare the images and a
 >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, do_reduce_labels=True)
 ```
 
-<frameworkcontent>
-<pt>
-
 It is common to apply some data augmentations to an image dataset to make a model more robust against overfitting. In this guide, you'll use the [`ColorJitter`](https://pytorch.org/vision/stable/generated/torchvision.transforms.ColorJitter.html) function from [torchvision](https://pytorch.org/vision/stable/index.html) to randomly change the color properties of an image, but you can also use any image library you like.
 
 ```py
@@ -354,67 +351,6 @@ To apply the `jitter` over the entire dataset, use the 🤗 Datasets [`~datasets
 >>> test_ds.set_transform(val_transforms)
 ```
 
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-It is common to apply some data augmentations to an image dataset to make a model more robust against overfitting.
-In this guide, you'll use [`tf.image`](https://www.tensorflow.org/api_docs/python/tf/image) to randomly change the color properties of an image, but you can also use any image
-library you like.
-Define two separate transformation functions:
-- training data transformations that include image augmentation
-- validation data transformations that only transpose the images, since computer vision models in 🤗 Transformers expect channels-first layout
-
-```py
->>> import tensorflow as tf
-
-
->>> def aug_transforms(image):
-...     image = tf.keras.utils.img_to_array(image)
-...     image = tf.image.random_brightness(image, 0.25)
-...     image = tf.image.random_contrast(image, 0.5, 2.0)
-...     image = tf.image.random_saturation(image, 0.75, 1.25)
-...     image = tf.image.random_hue(image, 0.1)
-...     image = tf.transpose(image, (2, 0, 1))
-...     return image
-
-
->>> def transforms(image):
-...     image = tf.keras.utils.img_to_array(image)
-...     image = tf.transpose(image, (2, 0, 1))
-...     return image
-```
-
-Next, create two preprocessing functions to prepare batches of images and annotations for the model. These functions apply
-the image transformations and use the earlier loaded `image_processor` to convert the images into `pixel_values` and
-annotations to `labels`. `ImageProcessor` also takes care of resizing and normalizing the images.
-
-```py
->>> def train_transforms(example_batch):
-...     images = [aug_transforms(x.convert("RGB")) for x in example_batch["image"]]
-...     labels = [x for x in example_batch["annotation"]]
-...     inputs = image_processor(images, labels)
-...     return inputs
-
-
->>> def val_transforms(example_batch):
-...     images = [transforms(x.convert("RGB")) for x in example_batch["image"]]
-...     labels = [x for x in example_batch["annotation"]]
-...     inputs = image_processor(images, labels)
-...     return inputs
-```
-
-To apply the preprocessing transformations over the entire dataset, use the 🤗 Datasets [`~datasets.Dataset.set_transform`] function.
-The transform is applied on the fly which is faster and consumes less disk space:
-
-```py
->>> train_ds.set_transform(train_transforms)
->>> test_ds.set_transform(val_transforms)
-```
-</tf>
-</frameworkcontent>
-
 ### Evaluate
 
 Including a metric during training is often helpful for evaluating your model's performance. You can quickly load an evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [mean Intersection over Union](https://huggingface.co/spaces/evaluate-metric/accuracy) (IoU) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
@@ -427,9 +363,6 @@ Including a metric during training is often helpful for evaluating your model's 
 
 Then create a function to [`~evaluate.EvaluationModule.compute`] the metrics. Your predictions need to be converted to
 logits first, and then reshaped to match the size of the labels before you can call [`~evaluate.EvaluationModule.compute`]:
-
-<frameworkcontent>
-<pt>
 
 ```py
 >>> import numpy as np
@@ -461,48 +394,10 @@ logits first, and then reshaped to match the size of the labels before you can c
 ...         return metrics
 ```
 
-</pt>
-</frameworkcontent>
-
-
-<frameworkcontent>
-<tf>
-
-```py
->>> def compute_metrics(eval_pred):
-...     logits, labels = eval_pred
-...     logits = tf.transpose(logits, perm=[0, 2, 3, 1])
-...     logits_resized = tf.image.resize(
-...         logits,
-...         size=tf.shape(labels)[1:],
-...         method="bilinear",
-...     )
-
-...     pred_labels = tf.argmax(logits_resized, axis=-1)
-...     metrics = metric.compute(
-...         predictions=pred_labels,
-...         references=labels,
-...         num_labels=num_labels,
-...         ignore_index=-1,
-...         reduce_labels=image_processor.do_reduce_labels,
-...     )
-
-...     per_category_accuracy = metrics.pop("per_category_accuracy").tolist()
-...     per_category_iou = metrics.pop("per_category_iou").tolist()
-
-...     metrics.update({f"accuracy_{id2label[i]}": v for i, v in enumerate(per_category_accuracy)})
-...     metrics.update({f"iou_{id2label[i]}": v for i, v in enumerate(per_category_iou)})
-...     return {"val_" + k: v for k, v in metrics.items()}
-```
-
-</tf>
-</frameworkcontent>
-
 Your `compute_metrics` function is ready to go now, and you'll return to it when you setup your training.
 
 ### Train
-<frameworkcontent>
-<pt>
+
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
@@ -557,111 +452,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-<Tip>
-
-If you are unfamiliar with fine-tuning a model with Keras, check out the [basic tutorial](./training#train-a-tensorflow-model-with-keras) first!
-
-</Tip>
-
-To fine-tune a model in TensorFlow, follow these steps:
-1. Define the training hyperparameters, and set up an optimizer and a learning rate schedule.
-2. Instantiate a pretrained model.
-3. Convert a 🤗 Dataset to a `tf.data.Dataset`.
-4. Compile your model.
-5. Add callbacks to calculate metrics and upload your model to 🤗 Hub
-6. Use the `fit()` method to run the training.
-
-Start by defining the hyperparameters, optimizer and learning rate schedule:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 2
->>> num_epochs = 50
->>> num_train_steps = len(train_ds) * num_epochs
->>> learning_rate = 6e-5
->>> weight_decay_rate = 0.01
-
->>> optimizer, lr_schedule = create_optimizer(
-...     init_lr=learning_rate,
-...     num_train_steps=num_train_steps,
-...     weight_decay_rate=weight_decay_rate,
-...     num_warmup_steps=0,
-... )
-```
-
-Then, load SegFormer with [`TFAutoModelForSemanticSegmentation`] along with the label mappings, and compile it with the
-optimizer. Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
-
-```py
->>> from transformers import TFAutoModelForSemanticSegmentation
-
->>> model = TFAutoModelForSemanticSegmentation.from_pretrained(
-...     checkpoint,
-...     id2label=id2label,
-...     label2id=label2id,
-... )
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-Convert your datasets to the `tf.data.Dataset` format using the [`~datasets.Dataset.to_tf_dataset`] and the [`DefaultDataCollator`]:
-
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-
->>> tf_train_dataset = train_ds.to_tf_dataset(
-...     columns=["pixel_values", "label"],
-...     shuffle=True,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-
->>> tf_eval_dataset = test_ds.to_tf_dataset(
-...     columns=["pixel_values", "label"],
-...     shuffle=True,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-```
-
-To compute the accuracy from the predictions and push your model to the 🤗 Hub, use [Keras callbacks](../main_classes/keras_callbacks).
-Pass your `compute_metrics` function to [`KerasMetricCallback`],
-and use the [`PushToHubCallback`] to upload the model:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback, PushToHubCallback
-
->>> metric_callback = KerasMetricCallback(
-...     metric_fn=compute_metrics, eval_dataset=tf_eval_dataset, batch_size=batch_size, label_cols=["labels"]
-... )
-
->>> push_to_hub_callback = PushToHubCallback(output_dir="scene_segmentation", tokenizer=image_processor)
-
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-Finally, you are ready to train your model! Call `fit()` with your training and validation datasets, the number of epochs,
-and your callbacks to fine-tune the model:
-
-```py
->>> model.fit(
-...     tf_train_dataset,
-...     validation_data=tf_eval_dataset,
-...     callbacks=callbacks,
-...     epochs=num_epochs,
-... )
-```
-
-Congratulations! You have fine-tuned your model and shared it on the 🤗 Hub. You can now use it for inference!
-</tf>
-</frameworkcontent>
 
 ### Inference
 
@@ -683,15 +473,12 @@ Reload the dataset and load an image for inference.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-image.png" alt="Image of bedroom"/>
 </div>
 
-<frameworkcontent>
-<pt>
 
 We will now see how to infer without a pipeline. Process the image with an image processor and place the `pixel_values` on a GPU:
 
 ```py
->>> from accelerate.test_utils.testing import get_backend
-# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
->>> device, _, _ = get_backend()
+>>> from transformers import infer_device
+>>> device = infer_device()
 >>> encoding = image_processor(image, return_tensors="pt")
 >>> pixel_values = encoding.pixel_values.to(device)
 ```
@@ -716,44 +503,6 @@ Next, rescale the logits to the original image size:
 >>> pred_seg = upsampled_logits.argmax(dim=1)[0]
 ```
 
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-Load an image processor to preprocess the image and return the input as TensorFlow tensors:
-
-```py
->>> from transformers import AutoImageProcessor
-
->>> image_processor = AutoImageProcessor.from_pretrained("MariaK/scene_segmentation")
->>> inputs = image_processor(image, return_tensors="tf")
-```
-
-Pass your input to the model and return the `logits`:
-
-```py
->>> from transformers import TFAutoModelForSemanticSegmentation
-
->>> model = TFAutoModelForSemanticSegmentation.from_pretrained("MariaK/scene_segmentation")
->>> logits = model(**inputs).logits
-```
-
-Next, rescale the logits to the original image size and apply argmax on the class dimension:
-```py
->>> logits = tf.transpose(logits, [0, 2, 3, 1])
-
->>> upsampled_logits = tf.image.resize(
-...     logits,
-...     # We reverse the shape of `image` because `image.size` returns width and height.
-...     image.size[::-1],
-... )
-
->>> pred_seg = tf.math.argmax(upsampled_logits, axis=-1)[0]
-```
-
-</tf>
-</frameworkcontent>
 
 To visualize the results, load the [dataset color palette](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) as `ade_palette()` that maps each class to their RGB values.
 

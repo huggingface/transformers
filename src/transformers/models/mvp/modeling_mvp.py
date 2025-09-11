@@ -23,7 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
@@ -77,7 +77,9 @@ class MvpLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0, position_ids: torch.Tensor = None):
+    def forward(
+        self, input_ids: torch.Tensor, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+    ):
         """`input_ids' shape is expected to be [bsz x seqlen]."""
 
         if position_ids is None:
@@ -146,6 +148,7 @@ class MvpAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
 
+        is_updated = False
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
@@ -175,7 +178,7 @@ class MvpAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         if attn_prompt is not None:
@@ -243,7 +246,7 @@ class MvpAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -855,14 +858,18 @@ class MvpDecoder(MvpPreTrainedModel):
                 )
                 use_cache = False
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is None:
+            past_key_values = (
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                if encoder_hidden_states is not None
+                else DynamicCache(config=self.config)
+            )
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
                 "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -939,9 +946,6 @@ class MvpDecoder(MvpPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
-
         if not return_dict:
             return tuple(
                 v
@@ -985,9 +989,6 @@ class MvpModel(MvpPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def set_lightweight_tuning(self):
         assert self.use_prompt, "If you want to use lightweight tuning, make sure that `use_prompt=True`."

@@ -20,6 +20,7 @@ import warnings
 from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
+from functools import cached_property
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -37,7 +38,6 @@ from .trainer_utils import (
 from .utils import (
     ACCELERATE_MIN_VERSION,
     ExplicitEnum,
-    cached_property,
     is_accelerate_available,
     is_apex_available,
     is_ipex_available,
@@ -76,6 +76,9 @@ if is_accelerate_available():
     from accelerate.utils import DistributedType
 
     from .trainer_pt_utils import AcceleratorConfig
+
+    if is_accelerate_available("1.10.1"):
+        from accelerate.parallelism_config import ParallelismConfig
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -388,9 +391,6 @@ class TrainingArguments:
             seed.
         jit_mode_eval (`bool`, *optional*, defaults to `False`):
             Whether or not to use PyTorch jit trace for inference.
-        use_ipex (`bool`, *optional*, defaults to `False`):
-            Use Intel extension for PyTorch when it is available. [IPEX
-            installation](https://github.com/intel/intel-extension-for-pytorch).
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change.
@@ -453,6 +453,8 @@ class TrainingArguments:
             Will eventually default to the list of argument names accepted by the model that contain the word "label",
             except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
             `["start_positions", "end_positions"]` keys.
+
+            You should only specify `label_names` if you're using custom label names or if your model's `forward` consumes multiple label tensors (e.g., extractive QA).
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
             Whether or not to load the best model found during training at the end of training. When this option is
             enabled, the best checkpoint will always be saved. See
@@ -595,7 +597,8 @@ class TrainingArguments:
                     Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`.
                     If `True`, an `Accelerator` or `PartialState` must be initialized. Note that by doing so, this could lead to issues
                     with hyperparameter tuning.
-
+        parallelism_config (`ParallelismConfig`, *optional*):
+            Parallelism configuration for the training run. Requires Accelerate `1.10.1`
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
@@ -1054,15 +1057,6 @@ class TrainingArguments:
     jit_mode_eval: bool = field(
         default=False, metadata={"help": "Whether or not to use PyTorch jit trace for inference"}
     )
-    use_ipex: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Use Intel extension for PyTorch when it is available, installation:"
-                " 'https://github.com/intel/intel-extension-for-pytorch'"
-            )
-        },
-    )
     bf16: bool = field(
         default=False,
         metadata={
@@ -1269,6 +1263,10 @@ class TrainingArguments:
                 "accelerator json config file (e.g., `accelerator_config.json`) or an already loaded json file as `dict`."
             )
         },
+    )
+    parallelism_config: Optional["ParallelismConfig"] = field(
+        default=None,
+        metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.10.1`")},
     )
     deepspeed: Optional[Union[dict, str]] = field(
         default=None,
@@ -1497,10 +1495,14 @@ class TrainingArguments:
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
     )
 
-    include_num_input_tokens_seen: Optional[bool] = field(
+    include_num_input_tokens_seen: Optional[Union[str, bool]] = field(
         default=False,
         metadata={
-            "help": "If set to `True`, will track the number of input tokens seen throughout training. (May be slower in distributed training)"
+            "help": (
+                "Whether to track the number of input tokens seen. "
+                "Can be `'all'` to count all tokens, `'non_padding'` to count only non-padding tokens, "
+                "or a boolean (`True` maps to `'all'`, `False` to `'no'`)."
+            )
         },
     )
 
@@ -1612,12 +1614,6 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.use_cpu = self.no_cuda
-        if self.use_ipex:
-            warnings.warn(
-                "using `use_ipex` is deprecated and will be removed in version 4.54 of 🤗 Transformers. "
-                "You only need PyTorch for the needed optimizations on Intel CPU and XPU.",
-                FutureWarning,
-            )
 
         self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
@@ -1830,12 +1826,16 @@ class TrainingArguments:
         if self.framework == "pt" and is_torch_available() and self.torch_compile:
             if is_torch_tf32_available():
                 if self.tf32 is None and not self.fp16 or self.bf16:
+                    device_str = "MUSA" if is_torch_musa_available() else "CUDA"
                     logger.info(
-                        "Setting TF32 in CUDA backends to speedup torch compile, you won't see any improvement"
+                        f"Setting TF32 in {device_str} backends to speedup torch compile, you won't see any improvement"
                         " otherwise."
                     )
-                    torch.backends.cuda.matmul.allow_tf32 = True
-                    torch.backends.cudnn.allow_tf32 = True
+                    if is_torch_musa_available():
+                        torch.backends.mudnn.allow_tf32 = True
+                    else:
+                        torch.backends.cuda.matmul.allow_tf32 = True
+                        torch.backends.cudnn.allow_tf32 = True
             else:
                 logger.warning(
                     "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
@@ -1843,24 +1843,24 @@ class TrainingArguments:
         if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
-                    torch.backends.cuda.matmul.allow_tf32 = True
-                    torch.backends.cudnn.allow_tf32 = True
+                    if is_torch_musa_available():
+                        torch.backends.mudnn.allow_tf32 = True
+                    else:
+                        torch.backends.cuda.matmul.allow_tf32 = True
+                        torch.backends.cudnn.allow_tf32 = True
                 else:
                     raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
             else:
                 if is_torch_tf32_available():
-                    torch.backends.cuda.matmul.allow_tf32 = False
-                    torch.backends.cudnn.allow_tf32 = False
+                    if is_torch_musa_available():
+                        torch.backends.mudnn.allow_tf32 = False
+                    else:
+                        torch.backends.cuda.matmul.allow_tf32 = False
+                        torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
 
-        # if training args is specified, it will override the one specified in the accelerate config
-        if self.half_precision_backend != "apex":
-            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-            if self.fp16:
-                mixed_precision_dtype = "fp16"
-            elif self.bf16:
-                mixed_precision_dtype = "bf16"
-            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
+        # NOTE: Mixed precision environment variable setting moved to after DeepSpeed processing
+        # to ensure DeepSpeed config can override TrainingArguments defaults
 
         if self.report_to is None:
             logger.info(
@@ -2070,6 +2070,16 @@ class TrainingArguments:
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
+        # Set mixed precision environment variable after DeepSpeed processing
+        # This ensures DeepSpeed config overrides have been applied to fp16/bf16 settings
+        if self.half_precision_backend != "apex":
+            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+            if self.fp16:
+                mixed_precision_dtype = "fp16"
+            elif self.bf16:
+                mixed_precision_dtype = "bf16"
+            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
+
         if self.use_cpu:
             self.dataloader_pin_memory = False
 
@@ -2132,6 +2142,11 @@ class TrainingArguments:
                 "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead."
             )
             self.include_for_metrics.append("inputs")
+
+        if self.include_num_input_tokens_seen is True:
+            self.include_num_input_tokens_seen = "all"
+        elif self.include_num_input_tokens_seen is False:
+            self.include_num_input_tokens_seen = "no"
 
     def __str__(self):
         self_as_dict = asdict(self)
@@ -2216,7 +2231,7 @@ class TrainingArguments:
         else:
             AcceleratorState._reset_state(reset_partial_state=True)
             self.distributed_state = None
-        if not self.use_ipex and "ACCELERATE_USE_IPEX" not in os.environ:
+        if "ACCELERATE_USE_IPEX" not in os.environ:
             os.environ["ACCELERATE_USE_IPEX"] = "false"
 
         self._n_gpu = 1
@@ -2524,17 +2539,17 @@ class TrainingArguments:
         )
         return warmup_steps
 
-    def _dict_torch_dtype_to_str(self, d: dict[str, Any]) -> None:
+    def _dict_dtype_to_str(self, d: dict[str, Any]) -> None:
         """
-        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        Checks whether the passed dictionary and its nested dicts have a *dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype") is not None and not isinstance(d["torch_dtype"], str):
-            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        if d.get("dtype") is not None and not isinstance(d["dtype"], str):
+            d["dtype"] = str(d["dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
-                self._dict_torch_dtype_to_str(value)
+                self._dict_dtype_to_str(value)
 
     def to_dict(self):
         """
@@ -2559,7 +2574,10 @@ class TrainingArguments:
                 quantization_config = v.get("quantization_config")
                 if quantization_config and not isinstance(quantization_config, dict):
                     d[k]["quantization_config"] = quantization_config.to_dict()
-        self._dict_torch_dtype_to_str(d)
+            if k == "parallelism_config" and v is not None:
+                d[k] = v.to_json()
+
+        self._dict_dtype_to_str(d)
 
         return d
 

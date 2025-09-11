@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-08-06 and added to Hugging Face Transformers on 2024-09-05.*
 
 # LLaVA-OneVision
 
@@ -38,7 +39,7 @@ yielding new emerging capabilities. In particular, strong video understanding an
 cross-scenario capabilities are demonstrated through task transfer from images to
 videos.*
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava-ov-acrhitecture.png"
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava-ov-architecture.png"
 alt="drawing" width="600"/>
 
 <small> LLaVA-OneVision architecture. Taken from the <a href="https://huggingface.co/papers/2408.03326">original paper.</a> </small>
@@ -114,14 +115,16 @@ The original code can be found [here](https://github.com/LLaVA-VL/LLaVA-NeXT/tre
 Here's how to load the model and perform inference in half-precision (`torch.float16`):
 
 ```python
-from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
+from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration, infer_device
 import torch
+
+device = f"{infer_device}:0"
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf") 
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     "llava-hf/llava-onevision-qwen2-7b-ov-hf",
-    torch_dtype=torch.float16,
-    device_map="cuda:0"
+    dtype=torch.float16,
+    device_map=device
 )
 
 # prepare image and text prompt, using the appropriate prompt template
@@ -136,7 +139,7 @@ conversation = [
     },
 ]
 inputs = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
-inputs = inputs.to("cuda:0", torch.float16)
+inputs = inputs.to(model.device, torch.float16)
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=100)
@@ -155,7 +158,7 @@ import torch
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 
 # Load the model in half-precision
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
 # Prepare a batch of two prompts, where the first one is a multi-turn conversation and the second is not
@@ -165,20 +168,20 @@ conversation_1 = [
         "content": [
             {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
             {"type": "text", "text": "What is shown in this image?"},
-            ],
+        ],
     },
     {
         "role": "assistant",
         "content": [
             {"type": "text", "text": "There is a red stop sign in the image."},
-            ],
+        ],
     },
     {
         "role": "user",
         "content": [
             {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
             {"type": "text", "text": "What about this image? How many cats do you see?"},
-            ],
+        ],
     },
 ]
 
@@ -188,7 +191,7 @@ conversation_2 = [
         "content": [
             {"type": "image", "url": "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"},
             {"type": "text", "text": "What is shown in this image?"},
-            ],
+        ],
     },
 ]
 
@@ -198,13 +201,14 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     padding=True,
-    return_tensors="pt"
+    padding_side="left",
+    return_tensors="pt",
 ).to(model.device, torch.float16)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=30)
 processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-['user\n\nWhat is shown in this image?\nassistant\nThere is a red stop sign in the image.\nuser\n\nWhat about this image? How many cats do you see?\nassistant\ntwo', 'user\n\nWhat is shown in this image?\nassistant\n']
+['user\n\nWhat is shown in this image?\nassistant\nThere is a red stop sign in the image.\nuser\n\nWhat about this image? How many cats do you see?\nassistant\ntwo', 'user\n\nWhat is shown in this image?\nassistant\nThe image shows a whimsical scene of a snowman sitting by a campfire. The snowman is anthropomorphized, wearing a hat and']
 ```
 
 ### Video inference
@@ -217,7 +221,7 @@ import torch
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 
 # Load the model in half-precision
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
 video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
@@ -284,7 +288,7 @@ from transformers import LlavaOnevisionForConditionalGeneration
 
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     model_id,
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     use_flash_attention_2=True
 ).to(0)
 ```
@@ -307,10 +311,6 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 
 [[autodoc]] LlavaOnevisionImageProcessorFast
     - preprocess
-
-## LlavaOnevisionVideoProcessor
-
-[[autodoc]] LlavaOnevisionVideoProcessor
 
 ## LlavaOnevisionVideoProcessor
 

@@ -33,7 +33,7 @@ from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -279,7 +279,7 @@ class Gemma3Attention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.attention_dropout = self.config.attention_dropout
-        self.is_causal = True
+        self.is_causal = not self.config.use_bidirectional_attention
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -443,6 +443,19 @@ class Gemma3PreTrainedModel(PreTrainedModel):
             module.mm_input_projection_weight.data.zero_()
 
 
+def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
+    """
+    Enables a bidirectional mask within the sliding window.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        """A token can attend to any other token if their absolute distance is within
+        the (exclusive) sliding window size (distance < sliding_window)."""
+        return abs(q_idx - kv_idx) < sliding_window
+
+    return inner_mask
+
+
 @auto_docstring
 class Gemma3TextModel(Gemma3PreTrainedModel):
     config: Gemma3TextConfig
@@ -507,7 +520,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None and not self.training:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -531,10 +544,16 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
+            sliding_mask_kwargs = mask_kwargs.copy()
+
+            if self.config.use_bidirectional_attention:
+                mask_kwargs["or_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
+                sliding_mask_kwargs["or_mask_function"] = _bidirectional_window_overlay(self.config.sliding_window)
+
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
             }
 
         # embed positions
@@ -600,12 +619,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -641,11 +654,6 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         "What is your favorite condiment?"
         ```"""
 
-        if self.training and self.config._attn_implementation != "eager":
-            logger.warning_once(
-                "It is strongly recommended to train Gemma3 models with the `eager` attention implementation "
-                f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
-            )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -757,7 +765,7 @@ def token_type_ids_mask_function(
 
 @auto_docstring(
     custom_intro="""
-    The Base Gemma3 model which consists of a vision backbone and a language model withou language modeling head.,
+    The Base Gemma3 model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
 class Gemma3Model(Gemma3PreTrainedModel):
@@ -807,7 +815,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -831,8 +839,8 @@ class Gemma3Model(Gemma3PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
@@ -882,7 +890,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
+        # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
             special_image_mask = input_ids == self.config.image_token_id
             llm_input_ids = input_ids.clone()
@@ -975,6 +983,9 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         "^language_model.lm_head": "lm_head",
     }
     _tied_weights_keys = ["lm_head.weight"]
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    # Fix: https://github.com/huggingface/transformers/issues/40564
+    accepts_loss_kwargs = False
 
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
@@ -997,7 +1008,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     def get_image_features(self, pixel_values):
         return self.model.get_image_features(pixel_values)
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -1013,8 +1024,8 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
@@ -1236,7 +1247,7 @@ class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1304,6 +1315,15 @@ class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
         )
 
 
+class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemma3PreTrainedModel):
+    """
+    Gemma3TextForSequenceClassification is a text-only sequence classification model that works with Gemma3TextConfig.
+    It uses the generic sequence classification implementation for efficiency and consistency.
+    """
+
+    config: Gemma3TextConfig
+
+
 __all__ = [
     "Gemma3PreTrainedModel",
     "Gemma3TextModel",
@@ -1311,4 +1331,5 @@ __all__ = [
     "Gemma3ForConditionalGeneration",
     "Gemma3Model",
     "Gemma3ForSequenceClassification",
+    "Gemma3TextForSequenceClassification",
 ]

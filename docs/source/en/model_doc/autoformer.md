@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-06-24 and added to Hugging Face Transformers on 2023-05-30.*
 
 # Autoformer
 

@@ -500,7 +500,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
     The correspondence ids use -1 to indicate non-matching points.
 
     Philipp Lindenberger, Paul-Edouard Sarlin and Marc Pollefeys. LightGlue: Local Feature Matching at Light Speed.
-    In ICCV 2023. https://arxiv.org/pdf/2306.13643.pdf
+    In ICCV 2023. https://huggingface.co/papers/2306.13643
     """
 
     def __init__(self, config: LightGlueConfig):
@@ -690,7 +690,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         descriptors: torch.Tensor,
         height: int,
         width: int,
-        mask: torch.Tensor = None,
+        mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple, tuple]:

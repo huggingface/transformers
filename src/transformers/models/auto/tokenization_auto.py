@@ -167,6 +167,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         ("cpmant", ("CpmAntTokenizer", None)),
+        ("csm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("ctrl", ("CTRLTokenizer", None)),
         ("data2vec-audio", ("Wav2Vec2CTCTokenizer", None)),
         ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -343,6 +344,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("kosmos-2.5", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
@@ -404,6 +406,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("mega", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        (
+            "metaclip_2",
+            (
+                "XLMRobertaTokenizer",
+                "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("mgp-str", ("MgpstrTokenizer", None)),
         (
             "minimax",
@@ -562,6 +571,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         (
             "qwen3_moe",
+            (
+                "Qwen2Tokenizer",
+                "Qwen2TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "qwen3_next",
             (
                 "Qwen2Tokenizer",
                 "Qwen2TokenizerFast" if is_tokenizers_available() else None,
@@ -772,7 +788,7 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
     for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
         if class_name in tokenizers:
             module_name = model_type_to_module_name(module_name)
-            if module_name in ["mistral", "mixtral"] and class_name == "MistralCommonTokenizer":
+            if module_name in ["mistral", "mixtral", "ministral"] and class_name == "MistralCommonTokenizer":
                 module = importlib.import_module(".tokenization_mistral_common", "transformers")
             else:
                 module = importlib.import_module(f".{module_name}", "transformers.models")

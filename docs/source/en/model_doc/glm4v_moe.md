@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-07-28 and added to Hugging Face Transformers on 2025-08-08.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -25,20 +26,22 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Glm4vMoe model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+Vision-language models (VLMs) have become a key cornerstone of intelligent systems. As real-world AI tasks grow increasingly complex, VLMs urgently need to enhance reasoning capabilities beyond basic multimodal perception — improving accuracy, comprehensiveness, and intelligence — to enable complex problem solving, long-context understanding, and multimodal agents.
 
-The abstract from the paper is the following:
+Through our open-source work, we aim to explore the technological frontier together with the community while empowering more developers to create exciting and innovative applications.
 
-*<INSERT PAPER ABSTRACT HERE>*
+[GLM-4.5V](https://huggingface.co/papers/2508.06471) ([Github repo](https://github.com/zai-org/GLM-V)) is based on ZhipuAI’s next-generation flagship text foundation model GLM-4.5-Air (106B parameters, 12B active).  It continues the technical approach of [GLM-4.1V-Thinking](https://huggingface.co/papers/2507.01006), achieving SOTA performance among models of the same scale on 42 public vision-language benchmarks.  It covers common tasks such as image, video, and document understanding, as well as GUI agent operations.
 
-Tips:
+![bench_45](https://raw.githubusercontent.com/zai-org/GLM-V/refs/heads/main/resources/bench_45v.jpeg)
 
-<INSERT TIPS ABOUT MODEL HERE>
+Beyond benchmark performance, GLM-4.5V focuses on real-world usability. Through efficient hybrid training, it can handle diverse types of visual content, enabling full-spectrum vision reasoning, including:
+- **Image reasoning** (scene understanding, complex multi-image analysis, spatial recognition)
+- **Video understanding** (long video segmentation and event recognition)
+- **GUI tasks** (screen reading, icon recognition, desktop operation assistance)
+- **Complex chart & long document parsing** (research report analysis, information extraction)
+- **Grounding** (precise visual element localization)
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
-
+The model also introduces a **Thinking Mode** switch, allowing users to balance between quick responses and deep reasoning. This switch works the same as in the `GLM-4.5` language model.
 
 ## Glm4vMoeConfig
 

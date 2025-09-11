@@ -27,10 +27,10 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     is_flaky,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -44,6 +44,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        GenerationConfig,
         SmolVLMConfig,
         SmolVLMForConditionalGeneration,
         SmolVLMModel,
@@ -186,6 +187,7 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Compile not yet supported in SmolVLM models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -343,24 +345,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(
-        reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
-    )
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
     @pytest.mark.generate
     @is_flaky(description="TODO: check why flaky")
     def test_generate_methods_with_logits_to_keep(self):
@@ -387,6 +371,7 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         pass
 
     @unittest.skip(reason="Compile not yet supported in SmolVLM models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -395,7 +380,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         pass
 
     @pytest.mark.generate
-    @require_torch_sdpa
     @slow
     @unittest.skip(
         reason="SmolVLM doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
@@ -557,7 +541,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test(self):
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -577,7 +561,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test_video(self):
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -593,7 +577,15 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature'  # fmt: skip
+        expected_generated_text = Expectations(
+            {
+                (None, None): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',
+                ("cuda", (8, 0)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model architecture, specifically a "Quick Brown" model, which is designed',
+                ("cuda", (8, 6)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model, specifically a neural network model, which is designed to learn and',
+                ("rocm", (9, 4)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',
+                ("rocm", None): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model architecture, specifically a "Quick Brown" model, which is designed',
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
@@ -611,7 +603,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Load model and extract vision encoder
         model = SmolVLMForConditionalGeneration.from_pretrained(
             model_id,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             config=config,
         )
 
@@ -634,7 +626,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Load the model and extract the connector (multi-modal projector)
         model = SmolVLMForConditionalGeneration.from_pretrained(
             model_id,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             config=config,
         )
 
@@ -659,12 +651,24 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         config.text_config.use_cache = True
         config.text_config.attn_implementation = "sdpa"
 
+        generation_config = GenerationConfig(
+            use_cache=True,
+            cache_implementation="static",
+            max_length=1234,
+            cache_config={
+                "batch_size": 1,
+                "max_cache_len": 1234,
+            },
+        )
+
         # Load the model and extract the text decoder
         model = SmolVLMForConditionalGeneration.from_pretrained(
             model_id,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             config=config,
         )
+
+        model.model.text_model.generation_config = generation_config
 
         text_decoder = model.model.text_model
         text_decoder.eval()

@@ -567,22 +567,12 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
         # based on pattern from src/transformers/models/whisper/modeling_whisper.py::WhisperDecoder and similar addition in GPT2Model
-        return_legacy_cache = False
         if use_cache:
             if past_key_values is None:
-                return_legacy_cache = True
-                past_key_values = DynamicCache()
-            elif not isinstance(past_key_values, Cache):
-                return_legacy_cache = True
-                logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.53.0. "
-                    "You should pass an instance of `Cache` instead, e.g. "
-                    "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-                )
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                past_key_values = DynamicCache(config=self.config)
 
             if self.config.add_cross_attention and not isinstance(past_key_values, EncoderDecoderCache):
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -697,12 +687,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         past_key_values = past_key_values if use_cache else None
-        if return_legacy_cache:
-            past_key_values = (
-                past_key_values.self_attention_cache.to_legacy_cache()
-                if self.config.add_cross_attention
-                else past_key_values.to_legacy_cache()
-            )
+        # no return to legacy cache
         if not return_dict:
             return tuple(
                 v

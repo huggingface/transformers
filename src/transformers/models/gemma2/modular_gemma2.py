@@ -209,7 +209,7 @@ class Gemma2RMSNorm(GemmaRMSNorm):
 
 class Gemma2MLP(GemmaMLP):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.act_fn = ACT2FN[config.hidden_activation]
 
 
@@ -403,7 +403,7 @@ class Gemma2Model(GemmaModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None and not self.training:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -520,11 +520,6 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         "What is your favorite condiment?"
         ```"""
 
-        if self.training and self.config._attn_implementation != "eager":
-            logger.warning_once(
-                "It is strongly recommended to train Gemma2 models with the `eager` attention implementation "
-                f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
-            )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

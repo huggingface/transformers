@@ -26,7 +26,7 @@ from torch import Tensor, nn
 from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -463,6 +463,7 @@ class ProphetNetAttention(nn.Module):
         # previous time steps are cached - no need to recompute key and value if they are static
         query_states = self.query_proj(hidden_states) / (self.head_dim**0.5)
 
+        is_updated = False
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
@@ -492,7 +493,7 @@ class ProphetNetAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         query_states = query_states.view(batch_size, tgt_len, self.num_attn_heads, self.head_dim).transpose(1, 2)
@@ -1238,14 +1239,18 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 )
                 use_cache = False
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is None:
+            past_key_values = (
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                if encoder_hidden_states is not None
+                else DynamicCache(config=self.config)
+            )
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
                 "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1356,9 +1361,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             all_main_stream_hidden_states += (hidden_states[:, :sequence_length],)
             if self.config.ngram > 0:
                 all_ngram_stream_hidden_states += (hidden_states[:, sequence_length:],)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         # split last_hidden_state for return
         last_hidden_state = hidden_states[:, :sequence_length]
@@ -1508,9 +1510,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     @auto_docstring
     def forward(
@@ -2008,7 +2007,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past_key_values:
+        if past_key_values is not None and past_key_values.get_seq_length() > 0:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
