@@ -34,7 +34,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
-from .configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig
+from .configuration_parakeet import ParakeetConfig, ParakeetTDTConfig, ParakeetEncoderConfig, ParakeetTDTDecoderConfig
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
@@ -560,6 +560,99 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+
+@auto_docstring(
+    custom_intro="""
+    The Parakeet TDT Decoder. This class encapsulates both the predictor and joint network for TDT models. 
+    """
+)
+class ParakeetTDTDecoder(ParakeetPreTrainedModel):
+    def __init__(self, config: ParakeetTDTDecoderConfig):
+        super().__init__(config)
+        self.config = config
+        self.gradient_checkpointing = False
+
+
+        print("HERE CONFIG IS", config)
+        vocab_size = config.vocab_size
+        pred_hidden = config.pred_hidden
+        self.emb = torch.nn.Embedding(vocab_size, pred_hidden)
+        self.rnn = rnn.rnn(
+                      input_size=pred_n_hidden,
+                      hidden_size=rnn_hidden_size if rnn_hidden_size > 0 else pred_n_hidden,
+                      num_layers=pred_rnn_layers,
+                      norm=norm,
+                      forget_gate_bias=forget_gate_bias,
+                      t_max=t_max,
+                      dropout=dropout,
+                      weights_init_scale=weights_init_scale,
+                      hidden_hidden_bias_scale=hidden_hidden_bias_scale,
+                      proj_size=pred_n_hidden if pred_n_hidden < rnn_hidden_size else 0,
+                  ),
+
+        self.post_init()
+
+    @auto_docstring
+    @check_model_inputs
+    @can_return_tuple
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        hidden_states = self.subsampling(input_features, attention_mask)
+        hidden_states = hidden_states * self.input_scale
+        position_embeddings = self.encode_positions(hidden_states)
+
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        position_embeddings = nn.functional.dropout(
+            position_embeddings, p=self.dropout_positions, training=self.training
+        )
+
+        if attention_mask is not None:
+            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+
+            # NOTE: @eustlb, which mask utils to do the same?
+            # @ebezzam could use `create_causal_mask` but more complicated
+            # as `and_mask_function` requires callable mask function
+            attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
+            attention_mask = attention_mask & attention_mask.transpose(1, 2)
+            attention_mask = attention_mask.unsqueeze(1)
+            # attention_mask = create_causal_mask(
+            #     self.config,
+            #     hidden_states,
+            #     attention_mask,
+            #     cache_position=torch.arange(attention_mask.shape[1], device=hidden_states.device),
+            #     past_key_values=None,
+            #     position_ids=None,
+            #     # and_mask_function=None,
+            # )
+            # # ensure boolean mask because of `~attention_mask` in later processing
+            # if attention_mask is not None and attention_mask.dtype != torch.bool:
+            #     attention_mask = attention_mask > 0
+
+        for encoder_layer in self.layers:
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            # skip the layer when `to_drop=True``, rather than setting `hidden_states=None`
+            # which can cause error when computing loss on None output
+            if not to_drop:
+                hidden_states = encoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_embeddings=position_embeddings,
+                    **kwargs,
+                )
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @dataclass
 class ParakeetGenerateOutput(ModelOutput):
     """
@@ -687,4 +780,104 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         return sequences
 
 
-__all__ = ["ParakeetForCTC", "ParakeetEncoder", "ParakeetPreTrainedModel"]
+@auto_docstring(
+    custom_intro="""
+    Parakeet Encoder with a TDT decoder for decoding text.
+    """
+)
+class ParakeetForTDT(ParakeetPreTrainedModel):
+    def __init__(self, config: ParakeetTDTConfig):
+        #super().__init__(config)
+        #self.encoder = ParakeetEncoder(config.encoder_config)
+        # Conv rather than linear to be consistent with NeMO decolying layer
+        self.decoder = ParakeetTDTDecoder(config.decoder_config)
+
+        self.post_init()
+
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutput:
+        encoder_outputs = self.encoder(
+            input_features=input_features,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+
+        hidden_states = encoder_outputs.last_hidden_state
+        logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
+
+        loss = None
+        if labels is not None:
+            # retrieve loss input_lengths from attention_mask
+            attention_mask = (
+                attention_mask if attention_mask is not None else torch.ones_like(input_features, dtype=torch.long)
+            )
+            input_lengths = self._get_subsampling_output_length(attention_mask.sum(-1)).to(torch.long)
+
+            # assuming that padded tokens are filled with -100
+            # when not being attended to
+            labels_mask = labels >= 0
+            target_lengths = labels_mask.sum(-1)
+            flattened_targets = labels.masked_select(labels_mask)
+
+            # ctc_loss doesn't support fp16
+            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+
+            with torch.backends.cudnn.flags(enabled=False):
+                loss = nn.functional.ctc_loss(
+                    log_probs,
+                    flattened_targets,
+                    input_lengths,
+                    target_lengths,
+                    blank=self.config.blank_token_id,
+                    reduction=self.config.ctc_loss_reduction,
+                    zero_infinity=self.config.ctc_zero_infinity,
+                )
+
+        return CausalLMOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+    def generate(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        return_dict_in_generate: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[ParakeetGenerateOutput, torch.LongTensor]:
+        kwargs["return_dict"] = True
+        outputs: CausalLMOutput = self.forward(
+            input_features=input_features,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+
+        # greedy decoding
+        sequences = outputs.logits.argmax(dim=-1)
+
+        # mask out padded tokens
+        if attention_mask is not None:
+            attention_mask = self._get_output_attention_mask(attention_mask)
+            sequences[~attention_mask] = self.config.pad_token_id
+
+        if return_dict_in_generate:
+            return ParakeetGenerateOutput(
+                sequences=sequences,
+                logits=outputs.logits,
+                attentions=outputs.attentions,
+                hidden_states=outputs.hidden_states,
+            )
+
+        return sequences
+
+
+__all__ = ["ParakeetForCTC", "ParakeetForTDT", "ParakeetEncoder", "ParakeetPreTrainedModel"]

@@ -24,70 +24,6 @@ logger = logging.get_logger(__name__)
 
 
 class ParakeetEncoderConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`ParakeetEncoder`]. It is used to instantiate a
-    `ParakeetEncoder` model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimension of the layers and the hidden states.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            Dimension of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-        conv_kernel_size (`int`, *optional*, defaults to 9):
-            The kernel size of the convolution layers in the Conformer block.
-        subsampling_factor (`int`, *optional*, defaults to 8):
-            The factor by which the input sequence is subsampled.
-        subsampling_conv_channels (`int`, *optional*, defaults to 256):
-            The number of channels in the subsampling convolution layers.
-        num_mel_bins (`int`, *optional*, defaults to 80):
-            Number of mel features.
-        subsampling_conv_kernel_size (`int`, *optional*, defaults to 3):
-            The kernel size of the subsampling convolution layers.
-        subsampling_conv_stride (`int`, *optional*, defaults to 2):
-            The stride of the subsampling convolution layers.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for all fully connected layers in the embeddings, encoder, and pooler.
-        dropout_positions (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the positions in the input sequence.
-        layerdrop (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the layers in the encoder.
-        activation_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for activations inside the fully connected layer.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention layers.
-        max_position_embeddings (`int`, *optional*, defaults to 5000):
-            The maximum sequence length that this model might ever be used with.
-        scale_input (`bool`, *optional*, defaults to `True`):
-            Whether to scale the input embeddings.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
-    Example:
-        ```python
-        >>> from transformers import ParakeetEncoderModel, ParakeetEncoderConfig
-
-        >>> # Initializing a `ParakeetEncoder` configuration
-        >>> configuration = ParakeetEncoderConfig()
-
-        >>> # Initializing a model from the configuration
-        >>> model = ParakeetEncoderModel(configuration)
-
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
-
-    This configuration class is based on the ParakeetEncoder architecture from NVIDIA NeMo. You can find more details
-    and pre-trained models at [nvidia/parakeet-ctc-1.1b](https://huggingface.co/nvidia/parakeet-ctc-1.1b).
-    """
 
     model_type = "parakeet_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -149,6 +85,37 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.use_bias = True
 
 
+class ParakeetTDTDecoderConfig(PretrainedConfig):
+    model_type = "parakeet_tdt_decoder"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        pred_hidden=640,
+        pred_n_layers=2,
+        joint_hidden=640,
+        vocab_size=1024,
+        durations=[0,1,2,3,4],
+        **kwargs,
+    ):
+        super().__init__(
+            **kwargs,
+        )
+        self.pred_hidden = pred_hidden
+        self.pred_n_layers = pred_n_layers
+        self.joint_hidden = joint_hidden
+        self.vocab_size = vocab_size
+        self.durations = durations
+
+        print("SUCCESS!")
+#        self.pred_hidden = kwargs['pred_hidden']
+#        self.pred_n_layers = kwargs['pred_n_layers']
+#        self.joint_hidden = kwargs['joint_hidden']
+#        self.vocab_size = kwargs['vocab_size']
+#        self.durations = kwargs['durations']
+
+
+
 class ParakeetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ParakeetCTC`]. It is used to instantiate a
@@ -207,6 +174,7 @@ class ParakeetConfig(PretrainedConfig):
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
         encoder_config: Union[dict, ParakeetEncoderConfig] = None,
+        decoder_config: Union[dict, ParakeetTDTDecoderConfig] = None,
         **kwargs,
     ):
         super().__init__(
@@ -229,6 +197,9 @@ class ParakeetConfig(PretrainedConfig):
             raise ValueError(
                 f"`encoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
             )
+
+        self.model_type = model_type
+
         self.vocab_size = vocab_size
         self.blank_token_id = blank_token_id
         self.ctc_loss_reduction = ctc_loss_reduction
@@ -248,4 +219,71 @@ class ParakeetConfig(PretrainedConfig):
         return cls(encoder_config=encoder_config.to_dict(), **kwargs)
 
 
-__all__ = ["ParakeetConfig", "ParakeetEncoderConfig"]
+class ParakeetTDTConfig(PretrainedConfig):
+
+    model_type = "parakeet"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs = {"encoder_config": ParakeetEncoderConfig}
+
+    def __init__(
+        self,
+        vocab_size=1025,
+        blank_token_id=1024,
+        pad_token_id=1024,
+        bos_token_id=1,
+        eos_token_id=2,
+        tdt_loss_reduction="mean",
+        encoder_config: Union[dict, ParakeetEncoderConfig] = None,
+        decoder_config: Union[dict, ParakeetTDTDecoderConfig] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
+        if encoder_config is None:
+            encoder_config = {}
+            logger.info("`encoder_config` is `None`. Initializing the `ParakeetEncoderConfig` with default values.")
+
+        if encoder_config is None:
+            encoder_config = ParakeetEncoderConfig()
+        elif isinstance(encoder_config, dict):
+            self.encoder_config = ParakeetEncoderConfig(**encoder_config)
+        elif isinstance(encoder_config, ParakeetEncoderConfig):
+            self.encoder_config = encoder_config
+        else:
+            raise ValueError(
+                f"`encoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
+            )
+
+#        self.model_type = model_type
+
+#        print("HERE decoder_config", decoder_config)
+#        assert decoder_config is not None and isinstance(decoder_config, ParakeetTDTDecoderConfig)
+        self.decoder_config = decoder_config
+
+        self.vocab_size = vocab_size
+
+        self.blank_token_id = blank_token_id
+        self.tdt_loss_reduction = tdt_loss_reduction
+
+#        self.durations = durations
+
+        self.use_bias = self.encoder_config.use_bias
+        self.initializer_range = self.encoder_config.initializer_range
+
+    @classmethod
+    def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):
+        r"""
+        Instantiate a [`ParakeetConfig`] (or a derived class) from parakeet encoder model configuration.
+
+        Returns:
+            [`ParakeetConfig`]: An instance of a configuration object
+        """
+
+        return cls(encoder_config=encoder_config.to_dict(), **kwargs)
+
+
+__all__ = ["ParakeetConfig", "ParakeetTDTConfig", "ParakeetEncoderConfig", "ParakeetTDTDecoderConfig"]

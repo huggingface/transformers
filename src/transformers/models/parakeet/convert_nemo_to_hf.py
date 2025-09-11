@@ -54,9 +54,9 @@ from typing import Any, Optional, Union
 import torch
 import yaml
 
-from transformers.models.parakeet.configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig
+from transformers.models.parakeet.configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig, ParakeetTDTDecoderConfig, ParakeetTDTConfig
 from transformers.models.parakeet.feature_extraction_parakeet import ParakeetFeatureExtractor
-from transformers.models.parakeet.modeling_parakeet import ParakeetForCTC
+from transformers.models.parakeet.modeling_parakeet import ParakeetForCTC, ParakeetForTDT
 from transformers.models.parakeet.processing_parakeet import ParakeetProcessor
 from transformers.models.parakeet.tokenization_parakeet import ParakeetCTCTokenizer
 
@@ -298,6 +298,7 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
         "encoder_type": "unknown",
         "decoder_type": "unknown",
         "is_ctc_model": False,
+        "is_tdt_model": False,
         "encoder_cfg": None,
         "decoder_cfg": None,
         "preprocessor_cfg": None,
@@ -306,7 +307,10 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
     # Extract model type from config or model name
     model_name = config.get("name", "").lower()
     if "parakeet" in model_name:
-        model_info["model_type"] = "parakeet_ctc"
+        if "ctc" in model_name:
+            model_info["model_type"] = "parakeet_ctc"
+        if "tdt" in model_name:
+            model_info["model_type"] = "parakeet_tdt"
     elif "canary" in model_name:
         model_info["model_type"] = "canary"
     elif "conformer" in model_name:
@@ -327,12 +331,17 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
     # Enhanced CTC model detection
     decoder_type = model_info["decoder_type"].lower()
     is_ctc = False
+    is_tdt = False
 
     # Primary check: Look for EncDecCTCModelBPE in the main config target
     main_target = config.get("target", "").lower()
     if "encdecctcmodelbpe" in main_target.replace("_", "").replace(".", ""):
         is_ctc = True
         logger.info(f"Detected EncDecCTCModelBPE in main target: {config.get('_target_', '')}")
+    elif "tdt" in config['loss']['loss_name']:
+        is_tdt = True
+        logger.info(f"Detected TDT model")
+
 
     # Secondary checks
     # Check decoder type
@@ -350,9 +359,12 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
             is_ctc = True
 
     model_info["is_ctc_model"] = is_ctc
+    model_info["is_tdt_model"] = is_tdt
 
     # Set model type based on CTC detection
     if is_ctc:
+        model_info["model_type"] = "parakeet"
+    if is_tdt:
         model_info["model_type"] = "parakeet"
 
     logger.info(f"Detected model type: {model_info['model_type']}")
@@ -367,7 +379,15 @@ def create_hf_config_from_nemo(
     model_info: dict[str, Any], state_dict: dict[str, torch.Tensor], vocab_dict: Optional[dict[str, int]] = None
 ) -> Union[ParakeetConfig]:
     """Create HuggingFace ParakeetConfig from NeMo config and weights."""
+
+    print("HERE model_info", model_info)
+
     encoder_cfg = model_info.get("encoder_cfg", {})
+    decoder_cfg = model_info.get("decoder_cfg", {})
+
+    print("HERE encoder_cfg", encoder_cfg)
+    print("HERE HA decoder_cfg", decoder_cfg)
+
     preprocessor_cfg = model_info.get("preprocessor_cfg", {})
 
     # Detect architecture from state dict
@@ -417,6 +437,7 @@ def create_hf_config_from_nemo(
 
     # Use config values if available, otherwise use detected values
     config_params = {
+        # encoder parameters
         "vocab_size": 1024,  # Default, will be overridden for CTC models
         "hidden_size": encoder_cfg.get("d_model", actual_hidden_size),
         "num_hidden_layers": encoder_cfg.get("n_layers", actual_layers),
@@ -437,14 +458,23 @@ def create_hf_config_from_nemo(
         "pad_token_id": 0,
         "bos_token_id": 1,
         "eos_token_id": 2,
+
+        # decoder parameters
+        "pred_hidden": 640,
+        "pred_n_layers": 2,
+        "joint_hidden": 640,
+        "durations": [0,1,2,3,4],
     }
 
     # Add model-specific metadata
     if model_info["is_ctc_model"]:
         architectures = ["parakeet"]
         base_model_type = "parakeet"
+    elif model_info["is_tdt_model"]:
+        architectures = ["parakeet"]
+        base_model_type = "parakeet"
     else:
-        raise ValueError("Unsupported model type. Only CTC models are supported in this converter.")
+        raise ValueError("Unsupported model type. Only CTC and TDT models are supported in this converter.")
 
     config_params.update(
         {
@@ -492,6 +522,52 @@ def create_hf_config_from_nemo(
             ctc_loss_reduction="mean",
             ctc_zero_infinity=True,
             encoder_config=parakeet_encoder_config,
+        )
+    elif model_info["is_tdt_model"]:
+        # Get vocab_size from state dict if available
+        vocab_size = 1024  # default
+        print("HERE state_dict.keys()", state_dict.keys())
+#        if any("decoder.ctc_head.weight" in key or "decoder_layers.0.weight" in key for key in state_dict.keys()):
+#            # Find the decoder weight to get vocab_size
+#            decoder_keys = [k for k in state_dict.keys() if "decoder_layers.0.weight" in k]
+#            if decoder_keys:
+#                decoder_weight = state_dict[decoder_keys[0]]
+#                if decoder_weight.dim() == 3 and decoder_weight.size(2) == 1:
+#                    vocab_size = decoder_weight.size(0)  # Conv1d output channels
+#                else:
+#                    vocab_size = decoder_weight.size(0)  # Linear output features
+#                logger.info(f"Detected vocab_size: {vocab_size} from decoder weights")
+
+        # Create `ParakeetEncoderConfig` sub-config with `parakeet_encoder` model_type
+        parakeet_encoder_config_params = config_params.copy()
+        parakeet_encoder_config_params["model_type"] = "parakeet_encoder"
+        parakeet_encoder_config_params["architectures"] = ["ParakeetEncoder"]
+        parakeet_encoder_config = ParakeetEncoderConfig(**parakeet_encoder_config_params)
+        print("HERE parakeet_encoder_config", parakeet_encoder_config)
+
+
+        parakeet_decoder_config_params = config_params.copy()
+        parakeet_decoder_config_params["model_type"] = "parakeet_decoder"
+        parakeet_decoder_config_params["architectures"] = ["ParakeetDecoder"]
+        parakeet_decoder_config = ParakeetTDTDecoderConfig(**parakeet_decoder_config_params)
+#        print("HERE parakeet_decoder_config_params", parakeet_decoder_config_params)
+        print("HERE parakeet_decoder_config", parakeet_decoder_config)
+
+        # Calculate blank token ID: should be len(vocab_dict) if we have vocab, otherwise vocab_size - 1
+        if vocab_dict:
+            blank_id = len(vocab_dict)  # Blank token after all real tokens
+            logger.info(f"Setting blank_token_id to {blank_id} (vocab has {len(vocab_dict)} real tokens)")
+        else:
+            blank_id = vocab_size - 1  # Fallback
+            logger.info(f"No vocab provided, setting blank_token_id to {blank_id}")
+
+        model_config = ParakeetTDTConfig(
+            vocab_size=vocab_size,  # Total size including blank token
+            blank_token_id=blank_id,
+            ctc_loss_reduction="mean",
+            ctc_zero_infinity=True,
+            encoder_config=parakeet_encoder_config,
+            decoder_config=parakeet_decoder_config,
         )
 
     # Non CTC models, TODO
@@ -598,11 +674,13 @@ def convert_weights(nemo_state_dict: dict[str, torch.Tensor], model_info: dict[s
 
 
 def create_hf_model(
-    hf_config: Union[ParakeetConfig],
+    hf_config: Union[ParakeetConfig, ParakeetTDTConfig],
     hf_state_dict: dict[str, torch.Tensor],
     model_info: dict[str, Any],
 ) -> Union[ParakeetForCTC]:
     """Create the appropriate HuggingFace model and load weights."""
+
+    print("HERE hf_config", hf_config)
 
     if model_info["is_ctc_model"]:
         # Check if we already have a ParakeetCTCConfig or need to create one
@@ -625,6 +703,32 @@ def create_hf_model(
                 encoder_config=hf_config,
             )
             model = ParakeetForCTC(ctc_config)
+
+    elif model_info["is_tdt_model"]:
+        # Check if we already have a ParakeetTDTConfig or need to create one
+        if isinstance(hf_config, ParakeetTDTConfig):
+            logger.info("Creating ParakeetForTDT model with existing ParakeetConfig...")
+            model = ParakeetForTDT(hf_config)
+        else:
+            # Fallback: create ParakeetConfig if we somehow still have FastConformerConfig
+            vocab_size = 1024  # default
+#            if "decoder.ctc_head.weight" in hf_state_dict:
+#                vocab_size = hf_state_dict["decoder.ctc_head.weight"].shape[0]
+#                logger.info(f"Detected vocab_size: {vocab_size} from TDT head")
+
+            logger.info("Creating ParakeetForCTC model with new ParakeetConfig...")
+            tdt_config = ParakeetTDTConfig(
+                vocab_size=vocab_size,
+                blank_token_id=vocab_size,
+                tdt_loss_reduction="mean",
+                model_type='tdt',
+#                ctc_zero_infinity=True,
+                encoder_config=hf_config,
+                decoder_config=hf_config,
+            )
+            model = ParakeetForTDT(tdt_config)
+
+            print("HERE MODEL", model)
 
     else:
         raise ValueError("Unsupported model type. Only CTC models are supported in this converter.")
@@ -734,6 +838,8 @@ def convert_nemo_to_hf(input_path: str, output_dir: str, push_to_hub: str | None
 
     # Create HuggingFace config
     hf_config = create_hf_config_from_nemo(model_info, state_dict, vocab_dict)
+
+    print("HERE2 hf_config", model_info,  hf_config)
 
     # Convert weights
     hf_state_dict = convert_weights(state_dict, model_info)
