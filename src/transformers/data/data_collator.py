@@ -40,7 +40,7 @@ class DataCollatorMixin:
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
-        elif return_tensors == "pt":
+        if return_tensors == "pt":
             return self.torch_call(features)
         elif return_tensors == "np":
             return self.numpy_call(features)
