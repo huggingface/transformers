@@ -313,7 +313,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         ensure_multiple_of: Optional[int] = 1,
         keep_aspect_ratio: bool = False,

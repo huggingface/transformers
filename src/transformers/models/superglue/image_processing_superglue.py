@@ -226,7 +226,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         images,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_grayscale: Optional[bool] = None,
