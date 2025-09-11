@@ -262,8 +262,8 @@ class XIELUActivation(nn.Module):
             )
         result = self._xielu_cuda_obj.forward(
             x,
-            self.alpha_p,
-            self.alpha_n,
+            self.alpha_p.to(x.dtype),
+            self.alpha_n.to(x.dtype),
             # Temporary until xIELU CUDA fully implemented -> self.{beta,eps}.item()
             self._beta_scalar,
             self._eps_scalar,
