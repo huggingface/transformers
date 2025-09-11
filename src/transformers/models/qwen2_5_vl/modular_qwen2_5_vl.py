@@ -840,7 +840,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
 
 class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Optional[Union[list[float | int] | float | int]]
+    fps: Optional[Union[list[Union[float, int]], float, int]]
 
 
 class Qwen2_5_VLImagesKwargs(Qwen2VLImagesKwargs):
