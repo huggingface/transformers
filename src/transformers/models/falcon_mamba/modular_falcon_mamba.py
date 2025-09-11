@@ -22,8 +22,6 @@ from torch import nn
 
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_kernels_available,
     is_mamba_ssm_available,
     is_mambapy_available,
 )
