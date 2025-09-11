@@ -74,7 +74,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         <Tip>
 
-        If the `processed_features` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+        If the `processed_features` passed are dictionary of numpy arrays or PyTorch tensors  the
         result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
         PyTorch tensors, you will lose the specific device of your tensors however.
 
@@ -87,7 +87,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 list[float]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
                 collate function.
 
-                Instead of `list[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
+                Instead of `list[float]` you can have tensors (numpy arrays or PyTorch tensors),
                 see the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding

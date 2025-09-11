@@ -1241,7 +1241,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
         Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
         in the batch. Padding side (left/right) padding token ids are defined at the tokenizer level (with
         `self.padding_side`, `self.pad_token_id` and `self.pad_token_type_id`) .. note:: If the `encoded_inputs` passed
-        are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the result will use the same type unless
+        are dictionary of numpy arrays or PyTorch tensors  the result will use the same type unless
         you provide a different tensor type with `return_tensors`. In the case of PyTorch tensors, you will lose the
         specific device of your tensors however.
 

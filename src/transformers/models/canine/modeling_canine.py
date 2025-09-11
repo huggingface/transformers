@@ -99,7 +99,6 @@ class CanineEmbeddings(nn.Module):
         self.char_position_embeddings = nn.Embedding(config.num_hash_buckets, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        # self.LayerNorm is not snake-cased due to old tensorflow checkpoint name matching
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -197,8 +196,6 @@ class CharactersToMolecules(nn.Module):
         )
         self.activation = ACT2FN[config.hidden_act]
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, char_encoding: torch.Tensor) -> torch.Tensor:
@@ -245,8 +242,6 @@ class ConvProjection(nn.Module):
             stride=1,
         )
         self.activation = ACT2FN[config.hidden_act]
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 

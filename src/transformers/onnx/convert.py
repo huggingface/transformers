@@ -24,7 +24,6 @@ from packaging.version import Version, parse
 
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import (
-    TensorType,
     is_torch_available,
     logging,
 )
@@ -136,7 +135,7 @@ def export_pytorch(
 
             # Ensure inputs match
             # TODO: Check when exporting QA we provide "is_pair=True"
-            model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
+            model_inputs = config.generate_dummy_inputs(preprocessor)
             device = torch.device(device)
             if device.type == "cuda" and torch.cuda.is_available():
                 model.to(device)
@@ -267,7 +266,6 @@ def validate_model_outputs(
             preprocessor,
             batch_size=config.default_fixed_batch + 1,
             seq_length=config.default_fixed_sequence + 1,
-            framework=TensorType.PYTORCH,
         )
 
     # Create ONNX Runtime session

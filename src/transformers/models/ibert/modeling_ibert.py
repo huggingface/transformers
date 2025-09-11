@@ -89,8 +89,6 @@ class IBertEmbeddings(nn.Module):
         self.embeddings_act1 = QuantAct(self.embedding_act_bit, quant_mode=self.quant_mode)
         self.embeddings_act2 = QuantAct(self.embedding_act_bit, quant_mode=self.quant_mode)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = IntLayerNorm(
             config.hidden_size,
             eps=config.layer_norm_eps,
