@@ -863,7 +863,6 @@ class SamImageProcessor(BaseImageProcessor):
 
         return masks, scores, converted_boxes
 
-
 def _compute_stability_score_pt(masks: "torch.Tensor", mask_threshold: float, stability_score_offset: int):
     # One mask is always contained inside the other.
     # Save memory by preventing unnecessary cast to torch.int64
