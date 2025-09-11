@@ -3129,8 +3129,6 @@ class GenerationMixin(ContinuousMixin):
         num_beams = generation_config.num_beams
         num_return_sequences = generation_config.num_return_sequences
 
-        batch_size_unflattened, cur_len = input_ids.shape[:2]
-        batch_size = batch_size_unflattened // num_beams
         # TODO (joao): standardize special cases
         if self.__class__.__name__ == "MoshiDepthDecoder":
             vocab_size = self.config.audio_vocab_size
@@ -3138,7 +3136,6 @@ class GenerationMixin(ContinuousMixin):
             vocab_size = self.get_output_embeddings().out_features
         else:
             vocab_size = self.config.get_text_config().vocab_size
-        decoder_prompt_len = cur_len
         this_peer_finished = False
 
         # At each beam search step, we want to keep top K [K = (number of EOS tokens + 1) * `num_beams`] candidates
@@ -3176,6 +3173,9 @@ class GenerationMixin(ContinuousMixin):
             is_encoder_decoder=self.config.is_encoder_decoder,
             **model_kwargs,
         )
+        batch_size_unflattened, cur_len = input_ids.shape[:2]
+        batch_size = batch_size_unflattened // num_beams
+        decoder_prompt_len = cur_len
 
         model_kwargs = self._prefill(input_ids, generation_config, model_kwargs)
 
@@ -3710,6 +3710,9 @@ class GenerationMixin(ContinuousMixin):
         # Only prefill up to the token just before last, so that decoding is completely performed outside this function
         # (here we simply prefill the cache)
         prefill_input_ids = input_ids[:, :-1, ...]
+        if prefill_input_ids.numel() == 0:  # No prefill for 1 token prompts
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            return model_kwargs
 
         if generation_config.prefill_chunk_size is None:
             if (attention_mask := model_kwargs.pop("attention_mask", None)) is not None:
