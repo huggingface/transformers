@@ -990,7 +990,7 @@ def _get_resolved_checkpoint_files(
     subfolder: str,
     variant: Optional[str],
     gguf_file: Optional[str],
-    use_safetensors: bool,
+    use_safetensors: Optional[bool],
     cache_dir: str,
     force_download: bool,
     proxies: Optional[dict[str, str]],
@@ -1016,14 +1016,14 @@ def _get_resolved_checkpoint_files(
                 # If the filename is explicitly defined, load this by default.
                 archive_file = os.path.join(pretrained_model_name_or_path, subfolder, transformers_explicit_filename)
                 is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
-            elif use_safetensors and os.path.isfile(
+            elif use_safetensors is not False and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
             ):
                 # Load from a safetensors checkpoint
                 archive_file = os.path.join(
                     pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant)
                 )
-            elif use_safetensors and os.path.isfile(
+            elif use_safetensors is not False and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant))
             ):
                 # Load from a sharded safetensors checkpoint
@@ -1067,7 +1067,7 @@ def _get_resolved_checkpoint_files(
             if transformers_explicit_filename is not None:
                 filename = transformers_explicit_filename
                 is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
-            elif use_safetensors:
+            elif use_safetensors is not False:
                 filename = _add_variant(SAFE_WEIGHTS_NAME, variant)
             else:
                 filename = _add_variant(WEIGHTS_NAME, variant)
@@ -4420,7 +4420,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
-        use_safetensors: bool = True,
+        use_safetensors: Optional[bool] = None,
         weights_only: bool = True,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
@@ -4588,9 +4588,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 specify the folder name here.
             variant (`str`, *optional*):
                 If specified load weights from `variant` filename, *e.g.* pytorch_model.<variant>.bin.
-            use_safetensors (`bool`, *optional*, defaults to `True`):
-                Whether or not to use `safetensors` checkpoints. Defaults to `True`. If `safetensors` is not installed,
-                it will be set to `False`.
+            use_safetensors (`bool`, *optional*, defaults to `None`):
+                Whether or not to use `safetensors` checkpoints. Defaults to `None`. If not specified and `safetensors`
+                is not installed, it will be set to `False`.
             weights_only (`bool`, *optional*, defaults to `True`):
                 Indicates whether unpickler should be restricted to loading only tensors, primitive types,
                 dictionaries and any types added via torch.serialization.add_safe_globals().
@@ -4741,7 +4741,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
             adapter_kwargs["token"] = token
 
-        if use_safetensors and not is_safetensors_available():
+        if use_safetensors is None and not is_safetensors_available():
             use_safetensors = False
 
         if gguf_file is not None and not is_accelerate_available():
