@@ -32,7 +32,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
     >>> extractor = pipeline(model="google/vit-base-patch16-224", task="image-feature-extraction")
     >>> result = extractor("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", return_tensors=True)
-    >>> result.shape  # This is a tensor of shape [1, sequence_lenth, hidden_dimension] representing the input image.
+    >>> result.shape  # This is a tensor of shape [1, sequence_length, hidden_dimension] representing the input image.
     torch.Size([1, 197, 768])
     ```
 
