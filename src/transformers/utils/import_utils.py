@@ -592,12 +592,14 @@ def is_flash_linear_attention_available():
 
         if not torch.cuda.is_available():
             return False
-        else:
-            if _is_package_available("fla"):
-                import fla
 
-                if version.parse(fla.__version__) >= version.parse("0.2.2"):
-                    return True
+        try:
+            import fla
+
+            if version.parse(fla.__version__) >= version.parse("0.2.2"):
+                return True
+        except Exception:
+            pass
     return False
 
 
