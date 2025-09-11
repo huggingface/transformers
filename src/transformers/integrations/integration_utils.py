@@ -1216,7 +1216,7 @@ class CometCallback(TrainerCallback):
         - **COMET_PROJECT_NAME** (`str`, *optional*):
             Comet project name for experiments.
         - **COMET_LOG_ASSETS** (`str`, *optional*, defaults to `TRUE`):
-            Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be `TRUE`, or
+            Whether or not to log training assets (checkpoints, etc), to Comet. Can be `TRUE`, or
             `FALSE`.
 
         For a number of configurable items in the environment, see
