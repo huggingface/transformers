@@ -3710,7 +3710,7 @@ class GenerationMixin(ContinuousMixin):
         # Only prefill up to the token just before last, so that decoding is completely performed outside this function
         # (here we simply prefill the cache)
         prefill_input_ids = input_ids[:, :-1, ...]
-        inputs_embeds, token_type_ids = None, None
+        inputs_embeds = None
         prefill_len = prefill_input_ids.shape[1]
         if prefill_input_ids.numel() == 0:  # No prefill for 1 token prompts
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
@@ -3720,10 +3720,6 @@ class GenerationMixin(ContinuousMixin):
             prefill_input_embeds = inputs_embeds[:, :-1, ...]
             model_kwargs["inputs_embeds"] = prefill_input_embeds
             prefill_len = prefill_input_embeds.shape[1]
-        if "token_type_ids" in model_kwargs:
-            token_type_ids = model_kwargs.pop("token_type_ids")
-            prefill_token_type_ids = token_type_ids[:, :-1, ...]
-            model_kwargs["token_type_ids"] = prefill_token_type_ids
 
         if generation_config.prefill_chunk_size is None:
             if (attention_mask := model_kwargs.pop("attention_mask", None)) is not None:
@@ -3736,12 +3732,9 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
             )
-            if attention_mask is not None:
-                model_kwargs["attention_mask"] = attention_mask
+            model_kwargs["attention_mask"] = attention_mask
             if inputs_embeds is not None:
                 model_kwargs["inputs_embeds"] = inputs_embeds
-            if token_type_ids is not None:
-                model_kwargs["token_type_ids"] = token_type_ids
             return model_kwargs
         else:  # Chunked prefill
             # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
