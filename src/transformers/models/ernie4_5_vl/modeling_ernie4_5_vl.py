@@ -52,12 +52,6 @@ from .configuration_ernie4_5_vl import Ernie4_5_VLConfig, Ernie4_5_VLTextConfig,
 logger = logging.get_logger(__name__)
 
 
-class TokenType:
-    text = 0
-    image = 1
-    video = 2
-
-
 class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
     def __init__(self, config, device=None):
         super().__init__()
@@ -1023,7 +1017,7 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
 @auto_docstring
 class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
     base_model_prefix = ""
-    _checkpoint_conversion_mapping = {}  # overwrite to avoid any mappings
+    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Ernie4_5_VLConfig
@@ -1496,7 +1490,7 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
 
 
 class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}  # overwrite to avoid any mappings
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1571,8 +1565,6 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
             The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
-        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
 
         Example:
 
@@ -1581,8 +1573,8 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         >>> import requests
         >>> from transformers import AutoProcessor, Ernie4_5_VLForConditionalGeneration
 
-        >>> model = Ernie4_5_VLForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
-        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
+        >>> model = Ernie4_5_VLForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 
         >>> messages = [
             {
@@ -1658,6 +1650,8 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         grid_thw=None,  # TODO remove after refactor
         image_grid_thw=None,
         video_grid_thw=None,
+        # Intentionally ignore position ids to force
+        # custom cache logic of 3D position ids
         position_ids=None,
         **kwargs,
     ):
@@ -1713,39 +1707,44 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
             image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
             video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
         """
-        image_token_id = self.config.image_token_id
-        video_token_id = self.config.video_token_id
-        vision_start_token_id = self.config.vision_start_token_id
 
         if inputs_embeds is not None:
-            vision_start_mask = (
+            is_image = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
-            image_mask = (
+            is_video_start = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
-            video_mask = (
+            is_video_end = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
         else:
-            vision_start_mask = input_ids == vision_start_token_id
-            image_mask = input_ids == image_token_id
-            video_mask = input_ids == video_token_id
+            is_image = input_ids == self.config.image_start_token_id
+            is_video_start = input_ids == self.config.video_start_token_id
+            is_video_end = input_ids == self.config.video_end_token_id
 
-        vision_first_mask = torch.roll(vision_start_mask, shifts=1, dims=1)
-        image_nums = torch.sum(vision_first_mask & image_mask, dim=1)
-        video_nums = torch.sum(vision_first_mask & video_mask, dim=1)
+        # Cumulative sum to track if we're inside a video span
+        # We'll assume well-formed video tags (i.e. matching starts and ends)
+        video_level = torch.cumsum(is_video_start.int() - is_video_end.int(), dim=1)
+        inside_video = video_level > 0  # shape (batch_size, seq_length)
 
-        return image_nums, video_nums
+        # Mask out image tokens that are inside video spans
+        standalone_images = is_image & (~inside_video)
+
+        # Count per batch
+        image_counts = standalone_images.sum(dim=1)
+        video_counts = is_video_start.sum(dim=1)
+
+        return image_counts, video_counts
 
     def _expand_inputs_for_generation(
         self,

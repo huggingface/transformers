@@ -70,11 +70,11 @@ from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeRMSNorm,
     Ernie4_5_MoeStatics,
 )
+from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VisionTransformerPretrainedModel,
-    Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionBlock,
@@ -88,12 +88,6 @@ from .configuration_ernie4_5_vl import Ernie4_5_VLConfig, Ernie4_5_VLTextConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class TokenType:
-    text = 0
-    image = 1
-    video = 2
 
 
 class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
@@ -706,7 +700,7 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
 
 
 class Ernie4_5_VLModel(Qwen2_5_VLModel):
-    _checkpoint_conversion_mapping = {}  # overwrite to avoid any mappings
+    _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: Ernie4_5_VLConfig):
         super().__init__(config)
@@ -1086,10 +1080,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         )
 
 
-# TODO: use glm4v get imgs and vids nums
-class Ernie4_5_VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, GenerationMixin):
-    _checkpoint_conversion_mapping = {}  # overwrite to avoid any mappings
-
+class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
     @property
     def visual(self):
         return self.model.vision_tower
@@ -1104,6 +1095,8 @@ class Ernie4_5_VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, Ge
         grid_thw=None,  # TODO remove after refactor
         image_grid_thw=None,
         video_grid_thw=None,
+        # Intentionally ignore position ids to force
+        # custom cache logic of 3D position ids
         position_ids=None,
         **kwargs,
     ):
