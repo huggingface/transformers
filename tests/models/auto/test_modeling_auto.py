@@ -515,11 +515,15 @@ class AutoModelTest(unittest.TestCase):
             _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
 
     def test_model_from_tf_error(self):
-        with self.assertRaisesRegex(EnvironmentError, "Can't load the model for"):
+        with self.assertRaisesRegex(
+            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
+        ):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
 
     def test_model_from_flax_error(self):
-        with self.assertRaisesRegex(EnvironmentError, "Can't load the model for"):
+        with self.assertRaisesRegex(
+            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
+        ):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
 
     @unittest.skip("Failing on main")
