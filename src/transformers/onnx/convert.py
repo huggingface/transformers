@@ -121,7 +121,6 @@ def export_pytorch(
         import torch
         from torch.onnx import export as onnx_export
 
-        logger.info(f"Using framework PyTorch: {torch.__version__}")
         with torch.no_grad():
             model.config.return_dict = True
             model.eval()

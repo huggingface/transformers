@@ -12,7 +12,6 @@ os.environ["AWS_DEFAULT_REGION"] = "us-east-1"  # defaults region
 
 @dataclass
 class SageMakerTestEnvironment:
-    framework: str = "pytorch"
     role = "arn:aws:iam::558105141721:role/sagemaker_execution_role"
     hyperparameters = {
         "task_name": "mnli",
@@ -38,11 +37,11 @@ class SageMakerTestEnvironment:
 
     @property
     def base_job_name(self) -> str:
-        return f"{self.framework}-transformers-test"
+        return "pytorch-transformers-test"
 
     @property
     def test_path(self) -> str:
-        return f"./tests/sagemaker/scripts/{self.framework}"
+        return "./tests/sagemaker/scripts/pytorch"
 
     @property
     def image_uri(self) -> str:
@@ -51,4 +50,4 @@ class SageMakerTestEnvironment:
 
 @pytest.fixture(scope="class")
 def sm_env(request):
-    request.cls.env = SageMakerTestEnvironment(framework=request.cls.framework)
+    request.cls.env = SageMakerTestEnvironment()
