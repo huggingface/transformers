@@ -18,24 +18,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import math
 
 from ...configuration_utils import PretrainedConfig
-from ...utils.import_utils import is_causal_conv1d_available, is_kernels_available
-
-
-if is_kernels_available():
-    from kernels import get_kernel
-
-    kernel_causal_conv1d = get_kernel("kernels-community/causal-conv1d")
-    causal_conv1d_update, causal_conv1d_fn = (
-        kernel_causal_conv1d.causal_conv1d_update,
-        kernel_causal_conv1d.causal_conv1d_fn,
-    )
-elif is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
 
 
 class FalconMambaConfig(PretrainedConfig):

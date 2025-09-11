@@ -55,23 +55,6 @@ if is_mamba_ssm_available():
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
-if is_kernels_available():
-    from kernels import get_kernel
-
-    kernel_causal_conv1d = get_kernel("kernels-community/causal-conv1d")
-    causal_conv1d_update, causal_conv1d_fn = (
-        kernel_causal_conv1d.causal_conv1d_update,
-        kernel_causal_conv1d.causal_conv1d_fn,
-    )
-elif is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
-
 
 logger = logging.get_logger(__name__)
 
@@ -177,6 +160,28 @@ class FalconMambaCache:
             self.ssm_states[layer_idx].zero_()
 
 
+def _lazy_load_causal_conv1d():
+    global _causal_conv1d_cache
+    if _causal_conv1d_cache is not None:
+        return _causal_conv1d_cache
+
+    if is_kernels_available():
+        from kernels import get_kernel
+
+        kernel_causal_conv1d = get_kernel("kernels-community/causal-conv1d")
+        _causal_conv1d_cache = (kernel_causal_conv1d.causal_conv1d_update, kernel_causal_conv1d.causal_conv1d_fn)
+    elif is_causal_conv1d_available():
+        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+
+        _causal_conv1d_cache = (causal_conv1d_update, causal_conv1d_fn)
+    else:
+        _causal_conv1d_cache = (None, None)
+    return _causal_conv1d_cache
+
+
+_causal_conv1d_cache = None
+
+
 def rms_forward(hidden_states, variance_epsilon=1e-6):
     """
     Calculates simple RMSNorm with no learnable weights. `MambaRMSNorm` will
@@ -256,6 +261,7 @@ class FalconMambaMixer(nn.Module):
         self.rms_eps = config.mixer_rms_eps
 
     def warn_slow_implementation(self):
+        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -264,8 +270,8 @@ class FalconMambaMixer(nn.Module):
                 if is_mambapy_available():
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation and"
-                        " https://github.com/Dao-AILab/causal-conv1d"
+                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
+                        " https://github.com/Dao-AILab/causal-conv1d or install kernels for causal-conv1d"
                     )
                 else:
                     raise ImportError(
@@ -274,8 +280,8 @@ class FalconMambaMixer(nn.Module):
             else:
                 logger.warning_once(
                     "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation and"
-                    " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
+                    " https://github.com/Dao-AILab/causal-conv1d or install kernels for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
     def cuda_kernels_forward(
@@ -310,6 +316,7 @@ class FalconMambaMixer(nn.Module):
             )
 
         else:
+            causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -504,6 +511,7 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
