@@ -112,7 +112,6 @@ class Wav2Vec2Processor(ProcessorMixin):
                 audio,
                 **output_kwargs["audio_kwargs"],
                 **output_kwargs["text_kwargs"],
-                **output_kwargs["common_kwargs"],
             )
 
         if audio is not None:

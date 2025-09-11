@@ -619,7 +619,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self._valid_kwargs_names:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name))
 
         # Extract parameters that are only used for preparing the input images
         do_convert_rgb = kwargs.pop("do_convert_rgb")

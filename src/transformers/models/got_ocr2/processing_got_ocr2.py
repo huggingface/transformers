@@ -24,7 +24,7 @@ from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...utils import is_vision_available, logging
-from .image_processing_got_ocr2_fast import GotOcr2FastImageProcessorKwargs
+from .image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs
 
 
 if is_vision_available():
@@ -37,7 +37,7 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
     format: Optional[bool]
 
 
-class GotOcr2ImagesKwargs(GotOcr2FastImageProcessorKwargs, total=False):
+class GotOcr2ImagesKwargs(GotOcr2ImageProcessorKwargs, total=False):
     box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
     color: Optional[str]
     num_image_tokens: Optional[int]

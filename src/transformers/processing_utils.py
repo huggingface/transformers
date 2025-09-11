@@ -158,6 +158,7 @@ class TextKwargs(TypedDict, total=False):
     verbose: Optional[bool]
     padding_side: Optional[str]
     return_mm_token_type_ids: Optional[bool]
+    return_tensors: Optional[Union[str, TensorType]]
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -222,6 +223,7 @@ class ImagesKwargs(TypedDict, total=False):
     input_data_format: Optional[Union[str, ChannelDimension]]
     device: Optional[Union[str, "torch.device"]]
     disable_grouping: Optional[bool]
+    return_tensors: Optional[Union[str, TensorType]]
 
 
 class VideosKwargs(TypedDict, total=False):
@@ -297,6 +299,7 @@ class VideosKwargs(TypedDict, total=False):
     fps: Optional[Union[int, float]]
     num_frames: Optional[int]
     return_metadata: Optional[bool]
+    return_tensors: Optional[Union[str, TensorType]]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -336,9 +339,6 @@ class AudioKwargs(TypedDict, total=False):
     truncation: Optional[bool]
     pad_to_multiple_of: Optional[int]
     return_attention_mask: Optional[bool]
-
-
-class CommonKwargs(TypedDict, total=False):
     return_tensors: Optional[Union[str, TensorType]]
 
 
@@ -383,9 +383,6 @@ class ProcessingKwargs(TypedDict, total=False):
 
     _defaults = {}
 
-    common_kwargs: CommonKwargs = {
-        **CommonKwargs.__annotations__,
-    }
     text_kwargs: TextKwargs = {
         **TextKwargs.__annotations__,
     }
@@ -1258,7 +1255,6 @@ class ProcessorMixin(PushToHubMixin):
             "images_kwargs": {},
             "audio_kwargs": {},
             "videos_kwargs": {},
-            "common_kwargs": {},
         }
 
         default_kwargs = {
@@ -1266,10 +1262,10 @@ class ProcessorMixin(PushToHubMixin):
             "images_kwargs": {},
             "audio_kwargs": {},
             "videos_kwargs": {},
-            "common_kwargs": {},
         }
 
         map_preprocessor_kwargs = {
+            "text_kwargs": "tokenizer",
             "images_kwargs": "image_processor",
             "audio_kwargs": "feature_extractor",
             "videos_kwargs": "video_processor",
@@ -1281,15 +1277,20 @@ class ProcessorMixin(PushToHubMixin):
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:  # noqa: PLC0206
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
-            # Some preprocessors have set of acceptable "valid_kwargs" (for now only fast processors)
-            # Give priority to "valid_kwargs" if it exists for model-specific kwargs, otherwise go with general kwarg set
-            preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
-            modality_valid_kwargs = getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
-            modality_valid_kwargs = (
-                modality_valid_kwargs
-                if modality_valid_kwargs is not None
-                else ModelProcessorKwargs.__annotations__[modality].__annotations__
-            )
+            # Some preprocessors define a set of accepted "valid_kwargs" (currently only vision).
+            # In those cases, we don’t declare a `ModalityKwargs` attribute in the TypedDict.
+            # Instead, we dynamically obtain the kwargs from the preprocessor and merge them
+            # with the general kwargs set. This ensures consistency between preprocessor and
+            # processor classes, and helps prevent accidental mismatches.
+            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
+            if modality in map_preprocessor_kwargs:
+                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+                preprocessor_valid_kwargs = (
+                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
+                )
+                modality_valid_kwargs.update(
+                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
+                )
             # update defaults with arguments from tokenizer init
             for modality_key in modality_valid_kwargs:
                 # init with tokenizer init kwargs if necessary
@@ -1307,13 +1308,15 @@ class ProcessorMixin(PushToHubMixin):
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality, output_kwarg in output_kwargs.items():
-            preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
-            modality_valid_kwargs = getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
-            modality_valid_kwargs = (
-                modality_valid_kwargs
-                if modality_valid_kwargs is not None
-                else ModelProcessorKwargs.__annotations__[modality].__annotations__
-            )
+            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
+            if modality in map_preprocessor_kwargs:
+                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+                preprocessor_valid_kwargs = (
+                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
+                )
+                modality_valid_kwargs.update(
+                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
+                )
             for modality_key in modality_valid_kwargs:
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
@@ -1346,17 +1349,18 @@ class ProcessorMixin(PushToHubMixin):
         else:
             # kwargs is a flat dictionary
             for key, kwarg in kwargs.items():
-                if key not in used_keys:
-                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__:
-                        output_kwargs["common_kwargs"][key] = kwarg
-                    elif key not in possible_modality_keywords:
-                        logger.warning_once(
-                            f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
-                        )
+                if key not in used_keys and key not in possible_modality_keywords:
+                    logger.warning_once(
+                        f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                    )
 
-        # all modality-specific kwargs are updated with common kwargs
-        for kwarg in output_kwargs.values():
-            kwarg.update(output_kwargs["common_kwargs"])
+        # For `common_kwargs` just update all modality-specific kwargs with same key/values
+        common_kwargs = kwargs.get("common_kwargs", {})
+        common_kwargs.update(ModelProcessorKwargs._defaults.get("common_kwargs", {}))
+        if common_kwargs:
+            for kwarg in output_kwargs.values():
+                kwarg.update(common_kwargs)
+
         return output_kwargs
 
     @classmethod
