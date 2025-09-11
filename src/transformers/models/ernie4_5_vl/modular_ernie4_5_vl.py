@@ -101,9 +101,7 @@ class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
             self.rope_type = "default"
 
         if self.rope_type != "ernie_3d":
-            raise ValueError(
-                f"Ernie 4.5 VL requires the `ernie_3d` rope type, but found {self.rope_type} instead."
-            )
+            raise ValueError(f"Ernie 4.5 VL requires the `ernie_3d` rope type, but found {self.rope_type} instead.")
 
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -140,7 +138,7 @@ class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
         return cos, sin
 
     def recomposition_to_3d(self, freq):
-        freq_h, freq_w, freq_t = (m[(i+1) % 3] for i, m in enumerate(freq.split([*self.split_sizes], dim=-1)))
+        freq_h, freq_w, freq_t = (m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.split_sizes], dim=-1)))
         freq_hw = torch.stack([freq_h, freq_w], dim=-1).flatten(-2)
         freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
         return freq_hwt.repeat_interleave(2, dim=-1)
@@ -211,9 +209,7 @@ class Ernie4_5_VLSparseMoeBlock(nn.Module):
 
         # gating
         self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
-        self.experts = nn.ModuleList(
-            [Ernie4_5_VLMLP(config, intermediate_size) for _ in range(self.num_experts)]
-        )
+        self.experts = nn.ModuleList([Ernie4_5_VLMLP(config, intermediate_size) for _ in range(self.num_experts)])
         self.norm_min = config.moe_norm_min
 
     def forward(
@@ -282,19 +278,17 @@ class Ernie4_5_VLMoeBlock(nn.Module):
         self.num_experts = config.moe_num_experts
 
         self.text_moe = Ernie4_5_VLSparseMoeBlock(
-            config,
-            num_experts=self.num_experts,
-            intermediate_size=config.moe_intermediate_size[0]
+            config, num_experts=self.num_experts, intermediate_size=config.moe_intermediate_size[0]
         )
         self.vision_moe = Ernie4_5_VLSparseMoeBlock(
-            config,
-            num_experts=self.num_experts,
-            intermediate_size=config.moe_intermediate_size[1]
+            config, num_experts=self.num_experts, intermediate_size=config.moe_intermediate_size[1]
         )
 
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
-            self.shared_experts = Ernie4_5_VLMLP(config, config.moe_intermediate_size[0] * config.moe_num_shared_experts)
+            self.shared_experts = Ernie4_5_VLMLP(
+                config, config.moe_intermediate_size[0] * config.moe_num_shared_experts
+            )
 
     def forward(
         self,
@@ -311,7 +305,8 @@ class Ernie4_5_VLMoeBlock(nn.Module):
             final_hidden_states = torch.zeros_like(hidden_states)
             router_logits = torch.zeros(
                 size=(batch_size * sequence_length, self.num_experts),
-                device=final_hidden_states.device, dtype=torch.float
+                device=final_hidden_states.device,
+                dtype=torch.float,
             )
 
             # True (1) == vision, False (0) == text tokens
@@ -324,8 +319,12 @@ class Ernie4_5_VLMoeBlock(nn.Module):
             vision_hidden_states = hidden_states[token_type_ids_states].reshape(batch_size, -1, hidden_dim)
 
             # Run moe on each modality and assign their results to the original token positions
-            final_hidden_states[~token_type_ids_states], router_logits[~token_type_ids_router] = self.text_moe(text_hidden_states)
-            final_hidden_states[token_type_ids_states], router_logits[token_type_ids_router] = self.vision_moe(vision_hidden_states)
+            final_hidden_states[~token_type_ids_states], router_logits[~token_type_ids_router] = self.text_moe(
+                text_hidden_states
+            )
+            final_hidden_states[token_type_ids_states], router_logits[token_type_ids_router] = self.vision_moe(
+                vision_hidden_states
+            )
         else:
             final_hidden_states, router_logits = self.text_moe(hidden_states)
             final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
@@ -554,7 +553,10 @@ class Ernie4_5_VLVisionTransformerPretrainedModel(Qwen2_5_VisionTransformerPretr
         raise AttributeError("Ernie 4.5 VL does not use windowed attention!")
 
     def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs,
+        self,
+        hidden_states: torch.Tensor,
+        grid_thw: torch.Tensor,
+        **kwargs,
     ) -> torch.Tensor:
         hidden_states = self.patch_embed(hidden_states)
 
@@ -630,17 +632,13 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
         grid_hw_after_conv = grid_hw.prod(-1) // (self.spatial_merge_size**2)
 
         tokens_per_img_or_vid = (grid_thw.prod(-1) // (self.spatial_merge_size**2)).flatten()
-        batch_offsets = torch.empty(
-            tokens_per_img_or_vid.size(), dtype=tokens_per_img_or_vid.dtype
-        )
+        batch_offsets = torch.empty(tokens_per_img_or_vid.size(), dtype=tokens_per_img_or_vid.dtype)
         batch_offsets[0] = 0
         batch_offsets[1:] = tokens_per_img_or_vid.cumsum(dim=0)[:-1]
 
         first_slice_offsets = []
         second_slice_offsets = []
-        for temporal_size, spatial_size, batch_offset in zip(
-            grid_t, grid_hw_after_conv, batch_offsets
-        ):
+        for temporal_size, spatial_size, batch_offset in zip(grid_t, grid_hw_after_conv, batch_offsets):
             # Depending on temporal, we may interleave
             first_offset_range = range(0, temporal_size, 2)
             second_offset_range = range(1 if temporal_size > 1 else 0, temporal_size, 2)
@@ -678,9 +676,9 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
         return torch.concat(
             [
                 torch.index_select(x, dim=0, index=first_slice_offsets),
-                torch.index_select(x, dim=0, index=second_slice_offsets)
+                torch.index_select(x, dim=0, index=second_slice_offsets),
             ],
-            dim=-1
+            dim=-1,
         )
 
     def forward(self, x, grid_thw):
@@ -752,11 +750,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         # then use the prev pre-calculated rope-deltas to get the correct position ids
         else:
             batch_size, seq_length, device = input_ids.shape[0], 1, input_ids.device
-            delta = (
-                (cache_position[0] + self.rope_deltas).to(device)
-                if cache_position is not None
-                else 0
-            )
+            delta = (cache_position[0] + self.rope_deltas).to(device) if cache_position is not None else 0
             position_ids = torch.arange(seq_length, device=device)
             position_ids = position_ids.view(1, -1).expand(batch_size, -1)
             if cache_position is not None:  # otherwise `deltas` is an int `0`
@@ -999,6 +993,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         inputs_embeds: torch.FloatTensor,
     ):
         """Return the mask indicating a multimodal token (including the start/end tokens of an image/video)"""
+
         def get_mask_for_token_id(token_id):
             if input_ids is not None:
                 return (input_ids == token_id).bool()

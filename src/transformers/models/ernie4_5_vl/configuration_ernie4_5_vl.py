@@ -27,7 +27,7 @@ class Ernie4_5_VLVisionConfig(PretrainedConfig):
         depth=32,
         hidden_size=1280,
         hidden_act="quick_gelu",
-        intermediate_size=4*1280,
+        intermediate_size=4 * 1280,
         num_heads=16,
         in_channels=3,
         patch_size=14,

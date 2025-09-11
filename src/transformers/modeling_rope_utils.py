@@ -403,10 +403,8 @@ def _comput_ernie_3d_parameters(
 
     inv_freq_3d = torch.empty_like(inv_freq)
     # (Pre-)Rotate to avoid another rotation during the forward
-    inv_freq_3d[ : hw_dim] = torch.cat(
-        [inv_freq[: -t_dim][0::2], inv_freq[: -t_dim][1::2]]
-    )
-    inv_freq_3d[-t_dim :] = inv_freq[-t_dim :]
+    inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
+    inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
 
     return inv_freq_3d, attention_factor
 

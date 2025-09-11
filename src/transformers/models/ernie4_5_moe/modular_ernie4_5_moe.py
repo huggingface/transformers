@@ -118,9 +118,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
 
         # gating
         self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False, dtype=torch.float32)
-        self.experts = nn.ModuleList(
-            [Ernie4_5_MoeMLP(config, intermediate_size) for _ in range(self.num_experts)]
-        )
+        self.experts = nn.ModuleList([Ernie4_5_MoeMLP(config, intermediate_size) for _ in range(self.num_experts)])
         self.norm_min = config.moe_norm_min
 
         self.shared_experts = None
