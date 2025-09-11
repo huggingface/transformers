@@ -130,7 +130,7 @@ def init_on_device(device: "torch.device", include_buffers: bool = False):
         nn.Module.register_parameter = register_empty_parameter
         if include_buffers:
             nn.Module.register_buffer = register_empty_buffer
-        for torch_function_name in tensor_constructors_to_patch.keys():
+        for torch_function_name in tensor_constructors_to_patch:
             setattr(torch, torch_function_name, patch_tensor_constructor(getattr(torch, torch_function_name)))
         yield
     finally:
@@ -156,7 +156,7 @@ def find_tied_parameters(model: "nn.Module", **kwargs):
         model (`torch.nn.Module`): The model to inspect.
 
     Returns:
-        List[List[str]]: A list of lists of parameter names being all tied together.
+        list[list[str]]: A list of lists of parameter names being all tied together.
 
     Example:
 

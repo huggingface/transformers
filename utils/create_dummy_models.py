@@ -424,7 +424,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # `text_model_tester` via `text_kwargs`. The same trick is also necessary for `Flava`.
 
     if "vocab_size" in model_tester_kwargs:
-        if "text_kwargs" in inspect.signature(model_tester_class.__init__).parameters.keys():
+        if "text_kwargs" in inspect.signature(model_tester_class.__init__).parameters:
             vocab_size = model_tester_kwargs.pop("vocab_size")
             model_tester_kwargs["text_kwargs"] = {"vocab_size": vocab_size}
 
@@ -1458,7 +1458,7 @@ def create_tiny_models(
             all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
         with multiprocessing.Pool() as pool:
             results = pool.starmap(build, all_build_args)
-            results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
+            results = {build_args[0].__name__: result for build_args, result in zip(all_build_args, results)}
 
     if upload:
         if organization is None:

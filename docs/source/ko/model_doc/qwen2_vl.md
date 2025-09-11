@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview[[Overview]]
 
-[Qwen2-VL](https://qwenlm.github.io/blog/qwen2-vl/) 모델은 알리바바 리서치의 Qwen팀에서 개발한 [Qwen-VL](https://arxiv.org/pdf/2308.12966) 모델의 주요 업데이트 버전입니다.
+[Qwen2-VL](https://qwenlm.github.io/blog/qwen2-vl/) 모델은 알리바바 리서치의 Qwen팀에서 개발한 [Qwen-VL](https://huggingface.co/papers/2308.12966) 모델의 주요 업데이트 버전입니다.
 
 블로그의 요약은 다음과 같습니다:
 
@@ -97,7 +97,7 @@ conversation = [
 
 inputs = processor.apply_chat_template(
     conversation,
-    video_fps=1,
+    fps=1,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
@@ -167,7 +167,7 @@ conversations = [conversation1, conversation2, conversation3, conversation4]
 # 배치 추론을 위한 준비
 ipnuts = processor.apply_chat_template(
     conversations,
-    video_fps=1,
+    fps=1,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
@@ -269,7 +269,7 @@ from transformers import Qwen2VLForConditionalGeneration
 
 model = Qwen2VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2-VL-7B-Instruct", 
-    torch_dtype=torch.bfloat16, 
+    dtype=torch.bfloat16, 
     attn_implementation="flash_attention_2",
 )
 ```

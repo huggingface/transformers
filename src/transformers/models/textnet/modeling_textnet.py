@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch TextNet model."""
 
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -218,7 +218,7 @@ class TextNetEncoder(nn.Module):
 
 @auto_docstring
 class TextNetPreTrainedModel(PreTrainedModel):
-    config_class = TextNetConfig
+    config: TextNetConfig
     base_model_prefix = "textnet"
     main_input_name = "pixel_values"
 
@@ -245,7 +245,7 @@ class TextNetModel(TextNetPreTrainedModel):
     @auto_docstring
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
-    ) -> Union[Tuple[Any, List[Any]], Tuple[Any], BaseModelOutputWithPoolingAndNoAttention]:
+    ) -> Union[tuple[Any, list[Any]], tuple[Any], BaseModelOutputWithPoolingAndNoAttention]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -368,6 +368,8 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
     """
 )
 class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
@@ -381,7 +383,7 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
     @auto_docstring
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
-    ) -> Union[Tuple[Tuple], BackboneOutput]:
+    ) -> Union[tuple[tuple], BackboneOutput]:
         r"""
         Examples:
 

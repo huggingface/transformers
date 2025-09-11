@@ -16,7 +16,7 @@
 
 import io
 import math
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -28,7 +28,7 @@ from ...image_utils import (
     ImageInput,
     get_image_size,
     infer_channel_dimension_format,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -51,8 +51,8 @@ DEFAULT_FONT_PATH = "ybelkada/fonts"
 # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
-    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape (1, `patch_height`,
-    `patch_width`, `num_channels`x `patch_height` x `patch_width`)
+    Utility function to extract patches from a given image tensor. Returns a tensor of shape
+    (1, `rows`, `columns`, `num_channels`x `patch_height` x `patch_width`).
 
     Args:
         image_tensor (torch.Tensor):
@@ -197,23 +197,23 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. According to Pix2Struct paper and code, the image is normalized with its own mean and standard
             deviation.
-        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+        patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
             The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
         max_patches (`int`, *optional*, defaults to 2048):
             The maximum number of patches to extract from the image as per the [Pix2Struct
-            paper](https://arxiv.org/pdf/2210.03347.pdf).
+            paper](https://huggingface.co/papers/2210.03347).
         is_vqa (`bool`, *optional*, defaults to `False`):
             Whether or not the image processor is for the VQA task. If `True` and `header_text` is passed in, text is
             rendered onto the input images.
     """
 
-    model_input_names = ["flattened_patches"]
+    model_input_names = ["flattened_patches", "attention_mask"]
 
     def __init__(
         self,
         do_convert_rgb: bool = True,
         do_normalize: bool = True,
-        patch_size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         max_patches: int = 2048,
         is_vqa: bool = False,
         **kwargs,
@@ -352,7 +352,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         do_convert_rgb: Optional[bool] = None,
         do_normalize: Optional[bool] = None,
         max_patches: Optional[int] = None,
-        patch_size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -369,7 +369,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images.
-            header_text (`Union[List[str], str]`, *optional*):
+            header_text (`Union[list[str], str]`, *optional*):
                 Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
@@ -404,10 +404,10 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         max_patches = max_patches if max_patches is not None else self.max_patches
         is_vqa = self.is_vqa
 
-        if kwargs.get("data_format", None) is not None:
+        if kwargs.get("data_format") is not None:
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

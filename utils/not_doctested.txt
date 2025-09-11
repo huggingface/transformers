@@ -2,7 +2,6 @@ docs/source/en/_config.py
 docs/source/en/accelerate.md
 docs/source/en/add_new_model.md
 docs/source/en/add_new_pipeline.md
-docs/source/en/attention.md
 docs/source/en/community.md
 docs/source/en/contributing.md
 docs/source/en/custom_models.md
@@ -267,7 +266,6 @@ docs/source/en/model_doc/yolos.md
 docs/source/en/model_doc/yoso.md
 docs/source/en/model_memory_anatomy.md
 docs/source/en/model_sharing.md
-docs/source/en/model_summary.md
 docs/source/en/notebooks.md
 docs/source/en/pad_truncation.md
 docs/source/en/peft.md
@@ -280,7 +278,6 @@ docs/source/en/perf_train_cpu_many.md
 docs/source/en/perf_train_gpu_many.md
 docs/source/en/perf_train_gpu_one.md
 docs/source/en/perf_train_special.md
-docs/source/en/perf_train_tpu_tf.md
 docs/source/en/perplexity.md
 docs/source/en/philosophy.md
 docs/source/en/pipeline_webserver.md
@@ -309,8 +306,6 @@ docs/source/en/tasks/video_classification.md
 docs/source/en/tasks/visual_question_answering.md
 docs/source/en/tasks/zero_shot_image_classification.md
 docs/source/en/tasks/zero_shot_object_detection.md
-docs/source/en/tasks_explained.md
-docs/source/en/tf_xla.md
 docs/source/en/tflite.md
 docs/source/en/tokenizer_summary.md
 docs/source/en/torchscript.md
@@ -329,7 +324,6 @@ src/transformers/commands/train.py
 src/transformers/commands/transformers_cli.py
 src/transformers/configuration_utils.py
 src/transformers/convert_graph_to_onnx.py
-src/transformers/convert_pytorch_checkpoint_to_tf2.py
 src/transformers/convert_slow_tokenizer.py
 src/transformers/convert_slow_tokenizers_checkpoints_to_fast.py
 src/transformers/convert_tf_hub_seq_to_seq_bert_to_pytorch.py

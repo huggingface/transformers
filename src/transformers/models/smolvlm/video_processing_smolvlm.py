@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
 from ...image_processing_utils import (
     BatchFeature,
+    get_size_dict,
 )
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -38,7 +38,7 @@ from ...utils.import_utils import requires
 from ...video_processing_utils import (
     BaseVideoProcessor,
 )
-from ...video_utils import group_videos_by_shape, reorder_videos
+from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
 if is_vision_available():
@@ -68,67 +68,7 @@ FRAME_TIMESTAMP_MESSAGE = "\nFrame from {timestamp}:"
 MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 
-def smolvlm_sample_indices_fn(metadata, max_frames, target_fps, skip_secs=0):
-    """
-    Example sampling function which:
-      - Uses `max_frames` (if provided) or calculates it from `fps` and metadata.
-      - Applies a basic center-skip if fewer frames than available, otherwise
-        optionally skips `skip_secs` from both the start and end.
-      - Uniformly samples the desired number of frames between the start and end indices.
-
-    Args:
-        max_frames (`int`):
-            Maximum number of frames to sample.
-        target_fps (`int`):
-            Target frames to sample per second.
-        metadata (`dict`):
-            Contains video metadata such as "n_frames" and "video_fps".
-        skip_secs (`float`, *optional*, defaults to 1.0):
-            Number of seconds to skip from the start and end if the video is long enough.
-
-    Returns:
-        numpy.ndarray:
-            An array of unique frame indices to sample.
-    """
-
-    total_num_frames = getattr(metadata, "total_num_frames", 0)
-    if total_num_frames <= 0:
-        raise ValueError(f"Invalid total_num_frames={total_num_frames} in metadata.")
-
-    native_fps = getattr(metadata, "fps", 30.0)
-    duration_seconds = getattr(metadata, "duration", 0)
-
-    if duration_seconds <= 0:
-        raise ValueError(f"Invalid duration_seconds={duration_seconds} in metadata.")
-
-    # Step 1) Estimate how many frames we'd sample at `target_fps`, fallback if target_fps <= 0
-    estimated_frames = int(round(target_fps * duration_seconds))
-
-    # Step 2) desired_frames
-    desired_frames = min(estimated_frames, max_frames)
-    if desired_frames < 1:
-        desired_frames = 1
-
-    # Step 3) center skip logic
-    start_idx = 0
-    end_idx = total_num_frames - 1
-
-    if skip_secs > 0 and (duration_seconds - 2 * skip_secs) > (max_frames * target_fps):
-        start_idx = int(skip_secs * native_fps)
-        end_idx = int(total_num_frames - skip_secs * native_fps)
-
-    start_idx = max(0, start_idx)
-    end_idx = min(end_idx, total_num_frames - 1)
-    if start_idx >= end_idx:
-        start_idx, end_idx = 0, total_num_frames - 1
-
-    indices = np.linspace(start_idx, end_idx, desired_frames, dtype=int)
-    indices = np.unique(indices)
-
-    return indices
-
-
-def get_max_height_width(videos: list["torch.Tensor"]) -> List[int]:
+def get_max_height_width(videos: list["torch.Tensor"]) -> list[int]:
     """
     Get the maximum height and width across all videos in a batch.
     """
@@ -180,13 +120,15 @@ def get_resize_output_image_size(
     return height, width
 
 
-class SmolVLMVideoProcessorInitKwargs(VideosKwargs): ...
+class SmolVLMVideoProcessorInitKwargs(VideosKwargs):
+    max_image_size: dict[str, int] = None
 
 
 @requires(backends=("torchvision",))
 class SmolVLMVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.LANCZOS
     size = {"longest_edge": 4 * 364}
+    max_image_size = {"longest_edge": 364}
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     do_resize = True
@@ -194,17 +136,27 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
     do_normalize = True
     do_convert_rgb = True
     do_pad = True
+    do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     valid_kwargs = SmolVLMVideoProcessorInitKwargs
     model_input_names = ["pixel_values", "pixel_attention_mask"]
 
     def __init__(self, **kwargs: Unpack[SmolVLMVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
+        # For BC pop values from `config.video_sampling`. In official config `video_sampling` is guaranteed to be present
+        # We check for `Noneness` only for certain tests such as `test_init_without_params`
+        if "size" in kwargs and "video_sampling" in kwargs:
+            kwargs["video_sampling"]["video_size"] = kwargs["size"]
+
+        if "video_sampling" in kwargs:
+            self.num_frames = kwargs["video_sampling"]["max_frames"]
+            self.fps = kwargs["video_sampling"]["fps"]
+            self.size = get_size_dict(kwargs["video_sampling"]["video_size"], default_to_square=self.default_to_square)
 
     def resize(
         self,
         video: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -240,12 +192,20 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
             new_size = (size.height, size.width)
         else:
             raise ValueError(f"Size must contain 'height' and 'width' keys, or 'longest_edge' key. Got {size}.")
-        return F.resize(video, new_size, interpolation=interpolation, antialias=antialias)
+
+        video = F.resize(video, new_size, interpolation=interpolation, antialias=antialias)
+
+        # Resize again to match image processor when `do_image_splitting=False`. Frames have to be squared to `max_image_size`
+        # NOTE: videos are always processoed without image splitting
+        max_size = self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
+        video = F.resize(video, max_size, interpolation=interpolation, antialias=antialias)
+        return video
 
     def pad(
         self,
         video: "torch.Tensor",
         padded_size: tuple[int, int],
+        max_num_frames: int,
         fill: int = 0,
         return_pixel_mask: bool = True,
     ):
@@ -253,26 +213,30 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         Args:
             video (`torch.Tensor`):
                 Video to pad.
-            padded_size (`Tuple[int, int]`):
+            padded_size (`tuple[int, int]`):
                 Height and width to pad.
+            max_num_frames (`int`):
+                The maximum number of frames to which video will be padded.
             fill (`int`, *optional*):
                 The value to use for the padding.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
         """
         original_size = video.size()[-2:]
-        padding_bottom = padded_size[0] - original_size[0]
-        padding_right = padded_size[1] - original_size[1]
-        if padding_bottom < 0 or padding_right < 0:
+        padding_height = padded_size[0] - original_size[0]
+        padding_width = padded_size[1] - original_size[1]
+        padding_frame = max_num_frames - video.shape[0]
+        if padding_width < 0 or padding_height < 0:
             raise ValueError(
                 f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
                 f"original size. Got padded size: {padded_size}, original size: {original_size}."
             )
         if original_size != padded_size:
-            padding = [0, 0, padding_right, padding_bottom]
+            padding = [0, padding_width, 0, padding_height, 0, 0, 0, padding_frame]
             video = F.pad(video, padding, fill=fill)
 
         # Make a pixel mask for the video, where 1 indicates a valid pixel and 0 indicates padding.
+        # Mask shape is (num_frames, height, width) so we omit the channel dim
         pixel_mask = None
         if return_pixel_mask:
             pixel_mask = torch.zeros_like(video[..., 0, :, :], dtype=torch.int64)
@@ -280,9 +244,74 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
 
         return video, pixel_mask
 
+    def sample_frames(
+        self,
+        metadata: VideoMetadata,
+        num_frames: Optional[int] = None,
+        fps: Optional[Union[int, float]] = None,
+        skip_secs: Optional[int] = 1,
+        **kwargs,
+    ):
+        """
+        Video sampling function which:
+            - Uses `num_frames` (if provided) or calculates it from `fps` and metadata.
+            - Applies a basic center-skip if fewer frames than available, otherwise
+                optionally skips `skip_secs` from both the start and end.
+            - Uniformly samples the desired number of frames between the start and end indices.
+
+        Args:
+            metadata (`VideoMetadata`):
+                Metadata of the video containing information about total duration, fps and total number of frames.
+            num_frames (`int`, *optional*):
+                Maximum number of frames to sample. Defaults to `self.num_frames`.
+            fps (`int` or `float`, *optional*):
+                Target frames to sample per second. Defaults to `self.fps`.
+            skip_secs (`float`, *optional*, defaults to `1`):
+                Number of seconds to skip from the start and end if the video is long enough.
+
+        Returns:
+            np.ndarray:
+                Indices to sample video frames.
+        """
+        if metadata is None or getattr(metadata, "fps", None) is None:
+            raise ValueError(
+                "Asked to sample frames per second but no video metadata was provided which is required when sampling in SmolVLM. "
+                "Please pass in `VideoMetadata` object or set `do_sample_frames=False`"
+            )
+
+        num_frames = num_frames if num_frames is not None else self.num_frames
+        fps = fps if fps is not None else self.fps
+        total_num_frames = metadata.total_num_frames
+
+        # Step 1) Estimate how many frames we'd sample at `target_fps`, fallback if target_fps <= 0
+        estimated_frames = int(round(fps * metadata["duration"]))
+
+        # Step 2) desired_frames
+        desired_frames = min(estimated_frames, num_frames)
+        if desired_frames < 1:
+            desired_frames = 1
+
+        # Step 3) center skip logic
+        start_idx = 0
+        end_idx = total_num_frames - 1
+
+        if skip_secs > 0 and (metadata["duration"] - 2 * skip_secs) > (num_frames * fps):
+            start_idx = int(skip_secs * metadata["fps"])
+            end_idx = int(total_num_frames - skip_secs * metadata["fps"])
+
+        start_idx = max(0, start_idx)
+        end_idx = min(end_idx, total_num_frames - 1)
+        if start_idx >= end_idx:
+            start_idx, end_idx = 0, total_num_frames - 1
+
+        indices = np.linspace(start_idx, end_idx, desired_frames, dtype=int)
+        indices = np.unique(indices)
+
+        return indices
+
     def _preprocess(
         self,
-        videos: List["torch.Tensor"],
+        videos: list["torch.Tensor"],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -291,12 +320,11 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         rescale_factor: float,
         do_normalize: bool,
         do_pad: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
-        # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
@@ -319,12 +347,15 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
 
         if do_pad:
             pad_size = get_max_height_width(processed_videos)
+            max_num_frames = max(len(video) for video in processed_videos)
             grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
             processed_padded_mask_grouped = {}
             processed_videos_grouped = {}
 
             for shape, stacked_videos in grouped_videos.items():
-                stacked_videos, padded_masks = self.pad(stacked_videos, padded_size=pad_size)
+                stacked_videos, padded_masks = self.pad(
+                    stacked_videos, padded_size=pad_size, max_num_frames=max_num_frames
+                )
                 processed_videos_grouped[shape] = stacked_videos
                 processed_padded_mask_grouped[shape] = padded_masks
 

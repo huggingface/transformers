@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 
@@ -24,7 +25,8 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
+    require_torch_gpu,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
@@ -40,6 +42,8 @@ if is_torch_available():
 
     from transformers import (
         DeepseekV3ForCausalLM,
+        DeepseekV3ForSequenceClassification,
+        DeepseekV3ForTokenClassification,
         DeepseekV3Model,
     )
     from transformers.models.deepseek_v3.modeling_deepseek_v3 import (
@@ -213,6 +217,8 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         (
             DeepseekV3Model,
             DeepseekV3ForCausalLM,
+            DeepseekV3ForSequenceClassification,
+            DeepseekV3ForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -221,7 +227,10 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekV3Model,
+            "text-classification": DeepseekV3ForSequenceClassification,
+            "token-classification": DeepseekV3ForTokenClassification,
             "text-generation": DeepseekV3ForCausalLM,
+            "zero-shot": DeepseekV3ForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -241,63 +250,17 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.model_tester = DeepseekV3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=37)
 
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_continue_from_inputs_embeds(self):
         pass
 
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
@@ -305,15 +268,11 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         pass
 
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
-    def test_generate_compile_model_forward(self):
-        pass
-
-    @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
     def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     def test_config(self):
@@ -434,16 +393,14 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         # difference: last dim
         k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
         v_embed_dim = config.v_head_dim
-        self_attention_key_cache_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        self_attention_value_cache_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
+        self_attention_keys_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
+        self_attention_values_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
         # build the full cache shapes
         num_hidden_layers = config.num_hidden_layers
-        all_cache_shapes = [
-            [self_attention_key_cache_shape, self_attention_value_cache_shape] for _ in range(num_hidden_layers)
-        ]
+        all_cache_shapes = [[self_attention_keys_shape, self_attention_values_shape] for _ in range(num_hidden_layers)]
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
-    @require_torch_sdpa
+    @require_torch_large_accelerator
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
@@ -455,16 +412,14 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         model_sdpa = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
+            dtype=torch.float16,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
+            dtype=torch.float16,
             attn_implementation="eager",
         ).to(torch_device)
 
@@ -492,25 +447,57 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
 
+    @require_torch_gpu
+    def test_flex_attention_with_grads(self):
+        """
+        Overwriting as the namings/functionality on the attention part are different; for now it's more of a unique model.
+        Original issue is also due to dimensionalities, here specifically due to dims not being a multiple of 2.
+        """
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config._attn_implementation = "flex_attention"
+
+            # Disable dropout
+            config.attention_dropout = 0.0
+
+            # Deepseek 3 specific - manipulate nope and adjust calculated total head dim
+            config.qk_nope_head_dim = 16
+            config.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+
+            model = model_class(config).to(device=torch_device)
+            self.assertTrue(model.config._attn_implementation == "flex_attention")
+
+            # Elaborate workaround for encoder-decoder models as some do not specify their main input
+            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
+            if config.is_encoder_decoder:
+                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
+                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
+
+            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
+            _ = model(**dummy_inputs)
+
+    def test_deepseek_v3_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels)
+        model = DeepseekV3ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
 
 @require_torch_accelerator
 class DeepseekV3IntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
         cleanup(torch_device, gc_collect=False)
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
@@ -519,14 +506,12 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         NUM_TOKENS_TO_GENERATE = 40
-        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
-        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        # https://github.com/huggingface/transformers/pull/38562#issuecomment-2939209171
+        # The reason why the output is gibberish is because the testing model bzantium/tiny-deepseek-v3 is not trained
+        # one. Since original DeepSeek-V3 model is too big to debug and test, there was no testing with the original one.
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
-            "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-            "theory of relativ",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
-            "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            "Simply put, the theory of relativity states that  Frojekecdytesాలు sicʰtinaccianntuala breej的效率和质量的控制lavestock-PraccuraciesOTTensorialoghismos的思路astiomotivityosexualriad TherapeuticsoldtYPEface Kishsatellite-TV",
+            "My favorite all time favorite condiment is ketchup.ieden沟渠係室温 Fryrok般地Segmentation Cycle/physicalwarenkrautempsాలు蹈梗 Mesomac一等asan lethality suspended Causewaydreamswith Fossilsdorfాలు蹈 ChristiansenHOMEbrew",
         ]
 
         prompts = [
@@ -535,7 +520,7 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
         ]
         tokenizer = AutoTokenizer.from_pretrained("bzantium/tiny-deepseek-v3", pad_token="</s>", padding_side="right")
         model = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/tiny-deepseek-v3", device_map=torch_device, torch_dtype=torch.float16
+            "bzantium/tiny-deepseek-v3", device_map=torch_device, dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 

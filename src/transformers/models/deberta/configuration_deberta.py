@@ -15,7 +15,8 @@
 """DeBERTa model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -77,7 +78,7 @@ class DebertaConfig(PretrainedConfig):
             The value used to pad input_ids.
         position_biased_input (`bool`, *optional*, defaults to `True`):
             Whether add absolute position embedding to content embedding.
-        pos_att_type (`List[str]`, *optional*):
+        pos_att_type (`list[str]`, *optional*):
             The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,
             `["p2c", "c2p"]`.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):

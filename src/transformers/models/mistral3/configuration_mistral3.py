@@ -37,7 +37,7 @@ class Mistral3Config(PretrainedConfig):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
-        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -1):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.
@@ -85,14 +85,13 @@ class Mistral3Config(PretrainedConfig):
         spatial_merge_size=2,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
 
         self.vision_feature_layer = vision_feature_layer
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config["model_type"] if "model_type" in vision_config else "pixtral"
+            vision_config["model_type"] = vision_config.get("model_type", "pixtral")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             vision_config = CONFIG_MAPPING["pixtral"](
@@ -110,7 +109,7 @@ class Mistral3Config(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "mistral"
+            text_config["model_type"] = text_config.get("model_type", "mistral")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["mistral"](
@@ -135,6 +134,8 @@ class Mistral3Config(PretrainedConfig):
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
         self.spatial_merge_size = spatial_merge_size
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Mistral3Config"]

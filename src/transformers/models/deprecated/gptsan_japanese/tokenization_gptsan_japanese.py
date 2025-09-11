@@ -19,7 +19,7 @@ import json
 import os
 import re
 import sys
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -237,7 +237,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         text = "".join(words)
         return text
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
@@ -268,8 +268,8 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         return vocab_file, emoji_file
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         # docstyle-ignore
         """
         The tokenizer returns token_type_ids as separators between the Prefix part and the rest.
@@ -318,7 +318,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput], List[TextInputPair], List[PreTokenizedInput], List[PreTokenizedInputPair]
+            list[TextInput], list[TextInputPair], list[PreTokenizedInput], list[PreTokenizedInputPair]
         ],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
@@ -398,7 +398,7 @@ class SubWordJapaneseTokenizer:
         self.vocab = vocab  # same as swe
         self.ids_to_tokens = ids_to_tokens  # same as bpe
         self.emoji = emoji
-        self.maxlen = np.max([len(w) for w in self.vocab.keys()])
+        self.maxlen = np.max([len(w) for w in self.vocab])
         self.content_repatter1 = re.compile(r"(https?|ftp)(:\/\/[-_\.!~*\'()a-zA-Z0-9;\/?:\@&=\+$,%#]+)")
         self.content_repatter2 = re.compile(r"[A-Za-z0-9\._+]*@[\-_0-9A-Za-z]+(\.[A-Za-z]+)*")
         self.content_repatter3 = re.compile(r"[\(]{0,1}[0-9]{2,4}[\)\-\(]{0,1}[0-9]{2,4}[\)\-]{0,1}[0-9]{3,4}")

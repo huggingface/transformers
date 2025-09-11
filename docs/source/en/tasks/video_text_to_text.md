@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Video-text-to-text models, also known as video language models or vision language models with video input, are language models that take a video input. These models can tackle various tasks, from video question answering to video captioning. 
 
-These models have nearly the same architecture as [image-text-to-text](../image_text_to_text.md) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos. Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`". 
+These models have nearly the same architecture as [image-text-to-text](../image_text_to_text) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos. Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`". 
 
 In this guide, we provide a brief overview of video LMs and show how to use them with Transformers for inference.
 
@@ -46,8 +46,7 @@ model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
 
 processor = LlavaProcessor.from_pretrained(model_id)
 
-model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.float16)
-model.to("cuda") # can also be xpu, mps, npu etc. depending on your hardware accelerator
+model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.float16)
 ```
 
 Some models directly consume the `<video>` token, and others accept `<image>` tokens equal to the number of sampled frames. This model handles videos in the latter fashion. We will write a simple utility to handle image tokens, and another utility to get a video from a url and sample frames from it. 

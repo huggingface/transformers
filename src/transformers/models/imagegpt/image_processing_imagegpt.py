@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for ImageGPT."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -65,13 +65,13 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     (color clusters).
 
     Args:
-        clusters (`np.ndarray` or `List[List[int]]`, *optional*):
+        clusters (`np.ndarray` or `list[list[int]]`, *optional*):
             The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
             in `preprocess`.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's dimensions to `(size["height"], size["width"])`. Can be overridden by
             `do_resize` in `preprocess`.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
             Size of the image after resizing. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
@@ -87,9 +87,9 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         # clusters is a first argument to maintain backwards compatibility with the old ImageGPTImageProcessor
-        clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
+        clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
         do_color_quantize: bool = True,
@@ -109,7 +109,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -121,7 +121,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
@@ -180,11 +180,11 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
         do_normalize: Optional[bool] = None,
         do_color_quantize: Optional[bool] = None,
-        clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
+        clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -198,7 +198,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_normalize=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
@@ -207,7 +207,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
                 Whether to normalize the image
             do_color_quantize (`bool`, *optional*, defaults to `self.do_color_quantize`):
                 Whether to color quantize the image.
-            clusters (`np.ndarray` or `List[List[int]]`, *optional*, defaults to `self.clusters`):
+            clusters (`np.ndarray` or `list[list[int]]`, *optional*, defaults to `self.clusters`):
                 Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if
                 `do_color_quantize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
@@ -291,14 +291,24 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
             # We need to convert back to a list of images to keep consistent behaviour across processors.
             images = list(images)
+            data = {"input_ids": images}
         else:
-            images = [
-                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-                for image in images
-            ]
-
-        data = {"input_ids": images}
+            images = [to_channel_dimension_format(image, data_format, input_data_format) for image in images]
+            data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def to_dict(self):
+        output = super().to_dict()
+        # Ensure clusters are JSON/equality friendly
+        if output.get("clusters") is not None and isinstance(output["clusters"], np.ndarray):
+            output["clusters"] = output["clusters"].tolist()
+        # Need to set missing keys from slow processor to match the expected behavior in save/load tests compared to fast processor
+        missing_keys = ["image_mean", "image_std", "rescale_factor", "do_rescale"]
+        for key in missing_keys:
+            if key in output:
+                output[key] = None
+
+        return output
 
 
 __all__ = ["ImageGPTImageProcessor"]

@@ -13,7 +13,7 @@
 # limitations under the License.
 import warnings
 from io import BytesIO
-from typing import List, Optional, Union
+from typing import Any, Optional, Union, overload
 
 import requests
 
@@ -51,6 +51,11 @@ class VideoClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=video-classification).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "av")
@@ -77,12 +82,18 @@ class VideoClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = "softmax"
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, inputs: Optional[Union[str, List[str]]] = None, **kwargs):
+    @overload
+    def __call__(self, inputs: str, **kwargs: Any) -> list[dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
+
+    def __call__(self, inputs: Optional[Union[str, list[str]]] = None, **kwargs):
         """
         Assign labels to the video(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`):
+            inputs (`str`, `list[str]`):
                 The pipeline handles three types of videos:
 
                 - A string containing a http link pointing to a video
@@ -144,7 +155,7 @@ class VideoClassificationPipeline(Pipeline):
 
         model_inputs = self.image_processor(video, return_tensors=self.framework)
         if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+            model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):

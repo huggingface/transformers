@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[overview]]
 
-맘바(Mamba) 모델은 Albert Gu, Tri Dao가 제안한 [맘바: 선택적 상태 공간을 이용한 선형 시간 시퀀스 모델링](https://arxiv.org/abs/2312.00752)라는 논문에서 소개 되었습니다.
+맘바(Mamba) 모델은 Albert Gu, Tri Dao가 제안한 [맘바: 선택적 상태 공간을 이용한 선형 시간 시퀀스 모델링](https://huggingface.co/papers/2312.00752)라는 논문에서 소개 되었습니다.
 
 이 모델은 `state-space-models`을 기반으로 한 새로운 패러다임 아키텍처입니다. 직관적인 이해를 얻고 싶다면 [이곳](https://srush.github.io/annotated-s4/)을 참고 하세요.
 
@@ -58,34 +58,18 @@ print(tokenizer.batch_decode(out))
 
 ```python 
 from datasets import load_dataset
-from trl import SFTTrainer
+from trl import SFTConfig, SFTTrainer
 from peft import LoraConfig
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
+
 model_id = "state-spaces/mamba-130m-hf"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id)
 dataset = load_dataset("Abirate/english_quotes", split="train")
-training_args = TrainingArguments(
-    output_dir="./results",
-    num_train_epochs=3,
-    per_device_train_batch_size=4,
-    logging_dir='./logs',
-    logging_steps=10,
-    learning_rate=2e-3
-)
-lora_config =  LoraConfig(
-        r=8,
-        target_modules=["x_proj", "embeddings", "in_proj", "out_proj"],
-        task_type="CAUSAL_LM",
-        bias="none"
-)
+training_args = SFTConfig(dataset_text_field="quote")
+lora_config =  LoraConfig(target_modules=["x_proj", "embeddings", "in_proj", "out_proj"])
 trainer = SFTTrainer(
-    model=model,
-    tokenizer=tokenizer,
+    model=model_id,
     args=training_args,
-    peft_config=lora_config,
     train_dataset=dataset,
-    dataset_text_field="quote",
+    peft_config=lora_config,
 )
 trainer.train()
 ```

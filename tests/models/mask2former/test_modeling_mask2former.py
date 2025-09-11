@@ -14,13 +14,16 @@
 """Testing suite for the PyTorch Mask2Former model."""
 
 import unittest
+from functools import cached_property
 
 import numpy as np
+import pytest
 
 from tests.test_modeling_common import floats_tensor
-from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
+from transformers import AutoModelForImageClassification, Mask2FormerConfig, is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
+    Expectations,
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -30,10 +33,9 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -350,8 +352,60 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             elif model.__class__.__name__ == "Mask2FormerForUniversalSegmentation":
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
 
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-TOLERANCE = 1e-4
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if (
+                        "self_attn.sampling_offsets.bias" in name
+                        or "self_attn.value_proj.weight" in name
+                        or "self_attn.output_proj.weight" in name
+                    ):
+                        continue
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+
+    def test_initialization_pretrained_backbone(self):
+        backbone_name = "microsoft/resnet-18"
+
+        # load Mask2Former config with a pretrained backbone
+        config = Mask2FormerConfig(
+            backbone=backbone_name,
+            use_pretrained_backbone=True,
+        )
+
+        # load pretrained backbone
+        backbone_model = AutoModelForImageClassification.from_pretrained(backbone_name, device_map=torch_device)
+
+        def params_match(params1, params2):
+            return all((p1 == p2).all() for p1, p2 in zip(params1, params2))
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            if model.__class__.__name__ == "Mask2FormerModel":
+                self.assertTrue(
+                    params_match(
+                        backbone_model.base_model.encoder.parameters(),
+                        model.pixel_level_module.encoder.encoder.parameters(),
+                    )
+                )
+            elif model.__class__.__name__ == "Mask2FormerForUniversalSegmentation":
+                self.assertTrue(
+                    params_match(
+                        backbone_model.base_model.encoder.parameters(),
+                        model.model.pixel_level_module.encoder.encoder.parameters(),
+                    )
+                )
+
+
+TOLERANCE = 2e-4
 
 
 # We will verify our results on an image of cute cats
@@ -386,31 +440,52 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         expected_slice_hidden_state = torch.tensor(
-            [[-0.2790, -1.0717, -1.1668], [-0.5128, -0.3128, -0.4987], [-0.5832, 0.1971, -0.0197]]
+            [
+                [-0.2790, -1.0717, -1.1668],
+                [-0.5128, -0.3128, -0.4987],
+                [-0.5832, 0.1971, -0.0197],
+            ]
         ).to(torch_device)
-        self.assertTrue(
-            torch.allclose(
-                outputs.encoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
-            )
+        torch.testing.assert_close(
+            outputs.encoder_last_hidden_state[0, 0, :3, :3],
+            expected_slice_hidden_state,
+            atol=TOLERANCE,
+            rtol=TOLERANCE,
         )
 
-        expected_slice_hidden_state = torch.tensor(
-            [[0.8973, 1.1847, 1.1776], [1.1934, 1.5040, 1.5128], [1.1153, 1.4486, 1.4951]]
-        ).to(torch_device)
-        self.assertTrue(
-            torch.allclose(
-                outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
-            )
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [0.8973, 1.1847, 1.1776],
+                    [1.1934, 1.5040, 1.5128],
+                    [1.1153, 1.4486, 1.4951],
+                ],
+                ("cuda", 8): [
+                    [0.8974, 1.1848, 1.1777],
+                    [1.1933, 1.5041, 1.5128],
+                    [1.1154, 1.4487, 1.4950],
+                ],
+            }
         )
+        expected_slice_hidden_state = torch.tensor(expectations.get_expectation()).to(torch_device)
+        torch.testing.assert_close(outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE,rtol=TOLERANCE)  # fmt: skip
 
-        expected_slice_hidden_state = torch.tensor(
-            [[2.1152, 1.7000, -0.8603], [1.5808, 1.8004, -0.9353], [1.6043, 1.7495, -0.5999]]
-        ).to(torch_device)
-        self.assertTrue(
-            torch.allclose(
-                outputs.transformer_decoder_last_hidden_state[0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
-            )
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [2.1152, 1.7000, -0.8603],
+                    [1.5808, 1.8004, -0.9353],
+                    [1.6043, 1.7495, -0.5999],
+                ],
+                ("cuda", 8): [
+                    [2.1153, 1.7004, -0.8604],
+                    [1.5807, 1.8007, -0.9354],
+                    [1.6040, 1.7498, -0.6001],
+                ],
+            }
         )
+        expected_slice_hidden_state = torch.tensor(expectations.get_expectation()).to(torch_device)
+        torch.testing.assert_close(outputs.transformer_decoder_last_hidden_state[0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)  # fmt: skip
 
     def test_inference_universal_segmentation_head(self):
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
@@ -430,23 +505,40 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(
             masks_queries_logits.shape, (1, model.config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4)
         )
-        expected_slice = [
-            [-8.7839, -9.0056, -8.8121],
-            [-7.4104, -7.0313, -6.5401],
-            [-6.6105, -6.3427, -6.4675],
-        ]
-        expected_slice = torch.tensor(expected_slice).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [-8.7839, -9.0056, -8.8121],
+                    [-7.4104, -7.0313, -6.5401],
+                    [-6.6105, -6.3427, -6.4675],
+                ],
+                ("cuda", 8): [
+                    [-8.7839, -9.0056, -8.8122],
+                    [-7.4104, -7.0313, -6.5401],
+                    [-6.6105, -6.3428, -6.4675],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(masks_queries_logits[0, 0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
         self.assertEqual(class_queries_logits.shape, (1, model.config.num_queries, model.config.num_labels + 1))
-        expected_slice = torch.tensor(
-            [
-                [1.8324, -8.0835, -4.1922],
-                [0.8450, -9.0050, -3.6053],
-                [0.3045, -7.7293, -3.0275],
-            ]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [1.8324, -8.0835, -4.1922],
+                    [0.8450, -9.0050, -3.6053],
+                    [0.3045, -7.7293, -3.0275],
+                ],
+                ("cuda", 8): [
+                    [1.8324, -8.0835, -4.1922],
+                    [0.8450, -9.0050, -3.6053],
+                    [0.3045, -7.7293, -3.0275],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(
             outputs.class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
         )
@@ -485,6 +577,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(outputs.loss is not None)
 
+    @pytest.mark.torch_export_test
     def test_export(self):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest(reason="This test requires torch >= 2.4 to run.")

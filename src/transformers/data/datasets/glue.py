@@ -17,7 +17,7 @@ import time
 import warnings
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import torch
 from filelock import FileLock
@@ -75,7 +75,7 @@ class GlueDataset(Dataset):
 
     args: GlueDataTrainingArguments
     output_mode: str
-    features: List[InputFeatures]
+    features: list[InputFeatures]
 
     def __init__(
         self,

@@ -14,8 +14,6 @@
 # limitations under the License.
 """EfficientFormer model configuration"""
 
-from typing import List
-
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
 
@@ -107,9 +105,9 @@ class EfficientFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        depths: List[int] = [3, 2, 6, 4],
-        hidden_sizes: List[int] = [48, 96, 224, 448],
-        downsamples: List[bool] = [True, True, True, True],
+        depths: list[int] = [3, 2, 6, 4],
+        hidden_sizes: list[int] = [48, 96, 224, 448],
+        downsamples: list[bool] = [True, True, True, True],
         dim: int = 448,
         key_dim: int = 32,
         attention_ratio: int = 4,

@@ -71,7 +71,7 @@ class TestImportStructures(unittest.TestCase):
         }
 
         self.assertEqual(len(import_structure.keys()), len(valid_frozensets.keys()))
-        for _frozenset in valid_frozensets.keys():
+        for _frozenset in valid_frozensets:
             self.assertTrue(_frozenset in import_structure)
             self.assertListEqual(list(import_structure[_frozenset].keys()), list(valid_frozensets[_frozenset].keys()))
             for module, objects in valid_frozensets[_frozenset].items():
@@ -96,7 +96,7 @@ class TestImportStructures(unittest.TestCase):
             with self.subTest(f"Testing arch {architecture}"):
                 import_structure = define_import_structure(self.models_path / architecture)
                 backend_agnostic_import_structure = {}
-                for requirement, module_object_mapping in import_structure.items():
+                for module_object_mapping in import_structure.values():
                     for module, objects in module_object_mapping.items():
                         if module not in backend_agnostic_import_structure:
                             backend_agnostic_import_structure[module] = []

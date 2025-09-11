@@ -1,11 +1,26 @@
 import ast
+import re
 from collections import defaultdict
 
 
 # Function to perform topological sorting
-def topological_sort(dependencies: dict):
+def topological_sort(dependencies: dict) -> list[list[str]]:
+    """Given the dependencies graph, construct a sorted list of list of modular files.
+
+    Examples:
+
+        The returned list of lists might be:
+        [
+            ["../modular_mistral.py", "../modular_gemma.py"],  # level 0
+            ["../modular_llama4.py", "../modular_gemma2.py"],  # level 1
+            ["../modular_glm4.py"],                            # level 2
+        ]
+        which means mistral and gemma do not depend on any other modular models, while llama4 and gemma2
+        depend on the models in the first list, and glm4 depends on the models in the second and (optionally) in the first list.
+    """
+
     # Nodes are the name of the models to convert (we only add those to the graph)
-    nodes = {node.rsplit("modular_", 1)[1].replace(".py", "") for node in dependencies.keys()}
+    nodes = {node.rsplit("modular_", 1)[1].replace(".py", "") for node in dependencies}
     # This will be a graph from models to convert, to models to convert that should be converted before (as they are a dependency)
     graph = {}
     name_mapping = {}
@@ -20,51 +35,79 @@ def topological_sort(dependencies: dict):
     while len(graph) > 0:
         # Find the nodes with 0 out-degree
         leaf_nodes = {node for node in graph if len(graph[node]) == 0}
-        # Add them to the list
-        sorting_list += list(leaf_nodes)
-        # Remove the leafs from the graph (and from the deps of other nodes)
+        # Add them to the list as next level
+        sorting_list.append([name_mapping[node] for node in leaf_nodes])
+        # Remove the leaves from the graph (and from the deps of other nodes)
         graph = {node: deps - leaf_nodes for node, deps in graph.items() if node not in leaf_nodes}
 
-    return [name_mapping[x] for x in sorting_list]
+    return sorting_list
 
 
-# Function to extract class and import info from a file
-def extract_classes_and_imports(file_path):
+# All the model file types that may be imported in modular files
+ALL_FILE_TYPES = (
+    "modeling",
+    "configuration",
+    "tokenization",
+    "processing",
+    "image_processing",
+    "video_processing",
+    "feature_extraction",
+)
+
+
+def is_model_import(module: str) -> bool:
+    """Check whether `module` is a model import or not."""
+    patterns = "|".join(ALL_FILE_TYPES)
+    regex = rf"(\w+)\.(?:{patterns})_(\w+)"
+    match_object = re.search(regex, module)
+    if match_object is not None:
+        model_name = match_object.group(1)
+        if model_name in match_object.group(2) and model_name != "auto":
+            return True
+    return False
+
+
+def extract_model_imports_from_file(file_path):
+    """From a python file `file_path`, extract the model-specific imports (the imports related to any model file in
+    Transformers)"""
     with open(file_path, "r", encoding="utf-8") as file:
         tree = ast.parse(file.read(), filename=file_path)
     imports = set()
 
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            module = node.module if isinstance(node, ast.ImportFrom) else None
-            if module and (".modeling_" in module or "transformers.models" in module):
-                imports.add(module)
+        if isinstance(node, ast.ImportFrom):
+            if is_model_import(node.module):
+                imports.add(node.module)
     return imports
 
 
-# Function to map dependencies between classes
-def map_dependencies(py_files):
-    dependencies = defaultdict(set)
-    # First pass: Extract all classes and map to files
-    for file_path in py_files:
-        # dependencies[file_path].add(None)
-        class_to_file = extract_classes_and_imports(file_path)
-        for module in class_to_file:
-            dependencies[file_path].add(module)
-    return dependencies
-
-
-def find_priority_list(py_files):
+def find_priority_list(modular_files: list[str]) -> tuple[list[list[str]], dict[str, set]]:
     """
     Given a list of modular files, sorts them by topological order. Modular models that DON'T depend on other modular
-    models will be higher in the topological order.
+    models will be lower in the topological order.
 
     Args:
-        py_files: List of paths to the modular files
+        modular_files (`list[str]`):
+            List of paths to the modular files.
 
     Returns:
-        A tuple with the ordered files (list) and their dependencies (dict)
+        A tuple `ordered_files` and `dependencies`.
+
+        `ordered_file` is a list of lists consisting of the models at each level of the dependency graph. For example,
+        it might be:
+        [
+            ["../modular_mistral.py", "../modular_gemma.py"],  # level 0
+            ["../modular_llama4.py", "../modular_gemma2.py"],  # level 1
+            ["../modular_glm4.py"],                            # level 2
+        ]
+        which means mistral and gemma do not depend on any other modular models, while llama4 and gemma2 depend on the
+        models in the first list, and glm4 depends on the models in the second and (optionally) in the first list.
+
+        `dependencies` is a dictionary mapping each modular file to the models on which it relies (the models that are
+        imported in order to use inheritance).
     """
-    dependencies = map_dependencies(py_files)
+    dependencies = defaultdict(set)
+    for file_path in modular_files:
+        dependencies[file_path].update(extract_model_imports_from_file(file_path))
     ordered_files = topological_sort(dependencies)
     return ordered_files, dependencies

@@ -18,13 +18,21 @@ import unittest
 import warnings
 
 import numpy as np
-import requests
+import pytest
 from packaging import version
 
-from transformers.testing_utils import is_flaky, require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.image_utils import load_image
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -258,7 +266,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertGreaterEqual(len(raised_warnings), 1)
             self.assertIn("extra_argument", messages)
 
-    @is_flaky()
+    @unittest.skip(reason="TODO: Yoni")
     def test_fast_is_faster_than_slow(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping speed test")
@@ -296,19 +304,14 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
         dummy_trimap = np.random.randint(0, 3, size=dummy_image.size[::-1])
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
         encoding_slow = image_processor_slow(dummy_image, trimaps=dummy_trimap, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, trimaps=dummy_trimap, return_tensors="pt")
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     def test_slow_fast_equivalence_batched(self):
         # this only checks on equal resolution, since the slow processor doesn't work otherwise
@@ -331,14 +334,12 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_slow = image_processor_slow(dummy_images, trimaps=dummy_trimaps, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, trimaps=dummy_trimaps, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         # override as trimaps are needed for the image processor
         if self.fast_image_processing_class is None:

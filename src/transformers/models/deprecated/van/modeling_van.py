@@ -16,7 +16,7 @@
 
 import math
 from collections import OrderedDict
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -79,14 +79,14 @@ class VanDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class VanOverlappingPatchEmbedder(nn.Module):
     """
     Downsamples the input using a patchify operation with a `stride` of 4 by default making adjacent windows overlap by
     half of the area. From [PVTv2: Improved Baselines with Pyramid Vision
-    Transformer](https://arxiv.org/abs/2106.13797).
+    Transformer](https://huggingface.co/papers/2106.13797).
     """
 
     def __init__(self, in_channels: int, hidden_size: int, patch_size: int = 7, stride: int = 4):
@@ -105,7 +105,7 @@ class VanOverlappingPatchEmbedder(nn.Module):
 class VanMlpLayer(nn.Module):
     """
     MLP with depth-wise convolution, from [PVTv2: Improved Baselines with Pyramid Vision
-    Transformer](https://arxiv.org/abs/2106.13797).
+    Transformer](https://huggingface.co/papers/2106.13797).
     """
 
     def __init__(
@@ -204,7 +204,7 @@ class VanLayerScaling(nn.Module):
 
     def __init__(self, hidden_size: int, initial_value: float = 1e-2):
         super().__init__()
-        self.weight = nn.Parameter(initial_value * torch.ones((hidden_size)), requires_grad=True)
+        self.weight = nn.Parameter(initial_value * torch.ones(hidden_size), requires_grad=True)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         # unsqueezing for broadcasting
@@ -315,7 +315,7 @@ class VanEncoder(nn.Module):
             x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")
         ]
 
-        for num_stage, (patch_size, stride, hidden_size, depth, mlp_expantion, drop_path_rate) in enumerate(
+        for num_stage, (patch_size, stride, hidden_size, depth, mlp_expansion, drop_path_rate) in enumerate(
             zip(patch_sizes, strides, hidden_sizes, depths, mlp_ratios, drop_path_rates)
         ):
             is_first_stage = num_stage == 0
@@ -330,7 +330,7 @@ class VanEncoder(nn.Module):
                     patch_size=patch_size,
                     stride=stride,
                     depth=depth,
-                    mlp_ratio=mlp_expantion,
+                    mlp_ratio=mlp_expansion,
                     drop_path_rate=drop_path_rate,
                 )
             )
@@ -340,7 +340,7 @@ class VanEncoder(nn.Module):
         hidden_state: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
+    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
         for _, stage_module in enumerate(self.stages):
@@ -361,7 +361,7 @@ class VanPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = VanConfig
+    config: VanConfig
     base_model_prefix = "van"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -436,7 +436,7 @@ class VanModel(VanPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor],
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
+    ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -493,7 +493,7 @@ class VanForImageClassification(VanPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
+    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

@@ -20,6 +20,7 @@ import unittest
 from functools import reduce
 
 import numpy as np
+import pytest
 import requests
 
 from transformers import (
@@ -35,6 +36,7 @@ from transformers import (
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     slow,
     torch_device,
@@ -88,7 +90,7 @@ class JanusVisionText2TextModelTester:
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
-            "num_image_tokens": 4,
+            "num_image_tokens": 16,
             "num_channels": 3,
             "is_training": True,
             "hidden_size": 32,
@@ -152,6 +154,7 @@ class JanusVisionText2TextModelTester:
             text_config=self.text_config,
             vision_config=self.vision_config,
             vq_config=self.get_vq_config(),
+            image_token_id=self.image_token_index,
         )
 
     def prepare_config_and_inputs(self):
@@ -198,50 +201,6 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
     def setUp(self):
         self.model_tester = JanusVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=JanusConfig, has_text_modality=False)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["generation_mode"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # Overwrite inputs_embeds tests because we need to delete "pixel values" for VLMs.
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["generation_mode"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
@@ -336,7 +295,8 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                             pass
 
     @unittest.skip("There are recompilations in Janus")  # TODO (joao, raushan): fix me
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
 
@@ -538,12 +498,29 @@ class JanusIntegrationTest(unittest.TestCase):
         self.assertTrue(out.shape[1] == 576)
 
         # fmt: off
-        expected_tokens = torch.tensor([4484,  4015, 15750,   506,  3758, 11651,  8597,  5739,  4861,   971,
-         14985, 14834, 15438,  7548,  1820,  1465, 13529, 12761, 10503, 12761,
-         14303,  6155,  4015, 11766,   705, 15736, 14146, 10417,  1951,  7713,
-         14305, 15617,  6169,  2706,  8006, 14893,  3855, 10188, 15652,  6297,
-          1097, 12108, 15038,   311, 14998, 15165,   897,  4044,  1762,  4676,
-        ]).to(model.device)
+        expected_tokens =  Expectations(
+            {
+                ("rocm", None): [
+                    10367, 1380, 4841, 15155, 1224, 16361, 15834, 13722, 15258, 8321, 10496, 14532, 8770, 12353, 5481,
+                    11484, 2585, 8587, 3201, 14292, 3356, 2037, 3077, 6107, 3758, 2572, 9376, 13219, 6007, 14292, 12696,
+                    10666, 10046, 13483, 8282, 9101, 5208, 4260, 13886, 13335, 6135, 2316, 15423, 311, 5460, 12218,
+                    14172, 8583, 14577, 3648
+                ],
+                ("rocm", (9, 5)): [
+                    4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
+                    13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
+                    15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
+                    897, 4044, 1762, 4676
+                ],
+                ("cuda", None): [
+                    4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
+                    13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
+                    15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
+                    897, 4044, 1762, 4676
+                ],
+            }
+        )
+        expected_tokens = torch.tensor(expected_tokens.get_expectation()).to(model.device)
         # fmt: on
 
         # Compare the first 50 generated tokens.

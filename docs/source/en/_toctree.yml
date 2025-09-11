@@ -17,20 +17,12 @@
       title: Customizing model components
     - local: model_sharing
       title: Sharing
-    - local: add_new_model
-      title: Adding a new model to Transformers
     - local: modular_transformers
-      title: Modular Transformers
+      title: Contributing a new model to Transformers
+    - local: add_new_model
+      title: Legacy model contribution
     - local: auto_docstring
-      title: Document your models
-    - local: task_summary
-      title: What 🤗 Transformers can do
-    - local: tasks_explained
-      title: How 🤗 Transformers solve tasks
-    - local: model_summary
-      title: The Transformer model family
-    - local: attention
-      title: Attention mechanisms
+      title: Documenting a model
     - local: attention_interface
       title: Customizing attention function
     title: Models
@@ -76,12 +68,10 @@
       title: Prompt engineering
     - local: llm_optims
       title: Optimizing inference
-    - local: kv_cache
-      title: KV cache strategies
-    - local: serving
-      title: Serving
     - local: cache_explanation
       title: Caching
+    - local: kv_cache
+      title: KV cache strategies
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     - local: perplexity
@@ -91,30 +81,42 @@
     - local: conversations
       title: Chat basics
     - local: chat_templating
-      title: Templates
+      title: Chat templates
     - local: chat_templating_multimodal
-      title: Multimodal templates
-    - local: chat_templating_writing
-      title: Template writing
+      title: Multimodal chat templates
     - local: chat_extras
-      title: Tools and RAG
+      title: Tool use
+    - local: chat_templating_writing
+      title: Writing a chat template
     title: Chat with models
+  - sections:
+    - local: serving
+      title: Serving LLMs, VLMs, and other chat-based models
+    - local: jan
+      title: Jan
+    - local: cursor
+      title: Cursor
+    - local: tiny_agents
+      title: Tiny-Agents CLI and MCP tools
+    - local: open_webui
+      title: Open WebUI
+    title: Serving
   - sections:
     - local: perf_torch_compile
       title: torch.compile
     - local: perf_infer_gpu_one
       title: GPU
     - local: perf_infer_gpu_multi
-      title: Distributed GPU inference
+      title: Distributed inference
     - local: perf_infer_cpu
       title: CPU
-    - local: tf_xla
-      title: XLA
     title: Optimization
   - local: agents
     title: Agents
   - local: tools
     title: Tools
+  - local: transformers_as_backend
+    title: Inference server backends
   title: Inference
 - isExpanded: false
   sections:
@@ -129,8 +131,8 @@
       title: Hyperparameter search
     title: Trainer API
   - sections:
-    - local: gpu_selection
-      title: GPU selection
+    - local: accelerator_selection
+      title: Accelerator selection
     - local: accelerate
       title: Accelerate
     - local: fsdp
@@ -149,8 +151,6 @@
       title: GPU
     - local: perf_train_cpu
       title: CPU
-    - local: perf_train_tpu_tf
-      title: TPU
     - local: perf_train_special
       title: Apple Silicon
     - local: perf_train_gaudi
@@ -189,6 +189,8 @@
     title: FBGEMM
   - local: quantization/finegrained_fp8
     title: Fine-grained FP8
+  - local: quantization/fp_quant
+    title: FP-Quant
   - local: gguf
     title: GGUF
   - local: quantization/gptq
@@ -275,6 +277,8 @@
         title: Keypoint detection
       - local: tasks/knowledge_distillation_for_image_classification
         title: Knowledge Distillation for Computer Vision
+      - local: tasks/keypoint_matching
+        title: Keypoint matching
       title: Computer vision
     - sections:
       - local: tasks/image_captioning
@@ -371,6 +375,10 @@
     - sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/apertus
+        title: Apertus
+      - local: model_doc/arcee
+        title: Arcee
       - local: model_doc/bamba
         title: Bamba
       - local: model_doc/bart
@@ -386,7 +394,7 @@
       - local: model_doc/bert-japanese
         title: BertJapanese
       - local: model_doc/bertweet
-        title: Bertweet
+        title: BERTweet
       - local: model_doc/big_bird
         title: BigBird
       - local: model_doc/bigbird_pegasus
@@ -439,6 +447,10 @@
         title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
+      - local: model_doc/doge
+        title: Doge
+      - local: model_doc/dots1
+        title: dots1
       - local: model_doc/dpr
         title: DPR
       - local: model_doc/electra
@@ -447,14 +459,22 @@
         title: Encoder Decoder Models
       - local: model_doc/ernie
         title: ERNIE
+      - local: model_doc/ernie4_5
+        title: Ernie4_5
+      - local: model_doc/ernie4_5_moe
+        title: Ernie4_5_MoE
       - local: model_doc/ernie_m
         title: ErnieM
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/exaone4
+        title: EXAONE-4.0
       - local: model_doc/falcon
         title: Falcon
       - local: model_doc/falcon3
         title: Falcon3
+      - local: model_doc/falcon_h1
+        title: FalconH1
       - local: model_doc/falcon_mamba
         title: FalconMamba
       - local: model_doc/flan-t5
@@ -479,6 +499,8 @@
         title: GLM
       - local: model_doc/glm4
         title: glm4
+      - local: model_doc/glm4_moe
+        title: glm4_moe
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -493,6 +515,8 @@
         title: GPT2
       - local: model_doc/gpt_bigcode
         title: GPTBigCode
+      - local: model_doc/gpt_oss
+        title: GptOss
       - local: model_doc/gptsan-japanese
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
@@ -511,6 +535,10 @@
         title: HerBERT
       - local: model_doc/hgnet_v2
         title: HGNet-V2
+      - local: model_doc/hunyuan_v1_dense
+        title: HunYuanDenseV1
+      - local: model_doc/hunyuan_v1_moe
+        title: HunYuanMoEV1
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/jamba
@@ -521,6 +549,8 @@
         title: Jukebox
       - local: model_doc/led
         title: LED
+      - local: model_doc/lfm2
+        title: LFM2
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
@@ -540,7 +570,7 @@
       - local: model_doc/mamba
         title: Mamba
       - local: model_doc/mamba2
-        title: mamba2
+        title: Mamba2
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -553,6 +583,8 @@
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/minimax
+        title: MiniMax
       - local: model_doc/mistral
         title: Mistral
       - local: model_doc/mixtral
@@ -563,6 +595,8 @@
         title: MobileBERT
       - local: model_doc/modernbert
         title: ModernBert
+      - local: model_doc/modernbert-decoder
+        title: ModernBERTDecoder
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -623,6 +657,8 @@
         title: Qwen3
       - local: model_doc/qwen3_moe
         title: Qwen3MoE
+      - local: model_doc/qwen3_next
+        title: Qwen3Next
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -645,6 +681,8 @@
         title: RoFormer
       - local: model_doc/rwkv
         title: RWKV
+      - local: model_doc/seed_oss
+        title: Seed-Oss
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
@@ -657,6 +695,8 @@
         title: SwitchTransformers
       - local: model_doc/t5
         title: T5
+      - local: model_doc/t5gemma
+        title: T5Gemma
       - local: model_doc/t5v1.1
         title: T5v1.1
       - local: model_doc/tapex
@@ -683,6 +723,8 @@
         title: XLM-V
       - local: model_doc/xlnet
         title: XLNet
+      - local: model_doc/xlstm
+        title: xLSTM
       - local: model_doc/yoso
         title: YOSO
       - local: model_doc/zamba
@@ -691,6 +733,8 @@
         title: Zamba2
       title: Text models
     - sections:
+      - local: model_doc/aimv2
+        title: Aimv2
       - local: model_doc/beit
         title: BEiT
       - local: model_doc/bit
@@ -707,6 +751,12 @@
         title: D-FINE
       - local: model_doc/dab-detr
         title: DAB-DETR
+      - local: model_doc/deepseek_v2
+        title: DeepSeek-V2
+      - local: model_doc/deepseek_vl
+        title: DeepseekVL
+      - local: model_doc/deepseek_vl_hybrid
+        title: DeepseekVLHybrid
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
@@ -727,18 +777,26 @@
         title: DINOV2
       - local: model_doc/dinov2_with_registers
         title: DINOv2 with Registers
+      - local: model_doc/dinov3
+        title: DINOv3
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
         title: DPT
       - local: model_doc/efficientformer
         title: EfficientFormer
+      - local: model_doc/efficientloftr
+        title: EfficientLoFTR
       - local: model_doc/efficientnet
         title: EfficientNet
+      - local: model_doc/eomt
+        title: EoMT
       - local: model_doc/focalnet
         title: FocalNet
       - local: model_doc/glpn
         title: GLPN
+      - local: model_doc/hgnet_v2
+        title: HGNet-V2
       - local: model_doc/hiera
         title: Hiera
       - local: model_doc/ijepa
@@ -747,6 +805,8 @@
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/lightglue
+        title: LightGlue
       - local: model_doc/mask2former
         title: Mask2Former
       - local: model_doc/maskformer
@@ -835,6 +895,8 @@
         title: CSM
       - local: model_doc/dac
         title: dac
+      - local: model_doc/dia
+        title: Dia
       - local: model_doc/encodec
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
@@ -843,6 +905,8 @@
         title: GraniteSpeech
       - local: model_doc/hubert
         title: Hubert
+      - local: model_doc/kyutai_speech_to_text
+        title: Kyutai Speech-To-Text
       - local: model_doc/mctct
         title: MCTCT
       - local: model_doc/mimi
@@ -893,6 +957,8 @@
         title: WavLM
       - local: model_doc/whisper
         title: Whisper
+      - local: model_doc/xcodec
+        title: X-Codec
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
@@ -901,6 +967,8 @@
     - sections:
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/vjepa2
+        title: V-JEPA 2
       - local: model_doc/videomae
         title: VideoMAE
       - local: model_doc/vivit
@@ -933,8 +1001,12 @@
         title: CLIPSeg
       - local: model_doc/clvp
         title: CLVP
+      - local: model_doc/cohere2_vision
+        title: Cohere2Vision
       - local: model_doc/colpali
         title: ColPali
+      - local: model_doc/colqwen2
+        title: ColQwen2
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot
@@ -943,12 +1015,22 @@
         title: Donut
       - local: model_doc/emu3
         title: Emu3
+      - local: model_doc/evolla
+        title: Evolla
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/florence2
+        title: Florence2
       - local: model_doc/gemma3
         title: Gemma3
+      - local: model_doc/gemma3n
+        title: Gemma3n
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glm4v
+        title: glm4v
+      - local: model_doc/glm4v_moe
+        title: glm4v_moe
       - local: model_doc/got_ocr2
         title: GOT-OCR2
       - local: model_doc/granitevision
@@ -973,6 +1055,8 @@
         title: Janus
       - local: model_doc/kosmos-2
         title: KOSMOS-2
+      - local: model_doc/kosmos2_5
+        title: KOSMOS-2.5
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2
@@ -986,7 +1070,7 @@
       - local: model_doc/llama4
         title: Llama4
       - local: model_doc/llava
-        title: Llava
+        title: LLaVA
       - local: model_doc/llava_next
         title: LLaVA-NeXT
       - local: model_doc/llava_next_video
@@ -997,18 +1081,24 @@
         title: LXMERT
       - local: model_doc/matcha
         title: MatCha
+      - local: model_doc/metaclip_2
+        title: MetaCLIP 2
       - local: model_doc/mgp-str
         title: MGP-STR
       - local: model_doc/mistral3
         title: Mistral3
       - local: model_doc/mllama
         title: mllama
+      - local: model_doc/mm-grounding-dino
+        title: MM Grounding DINO
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/omdet-turbo
         title: OmDet-Turbo
       - local: model_doc/oneformer
         title: OneFormer
+      - local: model_doc/ovis2
+        title: Ovis2
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/owlv2
@@ -1017,6 +1107,8 @@
         title: PaliGemma
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/perception_lm
+        title: PerceptionLM
       - local: model_doc/phi4_multimodal
         title: Phi4 Multimodal
       - local: model_doc/pix2struct
@@ -1031,6 +1123,10 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
         title: Qwen2VL
+      - local: model_doc/sam2
+        title: SAM2
+      - local: model_doc/sam2_video
+        title: SAM2 Video
       - local: model_doc/sam
         title: Segment Anything
       - local: model_doc/sam_hq
@@ -1041,6 +1137,8 @@
         title: SigLIP
       - local: model_doc/siglip2
         title: SigLIP2
+      - local: model_doc/smollm3
+        title: SmolLM3
       - local: model_doc/smolvlm
         title: SmolVLM
       - local: model_doc/speech-encoder-decoder
@@ -1067,6 +1165,8 @@
         title: Vision Text Dual Encoder
       - local: model_doc/visual_bert
         title: VisualBERT
+      - local: model_doc/voxtral
+        title: Voxtral
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models
@@ -1119,4 +1219,8 @@
     - local: internal/time_series_utils
       title: Utilities for Time Series
     title: Internal helpers
+  - sections:
+    - local: reference/environment_variables
+      title: Environment Variables
+    title: Reference
   title: API

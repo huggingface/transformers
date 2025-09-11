@@ -18,20 +18,23 @@ import json
 import os
 import tempfile
 import warnings
+from copy import deepcopy
 
 import numpy as np
+import pytest
 from packaging import version
 
 from transformers import AutoVideoProcessor
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
 )
 from transformers.utils import is_torch_available, is_vision_available
+from transformers.video_utils import VideoMetadata
 
 
 if is_torch_available():
@@ -165,8 +168,9 @@ class VideoProcessingTestMixin:
             self.assertIsNotNone(video_processor)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_video_processor(self):
         if self.fast_video_processing_class is None:
             self.skipTest("Skipping compilation test as fast video processor is not defined")
@@ -176,10 +180,12 @@ class VideoProcessingTestMixin:
         torch.compiler.reset()
         video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")
         video_processor = self.fast_video_processing_class(**self.video_processor_dict)
-        output_eager = video_processor(video_inputs, device=torch_device, return_tensors="pt")
+        output_eager = video_processor(video_inputs, device=torch_device, do_sample_frames=False, return_tensors="pt")
 
         video_processor = torch.compile(video_processor, mode="reduce-overhead")
-        output_compiled = video_processor(video_inputs, device=torch_device, return_tensors="pt")
+        output_compiled = video_processor(
+            video_inputs, device=torch_device, do_sample_frames=False, return_tensors="pt"
+        )
 
         torch.testing.assert_close(
             output_eager[self.input_name], output_compiled[self.input_name], rtol=1e-4, atol=1e-4
@@ -293,6 +299,66 @@ class VideoProcessingTestMixin:
                 (self.video_processor_tester.batch_size, *expected_output_video_shape),
             )
 
+    def test_call_sample_frames(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+
+            prev_num_frames = self.video_processor_tester.num_frames
+            self.video_processor_tester.num_frames = 8
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False,
+                return_tensors="torch",
+            )
+
+            # Force set sampling to False. No sampling is expected even when `num_frames` exists
+            video_processing.do_sample_frames = False
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=3)[self.input_name]
+            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=3)[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], 8)
+            self.assertEqual(encoded_videos_batched.shape[1], 8)
+
+            # Set sampling to True. Video frames should be sampled with `num_frames` in the output
+            video_processing.do_sample_frames = True
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=3)[self.input_name]
+            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=3)[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], 3)
+            self.assertEqual(encoded_videos_batched.shape[1], 3)
+
+            # Sample with `fps` requires metadata to infer number of frames from total duration
+            with self.assertRaises(ValueError):
+                metadata = VideoMetadata(**{"total_num_frames": 8})
+                video_processing.sample_frames(metadata=metadata, fps=3)
+
+            metadata = [[{"duration": 2.0, "total_num_frames": 8, "fps": 4}]]
+            batched_metadata = metadata * len(video_inputs)
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)[
+                self.input_name
+            ]
+            encoded_videos_batched = video_processing(
+                video_inputs, return_tensors="pt", fps=3, video_metadata=batched_metadata
+            )[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], 6)
+            self.assertEqual(encoded_videos_batched.shape[1], 6)
+
+            # The same as above but uses a `VideoMetadata` object in the input
+            metadata = [[VideoMetadata(duration=2.0, total_num_frames=8, fps=4)]]
+            batched_metadata = metadata * len(video_inputs)
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)[
+                self.input_name
+            ]
+
+            # We should raise error when asked to sample more frames than there are in input video
+            with self.assertRaises(ValueError):
+                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=10)[self.input_name]
+                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=10)[
+                    self.input_name
+                ]
+
+            # Assign back the actual num frames in tester
+            self.video_processor_tester.num_frames = prev_num_frames
+
     def test_nested_input(self):
         """Tests that the processor can work with nested list where each video is a list of arrays"""
         for video_processing_class in self.video_processor_list:
@@ -393,3 +459,40 @@ class VideoProcessingTestMixin:
 
         if not is_tested:
             self.skipTest(reason="No validation found for `preprocess` method")
+
+    def test_override_instance_attributes_does_not_affect_other_instances(self):
+        if self.fast_video_processing_class is None:
+            self.skipTest(
+                "Only testing fast video processor, as most slow processors break this test and are to be deprecated"
+            )
+
+        video_processing_class = self.fast_video_processing_class
+        video_processor_1 = video_processing_class()
+        video_processor_2 = video_processing_class()
+        if not (hasattr(video_processor_1, "size") and isinstance(video_processor_1.size, dict)) or not (
+            hasattr(video_processor_1, "image_mean") and isinstance(video_processor_1.image_mean, list)
+        ):
+            self.skipTest(
+                reason="Skipping test as the image processor does not have dict size or list image_mean attributes"
+            )
+
+        original_size_2 = deepcopy(video_processor_2.size)
+        for key in video_processor_1.size:
+            video_processor_1.size[key] = -1
+        modified_copied_size_1 = deepcopy(video_processor_1.size)
+
+        original_image_mean_2 = deepcopy(video_processor_2.image_mean)
+        video_processor_1.image_mean[0] = -1
+        modified_copied_image_mean_1 = deepcopy(video_processor_1.image_mean)
+
+        # check that the original attributes of the second instance are not affected
+        self.assertEqual(video_processor_2.size, original_size_2)
+        self.assertEqual(video_processor_2.image_mean, original_image_mean_2)
+
+        for key in video_processor_2.size:
+            video_processor_2.size[key] = -2
+        video_processor_2.image_mean[0] = -2
+
+        # check that the modified attributes of the first instance are not affected by the second instance
+        self.assertEqual(video_processor_1.size, modified_copied_size_1)
+        self.assertEqual(video_processor_1.image_mean, modified_copied_image_mean_1)

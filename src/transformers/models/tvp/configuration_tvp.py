@@ -172,6 +172,14 @@ class TvpConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
     @classmethod
     def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
         """Instantiate a [`TvpConfig`] (or a derived class) from a pre-trained backbone model configuration.
@@ -189,7 +197,7 @@ class TvpConfig(PretrainedConfig):
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
         if output["backbone_config"] is not None:

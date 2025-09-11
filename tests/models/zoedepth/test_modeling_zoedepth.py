@@ -20,6 +20,7 @@ import numpy as np
 from transformers import Dinov2Config, ZoeDepthConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -146,7 +147,8 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
-    test_torch_exportable = True
+    # `strict=True/False` are both failing with torch 2.7, see #38677
+    test_torch_exportable = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = ZoeDepthModelTester(self)

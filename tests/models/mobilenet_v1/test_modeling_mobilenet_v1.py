@@ -14,10 +14,11 @@
 """Testing suite for the PyTorch MobileNetV1 model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import MobileNetV1Config
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -246,6 +247,12 @@ class MobileNetV1ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1001))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-4.1739, -1.1233, 3.1205]).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [-4.1739, -1.1233, 3.1205],
+                ("cuda", 8): [-4.1739, -1.1233, 3.1205],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)

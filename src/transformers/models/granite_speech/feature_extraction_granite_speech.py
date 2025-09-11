@@ -50,6 +50,7 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.sampling_rate = sampling_rate
         self.melspec_kwargs = {
             "sample_rate": sampling_rate,
             "n_fft": n_fft,
@@ -57,8 +58,8 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             "hop_length": hop_length,
             "n_mels": n_mels,
         }
-        # Currently lazily initialized
-        self.melspec = None
+        requires_backends(self, ["torchaudio"])
+        self.mel_filters = torchaudio.transforms.MelSpectrogram(**self.melspec_kwargs)
         self.projector_window_size = projector_window_size
         self.projector_downsample_rate = projector_downsample_rate
 
@@ -91,34 +92,16 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         ).view(-1, 1)
         return BatchFeature(data=speech_inputs)
 
-    def _ensure_melspec_transform_is_initialized(self):
-        """
-        Ensures the mel spectrogram transform on this instance is initialized.
-
-        We do this for now since some logging explodes since the mel spectrogram
-        transform is not JSON serializable.
-        """
-        requires_backends(self, ["torchaudio"])
-
-        if self.melspec is None:
-            # TODO (@alex-jw-brooks / @eustlb) move this to common batch
-            # feature extraction in audio utils once they are written!
-            self.melspec = torchaudio.transforms.MelSpectrogram(**self.melspec_kwargs)
-
     def _extract_mel_spectrograms(self, audio: "torch.Tensor", device="cpu"):
         """
         Compute the Mel features to be passed to the conformer encoder.
         """
         requires_backends(self, ["torchaudio"])
-
-        # Initialize the mel spectrogram if isn't not already and
-        # move the melspec / audio to the computation device.
-        self._ensure_melspec_transform_is_initialized()
         if device is not None:
-            melspec = self.melspec.to(device)
+            melspec = self.mel_filters.to(device)
             audio = audio.to(device)
         else:
-            melspec = self.melspec
+            melspec = self.mel_filters
 
         bsz = audio.shape[0]
         with torch.no_grad():
@@ -134,8 +117,6 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             # stacking and skipping by 2
             audio = logmel.reshape(bsz, -1, 2 * logmel.shape[-1])
 
-        if audio.device != "cpu":
-            return audio.detach().cpu()
         return audio
 
     def _get_num_audio_features(self, audio_lengths: Sequence[int]) -> Sequence[int]:
@@ -195,11 +176,8 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             if not torch.is_floating_point(audios[0]):
                 raise ValueError("Invalid audio provided. Audio should be a floating point between 0 and 1")
             lengths = [audio.shape[-1] for audio in audios]
-            padding = [max(lengths) - length for length in lengths]
-            # ensure all audios have a batch dimension:
-            audios = [audio.view(1, -1) for audio in audios]
-            padded = [torch.nn.functional.pad(audio, (0, pad)) for audio, pad in zip(audios, padding)]
-            audios = torch.cat(padded, dim=0)
+            audios = [audio.squeeze(0) for audio in audios]
+            audios = torch.nn.utils.rnn.pad_sequence(audios, batch_first=True, padding_value=0.0)
             return audios, lengths
 
         raise TypeError("Invalid audio provided. Audio should be a one or more torch tensors or numpy arrays")

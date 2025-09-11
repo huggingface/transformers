@@ -13,22 +13,31 @@
 # limitations under the License.
 
 
+import asyncio
+import copy
 import json
 import os
 import platform
+import re
 import string
 import time
-import warnings
 from argparse import ArgumentParser, Namespace
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from threading import Thread
 from typing import Optional
 
 import yaml
+from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 
+from transformers import (
+    AutoTokenizer,
+    GenerationConfig,
+    PreTrainedTokenizer,
+)
+from transformers.commands import BaseTransformersCLICommand
+from transformers.commands.serving import ServeArguments, ServeCommand
 from transformers.utils import is_rich_available, is_torch_available
-
-from . import BaseTransformersCLICommand
 
 
 if platform.system() != "Windows":
@@ -47,9 +56,7 @@ if is_torch_available():
         AutoTokenizer,
         BitsAndBytesConfig,
         GenerationConfig,
-        TextIteratorStreamer,
     )
-
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
 ALLOWED_VALUE_CHARS = set(
@@ -68,6 +75,7 @@ DEFAULT_EXAMPLES = {
     "numbers": {"text": "Count to 10 but skip every number ending with an 'e'"},
     "birds": {"text": "Why aren't birds real?"},
     "socks": {"text": "Why is it important to eat socks after meditating?"},
+    "numbers2": {"text": "Which number is larger, 9.9 or 9.11?"},
 }
 
 # Printed at the start of a chat session
@@ -76,7 +84,7 @@ HELP_STRING_MINIMAL = """
 **TRANSFORMERS CHAT INTERFACE**
 
 Chat interface to try out a model. Besides chatting with the model, here are some basic commands:
-- **!help**: shows all available commands
+- **!help**: shows all available commands (set generation settings, save chat, etc.)
 - **!status**: shows the current status of the model and generation settings
 - **!clear**: clears the current conversation and starts a new one
 - **!exit**: closes the interface
@@ -102,19 +110,6 @@ If you're a new user, check this basic flag guide: https://huggingface.co/docs/t
 - **!exit**: closes the interface
 """
 
-# format: (optional CLI arg being deprecated, its current default, corresponding `generate` flag)
-_DEPRECATION_MAP = [
-    ("max_new_tokens", 256, "max_new_tokens"),
-    ("do_sample", True, "do_sample"),
-    ("num_beams", 1, "num_beams"),
-    ("temperature", 1.0, "temperature"),
-    ("top_k", 50, "top_k"),
-    ("top_p", 1.0, "top_p"),
-    ("repetition_penalty", 1.0, "repetition_penalty"),
-    ("eos_tokens", None, "eos_token_id"),
-    ("eos_token_ids", None, "eos_token_id"),
-]
-
 
 class RichInterface:
     def __init__(self, model_name: Optional[str] = None, user_name: Optional[str] = None):
@@ -128,18 +123,20 @@ class RichInterface:
         else:
             self.user_name = user_name
 
-    def stream_output(self, output_stream: TextIteratorStreamer) -> str:
-        """Stream output from a role, and return the generated text after it's done steaming."""
-        # This method is originally from the FastChat CLI:
-        # https://github.com/lm-sys/FastChat/blob/main/fastchat/serve/cli.py
-        # Create a Live context for updating the console output
-        text = ""
+    async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, int]:
         self._console.print(f"[bold blue]<{self.model_name}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
-            # Read lines from the stream
-            for i, outputs in enumerate(output_stream):
-                if not outputs or i == 0:
+            text = ""
+            async for token in await stream:
+                outputs = token.choices[0].delta.content
+
+                if not outputs:
                     continue
+
+                # Escapes single words encased in <>, e.g. <think> -> \<think\>, for proper rendering in Markdown.
+                # It only escapes single words that may have `_`, optionally following a `/` (e.g. </think>)
+                outputs = re.sub(r"<(/*)(\w*)>", r"\<\1\2\>", outputs)
+
                 text += outputs
                 # Render the accumulated text as Markdown
                 # NOTE: this is a workaround for the rendering "unstandard markdown"
@@ -152,6 +149,7 @@ class RichInterface:
                 #  introduce trailing spaces (only) in code block, but it works well
                 #  especially for console output, because in general the console does not
                 #  care about trailing spaces.
+
                 lines = []
                 for line in text.splitlines():
                     lines.append(line)
@@ -161,10 +159,14 @@ class RichInterface:
                         lines.append("\n")
                     else:
                         lines.append("  \n")
+
                 markdown = Markdown("".join(lines).strip(), code_theme="github-dark")
+
                 # Update the Live console output
-                live.update(markdown)
+                live.update(markdown, refresh=True)
+
         self._console.print()
+
         return text
 
     def input(self) -> str:
@@ -224,6 +226,7 @@ class ChatArguments:
     system_prompt: Optional[str] = field(default=None, metadata={"help": "System prompt."})
     save_folder: str = field(default="./chat_history/", metadata={"help": "Folder to save chat history."})
     examples_path: Optional[str] = field(default=None, metadata={"help": "Path to a yaml file with examples."})
+    verbose: bool = field(default=False, metadata={"help": "Whether to show runtime warnings in the chat interface."})
 
     # Generation settings
     generation_config: Optional[str] = field(
@@ -236,31 +239,21 @@ class ChatArguments:
             ),
         },
     )
-    # Deprecated CLI args start here
-    max_new_tokens: int = field(default=256, metadata={"help": "Maximum number of tokens to generate."})
-    do_sample: bool = field(default=True, metadata={"help": "Whether to sample outputs during generation."})
-    num_beams: int = field(default=1, metadata={"help": "Number of beams for beam search."})
-    temperature: float = field(default=1.0, metadata={"help": "Temperature parameter for generation."})
-    top_k: int = field(default=50, metadata={"help": "Value of k for top-k sampling."})
-    top_p: float = field(default=1.0, metadata={"help": "Value of p for nucleus sampling."})
-    repetition_penalty: float = field(default=1.0, metadata={"help": "Repetition penalty."})
-    eos_tokens: Optional[str] = field(
-        default=None,
-        metadata={"help": "EOS tokens to stop the generation. If multiple they should be comma separated."},
-    )
-    eos_token_ids: Optional[str] = field(
-        default=None,
-        metadata={"help": "EOS token IDs to stop the generation. If multiple they should be comma separated."},
-    )
-    # Deprecated CLI args end here
 
     # Model loading
     model_revision: str = field(
         default="main",
         metadata={"help": "Specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
+    device: str = field(default="auto", metadata={"help": "Device to use for inference."})
     torch_dtype: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "`torch_dtype` is deprecated! Please use `dtype` argument instead.",
+            "choices": ["auto", "bfloat16", "float16", "float32"],
+        },
+    )
+    dtype: Optional[str] = field(
         default="auto",
         metadata={
             "help": "Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, "
@@ -289,6 +282,16 @@ class ChatArguments:
     bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
     use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
 
+    # Serving settings
+    host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
+    port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
+
+    def __post_init__(self):
+        """Only used for BC `torch_dtype` argument."""
+        # In this case only the BC torch_dtype was given
+        if self.torch_dtype is not None and self.dtype == "auto":
+            self.dtype = self.torch_dtype
+
 
 def chat_command_factory(args: Namespace):
     """
@@ -311,7 +314,10 @@ class ChatCommand(BaseTransformersCLICommand):
 
         group = chat_parser.add_argument_group("Positional arguments")
         group.add_argument(
-            "model_name_or_path_positional", type=str, default=None, help="Name of the pre-trained model."
+            "model_name_or_path_or_address",
+            type=str,
+            default=None,
+            help="Name of the pre-trained model or address to connect to.",
         )
         group.add_argument(
             "generate_flags",
@@ -321,56 +327,49 @@ class ChatCommand(BaseTransformersCLICommand):
                 "Flags to pass to `generate`, using a space as a separator between flags. Accepts booleans, numbers, "
                 "and lists of integers, more advanced parameterization should be set through --generation-config. "
                 "Example: `transformers chat <model_repo> max_new_tokens=100 do_sample=False eos_token_id=[1,2]`. "
-                "If you're a new user, check this basic flag guide: https://huggingface.co/docs/transformers/llm_tutorial#common-options"
+                "If you're a new user, check this basic flag guide: "
+                "https://huggingface.co/docs/transformers/llm_tutorial#common-options"
             ),
             nargs="*",
         )
         chat_parser.set_defaults(func=chat_command_factory)
 
     def __init__(self, args):
-        args = self._handle_deprecated_args(args)
+        if args.model_name_or_path_or_address is not None:
+            name = args.model_name_or_path_or_address
+            if name.startswith("http") or name.startswith("https") or name.startswith("localhost"):
+                self.spawn_backend = False
+
+                if args.host != "localhost" or args.port != 8000:
+                    raise ValueError(
+                        "Looks like you’ve set both a server address and a custom host/port. "
+                        "Please pick just one way to specify the server."
+                    )
+
+                args.host, args.port = args.model_name_or_path_or_address.rsplit(":", 1)
+
+                if args.model_name_or_path is None:
+                    raise ValueError(
+                        "When connecting to a server, please specify a model name with the --model_name_or_path flag."
+                    )
+            else:
+                self.spawn_backend = True
+                args.model_name_or_path = args.model_name_or_path_or_address
+
+        if not is_rich_available() and (not is_torch_available() and self.spawn_backend):
+            raise ImportError(
+                "You need to install rich to use the chat interface. Additionally, you have not specified a remote "
+                "endpoint and are therefore spawning a backend. Torch is required for this: (`pip install rich torch`)"
+            )
+        elif not is_rich_available():
+            raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
+        elif not is_torch_available() and self.spawn_backend:
+            raise ImportError(
+                "You have not specified a remote endpoint and are therefore spawning a backend. Torch is required "
+                "for this: (`pip install rich torch`)"
+            )
+
         self.args = args
-
-    def _handle_deprecated_args(self, args: ChatArguments) -> ChatArguments:
-        """
-        Handles deprecated arguments and their deprecation cycle. To be removed after we fully migrated to the new
-        args.
-        """
-        has_warnings = False
-
-        # 1. Model as a positional argument
-        args.model_name_or_path_positional = args.model_name_or_path_positional or args.model_name_or_path
-        if args.model_name_or_path_positional is None:
-            raise ValueError(
-                "One of the following must be provided:"
-                "\n- The positional argument containing the model repo, e.g. `transformers chat <model_repo>`"
-                "\n- the optional --model_name_or_path argument, containing the model repo (deprecated)"
-            )
-        elif args.model_name_or_path is not None:
-            has_warnings = True
-            warnings.warn(
-                "The --model_name_or_path argument is deprecated will be removed in v4.54.0. Use the positional "
-                "argument instead, e.g. `transformers chat <model_repo>`.",
-                FutureWarning,
-            )
-        # 2. Named generate option args
-        for deprecated_arg, default_value, new_arg in _DEPRECATION_MAP:
-            value = getattr(args, deprecated_arg)
-            if value != default_value:
-                has_warnings = True
-                warnings.warn(
-                    f"The --{deprecated_arg} argument is deprecated will be removed in v4.54.0. There are two "
-                    "alternative solutions to specify this generation option: \n"
-                    "1. Pass `--generation-config <path_to_file/Hub repo>` to specify a generation config.\n"
-                    "2. Pass `generate` flags through positional arguments, e.g. `transformers chat <model_repo> "
-                    f"{new_arg}={value}`",
-                    FutureWarning,
-                )
-
-        if has_warnings:
-            print("\n(Press enter to continue)")
-            input()
-        return args
 
     # -----------------------------------------------------------------------------------------------------------------
     # Chat session methods
@@ -393,7 +392,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
         if filename is None:
             time_str = time.strftime("%Y-%m-%d_%H-%M-%S")
-            filename = f"{args.model_name_or_path_positional}/chat_{time_str}.json"
+            filename = f"{args.model_name_or_path_or_address}/chat_{time_str}.json"
             filename = os.path.join(folder, filename)
 
         os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -431,13 +430,16 @@ class ChatCommand(BaseTransformersCLICommand):
 
         # 2. b. strings should be quoted
         def is_number(s: str) -> bool:
+            # handle negative numbers
+            if s.startswith("-"):
+                s = s[1:]
             return s.replace(".", "", 1).isdigit()
 
         generate_flags_as_dict = {k: f'"{v}"' if not is_number(v) else v for k, v in generate_flags_as_dict.items()}
         # 2. c. [no processing needed] lists are lists of ints because `generate` doesn't take lists of strings :)
         # We also mention in the help message that we only accept lists of ints for now.
 
-        # 3. Join the the result into a comma separated string
+        # 3. Join the result into a comma separated string
         generate_flags_string = ", ".join([f"{k}: {v}" for k, v in generate_flags_as_dict.items()])
 
         # 4. Add the opening/closing brackets
@@ -464,36 +466,25 @@ class ChatCommand(BaseTransformersCLICommand):
         return processed_generate_flags
 
     def get_generation_parameterization(
-        self, args: ChatArguments, tokenizer: AutoTokenizer
+        self, args: ChatArguments, model_generation_config: GenerationConfig
     ) -> tuple[GenerationConfig, dict]:
         """
         Returns a GenerationConfig object holding the generation parameters for the CLI command.
         """
-        # No generation config arg provided -> use base generation config, apply CLI defaults
-        if args.generation_config is None:
-            generation_config = GenerationConfig()
-            # Apply deprecated CLI args on top of the default generation config
-            pad_token_id, eos_token_ids = self.parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
-            deprecated_kwargs = {
-                "max_new_tokens": args.max_new_tokens,
-                "do_sample": args.do_sample,
-                "num_beams": args.num_beams,
-                "temperature": args.temperature,
-                "top_k": args.top_k,
-                "top_p": args.top_p,
-                "repetition_penalty": args.repetition_penalty,
-                "pad_token_id": pad_token_id,
-                "eos_token_id": eos_token_ids,
-            }
-            generation_config.update(**deprecated_kwargs)
-        # generation config arg provided -> use it as the base parameterization
-        else:
+        # No generation config arg provided -> use model's default generation config, then apply CLI defaults
+        if args.generation_config is not None:
             if ".json" in args.generation_config:  # is a local file
                 dirname = os.path.dirname(args.generation_config)
                 filename = os.path.basename(args.generation_config)
                 generation_config = GenerationConfig.from_pretrained(dirname, filename)
             else:
                 generation_config = GenerationConfig.from_pretrained(args.generation_config)
+        else:
+            # !!!!!!!!!
+            # This is a chat session, so we have a few non-standard defaults
+            # !!!!!!!!!
+            generation_config = copy.deepcopy(model_generation_config)
+            generation_config.update(**{"do_sample": True, "max_new_tokens": 256})
 
         # Finally: parse and apply `generate_flags`
         parsed_generate_flags = self.parse_generate_flags(args.generate_flags)
@@ -504,13 +495,16 @@ class ChatCommand(BaseTransformersCLICommand):
 
     @staticmethod
     def parse_eos_tokens(
-        tokenizer: AutoTokenizer, eos_tokens: Optional[str], eos_token_ids: Optional[str]
+        tokenizer: PreTrainedTokenizer,
+        generation_config: GenerationConfig,
+        eos_tokens: Optional[str],
+        eos_token_ids: Optional[str],
     ) -> tuple[int, list[int]]:
         """Retrieves the pad token ID and all possible EOS token IDs."""
-        if tokenizer.pad_token_id is None:
-            pad_token_id = tokenizer.eos_token_id
+        if generation_config.pad_token_id is None:
+            pad_token_id = generation_config.eos_token_id
         else:
-            pad_token_id = tokenizer.pad_token_id
+            pad_token_id = generation_config.pad_token_id
 
         all_eos_token_ids = []
 
@@ -521,7 +515,7 @@ class ChatCommand(BaseTransformersCLICommand):
             all_eos_token_ids.extend([int(token_id) for token_id in eos_token_ids.split(",")])
 
         if len(all_eos_token_ids) == 0:
-            all_eos_token_ids.append(tokenizer.eos_token_id)
+            all_eos_token_ids.append(generation_config.eos_token_id)
 
         return pad_token_id, all_eos_token_ids
 
@@ -532,11 +526,11 @@ class ChatCommand(BaseTransformersCLICommand):
         if model_args.load_in_4bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                # For consistency with model weights, we use the same value as `torch_dtype`
-                bnb_4bit_compute_dtype=model_args.torch_dtype,
+                # For consistency with model weights, we use the same value as `dtype`
+                bnb_4bit_compute_dtype=model_args.dtype,
                 bnb_4bit_quant_type=model_args.bnb_4bit_quant_type,
                 bnb_4bit_use_double_quant=model_args.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=model_args.torch_dtype,
+                bnb_4bit_quant_storage=model_args.dtype,
             )
         elif model_args.load_in_8bit:
             quantization_config = BitsAndBytesConfig(
@@ -547,19 +541,19 @@ class ChatCommand(BaseTransformersCLICommand):
 
         return quantization_config
 
-    def load_model_and_tokenizer(self, args: ChatArguments) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
+    def load_model_and_tokenizer(self, args: ChatArguments) -> tuple["AutoModelForCausalLM", AutoTokenizer]:
         tokenizer = AutoTokenizer.from_pretrained(
             args.model_name_or_path_positional,
             revision=args.model_revision,
             trust_remote_code=args.trust_remote_code,
         )
 
-        torch_dtype = args.torch_dtype if args.torch_dtype in ["auto", None] else getattr(torch, args.torch_dtype)
+        dtype = args.dtype if args.dtype in ["auto", None] else getattr(torch, args.dtype)
         quantization_config = self.get_quantization_config(args)
         model_kwargs = {
             "revision": args.model_revision,
             "attn_implementation": args.attn_implementation,
-            "torch_dtype": torch_dtype,
+            "dtype": dtype,
             "device_map": "auto",
             "quantization_config": quantization_config,
         }
@@ -588,6 +582,7 @@ class ChatCommand(BaseTransformersCLICommand):
         Handles all user commands except for `!exit`. May update the chat history (e.g. reset it) or the
         generation config (e.g. set a new flag).
         """
+        valid_command = True
 
         if user_input == "!clear":
             chat = self.clear_chat_history(args.system_prompt)
@@ -643,24 +638,47 @@ class ChatCommand(BaseTransformersCLICommand):
 
         elif user_input == "!status":
             interface.print_status(
-                model_name=args.model_name_or_path_positional,
+                model_name=args.model_name_or_path,
                 generation_config=generation_config,
                 model_kwargs=model_kwargs,
             )
 
         else:
+            valid_command = False
             interface.print_color(text=f"'{user_input}' is not a valid command. Showing help message.", color="red")
             interface.print_help()
 
-        return chat, generation_config, model_kwargs
+        return chat, valid_command, generation_config, model_kwargs
 
     # -----------------------------------------------------------------------------------------------------------------
     # Main logic
     def run(self):
-        if not is_rich_available():
-            raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
-        if not is_torch_available():
-            raise ImportError("You need to install torch to use the chat interface. (`pip install torch`)")
+        asyncio.run(self._inner_run())
+
+    async def _inner_run(self):
+        if self.spawn_backend:
+            serve_args = ServeArguments(
+                device=self.args.device,
+                dtype=self.args.dtype,
+                trust_remote_code=self.args.trust_remote_code,
+                attn_implementation=self.args.attn_implementation,
+                load_in_8bit=self.args.load_in_8bit,
+                load_in_4bit=self.args.load_in_4bit,
+                bnb_4bit_quant_type=self.args.bnb_4bit_quant_type,
+                use_bnb_nested_quant=self.args.use_bnb_nested_quant,
+                host=self.args.host,
+                port=self.args.port,
+                log_level="error",
+            )
+            serve_command = ServeCommand(serve_args)
+
+            thread = Thread(target=serve_command.run)
+            thread.daemon = True
+            thread.start()
+
+        model = self.args.model_name_or_path + "@" + self.args.model_revision
+        host = "http://localhost" if self.args.host == "localhost" else self.args.host
+        client = AsyncInferenceClient(f"{host}:{self.args.port}")
 
         args = self.args
         if args.examples_path is None:
@@ -674,11 +692,10 @@ class ChatCommand(BaseTransformersCLICommand):
         else:
             user = args.user
 
-        model, tokenizer = self.load_model_and_tokenizer(args)
-        generation_streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=True, skip_prompt=True)
-        generation_config, model_kwargs = self.get_generation_parameterization(args, tokenizer)
+        model_generation_config = GenerationConfig.from_pretrained(args.model_name_or_path)
+        generation_config, model_kwargs = self.get_generation_parameterization(args, model_generation_config)
 
-        interface = RichInterface(model_name=args.model_name_or_path_positional, user_name=user)
+        interface = RichInterface(model_name=args.model_name_or_path, user_name=user)
         interface.clear()
         chat = self.clear_chat_history(args.system_prompt)
 
@@ -694,7 +711,7 @@ class ChatCommand(BaseTransformersCLICommand):
                     if user_input == "!exit":
                         break
                     else:
-                        chat, generation_config, model_kwargs = self.handle_non_exit_user_commands(
+                        chat, valid_command, generation_config, model_kwargs = self.handle_non_exit_user_commands(
                             user_input=user_input,
                             args=args,
                             interface=interface,
@@ -704,28 +721,33 @@ class ChatCommand(BaseTransformersCLICommand):
                             chat=chat,
                         )
                     # `!example` sends a user message to the model
-                    if not user_input.startswith("!example"):
+                    if not valid_command or not user_input.startswith("!example"):
                         continue
                 else:
                     chat.append({"role": "user", "content": user_input})
 
-                inputs = tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
-                    model.device
+                stream = client.chat_completion(
+                    chat,
+                    stream=True,
+                    extra_body={
+                        "generation_config": generation_config.to_json_string(),
+                        "model": model,
+                    },
                 )
-                attention_mask = torch.ones_like(inputs)
-                generation_kwargs = {
-                    "inputs": inputs,
-                    "attention_mask": attention_mask,
-                    "streamer": generation_streamer,
-                    "generation_config": generation_config,
-                    **model_kwargs,
-                }
 
-                thread = Thread(target=model.generate, kwargs=generation_kwargs)
-                thread.start()
-                model_output = interface.stream_output(generation_streamer)
-                thread.join()
+                model_output = await interface.stream_output(stream)
+
                 chat.append({"role": "assistant", "content": model_output})
 
             except KeyboardInterrupt:
                 break
+            finally:
+                await client.close()
+
+
+if __name__ == "__main__":
+    args = ChatArguments()
+    args.model_name_or_path_or_address = "meta-llama/Llama-3.2-3b-Instruct"
+    args.model_name_or_path_or_address = "http://localhost:8000"
+    chat = ChatCommand(args)
+    chat.run()

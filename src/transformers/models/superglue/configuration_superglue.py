@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -39,9 +39,9 @@ class SuperGlueConfig(PretrainedConfig):
             The config object or dictionary of the keypoint detector.
         hidden_size (`int`, *optional*, defaults to 256):
             The dimension of the descriptors.
-        keypoint_encoder_sizes (`List[int]`, *optional*, defaults to `[32, 64, 128, 256]`):
+        keypoint_encoder_sizes (`list[int]`, *optional*, defaults to `[32, 64, 128, 256]`):
             The sizes of the keypoint encoder layers.
-        gnn_layers_types (`List[str]`, *optional*, defaults to `['self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross']`):
+        gnn_layers_types (`list[str]`, *optional*, defaults to `['self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross']`):
             The types of the GNN layers. Must be either 'self' or 'cross'.
         num_attention_heads (`int`, *optional*, defaults to 4):
             The number of heads in the GNN layers.
@@ -73,8 +73,8 @@ class SuperGlueConfig(PretrainedConfig):
         self,
         keypoint_detector_config: "SuperPointConfig" = None,
         hidden_size: int = 256,
-        keypoint_encoder_sizes: Optional[List[int]] = None,
-        gnn_layers_types: Optional[List[str]] = None,
+        keypoint_encoder_sizes: Optional[list[int]] = None,
+        gnn_layers_types: Optional[list[str]] = None,
         num_attention_heads: int = 4,
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.0,
@@ -100,9 +100,7 @@ class SuperGlueConfig(PretrainedConfig):
         self.matching_threshold = matching_threshold
 
         if isinstance(keypoint_detector_config, dict):
-            keypoint_detector_config["model_type"] = (
-                keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
-            )
+            keypoint_detector_config["model_type"] = keypoint_detector_config.get("model_type", "superpoint")
             keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
                 **keypoint_detector_config
             )
@@ -115,6 +113,10 @@ class SuperGlueConfig(PretrainedConfig):
         self.is_decoder = False
 
         super().__init__(**kwargs)
+
+    @property
+    def sub_configs(self):
+        return {"keypoint_detector_config": type(self.keypoint_detector_config)}
 
 
 __all__ = ["SuperGlueConfig"]

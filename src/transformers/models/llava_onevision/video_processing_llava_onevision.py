@@ -47,6 +47,7 @@ class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     valid_kwargs = LlavaOnevisionFastVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos"]
 

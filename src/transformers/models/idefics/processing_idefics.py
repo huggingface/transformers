@@ -16,7 +16,7 @@
 Processor class for IDEFICS.
 """
 
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
@@ -27,7 +27,6 @@ from ...processing_utils import (
     ProcessorMixin,
     TextKwargs,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
@@ -45,9 +44,9 @@ IMAGE_TOKEN = "<image>"
 
 class IdeficsImagesKwargs(ImagesKwargs, total=False):
     transform: Optional[Callable]
-    image_size: Optional[Dict[str, int]]
-    image_mean: Optional[Union[float, List[float]]]
-    image_std: Optional[Union[float, List[float]]]
+    image_size: Optional[dict[str, int]]
+    image_mean: Optional[Union[float, list[float]]]
+    image_std: Optional[Union[float, list[float]]]
 
 
 class IdeficsTextKwargs(TextKwargs, total=False):
@@ -211,16 +210,10 @@ class IdeficsProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["image_size", "add_end_of_utterance_token"]
     image_processor_class = "IdeficsImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
         self.image_token_id = (
@@ -236,22 +229,20 @@ class IdeficsProcessor(ProcessorMixin):
         )
 
         self.tokenizer_was_trained_with_end_of_utterance_token = (
-            True
-            if "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
-            else False
+            "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
         )
 
     @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], str, List[str], List[List[str]]] = None,
+        images: Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]] = None,
         text: Union[
             TextInput,
             PreTokenizedInput,
-            List[TextInput],
-            List[PreTokenizedInput],
-            List[List[TextInput]],
-            List[List[PreTokenizedInput]],
+            list[TextInput],
+            list[PreTokenizedInput],
+            list[list[TextInput]],
+            list[list[PreTokenizedInput]],
         ] = None,
         audio=None,
         videos=None,
@@ -261,10 +252,10 @@ class IdeficsProcessor(ProcessorMixin):
         the model was trained on and prepares the image pixel values for the model to process.
 
         Args:
-            images (`Union[ImageInput, List[ImageInput], str, List[str], List[List[str]]]`):
+            images (`Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]]`):
                 either a single image or a batched list of images - can be passed in when text contains only text prompts,
                 in order to use the image-text-to-text behavior.
-            text (`Union[List[TextInput], [List[List[TextInput]]]]`):
+            text (`Union[list[TextInput], [list[list[TextInput]]]]`):
                 either a single prompt or a batched list of prompts - see the detailed description immediately after
                 the end of the arguments doc section.
             return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):
@@ -341,8 +332,6 @@ class IdeficsProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You need to specify either `text` or `images` and `text`.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         if images is None:
             # assuming the user wants to use the old behavior with prompts as the only argument
@@ -364,9 +353,10 @@ class IdeficsProcessor(ProcessorMixin):
             if not all(isinstance(i, str) for i in text):
                 raise ValueError("When using the image-text-to-text behavior, the prompts should only contain text.")
             if isinstance(images[0], (list, tuple)):
-                # if nested images, nest text as well
-                text = [[i] for i in text]
-            prompts = list(zip(images, text))
+                # if nested images, un-nest each sublist and create `prompts`
+                prompts = [[sample, *image_list] for image_list, sample in zip(images, text)]
+            else:
+                prompts = list(zip(images, text))
 
         output_kwargs = self._merge_kwargs(
             IdeficsProcessorKwargs,
@@ -406,7 +396,7 @@ class IdeficsProcessor(ProcessorMixin):
             last_was_text = False
             for i, item in enumerate(sample):
                 if i > 0:
-                    last_was_text = True if not last_was_image else False
+                    last_was_text = bool(not last_was_image)
 
                 if isinstance(item, str):
                     item = item.strip(" ")
@@ -524,25 +514,11 @@ class IdeficsProcessor(ProcessorMixin):
             }
         )
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return list(tokenizer_input_names + image_processor_input_names + ["image_attention_mask"])
 
 
 __all__ = ["IdeficsProcessor"]

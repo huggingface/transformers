@@ -1,3 +1,18 @@
+# Copyright 2024 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the ColPali processor."""
+
 import shutil
 import tempfile
 import unittest
@@ -38,6 +53,19 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
 
     @require_torch
     @require_vision
@@ -89,7 +117,7 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(batch_feature["input_ids"], torch.Tensor)
         self.assertEqual(batch_feature["input_ids"].shape[0], len(queries))
 
-        # The following tests are overwritten as ColPaliProcessor can only take one of images or text as input at a time
+    # The following tests override the parent tests because ColPaliProcessor can only take one of images or text as input at a time.
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
@@ -246,3 +274,15 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(images=image_input, **all_kwargs)
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
+
+    # Can process only text or images at a time
+    def test_model_input_names(self):
+        processor = self.get_processor()
+        image_input = self.prepare_image_inputs()
+        inputs = processor(images=image_input)
+
+        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
+
+    @unittest.skip("ColPali can't process text+image inputs at the same time")
+    def test_processor_text_has_no_visual(self):
+        pass

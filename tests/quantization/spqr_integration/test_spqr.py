@@ -16,8 +16,11 @@ import gc
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, SpQRConfig, StaticCache
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_spqr,
     require_torch_gpu,
@@ -82,8 +85,6 @@ class SpQRTest(unittest.TestCase):
     )
     EXPECTED_OUTPUT_COMPILE = "Hello my name is Jake and I am a 20 year old student at the University of North Texas. (Go Mean Green!) I am a huge fan of the Dallas"
 
-    device_map = "cuda"
-
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
@@ -93,12 +94,12 @@ class SpQRTest(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            device_map=cls.device_map,
+            device_map=torch_device,
         )
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model_conversion(self):
@@ -158,7 +159,7 @@ class SpQRTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
@@ -180,6 +181,7 @@ class SpQRTest(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    @pytest.mark.torch_compile_test
     def test_quantized_model_compile(self):
         """
         Simple test that checks if the quantized model is working properly
@@ -205,11 +207,7 @@ class SpQRTest(unittest.TestCase):
 
         # Setup static KV cache for generation
         past_key_values = StaticCache(
-            config=self.quantized_model.config,
-            max_batch_size=1,
-            max_cache_len=seq_length + self.max_new_tokens + 1,
-            device=torch_device,
-            dtype=self.quantized_model.config._pre_quantization_dtype,
+            config=self.quantized_model.config, max_cache_len=seq_length + self.max_new_tokens + 1
         )
 
         # Allocate token ids to be generated and copy prefix ids

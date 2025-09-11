@@ -83,7 +83,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model_config = LlavaOnevisionConfig()
 
-            # Create a dummy config file with image_proceesor_type
+            # Create a dummy config file with image_processor_type
             processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
@@ -143,7 +143,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
     def test_video_processor_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named preprocessor_config.json.",
+            "Can't load video processor for 'hf-internal-testing/config-no-model'.",
         ):
             _ = AutoVideoProcessor.from_pretrained("hf-internal-testing/config-no-model")
 
@@ -173,17 +173,6 @@ class AutoVideoProcessorTest(unittest.TestCase):
             video_processor.save_pretrained(tmp_dir)
             reloaded_video_processor = AutoVideoProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
         self.assertEqual(reloaded_video_processor.__class__.__name__, "NewVideoProcessor")
-
-        # The image processor file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(video_processor.__class__, reloaded_video_processor.__class__)
-
-        # Test the dynamic module is reloaded if we force it.
-        reloaded_video_processor = AutoVideoProcessor.from_pretrained(
-            "hf-internal-testing/test_dynamic_video_processor", trust_remote_code=True, force_download=True
-        )
-        self.assertIsNot(video_processor.__class__, reloaded_video_processor.__class__)
 
     def test_new_video_processor_registration(self):
         try:

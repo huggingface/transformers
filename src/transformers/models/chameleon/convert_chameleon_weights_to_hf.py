@@ -323,8 +323,8 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         state_dict[f"model.vqmodel.{k}"] = v
 
     # Write configs
-    ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
-    multiple_of = params["multiple_of"] if "multiple_of" in params else 256
+    ffn_dim_multiplier = params.get("ffn_dim_multiplier", 1)
+    multiple_of = params.get("multiple_of", 256)
 
     with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json")) as tokenizer_file:
         tokenizer_config = json.load(tokenizer_file)
@@ -400,7 +400,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     print("Loading the checkpoint in a Chameleon model...")
     print("*" * 100)
     model = ChameleonForConditionalGeneration.from_pretrained(
-        model_path, attn_implementation="eager", torch_dtype=torch.bfloat16, device_map="auto"
+        model_path, attn_implementation="eager", dtype=torch.bfloat16, device_map="auto"
     )
     processor = ChameleonProcessor.from_pretrained(model_path)
 
@@ -446,7 +446,7 @@ def main():
         "--model_size",
         choices=["7B", "30B"],
         help=""
-        " models correspond to the finetuned versions, and are specific to the Chameleon official release. For more details on Chameleon, checkout the original repo: https://github.com/facebookresearch/chameleon",
+        " models correspond to the finetuned versions, and are specific to the Chameleon official release. For more details on Chameleon, check out the original repo: https://github.com/facebookresearch/chameleon",
     )
     parser.add_argument(
         "--output_dir",

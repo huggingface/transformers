@@ -23,18 +23,25 @@ import json
 import numbers
 import os
 import pickle
+import re
 import shutil
 import sys
 import tempfile
 from dataclasses import asdict, fields
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import numpy as np
 import packaging.version
 
-from .. import PreTrainedModel, TFPreTrainedModel, TrainingArguments
+from transformers.utils.import_utils import _is_package_available
+
+
+if os.getenv("WANDB_MODE") == "offline":
+    print("⚙️  Running in WANDB offline mode")
+
+from .. import PreTrainedModel, TrainingArguments
 from .. import __version__ as version
 from ..utils import (
     PushToHubMixin,
@@ -49,8 +56,12 @@ from ..utils import (
 
 logger = logging.get_logger(__name__)
 
+if is_tf_available():
+    from .. import TFPreTrainedModel
+
 if is_torch_available():
     import torch
+    import torch.distributed as dist
 
 # comet_ml requires to be imported before any ML frameworks
 _MIN_COMET_VERSION = "3.43.2"
@@ -103,7 +114,18 @@ def is_wandb_available():
             "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
         )
         return False
-    return importlib.util.find_spec("wandb") is not None
+    if importlib.util.find_spec("wandb") is not None:
+        import wandb
+
+        # wandb might still be detected by find_spec after an uninstall (leftover files or metadata), but not actually
+        # import correctly. To confirm it's fully installed and usable, we check for a key attribute like "run".
+        return hasattr(wandb, "run")
+    else:
+        return False
+
+
+def is_trackio_available():
+    return importlib.util.find_spec("trackio") is not None
 
 
 def is_clearml_available():
@@ -625,6 +647,8 @@ def get_available_reporting_integrations():
         integrations.append("clearml")
     if is_swanlab_available():
         integrations.append("swanlab")
+    if is_trackio_available():
+        integrations.append("trackio")
     return integrations
 
 
@@ -763,7 +787,7 @@ class WandbLogModel(str, Enum):
     @classmethod
     def _missing_(cls, value: Any) -> "WandbLogModel":
         if not isinstance(value, str):
-            raise ValueError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
+            raise TypeError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
         if value.upper() in ENV_VARS_TRUE_VALUES:
             raise DeprecationWarning(
                 f"Setting `WANDB_LOG_MODEL` as {os.getenv('WANDB_LOG_MODEL')} is deprecated and will be removed in "
@@ -785,6 +809,19 @@ class WandbCallback(TrainerCallback):
     def __init__(self):
         has_wandb = is_wandb_available()
         if not has_wandb:
+            # Check if wandb is actually installed but disabled via WANDB_DISABLED
+            if importlib.util.find_spec("wandb") is not None:
+                # wandb is installed but disabled
+                wandb_disabled = os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES
+                if wandb_disabled:
+                    raise RuntimeError(
+                        "You specified `report_to='wandb'` but also set the `WANDB_DISABLED` environment variable.\n"
+                        "This disables wandb logging, even though it was explicitly requested.\n\n"
+                        "- To enable wandb logging: unset `WANDB_DISABLED`.\n"
+                        "- To disable logging: use `report_to='none'`.\n\n"
+                        "Note: WANDB_DISABLED is deprecated and will be removed in v5."
+                    )
+            # If wandb is not installed at all, use the original error message
             raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
         if has_wandb:
             import wandb
@@ -844,7 +881,7 @@ class WandbCallback(TrainerCallback):
             init_args = {}
             if trial_name is not None:
                 init_args["name"] = trial_name
-                init_args["group"] = args.run_name
+                init_args["group"] = args.run_name or args.output_dir
             elif args.run_name is not None:
                 init_args["name"] = args.run_name
                 if args.run_name == args.output_dir:
@@ -860,7 +897,7 @@ class WandbCallback(TrainerCallback):
                     **init_args,
                 )
             # add config parameters (run may have been created manually)
-            self._wandb.config.update(combined_dict, allow_val_change=True)
+            self._wandb.config.update(combined_dict or {}, allow_val_change=True)
 
             # define default x-axis (for latest wandb versions)
             if getattr(self._wandb, "define_metric", None):
@@ -914,7 +951,7 @@ class WandbCallback(TrainerCallback):
                     badge_markdown = (
                         f'[<img src="https://raw.githubusercontent.com/wandb/assets/main/wandb-github-badge'
                         f'-28.svg" alt="Visualize in Weights & Biases" width="20'
-                        f'0" height="32"/>]({self._wandb.run.get_url()})'
+                        f'0" height="32"/>]({self._wandb.run.url})'
                     )
 
                     modelcard.AUTOGENERATED_TRAINER_COMMENT += f"\n{badge_markdown}"
@@ -938,6 +975,7 @@ class WandbCallback(TrainerCallback):
 
             args_for_fake = copy.deepcopy(args)
             args_for_fake.deepspeed = None
+            args_for_fake.deepspeed_plugin = None
             fake_trainer = Trainer(
                 args=args_for_fake, model=model, processing_class=processing_class, eval_dataset=["fake"]
             )
@@ -1027,6 +1065,128 @@ class WandbCallback(TrainerCallback):
             self._wandb.log(metrics)
 
 
+class TrackioCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that logs metrics to Trackio.
+
+    It records training metrics, model (and PEFT) configuration, and GPU memory usage.
+    If `nvidia-ml-py` is installed, GPU power consumption is also tracked.
+
+    **Requires**:
+    ```bash
+    pip install trackio
+    ```
+    """
+
+    def __init__(self):
+        has_trackio = is_trackio_available()
+        if not has_trackio:
+            raise RuntimeError("TrackioCallback requires trackio to be installed. Run `pip install trackio`.")
+        if has_trackio:
+            import trackio
+
+            self._trackio = trackio
+        self._initialized = False
+
+    def setup(self, args, state, model, **kwargs):
+        """
+        Setup the optional Trackio integration.
+
+        To customize the setup you can also override the following environment variables:
+
+        Environment:
+        - **TRACKIO_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
+            The name of the project (can be an existing project to continue tracking or a new project to start tracking
+            from scratch).
+        - **TRACKIO_SPACE_ID** (`str`, *optional*, defaults to `None`):
+            If set, the project will be logged to a Hugging Face Space instead of a local directory. Should be a
+            complete Space name like `"username/reponame"` or `"orgname/reponame"`, or just `"reponame" in which case
+            the Space will be created in the currently-logged-in Hugging Face user's namespace. If the Space does not
+            exist, it will be created. If the Space already exists, the project will be logged to it.
+        """
+        if state.is_world_process_zero:
+            combined_dict = {**args.to_dict()}
+
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
+                combined_dict = {**model_config, **combined_dict}
+            if hasattr(model, "peft_config") and model.peft_config is not None:
+                peft_config = model.peft_config
+                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+
+            self._trackio.init(
+                project=os.getenv("TRACKIO_PROJECT", "huggingface"),
+                name=args.run_name,
+                space_id=os.getenv("TRACKIO_SPACE_ID", None),
+                resume="allow",
+            )
+
+            # Add config parameters (run may have been created manually)
+            self._trackio.config.update(combined_dict, allow_val_change=True)
+
+            # Add number of model parameters to trackio config
+            try:
+                self._trackio.config["model/num_parameters"] = model.num_parameters()
+            except AttributeError:
+                logger.info("Could not log the number of model parameters in Trackio due to an AttributeError.")
+        self._initialized = True
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model, **kwargs)
+
+    def on_train_end(self, args: TrainingArguments, state, control, model=None, processing_class=None, **kwargs):
+        if state.is_world_process_zero and self._initialized:
+            self._trackio.finish()
+
+    def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        single_value_scalars = [
+            "train_runtime",
+            "train_samples_per_second",
+            "train_steps_per_second",
+            "train_loss",
+            "total_flos",
+        ]
+
+        if is_torch_available() and torch.cuda.is_available():
+            device_idx = torch.cuda.current_device()
+            total_memory = torch.cuda.get_device_properties(device_idx).total_memory
+            memory_allocated = torch.cuda.memory_allocated(device_idx)
+
+            gpu_memory_logs = {
+                f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
+                f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
+            }
+            if _is_package_available("pynvml"):
+                power = torch.cuda.power_draw(device_idx)
+                gpu_memory_logs[f"gpu/{device_idx}/power"] = power / 1000  # Watts
+            if dist.is_available() and dist.is_initialized():
+                gathered_logs = [None] * dist.get_world_size()
+                dist.all_gather_object(gathered_logs, gpu_memory_logs)
+                gpu_memory_logs = {k: v for d in gathered_logs for k, v in d.items()}
+        else:
+            gpu_memory_logs = {}
+
+        if not self._initialized:
+            self.setup(args, state, model)
+        if state.is_world_process_zero:
+            non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
+            non_scalar_logs = rewrite_logs(non_scalar_logs)
+            self._trackio.log({**non_scalar_logs, **gpu_memory_logs, "train/global_step": state.global_step})
+
+    def on_save(self, args, state, control, **kwargs):
+        return
+
+    def on_predict(self, args, state, control, metrics, **kwargs):
+        if self._trackio is None:
+            return
+        if not self._initialized:
+            self.setup(args, state, **kwargs)
+        if state.is_world_process_zero:
+            metrics = rewrite_logs(metrics)
+            self._trackio.log(metrics)
+
+
 class CometCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [Comet ML](https://www.comet.com/site/).
@@ -1105,11 +1265,7 @@ class CometCallback(TrainerCallback):
 
             import comet_ml
 
-            # Do not use the default run_name as the experiment name
-            if args.run_name is not None and args.run_name != args.output_dir:
-                experiment_config = comet_ml.ExperimentConfig(name=args.run_name)
-            else:
-                experiment_config = comet_ml.ExperimentConfig()
+            experiment_config = comet_ml.ExperimentConfig(name=args.run_name)
 
             self._experiment = comet_ml.start(online=online, mode=mode, experiment_config=experiment_config)
             self._experiment.__internal_api__set_model_graph__(model, framework="transformers")
@@ -1340,10 +1496,13 @@ class MLflowCallback(TrainerCallback):
                         "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
 
+            # sanitize metric names to replace unsupported characters like parentheses
+            sanitized_metrics = {re.sub(r"[^0-9A-Za-z_\-\.\ :/]", "_", k): v for k, v in metrics.items()}
+
             if self._async_log:
-                self._ml_flow.log_metrics(metrics=metrics, step=state.global_step, synchronous=False)
+                self._ml_flow.log_metrics(metrics=sanitized_metrics, step=state.global_step, synchronous=False)
             else:
-                self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
+                self._ml_flow.log_metrics(metrics=sanitized_metrics, step=state.global_step)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
@@ -1623,10 +1782,10 @@ class NeptuneCallback(TrainerCallback):
                 copy_path = os.path.join(consistent_checkpoint_path, cpkt_path)
                 shutil.copytree(relative_path, copy_path)
                 target_path = consistent_checkpoint_path
-            except IOError as e:
+            except OSError as e:
                 logger.warning(
-                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'. "
-                    "Could fail trying to upload.".format(e)
+                    f"NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{e}'. "
+                    "Could fail trying to upload."
                 )
 
         self._metadata_namespace[self._target_checkpoints_namespace].upload_files(target_path)
@@ -1692,7 +1851,7 @@ class NeptuneCallback(TrainerCallback):
 
         raise Exception("The trainer doesn't have a NeptuneCallback configured.")
 
-    def on_log(self, args, state, control, logs: Optional[Dict[str, float]] = None, **kwargs):
+    def on_log(self, args, state, control, logs: Optional[dict[str, float]] = None, **kwargs):
         if not state.is_world_process_zero:
             return
 
@@ -1975,9 +2134,7 @@ class ClearMLCallback(TrainerCallback):
                     )
                 except Exception as e:
                     logger.warning(
-                        "Could not remove checkpoint `{}` after going over the `save_total_limit`. Error is: {}".format(
-                            self._checkpoints_saved[0].name, e
-                        )
+                        f"Could not remove checkpoint `{self._checkpoints_saved[0].name}` after going over the `save_total_limit`. Error is: {e}"
                     )
                     break
                 self._checkpoints_saved = self._checkpoints_saved[1:]
@@ -2231,10 +2388,12 @@ class SwanLabCallback(TrainerCallback):
                 combined_dict = {**{"peft_config": peft_config}, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
-            if trial_name is not None:
+            if trial_name is not None and args.run_name is not None:
                 init_args["experiment_name"] = f"{args.run_name}-{trial_name}"
             elif args.run_name is not None:
                 init_args["experiment_name"] = args.run_name
+            elif trial_name is not None:
+                init_args["experiment_name"] = trial_name
             init_args["project"] = os.getenv("SWANLAB_PROJECT", None)
 
             if self._swanlab.get_run() is None:
@@ -2266,7 +2425,7 @@ class SwanLabCallback(TrainerCallback):
                 badge_markdown = (
                     f'[<img src="https://raw.githubusercontent.com/SwanHubX/assets/main/badge1.svg"'
                     f' alt="Visualize in SwanLab" height="28'
-                    f'0" height="32"/>]({self._swanlab.get_run().public.cloud.exp_url})'
+                    f'0" height="32"/>]({self._swanlab.get_run().public.cloud.experiment_url})'
                 )
 
                 modelcard.AUTOGENERATED_TRAINER_COMMENT += f"\n{badge_markdown}"
@@ -2322,6 +2481,7 @@ INTEGRATION_TO_CALLBACK = {
     "mlflow": MLflowCallback,
     "neptune": NeptuneCallback,
     "tensorboard": TensorBoardCallback,
+    "trackio": TrackioCallback,
     "wandb": WandbCallback,
     "codecarbon": CodeCarbonCallback,
     "clearml": ClearMLCallback,

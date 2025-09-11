@@ -17,7 +17,9 @@ import unittest
 
 from transformers import XGLMConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    is_torch_greater_or_equal,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -256,7 +258,7 @@ class XGLMModelTester:
     def create_and_check_xglm_weight_initialization(self, config, *args):
         model = XGLMModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.num_hidden_layers)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -422,10 +424,20 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(input_ids, do_sample=True, num_beams=1)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and the water is still cold. We just stopped off for some fresh coffee. This place"
-            " looks like a"
-        )
+        if is_torch_greater_or_equal("2.7.0"):
+            cuda_expectation = (
+                "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today."
+            )
+        else:
+            cuda_expectation = "Today is a nice day and the water is still cold. We just stopped off for some fresh coffee. This place looks like a"
+
+        expected_output_strings = Expectations(
+            {
+                ("rocm", (9, 5)): "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today.",
+                ("cuda", None): cuda_expectation,
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT_STR = expected_output_strings.get_expectation()
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
 
     @require_torch_accelerator
@@ -434,7 +446,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         model_name = "facebook/xglm-564M"
         tokenizer = XGLMTokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
 
-        model = XGLMForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).to(torch_device)
+        model = XGLMForCausalLM.from_pretrained(model_name, dtype=torch.float16, use_cache=True).to(torch_device)
         model = model.eval()
 
         batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")

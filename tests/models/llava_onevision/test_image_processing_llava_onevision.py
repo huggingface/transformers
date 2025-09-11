@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+import pytest
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension
 from transformers.testing_utils import require_torch, require_vision
@@ -202,7 +203,7 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched as a nested list of images, where each sublist is one batch
-            image_inputs_nested = [image_inputs[:3], image_inputs[3:]]
+            image_inputs_nested = [[image_input] for image_input in image_inputs]
             encoded_images_nested = image_processing(image_inputs_nested, return_tensors="pt").pixel_values
             expected_output_image_shape = (7, 1522, 3, 20, 20)
             self.assertEqual(tuple(encoded_images_nested.shape), expected_output_image_shape)
@@ -210,9 +211,43 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             # Image processor should return same pixel values, independently of input format
             self.assertTrue((encoded_images_nested == encoded_images).all())
 
+    def test_multi_images(self):
+        length = 384
+        scale_single, scale_multi = 2, 3
+        image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+        image_processor_dict["size"] = {"height": length, "width": length}  # patch size
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**image_processor_dict)
+
+            # Test batched as a nested list of images, where each sublist is one batch
+            len_image_1 = length * scale_single
+            image_inputs_1 = prepare_image_inputs(
+                batch_size=1,
+                min_resolution=0,  # not used
+                max_resolution=len_image_1,
+                num_channels=3,
+                equal_resolution=True,
+            )
+            len_image_2 = length * scale_multi
+            image_inputs_2 = prepare_image_inputs(
+                batch_size=7,
+                min_resolution=0,  # not used
+                max_resolution=len_image_2,
+                num_channels=3,
+                equal_resolution=True,
+            )
+            image_inputs = [image_inputs_1, image_inputs_2]
+
+            # Only single image should be patchified
+            expected_num_patches = scale_single**2 + 1  # +1 for base image patch
+            expected_output_image_shape = (8, expected_num_patches, 3, length, length)
+            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
     @unittest.skip(
         reason="LlavaOnevisionImageProcessorFast doesn't compile (infinitely) when using class transforms"
     )  # FIXME yoni
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         pass
 
@@ -250,3 +285,18 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
                 encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
             )
             self.assertEqual(encoded_image_shape, image_shape)
+
+    def test_call_without_padding(self):
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PyTorch tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], do_pad=False).pixel_values
+            self.assertEqual(len(encoded_images), 1)
+
+            # Test batched
+            encoded_images = image_processing(image_inputs, do_pad=False).pixel_values
+            self.assertEqual(len(encoded_images), len(image_inputs))

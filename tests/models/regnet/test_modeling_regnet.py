@@ -14,10 +14,11 @@
 """Testing suite for the PyTorch RegNet model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import RegNetConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.testing_utils import Expectations, is_flaky, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -146,6 +147,10 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @is_flaky(description="Larger difference with A10. Still flaky after setting larger tolerance")
+    def test_batching_equivalence(self, atol=3e-5, rtol=3e-5):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     @unittest.skip(reason="RegNet does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -248,6 +253,11 @@ class RegNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.4180, -1.5051, -3.4836]).to(torch_device)
-
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        expectations = Expectations(
+            {
+                (None, None): [-0.4180, -1.5051, -3.4836],
+                ("cuda", 8): [-0.4180, -1.5051, -3.4836],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)

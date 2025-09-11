@@ -39,6 +39,13 @@ class BaseImageProcessor(ImageProcessingMixin):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+    @property
+    def is_fast(self) -> bool:
+        """
+        `bool`: Whether or not this image processor is a fast processor (backed by PyTorch and TorchVision).
+        """
+        return False
+
     def __call__(self, images, **kwargs) -> BatchFeature:
         """Preprocess an image or a batch of images."""
         return self.preprocess(images, **kwargs)
@@ -130,7 +137,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         Args:
             image (`np.ndarray`):
                 Image to center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
@@ -227,7 +234,7 @@ def get_size_dict(
       is set, it is added to the dict as `{"longest_edge": max_size}`.
 
     Args:
-        size (`Union[int, Iterable[int], Dict[str, int]]`, *optional*):
+        size (`Union[int, Iterable[int], dict[str, int]]`, *optional*):
             The `size` parameter to be cast into a size dictionary.
         max_size (`Optional[int]`, *optional*):
             The `max_size` parameter to be cast into a size dictionary.

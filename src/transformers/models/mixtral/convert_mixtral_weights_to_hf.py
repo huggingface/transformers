@@ -206,7 +206,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         model = MixtralForCausalLM(config)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
-    model.config.torch_dtype = torch.float16
+    model.config.dtype = torch.float16
     print("Saving in the Transformers format.")
 
     model.load_state_dict(state_dict, strict=True, assign=True)
@@ -227,7 +227,7 @@ def main():
     parser.add_argument(
         "--model_size",
         choices=["7B"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, checkout the original repo: https://huggingface.co/mistral-ai",
+        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, check out the original repo: https://huggingface.co/mistral-ai",
         default="7B",
     )
     parser.add_argument("--output_dir", help="Location to write HF model", required=True)

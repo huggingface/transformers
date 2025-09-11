@@ -15,10 +15,11 @@
 import copy
 import inspect
 import unittest
+from functools import cached_property
 
-from huggingface_hub import hf_hub_download
+from datasets import load_dataset
 
-from transformers import UdopConfig, is_torch_available, is_vision_available
+from transformers import UdopConfig, is_torch_available
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -40,10 +40,6 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers import UdopEncoderModel, UdopForConditionalGeneration, UdopModel, UdopProcessor
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class UdopModelTester:
@@ -407,21 +403,11 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    @unittest.skip(
-        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
-    )
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/udop-large"
         model = UdopForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @unittest.skip(reason="TODO: Fix me @joao")
-    def test_generate_with_head_masking(self):
-        pass
 
     @unittest.skip(reason="TODO: Fix me @joao")
     def test_generate_without_input_ids(self):
@@ -619,12 +605,6 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    @unittest.skip(
-        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
-    )
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
 
 @require_torch
 @require_sentencepiece
@@ -634,12 +614,8 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 class UdopModelIntegrationTests(unittest.TestCase):
     @cached_property
     def image(self):
-        filepath = hf_hub_download(
-            repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
-        )
-        image = Image.open(filepath).convert("RGB")
-
-        return image
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        return ds[1]["image"]
 
     @cached_property
     def processor(self):

@@ -11,17 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, QuarkConfig
 from transformers.testing_utils import (
+    cleanup,
     is_torch_available,
     require_accelerate,
     require_quark,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
+    torch_device,
 )
 from transformers.utils.import_utils import is_quark_available
 
@@ -35,7 +36,7 @@ if is_quark_available():
 
 @require_quark
 class QuarkConfigTest(unittest.TestCase):
-    def test_commmon_args(self):
+    def test_common_args(self):
         config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
         QuarkConfig(**config.quantization_config)
 
@@ -65,7 +66,7 @@ class QuarkTest(unittest.TestCase):
         Setup reference & quantized model
         """
         cls.model_fp16 = AutoModelForCausalLM.from_pretrained(
-            cls.reference_model_name, torch_dtype=torch.float16, device_map=cls.device_map
+            cls.reference_model_name, dtype=torch.float16, device_map=cls.device_map
         )
         cls.mem_fp16 = cls.model_fp16.get_memory_footprint()
 
@@ -73,9 +74,16 @@ class QuarkTest(unittest.TestCase):
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.quantized_model_name,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map=cls.device_map,
         )
+
+    def tearDown(self):
+        r"""
+        TearDown function needs to be called at the end of each test to free the accelerator memory and cache, also to
+        avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
+        """
+        cleanup(torch_device, gc_collect=True)
 
     def test_memory_footprint(self):
         mem_quantized = self.quantized_model.get_memory_footprint()

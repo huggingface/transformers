@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, Any, Mapping, Optional, OrderedDict
+from collections import OrderedDict
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional
 
 from packaging import version
 

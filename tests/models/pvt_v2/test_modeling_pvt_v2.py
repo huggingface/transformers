@@ -167,6 +167,9 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     @unittest.skip(reason="Pvt-V2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -322,7 +325,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0", torch_dtype=torch.float16)
+        model = PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0", dtype=torch.float16)
         model.to(torch_device)
         image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
 

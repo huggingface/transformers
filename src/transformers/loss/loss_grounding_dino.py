@@ -33,7 +33,7 @@ def sigmoid_focal_loss(
     gamma: float = 2,
 ):
     """
-    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+    Loss used in RetinaNet for dense detection: https://huggingface.co/papers/1708.02002.
 
     Args:
         inputs (`torch.FloatTensor` of arbitrary shape):
@@ -74,7 +74,7 @@ class GroundingDinoHungarianMatcher(HungarianMatcher):
                 * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
                 * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
                 * "label_maps": Tuple of tensors of dim [num_classes, hidden_dim].
-            targets (`List[dict]`):
+            targets (`list[dict]`):
                 A list of targets (len(targets) = batch_size), where each target is a dict containing:
                 * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
                   ground-truth
@@ -82,7 +82,7 @@ class GroundingDinoHungarianMatcher(HungarianMatcher):
                 * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
 
         Returns:
-            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
+            `list[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
             - index_i is the indices of the selected predictions (in order)
             - index_j is the indices of the corresponding selected targets (in order)
             For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
@@ -136,7 +136,7 @@ class GroundingDinoImageLoss(ImageLoss):
             Module able to compute a matching between targets and proposals.
         focal_alpha (`float`):
             Alpha parameter in focal loss.
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
@@ -267,5 +267,5 @@ def GroundingDinoForObjectDetectionLoss(
             aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)
 
-    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
     return loss, loss_dict, auxiliary_outputs

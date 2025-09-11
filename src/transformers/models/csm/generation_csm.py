@@ -15,7 +15,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -68,7 +68,7 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
             The generated audio.
     """
 
-    audio: Optional[List[torch.Tensor]] = None
+    audio: Optional[list[torch.Tensor]] = None
 
 
 class CsmGenerationMixin(GenerationMixin):
@@ -90,8 +90,8 @@ class CsmGenerationMixin(GenerationMixin):
         return kept_criteria
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
-    ) -> Tuple[GenerationConfig, Dict]:
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: dict
+    ) -> tuple[GenerationConfig, dict]:
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
         It ensures that the depth decoder generation config is initialized and that passed args as depth_decoder_* are properly handled.
@@ -153,8 +153,8 @@ class CsmGenerationMixin(GenerationMixin):
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
-        synced_gpus: bool,
-        streamer: Optional["BaseStreamer"],
+        synced_gpus: bool = False,
+        streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         """
@@ -167,7 +167,7 @@ class CsmGenerationMixin(GenerationMixin):
         3. Use these generated codebook tokens as input_ids to sample the next first codebook token using the backbone model
         4. Repeat until stopping criteria is met
 
-        Csm supports two stopping criterias:
+        Csm supports two stopping criteria:
         - stop when the generated sequence is at max_length
         - stop when all the generated codebook tokens are the codebook_eos_token_id
         """
@@ -400,14 +400,14 @@ class CsmGenerationMixin(GenerationMixin):
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             output_audio (`bool`, *optional*):
                 Whether to return the generated audio.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. Depth decoder specific kwargs should be prefixed with *depth_decoder_*.
 
         Return:
-            [`CsmGenerateOutput`] or `torch.LongTensor` or `List[torch.FloatTensor]`: A [`CsmGenerateOutput`]
+            [`CsmGenerateOutput`] or `torch.LongTensor` or `list[torch.FloatTensor]`: A [`CsmGenerateOutput`]
             (if `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `torch.LongTensor` when `output_audio=False`
-            or a `List[torch.FloatTensor]` otherwise.
+            or a `list[torch.FloatTensor]` otherwise.
 
         Example:
 
@@ -415,7 +415,7 @@ class CsmGenerationMixin(GenerationMixin):
         >>> from transformers import CsmProcessor, CsmForConditionalGeneration
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "eustlb/csm-1b"
+        >>> model_id = "sesame/csm-1b"
         >>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 
         >>> processor = AutoProcessor.from_pretrained(model_id)

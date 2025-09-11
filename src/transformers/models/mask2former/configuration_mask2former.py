@@ -14,7 +14,7 @@
 # limitations under the License.
 """Mask2Former model configuration"""
 
-from typing import Dict, List, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -105,7 +105,7 @@ class Mask2FormerConfig(PretrainedConfig):
         use_auxiliary_loss (`boolean``, *optional*, defaults to `True`):
             If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using
             the logits from each decoder's stage.
-        feature_strides (`List[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
+        feature_strides (`list[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
             Feature strides corresponding to features generated from backbone network.
         output_auxiliary_logits (`bool`, *optional*):
             Should the model output its `auxiliary_logits` or not.
@@ -133,7 +133,7 @@ class Mask2FormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[Dict] = None,
+        backbone_config: Optional[dict] = None,
         feature_size: int = 256,
         mask_feature_size: int = 256,
         hidden_dim: int = 256,
@@ -159,12 +159,12 @@ class Mask2FormerConfig(PretrainedConfig):
         init_std: float = 0.02,
         init_xavier_std: float = 1.0,
         use_auxiliary_loss: bool = True,
-        feature_strides: List[int] = [4, 8, 16, 32],
+        feature_strides: list[int] = [4, 8, 16, 32],
         output_auxiliary_logits: Optional[bool] = None,
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[Dict] = None,
+        backbone_kwargs: Optional[dict] = None,
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
@@ -235,6 +235,14 @@ class Mask2FormerConfig(PretrainedConfig):
         self.backbone_kwargs = backbone_kwargs
 
         super().__init__(**kwargs)
+
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
 
     @classmethod
     def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):

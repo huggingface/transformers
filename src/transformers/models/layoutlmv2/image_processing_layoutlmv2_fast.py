@@ -91,6 +91,7 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
         apply_ocr: bool,
         ocr_lang: Optional[str],
         tesseract_config: Optional[str],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
@@ -111,7 +112,7 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
                 boxes_batch.append(boxes)
 
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -121,7 +122,7 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # flip color channels from RGB to BGR (as Detectron2 requires this)

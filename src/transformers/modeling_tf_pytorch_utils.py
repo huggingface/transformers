@@ -78,6 +78,9 @@ def convert_tf_weight_name_to_pt_weight_name(
         tf_name = tf_name[len(name_scope) :]
         tf_name = tf_name.lstrip("/")
     tf_name = tf_name.replace(":0", "")  # device ids
+    if (len(tf_name) > 2048 and "___" in tf_name) or tf_name.count("___") > 10:
+        # ReDOS check
+        raise ValueError("TF variable name is too long or contains too many ___ separators: " + tf_name)
     tf_name = re.sub(
         r"/[^/]*___([^/]*)/", r"/\1/", tf_name
     )  # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
@@ -327,7 +330,7 @@ def load_pytorch_state_dict_in_tf2_model(
             tf_model(tf_inputs, training=False)  # Make sure model is built
     # Convert old format to new format if needed from a PyTorch state_dict
     tf_keys_to_pt_keys = {}
-    for key in pt_state_dict.keys():
+    for key in pt_state_dict:
         new_key = None
         if "gamma" in key:
             new_key = key.replace("gamma", "weight")
@@ -358,7 +361,7 @@ def load_pytorch_state_dict_in_tf2_model(
     # and there is no MainLayer class. This means that TF base classes have one
     # extra layer in their weight names, corresponding to the MainLayer class. This code block compensates for that.
     start_prefix_to_remove = ""
-    if not any(s.startswith(tf_model.base_model_prefix) for s in tf_keys_to_pt_keys.keys()):
+    if not any(s.startswith(tf_model.base_model_prefix) for s in tf_keys_to_pt_keys):
         start_prefix_to_remove = tf_model.base_model_prefix + "."
 
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
@@ -570,7 +573,7 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
     # Make sure we are able to load PyTorch base models as well as derived models (with heads)
     # TF models always have a prefix, some of PyTorch models (base ones) don't
     start_prefix_to_remove = ""
-    if not any(s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict.keys()):
+    if not any(s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict):
         start_prefix_to_remove = pt_model.base_model_prefix + "."
 
     # Build a map from potential PyTorch weight names to TF 2.0 Variables

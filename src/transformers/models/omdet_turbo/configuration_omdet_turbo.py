@@ -116,7 +116,7 @@ class OmDetTurboConfig(PretrainedConfig):
             The number of points sampled in the decoder multi-scale deformable attention module.
         decoder_dropout (`float`, *optional*, defaults to 0.0):
             The dropout rate for the decoder.
-        eval_size (`Tuple[int, int]`, *optional*):
+        eval_size (`tuple[int, int]`, *optional*):
             Height and width used to computes the effective height and width of the position embeddings after taking
             into account the stride (see RTDetr).
         learn_initial_query (`bool`, *optional*, defaults to `False`):
@@ -125,7 +125,7 @@ class OmDetTurboConfig(PretrainedConfig):
             The cache size for the classes and prompts caches.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder-decoder model or not.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from the architecture. The values in kwargs will be saved as part of the configuration
             and can be used to control the model outputs.
 
@@ -288,6 +288,17 @@ class OmDetTurboConfig(PretrainedConfig):
         self.is_encoder_decoder = is_encoder_decoder
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+
+    @property
+    def sub_configs(self):
+        sub_configs = {}
+        backbone_config = getattr(self, "backbone_config", None)
+        text_config = getattr(self, "text_config", None)
+        if isinstance(backbone_config, PretrainedConfig):
+            sub_configs["backbone_config"] = type(backbone_config)
+        if isinstance(text_config, PretrainedConfig):
+            sub_configs["text_config"] = type(text_config)
+        return sub_configs
 
 
 __all__ = ["OmDetTurboConfig"]

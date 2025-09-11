@@ -17,10 +17,20 @@ import json
 import re
 import types
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache
 from inspect import isfunction
-from typing import Any, Callable, Optional, Union, get_args, get_origin, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Optional,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from packaging import version
 
@@ -75,7 +85,7 @@ class DocstringParsingException(Exception):
     pass
 
 
-def _get_json_schema_type(param_type: str) -> dict[str, str]:
+def _get_json_schema_type(param_type: type) -> dict[str, str]:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
@@ -119,6 +129,20 @@ def _parse_type_hint(hint: str) -> dict:
             return_dict["nullable"] = True
         return return_dict
 
+    elif origin is Literal and len(args) > 0:
+        LITERAL_TYPES = (int, float, str, bool, type(None))
+        args_types = []
+        for arg in args:
+            if type(arg) not in LITERAL_TYPES:
+                raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
+            arg_type = _get_json_schema_type(type(arg)).get("type")
+            if arg_type is not None and arg_type not in args_types:
+                args_types.append(arg_type)
+        return {
+            "type": args_types.pop() if len(args_types) == 1 else list(args_types),
+            "enum": list(args),
+        }
+
     elif origin is list:
         if not args:
             return {"type": "array"}
@@ -134,13 +158,13 @@ def _parse_type_hint(hint: str) -> dict:
                 f"The type hint {str(hint).replace('typing.', '')} is a Tuple with a single element, which "
                 "we do not automatically convert to JSON schema as it is rarely necessary. If this input can contain "
                 "more than one element, we recommend "
-                "using a List[] type instead, or if it really is a single element, remove the Tuple[] wrapper and just "
+                "using a list[] type instead, or if it really is a single element, remove the tuple[] wrapper and just "
                 "pass the element directly."
             )
         if ... in args:
             raise TypeHintParsingException(
                 "Conversion of '...' is not supported in Tuple type hints. "
-                "Use List[] types for variable-length"
+                "Use list[] types for variable-length"
                 " inputs instead."
             )
         return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}
@@ -480,10 +504,27 @@ def render_jinja_template(
 
     rendered = []
     all_generation_indices = []
+    continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG "
     for chat in conversations:
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
+        if continue_final_message:
+            chat = deepcopy(chat)
+            final_message = chat[-1]["content"]
+            if isinstance(final_message, (list, tuple)):
+                for content_block in reversed(final_message):
+                    if "text" in content_block:
+                        # Pick the last text block in the message (the first one we hit while iterating in reverse)
+                        final_message = content_block["text"]
+                        content_block["text"] = content_block["text"] + continue_final_message_tag
+                        break
+                else:
+                    raise ValueError(
+                        "continue_final_message is set but we could not find any text to continue in the final message!"
+                    )
+            else:
+                chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
         if return_assistant_tokens_mask:
             rendered_chat, generation_indices = _render_with_assistant_indices(
                 compiled_template=compiled_template,
@@ -503,31 +544,22 @@ def render_jinja_template(
                 **kwargs,
             )
         if continue_final_message:
-            final_message = chat[-1]["content"]
-            if isinstance(final_message, (list, tuple)):
-                for content_block in reversed(final_message):
-                    if "text" in content_block:
-                        # Pick the last text block in the message (the first one we hit while iterating in reverse)
-                        final_message = content_block["text"]
-                        break
-                else:
-                    raise ValueError(
-                        "continue_final_message is set but we could not find any text to continuein the final message!"
-                    )
-            if final_message.strip() not in rendered_chat:
+            if (final_message.strip() not in rendered_chat) or (
+                continue_final_message_tag.strip() not in rendered_chat
+            ):
                 raise ValueError(
                     "continue_final_message is set but the final message does not appear in the chat after "
                     "applying the chat template! This can happen if the chat template deletes portions of "
                     "the final message. Please verify the chat template and final message in your chat to "
                     "ensure they are compatible."
                 )
-            final_msg_loc = rendered_chat.rindex(final_message.strip())
-            if rendered_chat[final_msg_loc : final_msg_loc + len(final_message.lstrip())] == final_message:
-                # The template preserves spacing or the message doesn't have trailing spacing, so things are simple
-                rendered_chat = rendered_chat[: final_msg_loc + len(final_message.lstrip())]
+            tag_loc = rendered_chat.rindex(continue_final_message_tag.strip())
+            if rendered_chat[tag_loc : tag_loc + len(continue_final_message_tag)] == continue_final_message_tag:
+                # The template preserves spacing, so things are simple
+                rendered_chat = rendered_chat[:tag_loc]
             else:
                 # The message has trailing spacing that was trimmed, so we must be more cautious
-                rendered_chat = rendered_chat[: final_msg_loc + len(final_message.strip())]
+                rendered_chat = rendered_chat[:tag_loc].rstrip()
         rendered.append(rendered_chat)
 
     return rendered, all_generation_indices

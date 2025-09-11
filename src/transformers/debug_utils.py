@@ -136,7 +136,7 @@ class DebugUnderflowOverflow:
             The model to debug.
         max_frames_to_save (`int`, *optional*, defaults to 21):
             How many frames back to record
-        trace_batch_nums(`List[int]`, *optional*, defaults to `[]`):
+        trace_batch_nums(`list[int]`, *optional*, defaults to `[]`):
             Which batch numbers to trace (turns detection off)
         abort_after_batch_num  (`int``, *optional*):
             Whether to abort after a certain batch number has finished
@@ -248,7 +248,7 @@ class DebugUnderflowOverflow:
 
         last_frame_of_batch = False
 
-        trace_mode = True if self.batch_number in self.trace_batch_nums else False
+        trace_mode = self.batch_number in self.trace_batch_nums
         if trace_mode:
             self.reset_saved_frames()
 

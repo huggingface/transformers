@@ -17,7 +17,6 @@ import unittest
 
 import pytest
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -35,6 +34,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_bitsandbytes,
+    require_optimum_quanto,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -256,6 +256,14 @@ class MllamaVisionText2TextModelTester:
             )["logits"]
         self.parent.assertFalse(torch.isnan(logits).any().item())
 
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -285,49 +293,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_resize_embeddings_results_in_successful_loss(self):
         # resizing embeddings should result in successful loss computation
@@ -388,7 +353,14 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
             self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
 
+    @require_optimum_quanto
+    @pytest.mark.generate
+    @unittest.skip("Mllama is actually an encoder decoder cache and thus can't supports quant cache")
+    def test_generate_with_quant_cache(self):
+        pass
+
     @unittest.skip("For some unknown reasons the tests fails in CrossAttention layer when doing torch.sdpa(). ")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -396,36 +368,36 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_model_parallelism(self):
         pass
 
-    @parameterized.expand([("offloaded",)])
-    @pytest.mark.generate
-    @unittest.skip(reason="Offloaded cache seems to not work with mllama's kv cache type")
-    def test_offloaded_cache_implementation(self, cache_implementation):
-        pass
-
-    @unittest.skip(
-        reason="Mllama cache type doesn't allow correct check on output `past_key_values` due to `Cache.crop()`"
-    )
-    def test_contrastive_generate_dict_outputs_use_cache(self, assistant_type):
-        pass
-
-    @unittest.skip(reason="Mllama can't do low memory due to `Cache.crop()`")
-    def test_contrastive_generate_low_memory(self, assistant_type):
-        pass
-
     @unittest.skip(reason="Mllama can't assisted decoding due to cache format and `Cache.crop()`")
     def test_assisted_decoding_with_num_logits_to_keep(self):
         pass
 
-    @unittest.skip(reason="Mllama uses self.weights dirrectly causing device mismatch when offloading`")
+    @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip(reason="Mllama uses self.weights dirrectly causing device mismatch when offloading`")
+    @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
     def test_disk_offload_bin(self):
         pass
 
-    @unittest.skip(reason="Mllama uses self.weights dirrectly causing device mismatch when offloading`")
+    @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
     def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
     @pytest.mark.generate
@@ -584,7 +556,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 {
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
                 }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -668,9 +640,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         actual_logits = output.logits[0, -1, :5].cpu()
         expected_logits_all = Expectations(
             {
-                ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324]),
-                ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207]),
-                ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207]),
+                ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324], dtype=actual_logits.dtype),
+                ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207], dtype=actual_logits.dtype),
+                ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207], dtype=actual_logits.dtype),
             }
         )
 
@@ -695,7 +667,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>This image shows",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
             torch_device
@@ -715,7 +692,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 {
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
                  }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -752,7 +729,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Prepare inputs
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         conversation = [
             {

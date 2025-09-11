@@ -283,7 +283,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 checkpoint = "NousResearch/Hermes-2-Pro-Llama-3-8B"
 
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, revision="pr/13")
-model = AutoModelForCausalLM.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(checkpoint, dtype=torch.bfloat16, device_map="auto")
 ```
 
 다음으로, 도구 목록을 정의해 보겠습니다:

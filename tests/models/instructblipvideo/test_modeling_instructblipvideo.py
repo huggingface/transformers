@@ -20,7 +20,6 @@ import unittest
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
 from transformers import (
     CONFIG_MAPPING,
@@ -33,7 +32,6 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -188,9 +186,9 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -515,6 +513,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(
+        reason="InstructBlipVideoQFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -535,16 +539,9 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(
-        "InstructBLIPVideo cannot generate only from input ids, and requires pixel values in all cases to be present"
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -611,7 +608,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
         #   added support for it yet. We skip these models for now.
         has_encoder_attributes = any(
             attr_name
-            for attr_name in config.to_dict().keys()
+            for attr_name in config.to_dict()
             if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
         )
         if has_encoder_attributes:
@@ -669,19 +666,11 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
-    @unittest.skip(
-        "InstructBLIPVideo cannot generate only from input ids, and requires pixel values in all cases to be present"
-    )
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
-
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
-        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        This tests only by looking at layer names, as usually SDPA layers call "SDPAAttention".
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
 
@@ -744,7 +733,8 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
     def test_inference_vicuna_7b(self):
         processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True, low_cpu_mem_usage=True
+            "Salesforce/instructblip-vicuna-7b",
+            load_in_8bit=True,
         )
 
         clip = prepare_video()
@@ -758,33 +748,3 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
             generated_text,
             "Explain what is happening in this short video. a baby girl wearing glasses is reading a book on the bed 1080p",
         )
-
-    def test_expansion_in_processing(self):
-        processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
-        model = InstructBlipVideoForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True, low_cpu_mem_usage=True
-        )
-
-        clip = prepare_video()
-        prompt = "Explain what is happening in this short video."
-
-        # Make sure we will go the legacy path by setting these args to None
-        processor.num_query_tokens = None
-        model.config.video_token_index = None
-        inputs = processor(images=clip, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
-
-        predictions = model.generate(**inputs, do_sample=False, max_new_tokens=15)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
-
-        # Add args to the config to trigger new logic when inputs are expanded in processing file
-        processor.num_query_tokens = model.config.num_query_tokens
-        processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<video>"]})
-        model.config.video_token_index = len(processor.tokenizer) - 1
-        model.resize_token_embeddings(len(processor.tokenizer), pad_to_multiple_of=64)
-
-        # Generate again with new inputs
-        inputs = processor(images=clip, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
-        predictions_expanded = model.generate(**inputs, do_sample=False, max_new_tokens=15)
-        generated_text_expanded = processor.batch_decode(predictions_expanded, skip_special_tokens=True)[0].strip()
-
-        self.assertTrue(generated_text_expanded == generated_text)

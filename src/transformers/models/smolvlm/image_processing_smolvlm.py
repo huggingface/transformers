@@ -20,7 +20,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import numpy as np
 
@@ -54,7 +55,7 @@ MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 def _resize_output_size_rescale_to_max_len(
     height: int, width: int, min_len: Optional[int] = 1, max_len: Optional[int] = None
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
     Args:
@@ -90,8 +91,8 @@ def _resize_output_size_rescale_to_max_len(
 
 
 def _resize_output_size_scale_below_upper_bound(
-    height: int, width: int, max_len: Optional[Dict[str, int]] = None
-) -> Tuple[int, int]:
+    height: int, width: int, max_len: Optional[dict[str, int]] = None
+) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
     Args:
@@ -99,7 +100,7 @@ def _resize_output_size_scale_below_upper_bound(
             Height of the input image.
         width (`int`):
             Width of the input image.
-        max_len (`Dict[str, int]`, *optional*, defaults to the maximum size of the image):
+        max_len (`dict[str, int]`, *optional*, defaults to the maximum size of the image):
             Defines the maximum dimensions of the image.
     Returns:
         The output size of the image after resizing.
@@ -124,7 +125,7 @@ def get_resize_output_image_size(
     image,
     resolution_max_side: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
     Args:
@@ -148,8 +149,8 @@ def get_resize_output_image_size(
 
 
 def get_max_height_width(
-    images_list: List[List[np.ndarray]], input_data_format: Optional[Union[str, ChannelDimension]] = None
-) -> List[int]:
+    images_list: list[list[np.ndarray]], input_data_format: Optional[Union[str, ChannelDimension]] = None
+) -> list[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -166,14 +167,14 @@ def get_max_height_width(
 
 
 def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray, output_size: tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (`tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = get_image_size(image, channel_dim=input_data_format)
@@ -193,7 +194,7 @@ def convert_to_rgb(
     Args:
         image (`np.ndarray`):
             The image to convert.
-        palette (List[int], *optional*):
+        palette (list[int], *optional*):
             The palette to use if given.
         data_format (ChannelDimension or str, *optional*):
             The channel dimension format for the output image. If not provided, it will be the same as the input image.
@@ -273,11 +274,11 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. If set to `True`, the image is normalized to have a mean of `image_mean` and
             a standard deviation of `image_std`.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -292,15 +293,15 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.LANCZOS,
         do_image_splitting: bool = True,
-        max_image_size: Optional[Dict[str, int]] = None,
+        max_image_size: Optional[dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: bool = True,
         **kwargs,
     ) -> None:
@@ -321,7 +322,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.LANCZOS,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -333,7 +334,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
                 Resampling filter to use when resizing the image.
@@ -378,7 +379,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
     def split_image(
         self,
         image,
-        max_image_size: Dict[str, int],
+        max_image_size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.LANCZOS,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -394,7 +395,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Images to split.
-            max_image_size (`Dict[str, int]`):
+            max_image_size (`dict[str, int]`):
                 Maximum size of the output image. If the image is larger than this size, it will be split into
                 patches of this size, and the original image will be concatenated with the patches, resized to max_size.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
@@ -496,7 +497,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
     def _pad_image(
         self,
         image: np.ndarray,
-        output_size: Tuple[int, int],
+        output_size: tuple[int, int],
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -522,7 +523,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
     def pad(
         self,
-        images: List[np.ndarray],
+        images: list[list[np.ndarray]],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -533,7 +534,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         For a list of images, for each images, pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width.
         For each sample in the batch, pads the sample with empty images to the max_number of images per sample in the batch. Optionally returns a pixel mask.
         Args:
-            images (`List[np.ndarray]`):
+            images (`list[list[np.ndarray]]`):
                 List of list of images to pad. Pads to the largest height and width in the batch.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
@@ -561,11 +562,13 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             else input_data_format
         )
         data_format = input_data_format if data_format is None else data_format
+        # filter out empty image lists, then take first image of the first sample
+        first_image_in_list = [sample_images for sample_images in images if sample_images][0][0]
 
         if input_data_format == ChannelDimension.FIRST:
-            n_channels = images[0][0].shape[0]
+            n_channels = first_image_in_list.shape[0]
         elif input_data_format == ChannelDimension.LAST:
-            n_channels = images[0][0].shape[-1]
+            n_channels = first_image_in_list.shape[-1]
         else:
             raise ValueError("Invalid channel dimension format.")
 
@@ -601,15 +604,15 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
         do_image_splitting: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
-        max_image_size: Optional[Dict[str, int]] = None,
+        max_image_size: Optional[dict[str, int]] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_row_col_info: bool = False,
@@ -625,7 +628,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 Whether to convert the image to RGB.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. With the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
@@ -641,9 +644,9 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
@@ -683,6 +686,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_pad = do_pad if do_pad is not None else self.do_pad
 
+        images = self.fetch_images(images)
         images_list = make_nested_list_of_images(images)
 
         if not valid_images(images_list[0]):
@@ -710,6 +714,9 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        # Search for the first image in the image list.
+        # NOTE: we can't slice the first image with images_list[0][0] if the first batch contains no images. See #36682
+        first_image_in_list = [images for images in images_list if images][0][0]
 
         # Extra channel dimension for grayscale images
         if input_data_format in [ChannelDimension.LAST, None]:
@@ -721,7 +728,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 [np.expand_dims(img, axis=0) if img.ndim == 2 else img for img in images] for images in images_list
             ]
 
-        if do_rescale and is_scaled_image(images_list[0][0]):
+        if do_rescale and is_scaled_image(first_image_in_list):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -729,7 +736,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         # We assume that all images have the same channel dimension format.
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
+            input_data_format = infer_channel_dimension_format(first_image_in_list, num_channels=(1, 3, 4))
 
         if do_resize:
             images_list = [
@@ -766,6 +773,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                     split_image_array, rows, cols = self.split_image(
                         image,
                         max_image_size=max_image_size,
+                        resample=resample,
                         input_data_format=input_data_format,
                     )
                     split_image_arrays.extend(split_image_array)
@@ -846,6 +854,48 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             encoding["cols"] = images_list_cols
 
         return encoding
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        do_image_splitting = images_kwargs.get("do_image_splitting", self.do_image_splitting)
+        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
+        size = images_kwargs.get("size", self.size)
+
+        num_patches = num_rows = num_cols = 1
+        if do_image_splitting:
+            height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
+            height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=4096)
+            aspect_ratio = width / height
+
+            if width >= height:
+                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_height = int(width / aspect_ratio)
+                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+            elif height > width:
+                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_width = int(height * aspect_ratio)
+                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+
+            max_height = max_width = max_image_size["longest_edge"]
+            if resized_height > max_height or resized_width > max_width:
+                # Calculate the number of splits
+                num_rows = math.ceil(resized_height / max_height)
+                num_cols = math.ceil(resized_width / max_width)
+                num_patches = num_rows * num_cols + 1
+
+        return num_patches, num_rows, num_cols
 
 
 __all__ = ["SmolVLMImageProcessor"]

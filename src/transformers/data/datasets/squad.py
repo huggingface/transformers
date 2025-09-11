@@ -16,7 +16,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import torch
 from filelock import FileLock
@@ -112,7 +112,7 @@ class SquadDataset(Dataset):
     """
 
     args: SquadDataTrainingArguments
-    features: List[SquadFeatures]
+    features: list[SquadFeatures]
     mode: Split
     is_language_sensitive: bool
 
@@ -195,7 +195,7 @@ class SquadDataset(Dataset):
     def __len__(self):
         return len(self.features)
 
-    def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, i) -> dict[str, torch.Tensor]:
         # Convert to Tensors and build dataset
         feature = self.features[i]
 

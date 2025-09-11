@@ -14,25 +14,21 @@
 # limitations under the License.
 """Testing suite for the PyTorch Nemotron model."""
 
-import tempfile
 import unittest
 
-import pytest
+from parameterized import parameterized
 
 from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    is_flaky,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
 
-from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
 
 
@@ -49,17 +45,18 @@ if is_torch_available():
     )
 
 
-class NemotronModelTester(GemmaModelTester):
+class NemotronModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = NemotronConfig
-        model_class = NemotronModel
-        for_causal_lm_class = NemotronForCausalLM
-        for_sequence_class = NemotronForSequenceClassification
-        for_token_class = NemotronForTokenClassification
+        base_model_class = NemotronModel
+        causal_lm_class = NemotronForCausalLM
+        sequence_class = NemotronForSequenceClassification
+        token_class = NemotronForTokenClassification
 
 
 @require_torch
-class NemotronModelTest(GemmaModelTest):
+class NemotronModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = NemotronModelTester
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
@@ -101,53 +98,18 @@ class NemotronModelTest(GemmaModelTest):
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @is_flaky()
-    @slow
-    def test_flash_attn_2_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(reason="Model does not support Flash Attention 2")
+    @unittest.skip("Nemotron has a hardcoded `rope_type`, so we can't apply RoPE scaling")
+    def test_model_rope_scaling_frequencies(self):
+        pass
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model_class.main_input_name]
-                dummy_input = dummy_input.to(torch_device)
-                outputs = model(dummy_input, output_hidden_states=True)
-                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_fa = outputs_fa.hidden_states[-1]
-
-                # nemotron flash attention 2 needs a high tolerance
-                assert torch.allclose(logits_fa, logits, atol=1e-2)
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("Nemotron has a hardcoded `rope_type`, so we can't apply RoPE scaling")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch_accelerator
 class NemotronIntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-
     @slow
     @require_read_token
     def test_nemotron_8b_generation_sdpa(self):
@@ -157,7 +119,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         ]
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
@@ -183,7 +145,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="eager"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
@@ -201,7 +163,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         ]
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)

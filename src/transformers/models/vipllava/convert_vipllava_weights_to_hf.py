@@ -92,11 +92,11 @@ def convert_vipllava_llama_to_hf(text_model_id, vision_model_id, output_hub_path
     # We add an image token so we resize the model
     model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
     model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
+        tuple(dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0])),
         dim=0,
     )
     model.language_model.lm_head.weight.data[32000:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
+        tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0])),
         dim=0,
     )
 

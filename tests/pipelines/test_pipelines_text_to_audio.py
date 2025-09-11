@@ -247,6 +247,26 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = music_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
         self.assertListEqual(outputs["audio"].tolist(), audio.tolist())
 
+    @slow
+    @require_torch
+    def test_csm_model_pt(self):
+        speech_generator = pipeline(task="text-to-audio", model="sesame/csm-1b", framework="pt")
+
+        outputs = speech_generator("[0]This is a test")
+        self.assertEqual(outputs["sampling_rate"], 24000)
+
+        audio = outputs["audio"]
+        self.assertEqual(ANY(np.ndarray), audio)
+
+        # test two examples side-by-side
+        outputs = speech_generator(["[0]This is a test", "[0]This is a second test"])
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+
+        # test batching
+        outputs = speech_generator(["[0]This is a test", "[0]This is a second test"], batch_size=2)
+        self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
+
     def get_test_pipeline(
         self,
         model,
@@ -254,18 +274,19 @@ class TextToAudioPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         model_test_kwargs = {}
         if model.can_generate():  # not all models in this pipeline can generate and, therefore, take `generate` kwargs
             model_test_kwargs["max_new_tokens"] = 5
+        model.config._attn_implementation = "eager"
         speech_generator = TextToAudioPipeline(
             model=model,
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             **model_test_kwargs,
         )
 

@@ -15,7 +15,7 @@
 """Image processor class for Got-OCR-2."""
 
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> List[Tuple[int, int]]:
+def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
     """
     Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
 
@@ -65,7 +65,7 @@ def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) 
             The maximum number of tiles allowed.
 
     Returns:
-        `List[Tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
         configuration in terms of number of tiles.
 
     Example:
@@ -86,11 +86,11 @@ def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) 
 
 @lru_cache(maxsize=100)
 def get_optimal_tiled_canvas(
-    original_image_size: Tuple[int, int],
-    target_tile_size: Tuple[int, int],
+    original_image_size: tuple[int, int],
+    target_tile_size: tuple[int, int],
     min_image_tiles: int,
     max_image_tiles: int,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
     original image aspect ratio.
@@ -155,11 +155,11 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -172,7 +172,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         crop_to_patches: bool = False,
         min_patches: int = 1,
         max_patches: int = 12,
@@ -180,8 +180,8 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
@@ -205,7 +205,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -217,7 +217,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
@@ -255,16 +255,16 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         crop_to_patches: Optional[bool] = None,
         min_patches: Optional[int] = None,
         max_patches: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         do_convert_rgb: Optional[bool] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
@@ -279,7 +279,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Controls the size of the image after `resize`. The shortest edge of the image is resized to
                 `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
                 is > `int(size["shortest_edge"] * (1333 / 800))`, then the image is resized again to make the longest
@@ -300,9 +300,9 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to normalize the image by if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
@@ -339,6 +339,8 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
+
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -419,8 +421,8 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: Optional[Union[Tuple, int, dict]] = None,
-        data_format: ChannelDimension = None,
+        patch_size: Optional[Union[tuple, int, dict]] = None,
+        data_format: Optional[ChannelDimension] = None,
     ):
         """
         Crop the image to patches and return a list of cropped images.
@@ -437,13 +439,13 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 The maximum number of patches to be extracted from the image.
             use_thumbnail (`bool`, *optional*, defaults to `True`):
                 Whether to add a thumbnail image to the list of cropped patches.
-            patch_size (`int`, `Tuple[int, int]`, `dict`, *optional*):
+            patch_size (`int`, `tuple[int, int]`, `dict`, *optional*):
                 The size of the output patches.
             data_format (`ChannelDimension`, *optional*):
                 The format of the image data. If `None`, the format is inferred from the input image.
 
         Returns:
-            List[`PIL.Image.Image`] or List[np.ndarray]: The list of cropped images.
+            list[`PIL.Image.Image`] or list[np.ndarray]: The list of cropped images.
         """
         if data_format is None:
             data_format = infer_channel_dimension_format(images)
@@ -490,6 +492,35 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
             processed_images.append(thumbnail_img)
 
         return processed_images
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        patch_size = images_kwargs.get("patch_size", self.size)
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+
+        num_patches = 1
+        if crop_to_patches and max_patches > 1:
+            num_columns, num_rows = get_optimal_tiled_canvas(
+                (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
+            )
+            if num_columns * num_rows > 1:
+                num_patches += num_columns * num_rows
+
+        return num_patches
 
 
 __all__ = ["GotOcr2ImageProcessor"]

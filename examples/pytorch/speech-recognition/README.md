@@ -278,7 +278,7 @@ accordingly be called `adapter.{<target_language}.safetensors`.
 
 Let's run an example script. Make sure to be logged in so that your model can be directly uploaded to the Hub.
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Now, let's run an example and upload it to the Hub under `wav2vec2-common_voice-tr-mms-demo`.
@@ -448,7 +448,7 @@ By pairing a pretrained speech model with a pretrained text model, the warm-star
 As an example, let's instantiate a *Wav2Vec2-2-Bart* model with the `SpeechEncoderDecoderModel` framework. First create an empty repo on `hf.co`:
 
 ```bash
-huggingface-cli repo create wav2vec2-2-bart-base
+hf repo create wav2vec2-2-bart-base
 git clone https://huggingface.co/<your-user-name>/wav2vec2-2-bart-base
 cd wav2vec2-2-bart-base
 ```
@@ -493,7 +493,7 @@ Note that we have added a randomly initialized _adapter layer_ to `wav2vec2-base
 `encoder_add_adapter=True`. This adapter sub-samples the output sequence of 
 `wav2vec2-base` along the time dimension. By default, a single
 output vector of `wav2vec2-base` has a receptive field of *ca.* 25ms (*cf.* 
-Section *4.2* of the [official Wav2Vec2 paper](https://arxiv.org/pdf/2006.11477.pdf)), which represents a little less a single character. On the other hand, BART
+Section *4.2* of the [official Wav2Vec2 paper](https://huggingface.co/papers/2006.11477)), which represents a little less a single character. On the other hand, BART
 makes use of a sentence-piece tokenizer as an input processor, so that a single 
 hidden vector of `bart-base` represents *ca.* 4 characters. To better align the 
 receptive field of the *Wav2Vec2* output vectors with *BART*'s hidden-states in the cross-attention 

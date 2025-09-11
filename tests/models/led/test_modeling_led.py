@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import LEDConfig, is_torch_available
 from transformers.models.auto import get_values
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -405,7 +405,8 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -514,7 +515,7 @@ TOLERANCE = 1e-4
 class LEDModelIntegrationTests(unittest.TestCase):
     """All the below results were obtained with the original checkpoints and code
     base from https://github.com/allenai/longformer.
-    IMPORTANT: Note that the original checkpoints include a `postion_embeddings` "hack"
+    IMPORTANT: Note that the original checkpoints include a `position_embeddings` "hack"
     and have to be cut to have the correct shape.
     See: https://github.com/huggingface/transformers/pull/9278#issue-544709661.
     """

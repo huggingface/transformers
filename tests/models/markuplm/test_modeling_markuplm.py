@@ -14,10 +14,10 @@
 
 
 import unittest
+from functools import cached_property
 
 from transformers import MarkupLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
@@ -309,7 +309,7 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         feature_extractor_name,
         processor_name,
     ):
-        # ValueError: Nodes must be of type `List[str]` (single pretokenized example), or `List[List[str]]`
+        # ValueError: Nodes must be of type `list[str]` (single pretokenized example), or `list[list[str]]`
         # (batch of pretokenized examples).
         return True
 

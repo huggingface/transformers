@@ -23,25 +23,25 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
 
 
 @dataclass
+@auto_docstring
 class DacOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.Tensor`):
-            Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
-        audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
-            Reconstructed audio data.
-        quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
-            Quantized continuous representation of input.
-        audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, time_steps)`):
-            Codebook indices for each codebook (quantized discrete representation of input).
-        projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
-            Projected latents (continuous representation of input before quantization).
+    r"""
+    loss (`torch.Tensor`):
+        Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
+    audio_values (`torch.Tensor` of shape `(batch_size, input_length)`):
+        Reconstructed audio data.
+    quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
+        Quantized continuous representation of input.
+    audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, time_steps)`):
+        Codebook indices for each codebook (quantized discrete representation of input).
+    projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`):
+        Projected latents (continuous representation of input before quantization).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -52,17 +52,17 @@ class DacOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 class DacEncoderOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.Tensor`):
-            Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
-        quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`, *optional*):
-            Quantized continuous representation of input.
-        audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
-            Codebook indices for each codebook (quantized discrete representation of input).
-        projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`, *optional*):
-            Projected latents (continuous representation of input before quantization).
+    r"""
+    loss (`torch.Tensor`):
+        Loss from the encoder model, comprising the weighted combination of the commitment and codebook losses.
+    quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`, *optional*):
+        Quantized continuous representation of input.
+    audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
+        Codebook indices for each codebook (quantized discrete representation of input).
+    projected_latents (`torch.Tensor` of shape `(batch_size, num_codebooks * dimension, time_steps)`, *optional*):
+        Projected latents (continuous representation of input before quantization).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -72,12 +72,12 @@ class DacEncoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring
 # Copied from transformers.models.encodec.modeling_encodec.EncodecDecoderOutput with Encodec->Dac, segment_length->input_length
 class DacDecoderOutput(ModelOutput):
-    """
-    Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, input_length)`, *optional*):
-            Decoded audio values, obtained using the decoder part of Dac.
+    r"""
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, input_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of Dac.
     """
 
     audio_values: Optional[torch.FloatTensor] = None
@@ -105,7 +105,7 @@ class DacVectorQuantize(nn.Module):
     Implementation of VQ similar to Karpathy's repo (https://github.com/karpathy/deep-vector-quantization)
 
     Additionally uses following tricks from improved VQGAN
-    (https://arxiv.org/pdf/2110.04627.pdf):
+    (https://huggingface.co/papers/2110.04627):
         1. Factorized codes: Perform nearest neighbor lookup in low-dimensional space
             for improved codebook usage
         2. l2-normalized codes: Converts euclidean distance to cosine similarity which
@@ -115,6 +115,7 @@ class DacVectorQuantize(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
+        self.codebook_dim = config.codebook_dim
         self.in_proj = nn.Conv1d(config.hidden_size, config.codebook_dim, kernel_size=1)
         self.out_proj = nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1)
         self.codebook = nn.Embedding(config.codebook_size, config.codebook_dim)
@@ -264,7 +265,7 @@ class DacDecoderBlock(nn.Module):
 
 class DacResidualVectorQuantize(nn.Module):
     """
-    ResidualVectorQuantize block - Introduced in SoundStream: An end2end neural audio codec (https://arxiv.org/abs/2107.03312)
+    ResidualVectorQuantize block - Introduced in SoundStream: An end2end neural audio codec (https://huggingface.co/papers/2107.03312)
     """
 
     def __init__(self, config: DacConfig):
@@ -471,8 +472,8 @@ class DacEncoder(nn.Module):
 
 
 @auto_docstring
-class DacPreTrainedModel(PreTrainedModel):
-    config_class = DacConfig
+class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
+    config: DacConfig
     base_model_prefix = "dac"
     main_input_name = "input_values"
 
@@ -480,6 +481,12 @@ class DacPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Conv1d):
             nn.init.trunc_normal_(module.weight, std=0.02)
             nn.init.constant_(module.bias, 0)
+        elif isinstance(module, Snake1d):
+            module.alpha.data.fill_(1.0)
+        elif isinstance(module, nn.ConvTranspose1d):
+            module.reset_parameters()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=0.02)
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
@@ -607,6 +614,8 @@ class DacModel(DacPreTrainedModel):
             The codebook indices for each codebook, representing the quantized discrete
             representation of the input. This parameter should be provided if you want
             to decode directly from the audio codes (it will overwrite quantized_representation).
+        return_dict (`bool`, *optional*, defaults to `True`):
+            Whether to return a [`DacDecoderOutput`] instead of a plain tuple.
         """
 
         if quantized_representation is None and audio_codes is None:
@@ -661,6 +670,7 @@ class DacModel(DacPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         length = input_values.shape[-1]
+
         loss, quantized_representation, audio_codes, projected_latents = self.encode(
             input_values, n_quantizers, return_dict=False
         )

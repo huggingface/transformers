@@ -9,13 +9,6 @@ class Cache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class CacheConfig(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class DynamicCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -44,13 +37,6 @@ class HybridCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MambaCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class OffloadedCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -66,13 +52,6 @@ class OffloadedStaticCache(metaclass=DummyObject):
 
 
 class QuantizedCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class QuantizedCacheConfig(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -198,13 +177,6 @@ class BeamScorer(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class BeamSearchScorer(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ClassifierFreeGuidanceLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -297,13 +269,6 @@ class ForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
 
 
 class GenerationMixin(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class HammingDiversityLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -536,6 +501,13 @@ class TorchExportableModuleWithStaticCache(metaclass=DummyObject):
 
 def convert_and_export_with_cache(*args, **kwargs):
     requires_backends(convert_and_export_with_cache, ["torch"])
+
+
+class AttentionMaskInterface(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 def model_addition_debugger_context(*args, **kwargs):

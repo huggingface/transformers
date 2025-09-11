@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-08-22 and added to Hugging Face Transformers on 2024-09-25.*
 
 # Idefics3
 
@@ -80,6 +81,9 @@ This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) 
 [[autodoc]] Idefics3ImageProcessor
     - preprocess
 
+## Idefics3ImageProcessorFast
+[[autodoc]] Idefics3ImageProcessorFast
+    - preprocess
 
 ## Idefics3Processor
 [[autodoc]] Idefics3Processor

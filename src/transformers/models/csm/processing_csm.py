@@ -15,7 +15,7 @@
 
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -31,14 +31,11 @@ if is_soundfile_available():
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class CsmAudioKwargs(AudioKwargs, total=False):
-    encoded_length_kwargs: Optional[Dict[str, Any]]
+    encoded_length_kwargs: Optional[dict[str, Any]]
 
 
 class CsmProcessorKwargs(ProcessingKwargs, total=False):
@@ -76,7 +73,7 @@ class CsmProcessor(ProcessorMixin):
         ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         audio = ds[0]["audio"]["array"]
 
-        processor = CsmProcessor.from_pretrained("eustlb/csm-1b")
+        processor = CsmProcessor.from_pretrained("sesame/csm-1b")
 
         processor(
             text=["<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"],
@@ -99,7 +96,6 @@ class CsmProcessor(ProcessorMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     feature_extractor_class = "EncodecFeatureExtractor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
@@ -132,8 +128,8 @@ class CsmProcessor(ProcessorMixin):
 
         Args:
             audio_length (int): The length of the audio sequence.
-            kernel_sizes (List[int]): The kernel sizes for the convolutional layers.
-            strides (List[int]): The strides for the convolutional layers.
+            kernel_sizes (list[int]): The kernel sizes for the convolutional layers.
+            strides (list[int]): The strides for the convolutional layers.
             use_causal_conv (bool): Whether to use causal convolutions.
         """
         cur_length = audio_length
@@ -167,7 +163,7 @@ class CsmProcessor(ProcessorMixin):
     def save_audio(
         self,
         audio: AudioInput,
-        saving_path: Union[str, Path, List[Union[str, Path]]],
+        saving_path: Union[str, Path, list[Union[str, Path]]],
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor
@@ -200,7 +196,7 @@ class CsmProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]],
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
         audio: Optional[AudioInput] = None,
         output_labels: Optional[bool] = False,
         depth_decoder_labels_ratio: Optional[float] = 1.0,
@@ -214,10 +210,10 @@ class CsmProcessor(ProcessorMixin):
         to the docstring of the above two methods for more information.
 
         Args:
-            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The audio or batch of audio to be prepared. Each audio can be a NumPy array or PyTorch
                 tensor.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -353,12 +349,26 @@ class CsmProcessor(ProcessorMixin):
             else:
                 skip_frames_idxs = audio_frame_idxs
 
-            labels = torch.where(data["input_ids"] == self.audio_token_id, data["input_ids"], -100)
+            labels = torch.where(
+                (data["input_ids"] == self.audio_token_id) | (data["input_ids"] == self.audio_eos_token_id),
+                data["input_ids"],
+                -100,
+            )
             labels[skip_frames_idxs[:, 0], skip_frames_idxs[:, 1]] = -101
 
             data["labels"] = labels
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+
+        # Remove `padding_mask`, it is popped and not used when processing. Make a copy of list when removing
+        # otherwise `self.feature_extractor.model_input_names` is also modified
+        feature_extractor_input_names = [name for name in feature_extractor_input_names if name != "padding_mask"]
+        return list(tokenizer_input_names + feature_extractor_input_names + ["input_values_cutoffs"])
 
 
 __all__ = ["CsmProcessor"]

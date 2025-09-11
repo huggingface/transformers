@@ -17,7 +17,7 @@
 Video processor class for InstructBLIPVideo
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -66,6 +66,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     valid_kwargs = InstructBlipVideoVideoProcessorInitKwargs
     model_input_names = ["pixel_values"]
 
@@ -74,7 +75,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        videos: List["torch.Tensor"],
+        videos: list["torch.Tensor"],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -86,9 +87,10 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)

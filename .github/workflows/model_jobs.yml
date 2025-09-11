@@ -12,15 +12,24 @@ on:
       slice_id:
         required: true
         type: number
-      runner:
-        required: true
+      runner_map:
+        required: false
         type: string
       docker:
         required: true
         type: string
+      commit_sha:
+        required: false
+        type: string
       report_name_prefix:
         required: false
         default: run_models_gpu
+        type: string
+      runner_type:
+        required: false
+        type: string
+      report_repo_id:
+        required: false
         type: string
 
 env:
@@ -45,7 +54,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
     runs-on:
-      group: '${{ inputs.machine_type }}'
+      group: ${{ fromJson(inputs.runner_map)[matrix.folders][inputs.machine_type] }}
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -70,7 +79,7 @@ jobs:
 
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -107,9 +116,9 @@ jobs:
         run: |
           echo "${{ inputs.machine_type }}"
 
-          if [ "${{ inputs.machine_type }}" = "aws-g4dn-4xlarge-cache" ]; then
+          if [ "${{ inputs.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ inputs.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ inputs.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ inputs.machine_type }}
@@ -140,3 +149,15 @@ jobs:
         with:
           name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports
+
+  collated_reports:
+    name: Collated Reports
+    if: ${{ always() }}
+    needs: run_models_gpu
+    uses: huggingface/transformers/.github/workflows/collated-reports.yml@main
+    with:
+      job: run_models_gpu
+      report_repo_id: ${{ inputs.report_repo_id }}
+      gpu_name: ${{ inputs.runner_type }}
+      machine_type: ${{ inputs.machine_type }}
+    secrets: inherit

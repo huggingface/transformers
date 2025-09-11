@@ -170,7 +170,7 @@ Unlike other data collators, this specific data collator needs to apply a differ
 ...     processor: AutoProcessor
 ...     padding: Union[bool, str] = "longest"
 
-...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+...     def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
 ...         # split inputs and labels since they have to be of different lengths and need
 ...         # different padding methods
 ...         input_features = [{"input_values": feature["input_values"][0]} for feature in features]
@@ -219,9 +219,9 @@ Then create a function that passes your predictions and labels to [`~evaluate.Ev
 ...     pred_str = processor.batch_decode(pred_ids)
 ...     label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
 
-...     wer = wer.compute(predictions=pred_str, references=label_str)
+...     wer_score = wer.compute(predictions=pred_str, references=label_str)
 
-...     return {"wer": wer}
+...     return {"wer": wer_score}
 ```
 
 Your `compute_metrics` function is ready to go now, and you'll return to it when you setup your training.

@@ -16,7 +16,6 @@
 
 import os
 from pickle import UnpicklingError
-from typing import Dict, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -66,7 +65,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(
             except (ImportError, ModuleNotFoundError):
                 logger.error(
                     "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
-                    " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
+                    " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/index.html#installation for installation"
                     " instructions."
                 )
                 raise
@@ -83,14 +82,14 @@ def load_pytorch_checkpoint_in_flax_state_dict(
 
 
 def rename_key_and_reshape_tensor(
-    pt_tuple_key: Tuple[str],
+    pt_tuple_key: tuple[str],
     pt_tensor: np.ndarray,
-    random_flax_state_dict: Dict[str, jnp.ndarray],
+    random_flax_state_dict: dict[str, jnp.ndarray],
     model_prefix: str,
-) -> (Tuple[str], np.ndarray):
+) -> tuple[tuple[str], np.ndarray]:
     """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
 
-    def is_key_or_prefix_key_in_dict(key: Tuple[str]) -> bool:
+    def is_key_or_prefix_key_in_dict(key: tuple[str]) -> bool:
         """Checks if `key` of `(prefix,) + key` is in random_flax_state_dict"""
         return len(set(random_flax_state_dict) & {key, (model_prefix,) + key}) > 0
 
@@ -180,10 +179,10 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     flax_state_dict = {}
 
     load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
-        model_prefix in {k.split(".")[0] for k in pt_state_dict.keys()}
+        model_prefix in {k.split(".")[0] for k in pt_state_dict}
     )
     load_base_model_into_model_with_head = (model_prefix in flax_model_params) and (
-        model_prefix not in {k.split(".")[0] for k in pt_state_dict.keys()}
+        model_prefix not in {k.split(".")[0] for k in pt_state_dict}
     )
 
     # Need to change some parameters name to match Flax names
@@ -268,10 +267,10 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
             random_flax_state_dict = flatten_dict(flax_model_params)
 
         load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
-            model_prefix in {k.split(".")[0] for k in pt_state_dict.keys()}
+            model_prefix in {k.split(".")[0] for k in pt_state_dict}
         )
         load_base_model_into_model_with_head = (model_prefix in flax_model_params) and (
-            model_prefix not in {k.split(".")[0] for k in pt_state_dict.keys()}
+            model_prefix not in {k.split(".")[0] for k in pt_state_dict}
         )
         # Need to change some parameters name to match Flax names
         for pt_key, pt_tensor in pt_state_dict.items():
@@ -347,7 +346,7 @@ def load_flax_checkpoint_in_pytorch_model(model, flax_checkpoint_path):
             try:
                 flax_state_dict = from_bytes(flax_cls, state_f.read())
             except UnpicklingError:
-                raise EnvironmentError(f"Unable to convert {flax_checkpoint_path} to Flax deserializable object. ")
+                raise OSError(f"Unable to convert {flax_checkpoint_path} to Flax deserializable object. ")
 
     return load_flax_weights_in_pytorch_model(model, flax_state_dict)
 
@@ -360,7 +359,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     except (ImportError, ModuleNotFoundError):
         logger.error(
             "Loading a Flax weights in PyTorch, requires both PyTorch and Flax to be installed. Please see"
-            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
+            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/index.html#installation for installation"
             " instructions."
         )
         raise
@@ -382,10 +381,10 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     pt_model_dict = pt_model.state_dict()
 
     load_model_with_head_into_base_model = (pt_model.base_model_prefix in flax_state) and (
-        pt_model.base_model_prefix not in {k.split(".")[0] for k in pt_model_dict.keys()}
+        pt_model.base_model_prefix not in {k.split(".")[0] for k in pt_model_dict}
     )
     load_base_model_into_model_with_head = (pt_model.base_model_prefix not in flax_state) and (
-        pt_model.base_model_prefix in {k.split(".")[0] for k in pt_model_dict.keys()}
+        pt_model.base_model_prefix in {k.split(".")[0] for k in pt_model_dict}
     )
 
     # keep track of unexpected & missing keys

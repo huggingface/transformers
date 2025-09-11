@@ -16,7 +16,7 @@
 
 import json
 import os
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -265,7 +265,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         current_idx = start_idx
         current_velocity = 0
-        note_onsets_ready = [None for i in range(sum([k.endswith("NOTE") for k in self.encoder.keys()]) + 1)]
+        note_onsets_ready = [None for i in range(sum([k.endswith("NOTE") for k in self.encoder]) + 1)]
         notes = []
         for token_type, number in words:
             if token_type == "TOKEN_SPECIAL":
@@ -341,7 +341,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         new_pm.remove_invalid_notes()
         return new_pm
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         """
         Saves the tokenizer's vocabulary dictionary to the provided save_directory.
 
@@ -366,7 +366,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def encode_plus(
         self,
-        notes: Union[np.ndarray, List[pretty_midi.Note]],
+        notes: Union[np.ndarray, list[pretty_midi.Note]],
         truncation_strategy: Optional[TruncationStrategy] = None,
         max_length: Optional[int] = None,
         **kwargs,
@@ -404,7 +404,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         notes = np.round(notes).astype(np.int32)
         max_time_idx = notes[:, :2].max()
 
-        times = [[] for i in range((max_time_idx + 1))]
+        times = [[] for i in range(max_time_idx + 1)]
         for onset, offset, pitch, velocity in notes:
             times[onset].append([pitch, velocity])
             times[offset].append([pitch, 0])
@@ -437,7 +437,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def batch_encode_plus(
         self,
-        notes: Union[np.ndarray, List[pretty_midi.Note]],
+        notes: Union[np.ndarray, list[pretty_midi.Note]],
         truncation_strategy: Optional[TruncationStrategy] = None,
         max_length: Optional[int] = None,
         **kwargs,
@@ -478,8 +478,8 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         self,
         notes: Union[
             np.ndarray,
-            List[pretty_midi.Note],
-            List[List[pretty_midi.Note]],
+            list[pretty_midi.Note],
+            list[list[pretty_midi.Note]],
         ],
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -555,7 +555,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         # check if it is batched or not
         # it is batched if its a list containing a list of `pretty_midi.Notes` where the outer list contains all the
         # batches and the inner list contains all Notes for a single batch. Otherwise if np.ndarray is passed it will be
-        # considered batched if it has shape of `[batch_size, seqence_length, 4]` or ndim=3.
+        # considered batched if it has shape of `[batch_size, sequence_length, 4]` or ndim=3.
         is_batched = notes.ndim == 3 if isinstance(notes, np.ndarray) else isinstance(notes[0], list)
 
         # get the truncation and padding strategy

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-08-17 and added to Hugging Face Transformers on 2023-05-09.*
 
 # RWKV
 
@@ -22,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The RWKV model was proposed in [this repo](https://github.com/BlinkDL/RWKV-LM)
+The RWKV model (version 4) was proposed in [this repo](https://github.com/BlinkDL/RWKV-LM)
 
 It suggests a tweak in the traditional Transformer attention to make it linear. This way, the model can be used as recurrent network: passing inputs for timestamp 0 and timestamp 1 together is the same as passing inputs at timestamp 0, then inputs at timestamp 1 along with the state of timestamp 0 (see example below).
 

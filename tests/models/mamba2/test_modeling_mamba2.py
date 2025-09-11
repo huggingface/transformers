@@ -13,9 +13,8 @@
 # limitations under the License.
 
 
+import math
 import unittest
-
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import (
@@ -30,7 +29,7 @@ from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -278,18 +277,37 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.rescale_prenorm_residual = True
 
+        configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            model = model_class(config=config)
+            model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                if "D" in name:
+                if "dt_proj.bias" in name:
+                    dt = torch.exp(
+                        torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
+                        + math.log(config.time_step_min)
+                    ).clamp(min=config.time_step_floor)
+                    inv_dt = dt + torch.log(-torch.expm1(-dt))
+                    if param.requires_grad:
+                        self.assertTrue(param.data.max().item() <= inv_dt[1])
+                        self.assertTrue(param.data.min().item() >= inv_dt[0])
+                elif "A_log" in name:
+                    A = torch.arange(1, config.num_heads + 1)
+                    torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
+                elif "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
                         torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
-
-    @unittest.skip(reason="Mamba 2 weights are not tied")
-    def test_tied_weights_keys(self):
-        pass
+                else:
+                    if param.requires_grad:
+                        if "mixer.conv1d.weight" in name or "mixer.dt_bias" in name or "mixer.out_proj.weight" in name:
+                            continue
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
     def test_multi_gpu_data_parallel_forward(self):
@@ -362,14 +380,9 @@ class Mamba2IntegrationTest(unittest.TestCase):
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
     @require_read_token
-    @parameterized.expand(
-        [
-            (torch_device,),
-        ]
-    )
     @slow
     @require_torch
-    def test_simple_generate(self, device):
+    def test_simple_generate(self):
         """
         Simple generate test to avoid regressions.
         Note: state-spaces (cuda) implementation and pure torch implementation
@@ -379,10 +392,10 @@ class Mamba2IntegrationTest(unittest.TestCase):
         tokenizer = self.tokenizer
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16)
-        model.to(device)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16)
+        model.to(torch_device)
         input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
-            device
+            torch_device
         )
 
         out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=30)
@@ -412,7 +425,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
@@ -443,7 +456,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
@@ -469,7 +482,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         config = Mamba2Config(num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1)
 
         torch.manual_seed(42)
-        with torch.amp.autocast(device_type=torch_device, dtype=dtype):
+        with torch.autocast(device_type=torch_device, dtype=dtype):
             with torch.no_grad():
                 mixer = Mamba2Mixer(config, layer_idx=0).to(torch_device)
                 hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device=torch_device)

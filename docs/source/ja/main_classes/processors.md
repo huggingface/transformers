@@ -78,7 +78,7 @@ QQP、QNLI、RTE、WNLI。
 言語を超えたテキスト表現の品質。 XNLI は、[*MultiNLI*](http://www.nyu.edu/projects/bowman/multinli/) に基づくクラウドソースのデータセットです。テキストのペアには、15 個のテキスト含意アノテーションがラベル付けされています。
 さまざまな言語 (英語などの高リソース言語とスワヒリ語などの低リソース言語の両方を含む)。
 
-論文 [XNLI: Evaluating Cross-lingual Sentence Representations](https://arxiv.org/abs/1809.05053) と同時にリリースされました。
+論文 [XNLI: Evaluating Cross-lingual Sentence Representations](https://huggingface.co/papers/1809.05053) と同時にリリースされました。
 
 このライブラリは、XNLI データをロードするプロセッサをホストします。
 
@@ -92,8 +92,8 @@ QQP、QNLI、RTE、WNLI。
 
 [The Stanford Question Answering Dataset (SQuAD)](https://rajpurkar.github.io/SQuAD-explorer//) は、次のベンチマークです。
 質問応答に関するモデルのパフォーマンスを評価します。 v1.1 と v2.0 の 2 つのバージョンが利用可能です。最初のバージョン
-(v1.1) は、論文 [SQuAD: 100,000+ question for Machine Comprehension of Text](https://arxiv.org/abs/1606.05250) とともにリリースされました。 2 番目のバージョン (v2.0) は、論文 [Know What You Don't と同時にリリースされました。
-知っておくべき: SQuAD の答えられない質問](https://arxiv.org/abs/1806.03822)。
+(v1.1) は、論文 [SQuAD: 100,000+ question for Machine Comprehension of Text](https://huggingface.co/papers/1606.05250) とともにリリースされました。 2 番目のバージョン (v2.0) は、論文 [Know What You Don't と同時にリリースされました。
+知っておくべき: SQuAD の答えられない質問](https://huggingface.co/papers/1806.03822)。
 
 このライブラリは、次の 2 つのバージョンのそれぞれのプロセッサをホストします。
 

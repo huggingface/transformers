@@ -19,8 +19,8 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 DeiT モデルは、Hugo Touvron、Matthieu Cord、Matthijs Douze、Francisco Massa、Alexandre
-Sablayrolles, Hervé Jégou.によって [Training data-efficient image Transformers & distillation through attention](https://arxiv.org/abs/2012.12877) で提案されました。
-サブレイロール、エルヴェ・ジェグー。 [Dosovitskiy et al., 2020](https://arxiv.org/abs/2010.11929) で紹介された [Vision Transformer (ViT)](vit) は、既存の畳み込みニューラルと同等、またはそれを上回るパフォーマンスを発揮できることを示しました。
+Sablayrolles, Hervé Jégou.によって [Training data-efficient image Transformers & distillation through attention](https://huggingface.co/papers/2012.12877) で提案されました。
+サブレイロール、エルヴェ・ジェグー。 [Dosovitskiy et al., 2020](https://huggingface.co/papers/2010.11929) で紹介された [Vision Transformer (ViT)](vit) は、既存の畳み込みニューラルと同等、またはそれを上回るパフォーマンスを発揮できることを示しました。
 Transformer エンコーダ (BERT のような) を使用したネットワーク。ただし、その論文で紹介された ViT モデルには、次のトレーニングが必要でした。
 外部データを使用して、数週間にわたる高価なインフラストラクチャ。 DeiT (データ効率の高い画像変換器) はさらに優れています
 画像分類用に効率的にトレーニングされたトランスフォーマーにより、必要なデータとコンピューティング リソースがはるかに少なくなります。

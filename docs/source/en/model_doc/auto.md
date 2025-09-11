@@ -30,7 +30,7 @@ model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 
 will create a model that is an instance of [`BertModel`].
 
-There is one class of `AutoModel` for each task, and for each backend (PyTorch, TensorFlow, or Flax).
+There is one class of `AutoModel` for each task.
 
 ## Extending the Auto Classes
 
@@ -90,14 +90,6 @@ The following auto classes are available for instantiating a base model class wi
 
 [[autodoc]] AutoModel
 
-### TFAutoModel
-
-[[autodoc]] TFAutoModel
-
-### FlaxAutoModel
-
-[[autodoc]] FlaxAutoModel
-
 ## Generic pretraining classes
 
 The following auto classes are available for instantiating a model with a pretraining head.
@@ -105,14 +97,6 @@ The following auto classes are available for instantiating a model with a pretra
 ### AutoModelForPreTraining
 
 [[autodoc]] AutoModelForPreTraining
-
-### TFAutoModelForPreTraining
-
-[[autodoc]] TFAutoModelForPreTraining
-
-### FlaxAutoModelForPreTraining
-
-[[autodoc]] FlaxAutoModelForPreTraining
 
 ## Natural Language Processing
 
@@ -122,113 +106,41 @@ The following auto classes are available for the following natural language proc
 
 [[autodoc]] AutoModelForCausalLM
 
-### TFAutoModelForCausalLM
-
-[[autodoc]] TFAutoModelForCausalLM
-
-### FlaxAutoModelForCausalLM
-
-[[autodoc]] FlaxAutoModelForCausalLM
-
 ### AutoModelForMaskedLM
 
 [[autodoc]] AutoModelForMaskedLM
-
-### TFAutoModelForMaskedLM
-
-[[autodoc]] TFAutoModelForMaskedLM
-
-### FlaxAutoModelForMaskedLM
-
-[[autodoc]] FlaxAutoModelForMaskedLM
 
 ### AutoModelForMaskGeneration
 
 [[autodoc]] AutoModelForMaskGeneration
 
-### TFAutoModelForMaskGeneration
-
-[[autodoc]] TFAutoModelForMaskGeneration
-
 ### AutoModelForSeq2SeqLM
 
 [[autodoc]] AutoModelForSeq2SeqLM
-
-### TFAutoModelForSeq2SeqLM
-
-[[autodoc]] TFAutoModelForSeq2SeqLM
-
-### FlaxAutoModelForSeq2SeqLM
-
-[[autodoc]] FlaxAutoModelForSeq2SeqLM
 
 ### AutoModelForSequenceClassification
 
 [[autodoc]] AutoModelForSequenceClassification
 
-### TFAutoModelForSequenceClassification
-
-[[autodoc]] TFAutoModelForSequenceClassification
-
-### FlaxAutoModelForSequenceClassification
-
-[[autodoc]] FlaxAutoModelForSequenceClassification
-
 ### AutoModelForMultipleChoice
 
 [[autodoc]] AutoModelForMultipleChoice
-
-### TFAutoModelForMultipleChoice
-
-[[autodoc]] TFAutoModelForMultipleChoice
-
-### FlaxAutoModelForMultipleChoice
-
-[[autodoc]] FlaxAutoModelForMultipleChoice
 
 ### AutoModelForNextSentencePrediction
 
 [[autodoc]] AutoModelForNextSentencePrediction
 
-### TFAutoModelForNextSentencePrediction
-
-[[autodoc]] TFAutoModelForNextSentencePrediction
-
-### FlaxAutoModelForNextSentencePrediction
-
-[[autodoc]] FlaxAutoModelForNextSentencePrediction
-
 ### AutoModelForTokenClassification
 
 [[autodoc]] AutoModelForTokenClassification
-
-### TFAutoModelForTokenClassification
-
-[[autodoc]] TFAutoModelForTokenClassification
-
-### FlaxAutoModelForTokenClassification
-
-[[autodoc]] FlaxAutoModelForTokenClassification
 
 ### AutoModelForQuestionAnswering
 
 [[autodoc]] AutoModelForQuestionAnswering
 
-### TFAutoModelForQuestionAnswering
-
-[[autodoc]] TFAutoModelForQuestionAnswering
-
-### FlaxAutoModelForQuestionAnswering
-
-[[autodoc]] FlaxAutoModelForQuestionAnswering
-
 ### AutoModelForTextEncoding
 
 [[autodoc]] AutoModelForTextEncoding
-
-### TFAutoModelForTextEncoding
-
-[[autodoc]] TFAutoModelForTextEncoding
 
 ## Computer vision
 
@@ -242,14 +154,6 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForImageClassification
 
-### TFAutoModelForImageClassification
-
-[[autodoc]] TFAutoModelForImageClassification
-
-### FlaxAutoModelForImageClassification
-
-[[autodoc]] FlaxAutoModelForImageClassification
-
 ### AutoModelForVideoClassification
 
 [[autodoc]] AutoModelForVideoClassification
@@ -258,13 +162,13 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForKeypointDetection
 
+### AutoModelForKeypointMatching
+
+[[autodoc]] AutoModelForKeypointMatching
+
 ### AutoModelForMaskedImageModeling
 
 [[autodoc]] AutoModelForMaskedImageModeling
-
-### TFAutoModelForMaskedImageModeling
-
-[[autodoc]] TFAutoModelForMaskedImageModeling
 
 ### AutoModelForObjectDetection
 
@@ -282,10 +186,6 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForSemanticSegmentation
 
-### TFAutoModelForSemanticSegmentation
-
-[[autodoc]] TFAutoModelForSemanticSegmentation
-
 ### AutoModelForInstanceSegmentation
 
 [[autodoc]] AutoModelForInstanceSegmentation
@@ -297,10 +197,6 @@ The following auto classes are available for the following computer vision tasks
 ### AutoModelForZeroShotImageClassification
 
 [[autodoc]] AutoModelForZeroShotImageClassification
-
-### TFAutoModelForZeroShotImageClassification
-
-[[autodoc]] TFAutoModelForZeroShotImageClassification
 
 ### AutoModelForZeroShotObjectDetection
 
@@ -316,10 +212,6 @@ The following auto classes are available for the following audio tasks.
 
 ### AutoModelForAudioFrameClassification
 
-[[autodoc]] TFAutoModelForAudioClassification
-
-### TFAutoModelForAudioFrameClassification
-
 [[autodoc]] AutoModelForAudioFrameClassification
 
 ### AutoModelForCTC
@@ -329,14 +221,6 @@ The following auto classes are available for the following audio tasks.
 ### AutoModelForSpeechSeq2Seq
 
 [[autodoc]] AutoModelForSpeechSeq2Seq
-
-### TFAutoModelForSpeechSeq2Seq
-
-[[autodoc]] TFAutoModelForSpeechSeq2Seq
-
-### FlaxAutoModelForSpeechSeq2Seq
-
-[[autodoc]] FlaxAutoModelForSpeechSeq2Seq
 
 ### AutoModelForAudioXVector
 
@@ -350,6 +234,10 @@ The following auto classes are available for the following audio tasks.
 
 [[autodoc]] AutoModelForTextToWaveform
 
+### AutoModelForAudioTokenization
+
+[[autodoc]] AutoModelForAudioTokenization
+
 ## Multimodal
 
 The following auto classes are available for the following multimodal tasks.
@@ -358,17 +246,9 @@ The following auto classes are available for the following multimodal tasks.
 
 [[autodoc]] AutoModelForTableQuestionAnswering
 
-### TFAutoModelForTableQuestionAnswering
-
-[[autodoc]] TFAutoModelForTableQuestionAnswering
-
 ### AutoModelForDocumentQuestionAnswering
 
 [[autodoc]] AutoModelForDocumentQuestionAnswering
-
-### TFAutoModelForDocumentQuestionAnswering
-
-[[autodoc]] TFAutoModelForDocumentQuestionAnswering
 
 ### AutoModelForVisualQuestionAnswering
 
@@ -378,14 +258,12 @@ The following auto classes are available for the following multimodal tasks.
 
 [[autodoc]] AutoModelForVision2Seq
 
-### TFAutoModelForVision2Seq
-
-[[autodoc]] TFAutoModelForVision2Seq
-
-### FlaxAutoModelForVision2Seq
-
-[[autodoc]] FlaxAutoModelForVision2Seq
-
 ### AutoModelForImageTextToText
 
 [[autodoc]] AutoModelForImageTextToText
+
+## Time Series
+
+### AutoModelForTimeSeriesPrediction
+
+[[autodoc]] AutoModelForTimeSeriesPrediction

@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gc
-import tempfile
 import unittest
 
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -31,8 +30,16 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
-from transformers.utils import is_soundfile_available
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_torch,
+    require_torch_large_accelerator,
+    require_torchcodec,
+    slow,
+    torch_device,
+)
+from transformers.utils import is_torchcodec_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -47,8 +54,8 @@ if is_vision_available():
     from PIL import Image
 
 
-if is_soundfile_available():
-    import soundfile
+if is_torchcodec_available():
+    import torchcodec
 
 
 class Phi4MultimodalModelTester:
@@ -206,10 +213,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="Right padding not supported")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
     @unittest.skip(reason="Depending on input modalities, some params may not have gradients")
     def test_training_gradient_checkpointing(self):
         pass
@@ -247,7 +250,8 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     @unittest.skip(
         reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
     )
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
@@ -276,31 +280,31 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 @slow
 class Phi4MultimodalIntegrationTest(unittest.TestCase):
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
-    image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-    audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
+    revision = "refs/pr/70"
+    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+    audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
 
     def setUp(self):
         # Currently, the Phi-4 checkpoint on the hub is not working with the latest Phi-4 code, so the slow integration tests
         # won't pass without using the correct revision (refs/pr/70)
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_path)
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_path, revision=self.revision)
         self.generation_config = GenerationConfig(max_new_tokens=20, do_sample=False)
         self.user_token = "<|user|>"
         self.assistant_token = "<|assistant|>"
         self.end_token = "<|end|>"
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
-        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav") as tmp:
-            tmp.write(requests.get(self.audio_url, stream=True).raw.data)
-            tmp.flush()
-            tmp.seek(0)
-            self.audio, self.sampling_rate = soundfile.read(tmp.name)
+        audio_bytes = requests.get(self.audio_url, stream=True).raw.data
+        samples = torchcodec.decoders.AudioDecoder(audio_bytes).get_all_samples()
+        self.audio, self.sampling_rate = samples.data, samples.sample_rate
+
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def test_text_only_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}What is the answer for 1+1? Explain it.{self.end_token}{self.assistant_token}"
@@ -319,7 +323,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|image|>What is shown in this image?{self.end_token}{self.assistant_token}"
@@ -332,13 +336,20 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         output = output[:, inputs["input_ids"].shape[1] :]
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_RESPONSE = "The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural"
+        EXPECTED_RESPONSES = Expectations(
+            {
+                ("cuda", 7): 'The image shows a vibrant scene at a traditional Chinese-style street entrance, known as a "gate"',
+                ("cuda", 8): 'The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural',
+            }
+        )  # fmt: skip
+        EXPECTED_RESPONSE = EXPECTED_RESPONSES.get_expectation()
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
+    @require_torch_large_accelerator
     def test_multi_image_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         images = []
@@ -362,10 +373,10 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
-    @require_soundfile
+    @require_torchcodec
     def test_audio_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|audio|>What is happening in this audio?{self.end_token}{self.assistant_token}"

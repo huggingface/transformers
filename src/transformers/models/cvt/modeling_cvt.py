@@ -16,7 +16,7 @@
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,7 +24,8 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import ImageClassifierOutputWithNoAttention, ModelOutput
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging
 from .configuration_cvt import CvtConfig
 
@@ -33,24 +34,20 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class BaseModelOutputWithCLSToken(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for model's outputs, with potential hidden states and attentions.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        cls_token_value (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
-            Classification token at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
+    """
+)
+class BaseModelOutputWithCLSToken(ModelOutput):
+    r"""
+    cls_token_value (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
+        Classification token at the output of the last layer of the model.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     cls_token_value: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -86,7 +83,7 @@ class CvtDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class CvtEmbeddings(nn.Module):
@@ -513,7 +510,7 @@ class CvtEncoder(nn.Module):
 
 @auto_docstring
 class CvtPreTrainedModel(PreTrainedModel):
-    config_class = CvtConfig
+    config: CvtConfig
     base_model_prefix = "cvt"
     main_input_name = "pixel_values"
     _no_split_modules = ["CvtLayer"]
@@ -560,7 +557,7 @@ class CvtModel(CvtPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithCLSToken]:
+    ) -> Union[tuple, BaseModelOutputWithCLSToken]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -614,7 +611,7 @@ class CvtForImageClassification(CvtPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
+    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

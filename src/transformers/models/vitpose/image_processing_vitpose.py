@@ -16,7 +16,7 @@
 
 import itertools
 import math
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -29,7 +29,7 @@ from ...image_utils import (
     ImageInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 # inspired by https://github.com/ViTAE-Transformer/ViTPose/blob/d5216452796c90c6bc29f5c5ec0bdba94366768a/mmpose/datasets/datasets/base/kpt_2d_sview_rgb_img_top_down_dataset.py#L132
 def box_to_center_and_scale(
-    box: Union[Tuple, List, np.ndarray],
+    box: Union[tuple, list, np.ndarray],
     image_width: int,
     image_height: int,
     normalize_factor: float = 200.0,
@@ -117,7 +117,7 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     return bboxes
 
 
-def get_keypoint_predictions(heatmaps: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Get keypoint predictions from score maps.
 
     Args:
@@ -133,7 +133,7 @@ def get_keypoint_predictions(heatmaps: np.ndarray) -> Tuple[np.ndarray, np.ndarr
             Scores (confidence) of the keypoints.
     """
     if not isinstance(heatmaps, np.ndarray):
-        raise ValueError("Heatmaps should be np.ndarray")
+        raise TypeError("Heatmaps should be np.ndarray")
     if heatmaps.ndim != 4:
         raise ValueError("Heatmaps should be 4-dimensional")
 
@@ -332,7 +332,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
     Args:
         do_affine_transform (`bool`, *optional*, defaults to `True`):
             Whether to apply an affine transformation to the input images.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 192}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 256, "width": 192}`):
             Resolution of the image after `affine_transform` is applied. Only has an effect if `do_affine_transform` is set to `True`. Can
             be overridden by `size` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -342,9 +342,9 @@ class VitPoseImageProcessor(BaseImageProcessor):
             method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
-        image_mean (`List[int]`, defaults to `[0.485, 0.456, 0.406]`, *optional*):
+        image_mean (`list[int]`, defaults to `[0.485, 0.456, 0.406]`, *optional*):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (`List[int]`, defaults to `[0.229, 0.224, 0.225]`, *optional*):
+        image_std (`list[int]`, defaults to `[0.229, 0.224, 0.225]`, *optional*):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
@@ -353,12 +353,12 @@ class VitPoseImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_affine_transform: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -373,11 +373,11 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
     def affine_transform(
         self,
-        image: np.array,
-        center: Tuple[float],
-        scale: Tuple[float],
+        image: np.ndarray,
+        center: tuple[float],
+        scale: tuple[float],
         rotation: float,
-        size: Dict[str, int],
+        size: dict[str, int],
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.array:
@@ -387,13 +387,13 @@ class VitPoseImageProcessor(BaseImageProcessor):
         Args:
             image (`np.array`):
                 Image to transform.
-            center (`Tuple[float]`):
+            center (`tuple[float]`):
                 Center of the bounding box (x, y).
-            scale (`Tuple[float]`):
+            scale (`tuple[float]`):
                 Scale of the bounding box with respect to height/width.
             rotation (`float`):
                 Rotation angle in degrees.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the destination image.
             data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format of the output image.
@@ -423,14 +423,14 @@ class VitPoseImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        boxes: Union[List[List[float]], np.ndarray],
+        boxes: Union[list[list[float]], np.ndarray],
         do_affine_transform: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -443,13 +443,13 @@ class VitPoseImageProcessor(BaseImageProcessor):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
 
-            boxes (`List[List[List[float]]]` or `np.ndarray`):
+            boxes (`list[list[list[float]]]` or `np.ndarray`):
                 List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
                 box coordinates in COCO format (top_left_x, top_left_y, width, height).
 
             do_affine_transform (`bool`, *optional*, defaults to `self.do_affine_transform`):
                 Whether to apply an affine transformation to the input images.
-            size (`Dict[str, int]` *optional*, defaults to `self.size`):
+            size (`dict[str, int]` *optional*, defaults to `self.size`):
                 Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
                 resizing.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
@@ -458,9 +458,9 @@ class VitPoseImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use if `do_normalize` is set to `True`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
@@ -484,7 +484,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -597,10 +597,10 @@ class VitPoseImageProcessor(BaseImageProcessor):
     def post_process_pose_estimation(
         self,
         outputs: "VitPoseEstimatorOutput",
-        boxes: Union[List[List[List[float]]], np.ndarray],
+        boxes: Union[list[list[list[float]]], np.ndarray],
         kernel_size: int = 11,
         threshold: Optional[float] = None,
-        target_sizes: Union[TensorType, List[Tuple]] = None,
+        target_sizes: Union[TensorType, list[tuple]] = None,
     ):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.
@@ -608,18 +608,18 @@ class VitPoseImageProcessor(BaseImageProcessor):
         Args:
             outputs (`VitPoseEstimatorOutput`):
                 VitPoseForPoseEstimation model outputs.
-            boxes (`List[List[List[float]]]` or `np.ndarray`):
+            boxes (`list[list[list[float]]]` or `np.ndarray`):
                 List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
                 box coordinates in COCO format (top_left_x, top_left_y, width, height).
             kernel_size (`int`, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation.
             threshold (`float`, *optional*, defaults to None):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will be resize with the default value.
         Returns:
-            `List[List[Dict]]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
+            `list[list[Dict]]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
             in the batch as predicted by the model.
         """
 
@@ -658,12 +658,12 @@ class VitPoseImageProcessor(BaseImageProcessor):
         labels = torch.arange(0, num_keypoints)
         bboxes_xyxy = torch.tensor(coco_to_pascal_voc(all_boxes))
 
-        results: List[List[Dict[str, torch.Tensor]]] = []
+        results: list[list[dict[str, torch.Tensor]]] = []
 
         pose_bbox_pairs = zip(poses, scores, bboxes_xyxy)
 
         for image_bboxes in boxes:
-            image_results: List[Dict[str, torch.Tensor]] = []
+            image_results: list[dict[str, torch.Tensor]] = []
             for _ in image_bboxes:
                 # Unpack the next pose and bbox_xyxy from the iterator
                 pose, score, bbox_xyxy = next(pose_bbox_pairs)

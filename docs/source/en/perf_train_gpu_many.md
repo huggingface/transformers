@@ -91,6 +91,8 @@ Tensor parallelism distributes large tensor computations across multiple GPUs. T
 
 Tensor parallelism is effective for training large models that don't fit into the memory of a single GPU. It is also faster and more efficient because each GPU can process its tensor slice in parallel, and it can be combined with other parallelism methods. Like other parallelism methods though, tensor parallelism adds communication overhead between GPUs.
 
+Refer to the [Tensor parallelism](./perf_infer_gpu_multi) guide to learn how to use it for inference.
+
 ## Hybrid parallelism
 
 Parallelism methods can be combined to achieve even greater memory savings and more efficiently train models with billions of parameters.

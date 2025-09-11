@@ -24,6 +24,7 @@ from typing import Any, Optional, Union
 import requests
 import yaml
 from huggingface_hub import model_info
+from huggingface_hub.errors import OfflineModeIsEnabled
 from huggingface_hub.utils import HFValidationError
 
 from . import __version__
@@ -83,7 +84,7 @@ class ModelCard:
 
     Please read the following paper for details and explanation on the sections: "Model Cards for Model Reporting" by
     Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
-    Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://arxiv.org/abs/1810.03993
+    Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://huggingface.co/papers/1810.03993
 
     Note: A model card can be loaded and saved to disk.
     """
@@ -92,7 +93,7 @@ class ModelCard:
         warnings.warn(
             "The class `ModelCard` is deprecated and will be removed in version 5 of Transformers", FutureWarning
         )
-        # Recommended attributes from https://arxiv.org/abs/1810.03993 (see papers)
+        # Recommended attributes from https://huggingface.co/papers/1810.03993 (see papers)
         self.model_details = kwargs.pop("model_details", {})
         self.intended_use = kwargs.pop("intended_use", {})
         self.factors = kwargs.pop("factors", {})
@@ -321,7 +322,7 @@ def infer_metric_tags_from_eval_results(eval_results):
     if eval_results is None:
         return {}
     result = {}
-    for key in eval_results.keys():
+    for key in eval_results:
         if key.lower().replace(" ", "_") in METRIC_TAGS:
             result[key.lower().replace(" ", "_")] = key
         elif key.lower() == "rouge1":
@@ -385,7 +386,12 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, HFValidationError):
+            except (
+                requests.exceptions.HTTPError,
+                requests.exceptions.ConnectionError,
+                HFValidationError,
+                OfflineModeIsEnabled,
+            ):
                 pass
 
     def create_model_index(self, metric_mapping):
@@ -833,7 +839,7 @@ def make_markdown_table(lines):
     """
     if lines is None or len(lines) == 0:
         return ""
-    col_widths = {key: len(str(key)) for key in lines[0].keys()}
+    col_widths = {key: len(str(key)) for key in lines[0]}
     for line in lines:
         for key, value in line.items():
             if col_widths[key] < len(_maybe_round(value)):

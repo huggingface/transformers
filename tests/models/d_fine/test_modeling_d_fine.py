@@ -18,6 +18,7 @@ import inspect
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
@@ -27,8 +28,13 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
-from transformers.utils import cached_property
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -371,7 +377,8 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -640,7 +647,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # Skip the check for the backbone
             for name, module in model.named_modules():
                 if module.__class__.__name__ == "DFineConvEncoder":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    backbone_params = [f"{name}.{key}" for key in module.state_dict()]
                     break
 
             for name, param in model.named_parameters():
@@ -679,36 +686,36 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertTrue(not failed_cases, message)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
-    def test_inference_with_different_dtypes(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_with_different_dtypes(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device).to(torch_dtype)
+            model.to(torch_device).to(dtype)
             model.eval()
             for key, tensor in inputs_dict.items():
                 if tensor.dtype == torch.float32:
-                    inputs_dict[key] = tensor.to(torch_dtype)
+                    inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
-    def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_equivalence_for_static_and_dynamic_anchors(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         h, w = inputs_dict["pixel_values"].shape[-2:]
@@ -716,16 +723,16 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # convert inputs to the desired dtype
         for key, tensor in inputs_dict.items():
             if tensor.dtype == torch.float32:
-                inputs_dict[key] = tensor.to(torch_dtype)
+                inputs_dict[key] = tensor.to(dtype)
 
         for model_class in self.all_model_classes:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model_class(config).save_pretrained(tmpdirname)
                 model_static = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, dtype=dtype
                 ).eval()
                 model_dynamic = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=None, device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=None, device_map=torch_device, dtype=dtype
                 ).eval()
 
             self.assertIsNotNone(model_static.config.anchor_image_size)
@@ -751,6 +758,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class DFineModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
@@ -771,37 +779,38 @@ class DFineModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-3.8097816, -4.7724586, -5.994499],
-                [-5.2974715, -9.499067, -6.1653666],
-                [-5.3502765, -3.9530406, -6.3630295],
+                [-3.8098, -4.7725, -5.9945],
+                [-5.2975, -9.4991, -6.1654],
+                [-5.3502, -3.9532, -6.3631],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [
-                [0.7677696, 0.41479152, 0.46441072],
-                [0.16912134, 0.19869131, 0.2123824],
-                [0.2581653, 0.54818195, 0.47512347],
+                [0.7678, 0.4148, 0.4644],
+                [0.1691, 0.1987, 0.2124],
+                [0.2582, 0.5482, 0.4751],
             ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=2e-4, rtol=2e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
+
         expected_scores = torch.tensor([0.9642, 0.9542, 0.9536, 0.8548], device=torch_device)
         expected_labels = [15, 65, 15, 57]
         expected_slice_boxes = torch.tensor(
             [
-                [1.3186283e01, 5.4130211e01, 3.1726535e02, 4.7212445e02],
-                [4.0275269e01, 7.2975174e01, 1.7620003e02, 1.1776848e02],
-                [3.4276117e02, 2.3427944e01, 6.3998401e02, 3.7477191e02],
-                [5.8418274e-01, 1.1794567e00, 6.3933154e02, 4.7485995e02],
+                [1.3186e01, 5.4130e01, 3.1727e02, 4.7212e02],
+                [4.0275e01, 7.2975e01, 1.7620e02, 1.1777e02],
+                [3.4276e02, 2.3428e01, 6.3998e02, 3.7477e02],
+                [5.8418e-01, 1.1794e00, 6.3933e02, 4.7486e02],
             ],
             device=torch_device,
         )

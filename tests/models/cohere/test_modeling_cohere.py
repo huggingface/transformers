@@ -19,8 +19,7 @@ from transformers import CohereConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
-    require_torch_multi_gpu,
-    require_torch_sdpa,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -203,7 +202,7 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 @require_torch
 @slow
 class CohereIntegrationTest(unittest.TestCase):
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @require_bitsandbytes
     def test_batched_4bit(self):
         model_id = "CohereForAI/c4ai-command-r-v01-4bit"
@@ -224,7 +223,6 @@ class CohereIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         self.assertEqual(tokenizer.batch_decode(output, skip_special_tokens=True), EXPECTED_TEXT)
 
-    @require_torch_sdpa
     def test_batched_small_model_logits(self):
         # Since the model is very large, we created a random cohere model so that we can do a simple
         # logits check on it.
@@ -232,15 +230,13 @@ class CohereIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS = torch.Tensor(
             [
-                [[0.0000, 0.1866, -0.1997], [0.0000, -0.0736, 0.1785], [0.0000, -0.1965, -0.0569]],
-                [[0.0000, -0.0302, 0.1488], [0.0000, -0.0402, 0.1351], [0.0000, -0.0341, 0.1116]],
+                [[0.0000, 0.0285, 0.0322], [0.0000, 0.0011, 0.1105], [0.0000, -0.0018, -0.1019]],
+                [[0.0000, 0.1080, 0.0454], [0.0000, -0.1808, -0.1553], [0.0000, 0.0452, 0.0369]],
             ]
         ).to(device=torch_device, dtype=torch.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = CohereForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = CohereForCausalLM.from_pretrained(model_id, dtype=torch.float16).to(torch_device)
 
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -251,4 +247,4 @@ class CohereIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         logits = output.logits
-        torch.testing.assert_close(EXPECTED_LOGITS, logits[:, :3, :3], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(EXPECTED_LOGITS, logits[:, -3:, :3], rtol=1e-3, atol=1e-3)

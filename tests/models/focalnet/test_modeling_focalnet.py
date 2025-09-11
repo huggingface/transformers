@@ -15,10 +15,11 @@
 
 import collections
 import unittest
+from functools import cached_property
 
 from transformers import FocalNetConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -425,8 +426,16 @@ class FocalNetModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([0.2166, -0.4368, 0.2191]).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+
+        expectations = Expectations(
+            {
+                (None, None): [0.2166, -0.4368, 0.2191],
+                ("cuda", 8): [0.2168, -0.4367, 0.2190],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
         self.assertTrue(outputs.logits.argmax(dim=-1).item(), 281)
 
 

@@ -19,6 +19,7 @@ import unittest
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
+    get_device_properties,
     require_accelerate,
     require_auto_awq,
     require_flash_attn,
@@ -61,12 +62,10 @@ class AwqConfigTest(unittest.TestCase):
 
         # Only cuda and xpu devices can run this function
         support_llm_awq = False
-        if torch.cuda.is_available():
-            compute_capability = torch.cuda.get_device_capability()
-            major, minor = compute_capability
-            if major >= 8:
-                support_llm_awq = True
-        elif torch.xpu.is_available():
+        device_type, major, _ = get_device_properties()
+        if device_type == "cuda" and major >= 8:
+            support_llm_awq = True
+        elif device_type == "xpu":
             support_llm_awq = True
 
         if support_llm_awq:
@@ -197,9 +196,7 @@ class AwqTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.bfloat16).to(torch_device)
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_BF16)
@@ -329,7 +326,6 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
             revision=self.model_revision,
         ).to(torch_device)
 
@@ -340,7 +336,7 @@ class AwqFusedTest(unittest.TestCase):
 
     def test_fused_modules_to_not_convert(self):
         """
-        Test if fused + modules to_not_covnert work as expected
+        Test if fused + modules to_not_convert work as expected
         """
         model_id = "hf-internal-testing/Mixtral-tiny-AWQ"
 
@@ -348,7 +344,6 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
         ).to(torch_device)
 
         # Check if model has been correctly fused
@@ -357,7 +352,7 @@ class AwqFusedTest(unittest.TestCase):
         self.assertTrue(isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear))
 
     @unittest.skipIf(
-        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
         "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
     )
     @require_flash_attn
@@ -371,7 +366,6 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
             revision=self.model_revision,
         ).to(torch_device)
 
@@ -388,7 +382,7 @@ class AwqFusedTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_gpu
     @unittest.skipIf(
-        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
         "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
     )
     def test_generation_fused_batched(self):
@@ -400,7 +394,6 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
             revision=self.model_revision,
         ).to(torch_device)
 
@@ -441,7 +434,7 @@ class AwqFusedTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_multi_gpu
     @unittest.skipIf(
-        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
         "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
     )
     def test_generation_custom_model(self):
@@ -517,7 +510,7 @@ class AwqScaleTest(unittest.TestCase):
         Simple test that checks if the scales have been replaced in the quantized model
         """
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            "TechxGenus/starcoder2-3b-AWQ", torch_dtype=torch.float16, device_map=torch_device
+            "TechxGenus/starcoder2-3b-AWQ", dtype=torch.float16, device_map=torch_device
         )
         self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))
 

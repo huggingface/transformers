@@ -20,7 +20,7 @@ from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -32,6 +32,9 @@ if is_torch_available():
         from transformers import MaskFormerImageProcessor
         from transformers.models.maskformer.image_processing_maskformer import binary_mask_to_rle
         from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
+
+        if is_torchvision_available():
+            from transformers import MaskFormerImageProcessorFast
 
 if is_vision_available():
     from PIL import Image
@@ -144,10 +147,26 @@ class MaskFormerImageProcessingTester:
         )
 
 
+# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
+def prepare_semantic_single_inputs():
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    example = ds[0]
+    return example["image"], example["map"]
+
+
+# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
+def prepare_semantic_batch_inputs():
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return list(ds["image"][:2]), list(ds["map"][:2])
+
+
 @require_torch
 @require_vision
 class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = MaskFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
+    fast_image_processing_class = (
+        MaskFormerImageProcessorFast if (is_vision_available() and is_torchvision_available()) else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -158,25 +177,15 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "ignore_index"))
-        self.assertTrue(hasattr(image_processing, "num_labels"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 32, "longest_edge": 1333})
-        self.assertEqual(image_processor.size_divisor, 0)
-
-        image_processor = self.image_processing_class.from_dict(
-            self.image_processor_dict, size=42, max_size=84, size_divisibility=8
-        )
-        self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
-        self.assertEqual(image_processor.size_divisor, 8)
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "ignore_index"))
+            self.assertTrue(hasattr(image_processing, "num_labels"))
 
     def comm_get_image_processing_inputs(
         self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"
@@ -211,15 +220,16 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_with_size_divisor(self):
         size_divisors = [8, 16, 32]
         weird_input_sizes = [(407, 802), (582, 1094)]
-        for size_divisor in size_divisors:
-            image_processor_dict = {**self.image_processor_dict, **{"size_divisor": size_divisor}}
-            image_processing = self.image_processing_class(**image_processor_dict)
-            for weird_input_size in weird_input_sizes:
-                inputs = image_processing([np.ones((3, *weird_input_size))], return_tensors="pt")
-                pixel_values = inputs["pixel_values"]
-                # check if divisible
-                self.assertTrue((pixel_values.shape[-1] % size_divisor) == 0)
-                self.assertTrue((pixel_values.shape[-2] % size_divisor) == 0)
+        for image_processing_class in self.image_processor_list:
+            for size_divisor in size_divisors:
+                image_processor_dict = {**self.image_processor_dict, **{"size_divisor": size_divisor}}
+                image_processing = image_processing_class(**image_processor_dict)
+                for weird_input_size in weird_input_sizes:
+                    inputs = image_processing([np.ones((3, *weird_input_size))], return_tensors="pt")
+                    pixel_values = inputs["pixel_values"]
+                    # check if divisible
+                    self.assertTrue((pixel_values.shape[-1] % size_divisor) == 0)
+                    self.assertTrue((pixel_values.shape[-2] % size_divisor) == 0)
 
     def test_call_with_segmentation_maps(self):
         def common(is_instance_map=False, segmentation_type=None):
@@ -417,126 +427,166 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.assertEqual(rle[1], 45)
 
     def test_post_process_segmentation(self):
-        fature_extractor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
-        outputs = self.image_processor_tester.get_fake_maskformer_outputs()
-        segmentation = fature_extractor.post_process_segmentation(outputs)
+        for image_processing_class in self.image_processor_list:
+            feature_extractor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
+            outputs = self.image_processor_tester.get_fake_maskformer_outputs()
+            segmentation = feature_extractor.post_process_segmentation(outputs)
 
-        self.assertEqual(
-            segmentation.shape,
-            (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_classes,
-                self.image_processor_tester.height,
-                self.image_processor_tester.width,
-            ),
-        )
+            self.assertEqual(
+                segmentation.shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_classes,
+                    self.image_processor_tester.height,
+                    self.image_processor_tester.width,
+                ),
+            )
 
-        target_size = (1, 4)
-        segmentation = fature_extractor.post_process_segmentation(outputs, target_size=target_size)
+            target_size = (1, 4)
+            segmentation = feature_extractor.post_process_segmentation(outputs, target_size=target_size)
 
-        self.assertEqual(
-            segmentation.shape,
-            (self.image_processor_tester.batch_size, self.image_processor_tester.num_classes, *target_size),
-        )
+            self.assertEqual(
+                segmentation.shape,
+                (self.image_processor_tester.batch_size, self.image_processor_tester.num_classes, *target_size),
+            )
 
     def test_post_process_semantic_segmentation(self):
-        fature_extractor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
-        outputs = self.image_processor_tester.get_fake_maskformer_outputs()
+        for image_processing_class in self.image_processor_list:
+            feature_extractor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
+            outputs = self.image_processor_tester.get_fake_maskformer_outputs()
 
-        segmentation = fature_extractor.post_process_semantic_segmentation(outputs)
+            segmentation = feature_extractor.post_process_semantic_segmentation(outputs)
 
-        self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
-        self.assertEqual(
-            segmentation[0].shape,
-            (
-                self.image_processor_tester.height,
-                self.image_processor_tester.width,
-            ),
-        )
+            self.assertEqual(len(segmentation), self.image_processor_tester.batch_size)
+            self.assertEqual(
+                segmentation[0].shape,
+                (
+                    self.image_processor_tester.height,
+                    self.image_processor_tester.width,
+                ),
+            )
 
-        target_sizes = [(1, 4) for i in range(self.image_processor_tester.batch_size)]
-        segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+            target_sizes = [(1, 4) for i in range(self.image_processor_tester.batch_size)]
+            segmentation = feature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
 
-        self.assertEqual(segmentation[0].shape, target_sizes[0])
+            self.assertEqual(segmentation[0].shape, target_sizes[0])
 
     def test_post_process_instance_segmentation(self):
-        image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
-        outputs = self.image_processor_tester.get_fake_maskformer_outputs()
-        segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
+            outputs = self.image_processor_tester.get_fake_maskformer_outputs()
+            segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
 
-        self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
-        for el in segmentation:
-            self.assertTrue("segmentation" in el)
-            self.assertTrue("segments_info" in el)
-            self.assertEqual(type(el["segments_info"]), list)
-            self.assertEqual(
-                el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            for el in segmentation:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(
+                    el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+                )
+
+            segmentation = image_processor.post_process_instance_segmentation(
+                outputs, threshold=0, return_binary_maps=True
             )
 
-        segmentation = image_processor.post_process_instance_segmentation(
-            outputs, threshold=0, return_binary_maps=True
-        )
-
-        self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
-        for el in segmentation:
-            self.assertTrue("segmentation" in el)
-            self.assertTrue("segments_info" in el)
-            self.assertEqual(type(el["segments_info"]), list)
-            self.assertEqual(len(el["segmentation"].shape), 3)
-            self.assertEqual(
-                el["segmentation"].shape[1:], (self.image_processor_tester.height, self.image_processor_tester.width)
-            )
+            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            for el in segmentation:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(len(el["segmentation"].shape), 3)
+                self.assertEqual(
+                    el["segmentation"].shape[1:],
+                    (self.image_processor_tester.height, self.image_processor_tester.width),
+                )
 
     def test_post_process_panoptic_segmentation(self):
-        image_processing = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
-        outputs = self.image_processor_tester.get_fake_maskformer_outputs()
-        segmentation = image_processing.post_process_panoptic_segmentation(outputs, threshold=0)
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(num_labels=self.image_processor_tester.num_classes)
+            outputs = self.image_processor_tester.get_fake_maskformer_outputs()
+            segmentation = image_processing.post_process_panoptic_segmentation(outputs, threshold=0)
 
-        self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
-        for el in segmentation:
-            self.assertTrue("segmentation" in el)
-            self.assertTrue("segments_info" in el)
-            self.assertEqual(type(el["segments_info"]), list)
-            self.assertEqual(
-                el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
-            )
+            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            for el in segmentation:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(
+                    el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+                )
 
     def test_post_process_label_fusing(self):
-        image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
-        outputs = self.image_processor_tester.get_fake_maskformer_outputs()
+        for image_processing_class in self.image_processor_list:
+            image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
+            outputs = self.image_processor_tester.get_fake_maskformer_outputs()
 
-        segmentation = image_processor.post_process_panoptic_segmentation(
-            outputs, threshold=0, mask_threshold=0, overlap_mask_area_threshold=0
-        )
-        unfused_segments = [el["segments_info"] for el in segmentation]
+            segmentation = image_processor.post_process_panoptic_segmentation(
+                outputs, threshold=0, mask_threshold=0, overlap_mask_area_threshold=0
+            )
+            unfused_segments = [el["segments_info"] for el in segmentation]
 
-        fused_segmentation = image_processor.post_process_panoptic_segmentation(
-            outputs, threshold=0, mask_threshold=0, overlap_mask_area_threshold=0, label_ids_to_fuse={1}
-        )
-        fused_segments = [el["segments_info"] for el in fused_segmentation]
+            fused_segmentation = image_processor.post_process_panoptic_segmentation(
+                outputs, threshold=0, mask_threshold=0, overlap_mask_area_threshold=0, label_ids_to_fuse={1}
+            )
+            fused_segments = [el["segments_info"] for el in fused_segmentation]
 
-        for el_unfused, el_fused in zip(unfused_segments, fused_segments):
-            if len(el_unfused) == 0:
-                self.assertEqual(len(el_unfused), len(el_fused))
-                continue
+            for el_unfused, el_fused in zip(unfused_segments, fused_segments):
+                if len(el_unfused) == 0:
+                    self.assertEqual(len(el_unfused), len(el_fused))
+                    continue
 
-            # Get number of segments to be fused
-            fuse_targets = [1 for el in el_unfused if el["label_id"] in {1}]
-            num_to_fuse = 0 if len(fuse_targets) == 0 else sum(fuse_targets) - 1
-            # Expected number of segments after fusing
-            expected_num_segments = max([el["id"] for el in el_unfused]) - num_to_fuse
-            num_segments_fused = max([el["id"] for el in el_fused])
-            self.assertEqual(num_segments_fused, expected_num_segments)
+                # Get number of segments to be fused
+                fuse_targets = [1 for el in el_unfused if el["label_id"] in {1}]
+                num_to_fuse = 0 if len(fuse_targets) == 0 else sum(fuse_targets) - 1
+                # Expected number of segments after fusing
+                expected_num_segments = max([el["id"] for el in el_unfused]) - num_to_fuse
+                num_segments_fused = max([el["id"] for el in el_fused])
+                self.assertEqual(num_segments_fused, expected_num_segments)
 
-    def test_removed_deprecated_kwargs(self):
-        image_processor_dict = dict(self.image_processor_dict)
-        image_processor_dict.pop("do_reduce_labels", None)
-        image_processor_dict["reduce_labels"] = True
+    def test_slow_fast_equivalence(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        # test we are able to create the image processor with the deprecated kwargs
-        image_processor = self.image_processing_class(**image_processor_dict)
-        self.assertEqual(image_processor.do_reduce_labels, True)
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        # test we still support reduce_labels with config
-        image_processor = self.image_processing_class.from_dict(image_processor_dict)
-        self.assertEqual(image_processor.do_reduce_labels, True)
+        dummy_image, dummy_map = prepare_semantic_single_inputs()
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        image_encoding_slow = image_processor_slow(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+        image_encoding_fast = image_processor_fast(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+        self._assert_slow_fast_tensors_equivalence(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values)
+        for mask_label_slow, mask_label_fast in zip(image_encoding_slow.mask_labels, image_encoding_fast.mask_labels):
+            self._assert_slow_fast_tensors_equivalence(mask_label_slow, mask_label_fast)
+        for class_label_slow, class_label_fast in zip(
+            image_encoding_slow.class_labels, image_encoding_fast.class_labels
+        ):
+            self._assert_slow_fast_tensors_equivalence(class_label_slow.float(), class_label_fast.float())
+
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        for mask_label_slow, mask_label_fast in zip(encoding_slow.mask_labels, encoding_fast.mask_labels):
+            self._assert_slow_fast_tensors_equivalence(mask_label_slow, mask_label_fast)
+        for class_label_slow, class_label_fast in zip(encoding_slow.class_labels, encoding_fast.class_labels):
+            self._assert_slow_fast_tensors_equivalence(class_label_slow.float(), class_label_fast.float())

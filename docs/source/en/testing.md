@@ -474,13 +474,6 @@ For example, here is a test that must be run only when there are 2 or more GPUs 
 def test_example_with_multi_gpu():
 ```
 
-If a test requires `tensorflow` use the `require_tf` decorator. For example:
-
-```python no-style
-@require_tf
-def test_tf_thing_with_tensorflow():
-```
-
 These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is
 how to set it up:
 
@@ -509,7 +502,7 @@ Inside tests:
 ```python
 from transformers.testing_utils import get_gpu_count
 
-n_gpu = get_gpu_count()  # works with torch and tf
+n_gpu = get_gpu_count()
 ```
 
 ### Testing with a specific PyTorch backend or device
@@ -1226,11 +1219,6 @@ if torch.cuda.is_available():
 import numpy as np
 
 np.random.seed(seed)
-
-# tf RNG
-import tensorflow as tf 
-
-tf.random.set_seed(seed)
 ```
 
 ### Debugging tests

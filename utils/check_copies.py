@@ -42,7 +42,7 @@ import os
 import re
 import subprocess
 from collections import OrderedDict
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from transformers.utils import direct_transformers_import
 
@@ -53,12 +53,6 @@ TRANSFORMERS_PATH = "src/transformers"
 MODEL_TEST_PATH = "tests/models"
 PATH_TO_DOCS = "docs/source/en"
 REPO_PATH = "."
-
-# Mapping for files that are full copies of others (keys are copies, values the file to keep them up to data with)
-FULL_COPIES = {
-    "examples/tensorflow/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
-    "examples/flax/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
-}
 
 
 LOCALIZED_READMES = {
@@ -253,7 +247,7 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
         raise ValueError(f"In {filename}, two code blocks expected to be copies have different structures.")
 
 
-def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
+def find_block_end(lines: list[str], start_index: int, indent: int) -> int:
     """
     Find the end of the class/func block starting at `start_index` in a source code (defined by `lines`).
 
@@ -282,8 +276,8 @@ def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
 
 
 def split_code_into_blocks(
-    lines: List[str], start_index: int, end_index: int, indent: int, backtrace: bool = False
-) -> List[Tuple[str, int, int]]:
+    lines: list[str], start_index: int, end_index: int, indent: int, backtrace: bool = False
+) -> list[tuple[str, int, int]]:
     """
     Split the class/func block starting at `start_index` in a source code (defined by `lines`) into *inner blocks*.
 
@@ -391,7 +385,7 @@ def split_code_into_blocks(
 
 def find_code_in_transformers(
     object_name: str, base_path: Optional[str] = None, return_indices: bool = False
-) -> Union[str, Tuple[List[str], int, int]]:
+) -> Union[str, tuple[list[str], int, int]]:
     """
     Find and return the source code of an object.
 
@@ -640,7 +634,7 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
 
 def is_copy_consistent(
     filename: str, overwrite: bool = False, buffer: Optional[dict] = None
-) -> Optional[List[Tuple[str, int]]]:
+) -> Optional[list[tuple[str, int]]]:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -731,8 +725,8 @@ def is_copy_consistent(
 
         # Below, we change some names in `theoretical_code_blocks` and `observed_code_blocks`. These mappings map the
         # original names to the modified names: this is used to restore the original order of the code blocks.
-        name_mappings_1 = {k: k for k in theoretical_code_blocks.keys()}
-        name_mappings_2 = {k: k for k in observed_code_blocks.keys()}
+        name_mappings_1 = {k: k for k in theoretical_code_blocks}
+        name_mappings_2 = {k: k for k in observed_code_blocks}
 
         # Update code blocks' name and content:
         #   If `"# Ignore copy"` is found in a block of the observed code:
@@ -866,37 +860,6 @@ def check_copies(overwrite: bool = False, file: Optional[str] = None):
         )
 
 
-def check_full_copies(overwrite: bool = False):
-    """
-    Check the files that are full copies of others (as indicated in `FULL_COPIES`) are copy-consistent.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to overwrite the copies when they don't match.
-    """
-    diffs = []
-    for target, source in FULL_COPIES.items():
-        with open(source, "r", encoding="utf-8") as f:
-            source_code = f.read()
-        with open(target, "r", encoding="utf-8") as f:
-            target_code = f.read()
-        if source_code != target_code:
-            if overwrite:
-                with open(target, "w", encoding="utf-8") as f:
-                    print(f"Replacing the content of {target} by the one of {source}.")
-                    f.write(source_code)
-            else:
-                diffs.append(f"- {target}: copy does not match {source}.")
-
-    if not overwrite and len(diffs) > 0:
-        diff = "\n".join(diffs)
-        raise Exception(
-            "Found the following copy inconsistencies:\n"
-            + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
-        )
-
-
 def get_model_list(filename: str, start_prompt: str, end_prompt: str) -> str:
     """
     Extracts the model list from a README.
@@ -936,7 +899,7 @@ def get_model_list(filename: str, start_prompt: str, end_prompt: str) -> str:
     return "".join(result)
 
 
-def convert_to_localized_md(model_list: str, localized_model_list: str, format_str: str) -> Tuple[bool, str]:
+def convert_to_localized_md(model_list: str, localized_model_list: str, format_str: str) -> tuple[bool, str]:
     """
     Compare the model list from the main README to the one in a localized README.
 
@@ -1023,7 +986,7 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
-    return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
+    return readmes_match, "\n".join(x[1] for x in sorted_index) + "\n"
 
 
 # Map a model name with the name it has in the README for the check_readme check
@@ -1078,4 +1041,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite, args.file)
-    check_full_copies(args.fix_and_overwrite)

@@ -90,7 +90,7 @@ torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOM
 default_cache_path = constants.default_cache_path
 
 # Determine default cache directory. Lots of legacy environment variables to ensure backward compatibility.
-# The best way to set the cache path is with the environment variable HF_HOME. For more details, checkout this
+# The best way to set the cache path is with the environment variable HF_HOME. For more details, check out this
 # documentation page: https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables.
 #
 # In code, use `HF_HUB_CACHE` as the default cache path. This variable is set by the library and is guaranteed
@@ -134,10 +134,16 @@ HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/tele
 
 
 def _get_cache_file_to_return(
-    path_or_repo_id: str, full_filename: str, cache_dir: Union[str, Path, None] = None, revision: Optional[str] = None
+    path_or_repo_id: str,
+    full_filename: str,
+    cache_dir: Union[str, Path, None] = None,
+    revision: Optional[str] = None,
+    repo_type: Optional[str] = None,
 ):
     # We try to see if we have a cached version (not up to date):
-    resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
+    resolved_file = try_to_load_from_cache(
+        path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision, repo_type=repo_type
+    )
     if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
         return resolved_file
     return None
@@ -161,13 +167,16 @@ def list_repo_templates(
             return [
                 entry.path.removeprefix(f"{CHAT_TEMPLATE_DIR}/")
                 for entry in list_repo_tree(
-                    repo_id=repo_id, revision=revision, path_in_repo=CHAT_TEMPLATE_DIR, recursive=False
+                    repo_id=repo_id,
+                    revision=revision,
+                    path_in_repo=CHAT_TEMPLATE_DIR,
+                    recursive=False,
                 )
                 if entry.path.endswith(".jinja")
             ]
         except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
             raise  # valid errors => do not catch
-        except (ConnectionError, HTTPError):
+        except (HTTPError, OfflineModeIsEnabled, requests.exceptions.ConnectionError):
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files
@@ -198,14 +207,14 @@ def define_sagemaker_information():
         dlc_tag = None
 
     sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
-    runs_distributed_training = True if "sagemaker_distributed_dataparallel_enabled" in sagemaker_params else False
+    runs_distributed_training = "sagemaker_distributed_dataparallel_enabled" in sagemaker_params
     account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
 
     sagemaker_object = {
         "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
         "sm_region": os.getenv("AWS_REGION", None),
-        "sm_number_gpu": os.getenv("SM_NUM_GPUS", 0),
-        "sm_number_cpu": os.getenv("SM_NUM_CPUS", 0),
+        "sm_number_gpu": os.getenv("SM_NUM_GPUS", "0"),
+        "sm_number_cpu": os.getenv("SM_NUM_CPUS", "0"),
         "sm_distributed_training": runs_distributed_training,
         "sm_deep_learning_container": dlc_container_used,
         "sm_deep_learning_container_tag": dlc_tag,
@@ -275,12 +284,12 @@ def cached_file(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -341,7 +350,7 @@ def cached_files(
             This can be either:
             - a string, the *model id* of a model repo on huggingface.co.
             - a path to a *directory* potentially containing the file.
-        filenames (`List[str]`):
+        filenames (`list[str]`):
             The name of all the files to locate in `path_or_repo`.
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
@@ -352,12 +361,12 @@ def cached_files(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -429,12 +438,11 @@ def cached_files(
                         f"'https://huggingface.co/{path_or_repo_id}/tree/{revision_}' for available files."
                     )
                 else:
-                    return None
+                    continue
             existing_files.append(resolved_file)
 
-    # All files exist
-    if len(existing_files) == len(full_filenames):
-        return existing_files
+    if os.path.isdir(path_or_repo_id):
+        return existing_files if existing_files else None
 
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
@@ -502,7 +510,7 @@ def cached_files(
             raise OSError(
                 f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
                 "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
-                "having permission to this repo either by logging in with `huggingface-cli login` or by passing "
+                "having permission to this repo either by logging in with `hf auth login` or by passing "
                 "`token=<your_token>`"
             ) from e
         elif isinstance(e, RevisionNotFoundError):
@@ -520,7 +528,8 @@ def cached_files(
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
-            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision, repo_type)
+            for filename in full_filenames
         ]
         if all(file is not None for file in resolved_files):
             return resolved_files
@@ -542,7 +551,7 @@ def cached_files(
             elif _raise_exceptions_for_missing_entries:
                 raise OSError(
                     f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, and couldn't find them in the"
-                    f" cached files.\nCheckout your internet connection or see how to run the library in offline mode at"
+                    f" cached files.\nCheck your internet connection or see how to run the library in offline mode at"
                     " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 ) from e
         # snapshot_download will not raise EntryNotFoundError, but hf_hub_download can. If this is the case, it will be treated
@@ -550,7 +559,7 @@ def cached_files(
         elif isinstance(e, HTTPError) and not isinstance(e, EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
-            raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}")
+            raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}") from e
         # Any other Exception type should now be re-raised, in order to provide helpful error messages and break the execution flow
         # (EntryNotFoundError will be treated outside this block and correctly re-raised if needed)
         elif not isinstance(e, EntryNotFoundError):
@@ -570,7 +579,7 @@ def cached_files(
         msg = (
             f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {(*missing_entries,)}"
         )
-        raise EnvironmentError(
+        raise OSError(
             f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
             " for available files."
         )
@@ -590,7 +599,7 @@ def download_url(url, proxies=None):
 
     Args:
         url (`str`): The url of the file to download.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
 
@@ -692,7 +701,7 @@ def has_file(
         raise OSError(
             f"{path_or_repo} is a gated repository. Make sure to request access at "
             f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo either by "
-            "logging in with `huggingface-cli login` or by passing `token=<your_token>`."
+            "logging in with `hf auth login` or by passing `token=<your_token>`."
         ) from e
     except RepositoryNotFoundError as e:
         logger.error(e)
@@ -866,7 +875,7 @@ class PushToHubMixin:
                 Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
+                when running `hf auth login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
                 is not specified.
             max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
@@ -881,7 +890,7 @@ class PushToHubMixin:
                 Branch to push the uploaded files to.
             commit_description (`str`, *optional*):
                 The description of the commit that will be created
-            tags (`List[str]`, *optional*):
+            tags (`list[str]`, *optional*):
                 List of tags to push on the Hub.
 
         Examples:
@@ -1137,7 +1146,7 @@ def create_and_tag_model_card(
     Args:
         repo_id (`str`):
             The repo_id where to look for the model card.
-        tags (`List[str]`, *optional*):
+        tags (`list[str]`, *optional*):
             The list of tags to add in the model card
         token (`str`, *optional*):
             Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.

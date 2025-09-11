@@ -23,7 +23,6 @@ FILES_TO_PARSE = [
     os.path.join(MODEL_ROOT, "rt_detr", "modular_rt_detr.py"),
     os.path.join(MODEL_ROOT, "qwen2", "modular_qwen2.py"),
     os.path.join(MODEL_ROOT, "qwen3", "modular_qwen3.py"),
-    os.path.join(MODEL_ROOT, "qwen3", "modular_qwen3_moe.py"),
     os.path.join(MODEL_ROOT, "llava_next_video", "modular_llava_next_video.py"),
     os.path.join(MODEL_ROOT, "cohere2", "modular_cohere2.py"),
     os.path.join(MODEL_ROOT, "modernbert", "modular_modernbert.py"),
@@ -39,20 +38,30 @@ FILES_TO_PARSE = [
     os.path.join(MODEL_ROOT, "mistral", "modular_mistral.py"),
     os.path.join(MODEL_ROOT, "phi3", "modular_phi3.py"),
     os.path.join(MODEL_ROOT, "cohere", "modular_cohere.py"),
+    os.path.join(MODEL_ROOT, "glm4", "modular_glm4.py"),
+    os.path.join(MODEL_ROOT, "seed_oss", "modular_seed_oss.py"),
 ]
 
 
-def appear_after(model1: str, model2: str, priority_list: list[str]) -> bool:
+def appear_after(model1: str, model2: str, priority_list: list[list[str]]) -> bool:
     """Return True if `model1` appear after `model2` in `priority_list`."""
-    return priority_list.index(model1) > priority_list.index(model2)
+    model1_index, model2_index = None, None
+    for i, level in enumerate(priority_list):
+        if model1 in level:
+            model1_index = i
+        if model2 in level:
+            model2_index = i
+    if model1_index is None or model2_index is None:
+        raise ValueError(f"Model {model1} or {model2} not found in {priority_list}")
+    return model1_index > model2_index
 
 
 class ConversionOrderTest(unittest.TestCase):
     def test_conversion_order(self):
         # Find the order
         priority_list, _ = create_dependency_mapping.find_priority_list(FILES_TO_PARSE)
-        # Extract just the model names
-        model_priority_list = [file.rsplit("modular_")[-1].replace(".py", "") for file in priority_list]
+        # Extract just the model names (list of lists)
+        model_priority_list = [[file.split("/")[-2] for file in level] for level in priority_list]
 
         # These are based on what the current library order should be (as of 09/01/2025)
         self.assertTrue(appear_after("mixtral", "mistral", model_priority_list))
@@ -63,3 +72,4 @@ class ConversionOrderTest(unittest.TestCase):
         self.assertTrue(appear_after("cohere2", "gemma2", model_priority_list))
         self.assertTrue(appear_after("cohere2", "cohere", model_priority_list))
         self.assertTrue(appear_after("phi3", "mistral", model_priority_list))
+        self.assertTrue(appear_after("glm4", "glm", model_priority_list))

@@ -93,7 +93,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class: PreTrainedTokenizer = None
+    slow_tokenizer_class: Optional[type[PreTrainedTokenizer]] = None
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
@@ -134,7 +134,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif not slow_tokenizer:
             # We tried loading a slow_tokenizer with spm and failed, try to load with tiktoken
-            self.vocab_file = kwargs.get("vocab_file", None)
+            self.vocab_file = kwargs.get("vocab_file")
             self.additional_special_tokens = kwargs.get("additional_special_tokens", [])
             fast_tokenizer = convert_slow_tokenizer(self, from_tiktoken=True)
             slow_tokenizer = None
@@ -226,10 +226,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     @property
     def can_save_slow_tokenizer(self) -> bool:
         """
-        `bool`: Whether or not the slow tokenizer can be saved. Usually for sentencepiece based slow tokenizer, this
+        `bool`: Whether or not the slow tokenizer can be saved. For a sentencepiece based slow tokenizer, this
         can only be `True` if the original `"sentencepiece.model"` was not deleted.
         """
-        return True
+        if "vocab_file" in self.vocab_files_names and self.vocab_files_names["vocab_file"].endswith(".model"):
+            if hasattr(self, "vocab_file") and self.vocab_file:
+                # If the vocab file is a sentencepiece model, we can save it
+                return os.path.isfile(self.vocab_file)
+            return False
+        else:
+            return True
 
     @property
     def vocab_size(self) -> int:
@@ -259,7 +265,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
 
         Returns:
-            `Dict[str, int]`: The added tokens.
+            `dict[str, int]`: The added tokens.
         """
         return self._tokenizer.get_added_tokens_decoder()
 
@@ -268,9 +274,15 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         Returns the added tokens in the vocabulary as a dictionary of token to index.
 
         Returns:
-            `Dict[str, int]`: The added tokens.
+            `dict[str, int]`: The added tokens.
         """
         return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key=lambda item: item[0])}
+
+    def __bool__(self) -> bool:
+        """
+        Returns True, to avoid expensive `assert tokenizer` gotchas.
+        """
+        return True
 
     def __len__(self) -> int:
         """
@@ -348,7 +360,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             tokens (`str` or `Iterable[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
-            `int` or `List[int]`: The token id or list of token ids.
+            `int` or `list[int]`: The token id or list of token ids.
         """
         if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
@@ -399,13 +411,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         added tokens.
 
         Args:
-            ids (`int` or `List[int]`):
+            ids (`int` or `list[int]`):
                 The token id (or token ids) to convert to tokens.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
 
         Returns:
-            `str` or `List[str]`: The decoded token(s).
+            `str` or `list[str]`: The decoded token(s).
         """
         if isinstance(ids, int):
             return self._tokenizer.id_to_token(ids)
@@ -545,9 +557,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         )
 
         # Convert encoding to dict
-        # `Tokens` has type: Tuple[
-        #                       List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]],
-        #                       List[EncodingFast]
+        # `Tokens` has type: tuple[
+        #                       list[dict[str, list[list[int]]]] or list[dict[str, 2D-Tensor]],
+        #                       list[EncodingFast]
         #                    ]
         # with nested dimensions corresponding to batch, overflows, sequence length
         tokens_and_encodings = [
@@ -571,7 +583,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # To match each overflowing sample with the original sample in the batch
         # we add an overflow_to_sample_mapping array (see below)
         sanitized_tokens = {}
-        for key in tokens_and_encodings[0][0].keys():
+        for key in tokens_and_encodings[0][0]:
             stack = [e for item, _ in tokens_and_encodings for e in item[key]]
             sanitized_tokens[key] = stack
         sanitized_encodings = [e for _, item in tokens_and_encodings for e in item]
@@ -743,7 +755,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         as the current one.
 
         Args:
-            text_iterator (generator of `List[str]`):
+            text_iterator (generator of `list[str]`):
                 The training corpus. Should be a generator of batches of texts, for instance a list of lists of texts
                 if you have everything in memory.
             vocab_size (`int`):
@@ -752,10 +764,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 The total number of sequences in the iterator. This is used to provide meaningful progress tracking
             new_special_tokens (list of `str` or `AddedToken`, *optional*):
                 A list of new special tokens to add to the tokenizer you are training.
-            special_tokens_map (`Dict[str, str]`, *optional*):
+            special_tokens_map (`dict[str, str]`, *optional*):
                 If you want to rename some of the special tokens this tokenizer uses, pass along a mapping old special
                 token name to new special token name in this argument.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to the trainer from the 🤗 Tokenizers library.
 
         Returns:

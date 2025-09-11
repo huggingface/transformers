@@ -14,7 +14,7 @@
 # limitations under the License.
 """MaskFormer model configuration"""
 
-from typing import Dict, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -113,8 +113,8 @@ class MaskFormerConfig(PretrainedConfig):
         mask_feature_size: int = 256,
         no_object_weight: float = 0.1,
         use_auxiliary_loss: bool = False,
-        backbone_config: Optional[Dict] = None,
-        decoder_config: Optional[Dict] = None,
+        backbone_config: Optional[dict] = None,
+        decoder_config: Optional[dict] = None,
         init_std: float = 0.02,
         init_xavier_std: float = 1.0,
         dice_weight: float = 1.0,
@@ -124,7 +124,7 @@ class MaskFormerConfig(PretrainedConfig):
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[Dict] = None,
+        backbone_kwargs: Optional[dict] = None,
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
@@ -199,6 +199,15 @@ class MaskFormerConfig(PretrainedConfig):
         self.use_timm_backbone = use_timm_backbone
         self.backbone_kwargs = backbone_kwargs
         super().__init__(**kwargs)
+
+    @property
+    def sub_configs(self):
+        sub_configs = {}
+        if self.backbone_config is not None and self.backbone_config != {}:
+            sub_configs["backbone_config"] = type(self.backbone_config)
+        if self.decoder_config is not None and self.decoder_config != {}:
+            sub_configs["decoder_config"] = type(self.decoder_config)
+        return sub_configs
 
     @classmethod
     def from_backbone_and_decoder_configs(

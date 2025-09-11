@@ -56,7 +56,7 @@ Optunaに関しては、[object_parameter](https://optuna.readthedocs.io/en/stab
 ...     }
 ```
 
-Optunaは、多目的のハイパーパラメータ最適化（HPO）を提供しています。 `hyperparameter_search` で `direction` を渡し、複数の目的関数値を返すための独自の `compute_objective` を定義することができます。 Pareto Front（`List[BestRun]`）は `hyperparameter_search` で返され、[test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py) のテストケース `TrainerHyperParameterMultiObjectOptunaIntegrationTest` を参照する必要があります。これは以下のようになります。
+Optunaは、多目的のハイパーパラメータ最適化（HPO）を提供しています。 `hyperparameter_search` で `direction` を渡し、複数の目的関数値を返すための独自の `compute_objective` を定義することができます。 Pareto Front（`list[BestRun]`）は `hyperparameter_search` で返され、[test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py) のテストケース `TrainerHyperParameterMultiObjectOptunaIntegrationTest` を参照する必要があります。これは以下のようになります。
 
 
 ```py

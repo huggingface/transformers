@@ -16,8 +16,9 @@
 
 import math
 import random
+from collections.abc import Iterable
 from functools import lru_cache
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -59,7 +60,7 @@ if is_torchvision_available():
 class FlavaMaskingGenerator:
     def __init__(
         self,
-        input_size: Union[int, Tuple[int, int]] = 14,
+        input_size: Union[int, tuple[int, int]] = 14,
         total_mask_patches: int = 75,
         mask_group_max_patches: Optional[int] = None,
         mask_group_min_patches: int = 16,
@@ -160,7 +161,7 @@ class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         codebook_do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input for codebook to a certain. Can be overridden by the `codebook_do_resize`
             parameter in `preprocess`. `codebook_size`.
-        codebook_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        codebook_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
             `preprocess`.
         codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
@@ -170,7 +171,7 @@ class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Whether to crop the input for codebook at the center. If the input size is smaller than
             `codebook_crop_size` along any edge, the image is padded with 0's and then center cropped. Can be
             overridden by the `codebook_do_center_crop` parameter in `preprocess`.
-        codebook_crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        codebook_crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Desired output size for codebook input when applying center-cropping. Can be overridden by the
             `codebook_crop_size` parameter in `preprocess`.
         codebook_do_rescale (`bool`, *optional*, defaults to `True`):
@@ -260,7 +261,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         return super().preprocess(images, **kwargs)
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
         created using from_dict and kwargs e.g. `FlavaImageProcessor.from_pretrained(checkpoint, codebook_size=600)`
@@ -272,7 +273,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             image_processor_dict["codebook_crop_size"] = kwargs.pop("codebook_crop_size")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    @lru_cache()
+    @lru_cache
     def masking_generator(
         self,
         input_size_patches,
@@ -336,7 +337,6 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
 
         kwargs["size"] = size
         kwargs["crop_size"] = crop_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["codebook_size"] = codebook_size
@@ -348,6 +348,15 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             pil_torch_interpolation_mapping[codebook_resample]
             if isinstance(codebook_resample, (PILImageResampling, int))
             else codebook_resample
+        )
+
+        # torch resize uses interpolation instead of resample
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
         )
 
         return kwargs
@@ -366,10 +375,11 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         do_map_pixels: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> "torch.Tensor":
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -379,7 +389,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -431,6 +441,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         codebook_do_normalize: Optional[bool],
         codebook_image_mean: Optional[Union[float, list[float]]],
         codebook_image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
@@ -447,6 +458,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             do_map_pixels=False,
             image_mean=image_mean,
             image_std=image_std,
+            disable_grouping=disable_grouping,
             return_tensors=return_tensors,
         )
         data = {
@@ -467,6 +479,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
                 do_map_pixels=codebook_do_map_pixels,
                 image_mean=codebook_image_mean,
                 image_std=codebook_image_std,
+                disable_grouping=disable_grouping,
                 return_tensors=return_tensors,
             )
             data["codebook_pixel_values"] = codebook_processed_images

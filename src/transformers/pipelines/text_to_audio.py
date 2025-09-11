@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
-from typing import List, Union
+from typing import Any, Union, overload
 
 from ..generation import GenerationConfig
 from ..utils import is_torch_available
@@ -80,14 +80,25 @@ class TextToAudioPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
     """
 
+    # Introducing the processor at load time for new behaviour
+    _load_processor = True
+
     _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     # Make sure the docstring is updated when the default generation config is changed
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
     )
 
-    def __init__(self, *args, vocoder=None, sampling_rate=None, **kwargs):
+    def __init__(self, *args, vocoder=None, sampling_rate=None, no_processor=True, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Legacy behaviour just uses the tokenizer while new models use the processor as a whole at any given time
+        self.no_processor = no_processor
 
         if self.framework == "tf":
             raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
@@ -116,6 +127,14 @@ class TextToAudioPipeline(Pipeline):
                 sampling_rate = getattr(config, sampling_rate_name, None)
                 if sampling_rate is not None:
                     self.sampling_rate = sampling_rate
+                elif getattr(config, "codec_config", None) is not None:
+                    sampling_rate = getattr(config.codec_config, sampling_rate_name, None)
+                    if sampling_rate is not None:
+                        self.sampling_rate = sampling_rate
+
+        # last fallback to get the sampling rate based on processor
+        if self.sampling_rate is None and not self.no_processor and hasattr(self.processor, "feature_extractor"):
+            self.sampling_rate = self.processor.feature_extractor.sampling_rate
 
     def preprocess(self, text, **kwargs):
         if isinstance(text, str):
@@ -136,7 +155,8 @@ class TextToAudioPipeline(Pipeline):
 
             kwargs = new_kwargs
 
-        output = self.tokenizer(text, **kwargs, return_tensors="pt")
+        preprocessor = self.tokenizer if self.no_processor else self.processor
+        output = preprocessor(text, **kwargs, return_tensors="pt")
 
         return output
 
@@ -173,12 +193,20 @@ class TextToAudioPipeline(Pipeline):
 
         return output
 
-    def __call__(self, text_inputs: Union[str, List[str]], **forward_params):
+    @overload
+    def __call__(self, text_inputs: str, **forward_params: Any) -> dict[str, Any]: ...
+
+    @overload
+    def __call__(self, text_inputs: list[str], **forward_params: Any) -> list[dict[str, Any]]: ...
+
+    def __call__(
+        self, text_inputs: Union[str, list[str]], **forward_params
+    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
-            text_inputs (`str` or `List[str]`):
+            text_inputs (`str` or `list[str]`):
                 The text(s) to generate.
             forward_params (`dict`, *optional*):
                 Parameters passed to the model generation/forward method. `forward_params` are always passed to the
@@ -220,13 +248,30 @@ class TextToAudioPipeline(Pipeline):
 
         return preprocess_params, params, postprocess_params
 
-    def postprocess(self, waveform):
+    def postprocess(self, audio):
         output_dict = {}
-        if isinstance(waveform, dict):
-            waveform = waveform["waveform"]
-        elif isinstance(waveform, tuple):
-            waveform = waveform[0]
-        output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
+
+        if self.model.config.model_type == "csm":
+            waveform_key = "audio"
+        else:
+            waveform_key = "waveform"
+
+        # We directly get the waveform
+        if self.no_processor:
+            if isinstance(audio, dict):
+                waveform = audio[waveform_key]
+            elif isinstance(audio, tuple):
+                waveform = audio[0]
+            else:
+                waveform = audio
+        # Or we need to postprocess to get the waveform
+        else:
+            waveform = self.processor.decode(audio)
+
+        if isinstance(audio, list):
+            output_dict["audio"] = [el.to(device="cpu", dtype=torch.float).numpy() for el in waveform]
+        else:
+            output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
         output_dict["sampling_rate"] = self.sampling_rate
 
         return output_dict

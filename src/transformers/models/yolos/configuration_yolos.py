@@ -15,7 +15,7 @@
 """YOLOS model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 
@@ -57,7 +57,7 @@ class YolosConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        image_size (`List[int]`, *optional*, defaults to `[512, 864]`):
+        image_size (`list[int]`, *optional*, defaults to `[512, 864]`):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.

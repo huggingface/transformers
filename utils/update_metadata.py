@@ -34,7 +34,6 @@ import collections
 import os
 import re
 import tempfile
-from typing import Dict, List, Tuple
 
 import pandas as pd
 from datasets import Dataset
@@ -110,7 +109,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES",
         "AutoModelForVisualQuestionAnswering",
     ),
-    ("image-to-text", "MODEL_FOR_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
+    ("image-to-text", "MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
     (
         "zero-shot-image-classification",
         "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
@@ -121,10 +120,11 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("mask-generation", "MODEL_FOR_MASK_GENERATION_MAPPING_NAMES", "AutoModelForMaskGeneration"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "AutoModelForTextToSpectrogram"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "AutoModelForTextToWaveform"),
+    ("keypoint-matching", "MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES", "AutoModelForKeypointMatching"),
 ]
 
 
-def camel_case_split(identifier: str) -> List[str]:
+def camel_case_split(identifier: str) -> list[str]:
     """
     Split a camel-cased name into words.
 
@@ -152,9 +152,9 @@ def get_frameworks_table() -> pd.DataFrame:
     modules.
     """
     # Dictionary model names to config.
-    config_maping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
+    config_mapping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
     model_prefix_to_model_type = {
-        config.replace("Config", ""): model_type for model_type, config in config_maping_names.items()
+        config.replace("Config", ""): model_type for model_type, config in config_mapping_names.items()
     }
 
     # Dictionaries flagging if each model prefix has a backend in PT/TF/Flax.
@@ -213,7 +213,7 @@ def get_frameworks_table() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> Dict[str, Tuple[str, str]]:
+def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> dict[str, tuple[str, str]]:
     """
     Update the table mapping models to pipelines and auto classes without removing old keys if they don't exist anymore.
 

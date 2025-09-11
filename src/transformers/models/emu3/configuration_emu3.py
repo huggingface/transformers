@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -45,11 +45,11 @@ class Emu3VQVAEConfig(PretrainedConfig):
             Temporal downsample factor.
         base_channels (`int`, *optional*, defaults to 256):
             Basic channel number of the intermediate blocks.
-        channel_multiplier (`List[int]`, *optional*, defaults to `[1, 2, 2, 4]`):
+        channel_multiplier (`list[int]`, *optional*, defaults to `[1, 2, 2, 4]`):
             Channel scaling factor of the intermediate blocks.
         num_res_blocks (`int`, *optional*, defaults to 2):
             Residual block number in each stage.
-        attn_resolutions (`List[int]`, *optional*, defaults to `[3]`):
+        attn_resolutions (`list[int]`, *optional*, defaults to `[3]`):
             Stage indices to apply attention.
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimension of the hidden representations in the attention layer.
@@ -84,9 +84,9 @@ class Emu3VQVAEConfig(PretrainedConfig):
         out_channels: int = 3,
         temporal_downsample_factor: int = 4,
         base_channels: int = 256,
-        channel_multiplier: List[int] = [1, 2, 2, 4],
+        channel_multiplier: list[int] = [1, 2, 2, 4],
         num_res_blocks: int = 2,
-        attn_resolutions: List[int] = [3],
+        attn_resolutions: list[int] = [3],
         hidden_size: int = 1024,
         num_attention_heads: int = 1,
         attention_dropout: float = 0.0,
@@ -138,8 +138,8 @@ class Emu3TextConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -185,11 +185,11 @@ class Emu3TextConfig(PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -241,7 +241,7 @@ class Emu3TextConfig(PretrainedConfig):
         eos_token_id: int = 151850,
         tie_word_embeddings: bool = False,
         rope_theta: float = 1000000.0,
-        rope_scaling: Optional = None,
+        rope_scaling: Optional[dict[str, Any]] = None,
         mlp_bias=False,
         attention_bias=False,
         attention_dropout: float = 0.1,
@@ -302,9 +302,9 @@ class Emu3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vq_config: Union[Dict, Emu3VQVAEConfig] = None,
-        text_config: Union[Dict, Emu3TextConfig] = None,
-        vocabulary_map: Optional[Dict[int, int]] = None,
+        vq_config: Union[dict, Emu3VQVAEConfig] = None,
+        text_config: Union[dict, Emu3TextConfig] = None,
+        vocabulary_map: Optional[dict[int, int]] = None,
         **kwargs,
     ):
         if vq_config is None:
@@ -320,6 +320,7 @@ class Emu3Config(PretrainedConfig):
         self.vq_config = vq_config
         self.text_config = text_config
         self.vocabulary_map = vocabulary_map
+        self.image_token_id = vocabulary_map.get("<image>") if vocabulary_map is not None else None
 
         super().__init__(**kwargs)
 

@@ -19,7 +19,7 @@ import json
 import os
 import re
 import sys
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
@@ -162,7 +162,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
@@ -221,7 +221,7 @@ class SubWordJapaneseTokenizer:
         self.vocab = vocab  # same as swe
         self.ids_to_tokens = ids_to_tokens  # same as bpe
         self.emoji = emoji
-        self.maxlen = np.max([len(w) for w in self.vocab.keys()])
+        self.maxlen = np.max([len(w) for w in self.vocab])
         self.content_repatter1 = re.compile(r"(https?|ftp)(:\/\/[-_\.!~*\'()a-zA-Z0-9;\/?:\@&=\+$,%#]+)")
         self.content_repatter2 = re.compile(r"[A-Za-z0-9\._+]*@[\-_0-9A-Za-z]+(\.[A-Za-z]+)*")
         self.content_repatter3 = re.compile(r"[\(]{0,1}[0-9]{2,4}[\)\-\(]{0,1}[0-9]{2,4}[\)\-]{0,1}[0-9]{3,4}")

@@ -16,20 +16,18 @@
 
 import unittest
 
-from parameterized import parameterized
+import pytest
 
-from transformers import Phi3Config, StaticCache, is_torch_available, set_seed
+from transformers import Phi3Config, StaticCache, is_torch_available
 from transformers.models.auto.configuration_auto import AutoConfig
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     slow,
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -49,13 +47,7 @@ if is_torch_available():
         def __init__(self, model: Phi3ForCausalLM, batch_size: int, max_seq_len: int):
             super().__init__()
             self.model = model
-            self.cache = StaticCache(
-                config=model.config,
-                max_batch_size=batch_size,
-                max_cache_len=max_seq_len,
-                device=self.model.device,
-                dtype=self.model.dtype,
-            )
+            self.cache = StaticCache(config=model.config, max_cache_len=max_seq_len)
 
         def forward(
             self,
@@ -93,127 +85,17 @@ if is_torch_available():
             return response_tokens
 
 
-class Phi3ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-    def get_config(self):
-        return Phi3Config(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-        )
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Phi3
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = Phi3Model(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-        return config, inputs_dict
+class Phi3ModelTester(CausalLMModelTester):
+    config_class = Phi3Config
+    if is_torch_available():
+        base_model_class = Phi3Model
+        causal_lm_class = Phi3ForCausalLM
+        sequence_class = Phi3ForSequenceClassification
+        token_class = Phi3ForTokenClassification
 
 
 @require_torch
-class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (Phi3Model, Phi3ForCausalLM, Phi3ForSequenceClassification, Phi3ForTokenClassification)
         if is_torch_available()
@@ -223,9 +105,8 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         {
             "feature-extraction": Phi3Model,
             "text-classification": Phi3ForSequenceClassification,
-            "text-generation": Phi3ForCausalLM,
             "token-classification": Phi3ForTokenClassification,
-            "zero-shot": Phi3ForSequenceClassification,
+            "text-generation": Phi3ForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -233,150 +114,7 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     test_headmasking = False
     test_pruning = False
-
-    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        return True
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Phi3
-    def setUp(self):
-        self.model_tester = Phi3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Phi3Config, hidden_size=37)
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model with Llama->Phi3,llama->phi3
-    def test_phi3_sequence_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = Phi3ForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_single_label with Llama->Phi3,llama->phi3
-    def test_phi3_sequence_classification_model_for_single_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "single_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = Phi3ForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_multi_label with Llama->Phi3,llama->phi3
-    def test_phi3_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = Phi3ForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    @parameterized.expand([("longrope",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = Phi3Model(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        n_factors = config.hidden_size // config.num_attention_heads // 2
-        config.rope_scaling = {
-            "type": scaling_type,
-            "short_factor": [5.0 for _ in range(n_factors)],
-            "long_factor": [5.0 for _ in range(n_factors)],
-        }
-        scaled_model = Phi3Model(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Scaling changes the RoPE embeddings, both for the short and long outputs
-        self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    @parameterized.expand([("longrope",)])
-    def test_model_rope_scaling_short_long_factor(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        n_factors = config.hidden_size // config.num_key_value_heads // 2
-        config.rope_scaling = {
-            "type": scaling_type,
-            "short_factor": [3.0 for _ in range(n_factors)],
-            "long_factor": [5.0 for _ in range(n_factors)],
-        }
-        input_tensor = ids_tensor([1, 4090], config.vocab_size)
-        # Make sure we don't have padding tokens. If this is the case, then the actual number of "true" tokens may be shorter
-        # than `config.original_max_position_embeddings + 5`, invalidating this test
-        input_tensor[input_tensor == config.pad_token_id] += 1
-        model = Phi3ForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-        generation_args_short = {
-            "max_length": config.original_max_position_embeddings,
-            "temperature": 0.0,
-            "use_cache": True,
-            "do_sample": False,
-            "return_dict_in_generate": True,
-        }
-        output_with_short_factor = model.generate(input_tensor, **generation_args_short)
-        keys_with_short_factor = output_with_short_factor.past_key_values[0][0]
-        generation_args_long = {
-            "max_length": config.original_max_position_embeddings + 5,
-            "temperature": 0.0,
-            "use_cache": True,
-            "do_sample": False,
-            "return_dict_in_generate": True,
-            "output_logits": True,
-        }
-        output_with_long_factor = model.generate(input_tensor, **generation_args_long)
-        keys_with_long_factor = output_with_long_factor.past_key_values[0][0]
-        last_token_logits = output_with_long_factor.logits[-1][-1]
-        regenerated_last_token_logits = model(output_with_long_factor.sequences[:, :-1]).logits[0][-1]
-        keys_with_long_factor = keys_with_long_factor[:, :, : config.original_max_position_embeddings - 1, :]
-
-        # KV cache is re-computed after reaching the (`config.original_max_position_embeddings`+1)th token position
-        self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-2, rtol=1e-2))
-        # Last token generated using long factor
-        torch.testing.assert_close(last_token_logits, regenerated_last_token_logits, rtol=1e-2, atol=1e-2)
+    model_tester_class = Phi3ModelTester
 
 
 @slow
@@ -394,7 +132,12 @@ class Phi3IntegrationTest(unittest.TestCase):
 
         output = model(**input_ids).logits
 
-        EXPECTED_OUTPUT = torch.tensor([[ 0.9979, -1.9449, -2.5613, -2.2110, -0.9323, -2.2726, -3.2468, -2.0122,-1.0021, -1.2764, -1.0876, -1.2358,  3.9385,  6.2152, -0.3695, -2.3285,-1.2907, -1.8238, -1.9941, -2.2098, -0.6923, -1.6793, -1.1660, -2.0469,-0.7369, -1.4101, -1.4091, -3.1694, -1.8383, -1.1952],[ 3.0525,  1.9178,  3.7016,  0.9263,  0.3397,  1.9584,  2.1347,  0.3482, 1.3773,  0.2153,  0.2798,  0.8360,  9.0936, 11.4944, -0.3575, -0.9442,-0.1246,  1.3869,  0.9846,  1.7243,  0.9150,  1.0823,  0.4313,  1.5742, 0.2566, -0.1401, -1.3019,  0.4967,  0.6941,  0.7214]]).to(torch_device)  # fmt: skip
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                [8.9005, 8.5380, 12.0361, 9.1562, 7.4068, 10.2581, 7.8991, 7.2447,7.0626, 7.5760, 7.8315, 9.4076, 16.1104, 20.1290, 7.7500, 7.1947, 6.1550, 7.0563, 8.5344, 8.7248, 7.1359, 7.8237, 7.6817, 7.6395, 7.7924, 6.9702, 6.9097, 8.7074, 9.5768, 8.1145],
+                [18.7090, 18.5701, 19.3660, 21.5171, 17.5042, 17.8716, 16.3554, 17.4617, 18.1623, 16.5641, 17.7547, 18.0193, 23.8355, 29.4481, 16.3864, 16.0560, 16.1543, 18.5507, 18.1343, 17.3883, 17.7422, 17.3012, 16.7657, 17.6874,17.9067, 16.8301, 16.2719, 18.3709, 19.0318, 16.7315],
+            ]
+        ).to(torch_device)  # fmt: skip
 
         torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
 
@@ -455,7 +198,12 @@ class Phi3IntegrationTest(unittest.TestCase):
 
         output = model(**input_ids).logits
 
-        EXPECTED_OUTPUT = torch.tensor([[ 1.8478, -0.5709, -1.6792, -1.2133, -0.7809, -0.8817, -2.0969, -1.1191,-0.7731, -1.0483, -0.5961, -1.3067,  3.1325,  6.9442, -0.4803, -0.9154,-1.3085, -1.0822, -1.1433, -0.7660, -0.8531, -0.9150, -0.6179, -1.6153,-0.2239, -1.3207, -1.1187, -2.4795, -1.4733, -0.4931],[ 3.5839,  2.4722,  3.7130,  1.2032,  0.7356,  2.7777,  2.5256,  0.9157, 1.6431,  0.3533,  0.5100,  1.3512,  8.9873, 10.9815,  0.3530,  0.1473, 0.2051,  1.8553,  1.5988,  2.2268,  1.1897,  1.2829,  0.7894,  1.8895, 0.7666,  0.4122, -0.9316,  0.9936,  1.2722,  0.8263]]).to(torch_device)  # fmt: skip
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                [10.6076, 10.6499, 14.0601, 19.8499, 15.1787, 19.3717, 19.9782, 17.0394, 15.7875, 18.1403, 19.2748, 12.6627, 20.2804, 24.5362, 18.8105, 15.3394, 12.1219, 15.9941, 19.0679, 16.4936, 17.0505, 16.8738, 17.3090, 16.6572, 16.8754, 16.6912, 15.1627, 18.8721, 19.6017, 18.5513],
+                [16.2141, 18.7298, 17.4216, 21.9312, 17.7606, 17.6177, 16.7766, 17.9859, 18.4132, 17.4505, 18.6385, 18.5396, 23.6260, 28.7443, 16.1817, 15.5148, 16.0035, 18.6652, 18.3087, 17.2960, 17.8223, 17.7776, 16.8686, 17.4093, 17.8037, 17.2544, 16.7231, 18.6195, 19.6784, 16.6647],
+            ]
+        ).to(torch_device)  # fmt: skip
 
         torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
 
@@ -511,7 +259,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         See #33586 for more
         """
         model = Phi3ForCausalLM.from_pretrained(
-            "microsoft/Phi-3-mini-4k-instruct", device_map=torch_device, torch_dtype=torch.bfloat16
+            "microsoft/Phi-3-mini-4k-instruct", device_map=torch_device, dtype=torch.bfloat16
         )
         tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
 
@@ -594,6 +342,7 @@ class Phi3IntegrationTest(unittest.TestCase):
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
@@ -604,15 +353,19 @@ class Phi3IntegrationTest(unittest.TestCase):
         from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
         )
 
         model_id = "microsoft/Phi-4-mini-instruct"
 
         tokenizer = AutoTokenizer.from_pretrained(model_id, pad_token="</s>", padding_side="right")
-        EXPECTED_TEXT_COMPLETION = [
-            "You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. A 45-year-old patient with a 10-year history of type 2 diabetes mellitus, who is currently on metformin and a SGLT2 inhibitor, presents with a 2-year history"
-        ]
+
+        expected_text_completions = Expectations(
+            {
+                ("rocm", (9, 5)): ["You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. A 45-year-old patient with a 10-year history of type 2 diabetes mellitus presents with a 2-year history of progressive, non-healing, and painful, 2.5 cm"],
+                ("cuda", None): ["You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. A 45-year-old patient with a 10-year history of type 2 diabetes mellitus, who is currently on metformin and a SGLT2 inhibitor, presents with a 2-year history"],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
@@ -626,7 +379,7 @@ class Phi3IntegrationTest(unittest.TestCase):
             config.rope_scaling["type"] = "default"
 
         # Load model
-        device = "cpu"
+        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"
@@ -635,7 +388,7 @@ class Phi3IntegrationTest(unittest.TestCase):
             model_id,
             config=config,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
@@ -656,7 +409,13 @@ class Phi3IntegrationTest(unittest.TestCase):
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
         # Static Cache + export
-        exported_program = convert_and_export_with_cache(model)
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
+        )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )
