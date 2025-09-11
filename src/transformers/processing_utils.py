@@ -1332,20 +1332,17 @@ class ProcessorMixin(PushToHubMixin):
                         f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                     )
 
-        # BC for `common_kwargs` to update all modality-specific kwargs
+        # For `common_kwargs` just update all modality-specific kwargs with same key/values
         common_kwargs = kwargs.get("common_kwargs", {})
+        ModelProcessorKwargs._defaults["common_kwargs"]
+        common_kwargs.update(ModelProcessorKwargs._defaults.get("common_kwargs", {}))
         if common_kwargs:
             for kwarg in output_kwargs.values():
                 kwarg.update(common_kwargs)
 
         # Finally perform type validation on collected kwargs
-        # NOTE: When we inherit from BaseTypedDict, the bases won't be in MRO of ModelTypedDict
-        # That causes errors if certain type annotations are not defined/imported in model processor
-        # file. So we will pass globalns of `processing_utils.py` manually to bypass it
-        base_globalns = getattr(sys.modules.get(ProcessingKwargs.__module__, None), "__dict__", {})
         for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
-            child_localns = getattr(sys.modules.get(typed_dict_obj.__module__, None), "__dict__", {})
-            type_validator = TypedDictAdapter(typed_dict_obj, globalns=base_globalns, localns=child_localns)
+            type_validator = TypedDictAdapter(typed_dict_obj)
             type_validator.validate_fields(**output_kwargs[key])
         return output_kwargs
 

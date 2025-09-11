@@ -36,7 +36,7 @@ from ...video_utils import VideoInput
 
 
 class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Optional[Union[list[float], float]]
+    fps: Optional[Union[list[float | int] | float | int]]
 
 
 class Qwen2_5_VLImagesKwargs(ImagesKwargs):
