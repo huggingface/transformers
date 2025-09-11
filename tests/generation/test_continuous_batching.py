@@ -15,10 +15,21 @@
 import unittest
 from typing import Optional
 
+import datasets
+import torch
 from parameterized import parameterized
 
-from transformers import AutoConfig
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.generation.continuous_batching.cache import group_layers_by_attn_type
+from transformers.testing_utils import require_torch_gpu, slow
+
+
+CB_MODELS_TO_TEST = [
+    ("Qwen/Qwen3-4B-Instruct-2507", ), # for full attention
+    ("meta-llama/Llama-3.1-8B", ),  # same, but has different modeling code
+    ("google/gemma-2-2b-it", ),  # for hybrid attention
+    ("openai/gpt-oss-20b", ),  # same, but has an attn sink
+]
 
 
 class ContinuousBatchingTest(unittest.TestCase):
@@ -82,3 +93,77 @@ class ContinuousBatchingTest(unittest.TestCase):
                     expected_group_type,
                     f"Test failed for: {layer_types_str = }, {sliding_window = }, {group_types = }",
                 )
+
+    def _test_continuous_batching_parity(self, model_id: str, attn_implementation: str):
+
+        # Prepare common elements
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        prompts = [
+            "Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her "
+                "friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh "
+                "duck egg. How much in dollars does she make every day at the farmers' market? The answer is:",
+            "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take? "
+                "The answer is:",
+            "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. "
+                "This increased the value of the house by 150%. How much profit did he make? The answer is:",
+        ]  # fmt: skip
+        batched_inputs = [tokenizer.encode(prompt) for prompt in prompts]
+
+        # Generation with continuous batching
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, attn_implementation=attn_implementation, dtype="auto",
+        ).cuda().eval()
+        model.generation_config.max_new_tokens = 40
+        model.generation_config.do_sample = False
+        model.generation_config.use_cuda_graph = False
+
+        cb_outputs = model.generate_batch(inputs=batched_inputs, generation_config=model.generation_config)
+
+        # Generation without continuous batching
+        if attn_implementation == "sdpa_paged":
+            non_cb_attn_implementation = "sdpa"
+        elif attn_implementation == "eager_paged":
+            non_cb_attn_implementation = "eager"
+        else:
+            raise ValueError(f"Invalid attention implementation: {attn_implementation}")
+
+        # We regenerate the model because just changing the attn_implementation does not work
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, attn_implementation=non_cb_attn_implementation, dtype="auto",
+        ).cuda().eval()
+        model.generation_config.max_new_tokens = 40
+        model.generation_config.do_sample = False
+        model.generation_config.use_cuda_graph = False
+
+        for request_id, request in cb_outputs.items():
+            input_ids = torch.tensor([request.prompt_ids]).cuda()
+            attention_mask = torch.ones_like(input_ids)
+            outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=model.generation_config)
+            generated_tokens = outputs[0][input_ids.shape[1] :]
+            ref_decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+            input_ids = input_ids.tolist()[0]
+
+            cb_decoded_output = tokenizer.decode(request.generated_tokens, skip_special_tokens=True)
+            self.assertEqual(
+                ref_decoded_output,
+                cb_decoded_output,
+                msg=f"Test failed with {request_id = }\nRef:{repr(ref_decoded_output)}\nOut:{repr(cb_decoded_output)}"
+            )
+
+    @require_torch_gpu
+    @slow
+    @parameterized.expand(CB_MODELS_TO_TEST)
+    def test_continuous_batching_parity_eager(self, model_id: str) -> None:
+        self._test_continuous_batching_parity(model_id, "eager_paged")
+
+    @require_torch_gpu
+    @slow
+    @parameterized.expand(CB_MODELS_TO_TEST[: -1])  # GPT-OSS is not collected: it has an attn sink incompatible w/ SDPA
+    def test_continuous_batching_parity_sdpa(self, model_id: str) -> None:
+        self._test_continuous_batching_parity(model_id, "sdpa_paged")
+
+    # @require_torch_gpu
+    # @require_flash_attn
+    # @slow
+    # def test_continuous_batching_parity_flash(self, model_id: str) -> None:
+    #     self._test_continuous_batching_parity(model_id, "flash_attn")
