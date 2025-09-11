@@ -474,7 +474,7 @@ class TrainerMemoryTracker:
         if self.skip_memory_metrics:
             return
 
-        import psutil  # noqa
+        import psutil
 
         if is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available():
             import torch
