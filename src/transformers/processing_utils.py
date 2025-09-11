@@ -24,7 +24,6 @@ import os
 import sys
 import typing
 import warnings
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
@@ -50,7 +49,7 @@ from .utils.type_validators import (
     truncation_validator,
     video_metadata_validator,
 )
-from .video_utils import VideoInput, VideoMetadata
+from .video_utils import VideoInput, VideoMetadataType
 
 
 if is_vision_available():
@@ -301,9 +300,7 @@ class VideosKwargs(TypedDict, total=False):
     input_data_format: Optional[Union[str, ChannelDimension]]
     device: Annotated[Optional[str], device_validator()]
     do_sample_frames: Optional[bool]
-    video_metadata: Annotated[
-        Optional[Union[VideoMetadata, dict, Iterable[VideoMetadata, dict]]], video_metadata_validator()
-    ]
+    video_metadata: Annotated[Optional[VideoMetadataType], video_metadata_validator()]
     fps: Annotated[Optional[Union[int, float]], positive_any_number()]
     num_frames: Annotated[Optional[int], positive_int()]
     return_metadata: Optional[bool]

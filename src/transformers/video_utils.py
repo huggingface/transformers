@@ -112,6 +112,11 @@ class VideoMetadata(Mapping):
                 setattr(self, key, value)
 
 
+VideoMetadataType = Union[
+    VideoMetadata, dict, list[Union[dict, VideoMetadata]], list[list[Union[dict, VideoMetadata]]]
+]
+
+
 def is_valid_video_frame(frame):
     return isinstance(frame, PIL.Image.Image) or (
         (is_numpy_array(frame) or is_torch_tensor(frame)) and frame.ndim == 3
@@ -215,7 +220,7 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
     return flat_videos_list
 
 
-def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadata, dict]):
+def make_batched_metadata(videos: VideoInput, video_metadata: VideoMetadataType) -> list[VideoMetadata]:
     if video_metadata is None:
         # Create default metadata and fill attributes we can infer from given video
         video_metadata = [

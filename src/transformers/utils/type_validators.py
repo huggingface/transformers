@@ -1,11 +1,11 @@
-from collections.abc import Iterable
+from collections.abc import Sequence
 from dataclasses import MISSING, field, make_dataclass
 from typing import Annotated, Any, ForwardRef, Optional, TypedDict, Union, get_args, get_origin
 
 from huggingface_hub.dataclasses import as_validated_field, strict
 
 from ..tokenization_utils_base import PaddingStrategy, TruncationStrategy
-from ..video_utils import VideoMetadata
+from ..video_utils import VideoMetadataType
 from .generic import TensorType
 from .import_utils import is_vision_available
 
@@ -172,22 +172,35 @@ def resampling_validator(value: Optional[Union[int, "PILImageResampling"]] = Non
 
 
 @as_validated_field
-def video_metadata_validator(value: Optional[Union[VideoMetadata, dict, Iterable[VideoMetadata, dict]]] = None):
-    possible_keys = ["total_num_frames", "fps", "width", "height", "duration", "video_backend", "frames_indices"]
+def video_metadata_validator(value: Optional[VideoMetadataType] = None):
     if value is None:
-        pass
-    elif isinstance(value, Iterable) and not all(isinstance(item, (VideoMetadata, dict)) for item in value):
-        raise ValueError(
-            f"If `video_metadata` is a list, each item in the list should be either a dict or a `VideoMetadata` object but got video_metadata={value}"
-        )
-    elif isinstance(value, dict) and not all(key in possible_keys for key in value.keys()):
-        raise ValueError(
-            f"If video_metadata is a dict, the keys should be one of {possible_keys} but got device={value.keys()}"
-        )
-    elif not isinstance(value, (VideoMetadata, dict, Iterable)):
-        raise ValueError(
-            f"Video metadata must be either a dict, a VideoMetadata or a batched list of metadata, but got device={value}"
-        )
+        return
+
+    valid_keys = ["total_num_frames", "fps", "width", "height", "duration", "video_backend", "frames_indices"]
+
+    def check_dict_keys(d: dict) -> bool:
+        return all(key in valid_keys for key in d.keys())
+
+    if isinstance(value, Sequence) and isinstance(value[0], Sequence) and isinstance(value[0][0], dict):
+        for sublist in value:
+            for item in sublist:
+                if not check_dict_keys(item):
+                    raise ValueError(
+                        f"Invalid keys found in video metadata. Valid keys: {valid_keys} got: {list(item.keys())}"
+                    )
+
+    elif isinstance(value, Sequence) and isinstance(value[0], dict):
+        for item in value:
+            if not check_dict_keys(item):
+                raise ValueError(
+                    f"Invalid keys found in video metadata. Valid keys: {valid_keys} got: {list(item.keys())}"
+                )
+
+    elif isinstance(value, dict):
+        if not check_dict_keys(value):
+            raise ValueError(
+                f"Invalid keys found in video metadata. Valid keys: {valid_keys}, got: {list(value.keys())}"
+            )
 
 
 @as_validated_field
