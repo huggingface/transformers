@@ -1568,8 +1568,7 @@ class Florence2Model(LlavaModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        cache_position: Optional[torch.LongTensor] = None
     ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1619,8 +1618,7 @@ class Florence2Model(LlavaModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            return_dict=True,
-            **kwargs,
+            return_dict=True
         )
 
         return Florence2Seq2SeqModelOutput(
@@ -1731,7 +1729,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            **kwargs,
+            # **kwargs, ## TODO: add back when Bart attention is refactored and takes kwargs
         )
 
         hidden_states = outputs[0]
