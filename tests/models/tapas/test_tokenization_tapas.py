@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from parameterized import parameterized
 
-from transformers import AddedToken, is_flax_available, is_mlx_available, is_tf_available, is_torch_available
+from transformers import AddedToken, is_mlx_available, is_torch_available
 from transformers.models.tapas.tokenization_tapas import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
@@ -1184,18 +1184,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer_return_type.append("np")
             output_tensor_type.append(np.int64)
 
-        if is_tf_available():
-            import tensorflow as tf
-
-            tokenizer_return_type.append("tf")
-            output_tensor_type.append(tf.int32)
-
-        if is_flax_available():
-            import jax.numpy as jnp
-
-            tokenizer_return_type.append("jax")
-            output_tensor_type.append(jnp.int32)
-
         if is_mlx_available():
             import mlx.core as mx
 
@@ -1203,7 +1191,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             output_tensor_type.append(mx.int32)
 
         if len(tokenizer_return_type) == 0:
-            self.skipTest(reason="No expected framework from PT, TF, JAX or MLX found")
+            self.skipTest(reason="No expected framework from PT, or MLX found")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
