@@ -3,7 +3,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-check_dirs := examples tests src utils
+check_dirs := examples tests src utils scripts benchmark benchmark_v2
 
 exclude_folders :=  ""
 
@@ -52,6 +52,7 @@ repo-consistency:
 	python utils/check_doctest_list.py
 	python utils/update_metadata.py --check-only
 	python utils/check_docstrings.py
+	python utils/add_dates.py
 
 # this target runs checks on all files
 

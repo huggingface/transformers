@@ -22,6 +22,7 @@ import warnings
 from copy import deepcopy
 
 import numpy as np
+import pytest
 import requests
 from packaging import version
 
@@ -36,7 +37,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+
+
+if is_torchvision_available():
+    from transformers.image_processing_utils_fast import BaseImageProcessorFast
 
 
 if is_torch_available():
@@ -240,6 +245,16 @@ class ImageProcessingTestMixin:
         slow_time = measure_time(image_processor_slow, dummy_images)
 
         self.assertLessEqual(fast_time, slow_time)
+
+    def test_is_fast(self):
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+
+            # Check is_fast is set correctly
+            if is_torchvision_available() and issubclass(image_processing_class, BaseImageProcessorFast):
+                self.assertTrue(image_processor.is_fast)
+            else:
+                self.assertFalse(image_processor.is_fast)
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processor_list:
@@ -600,6 +615,7 @@ class ImageProcessingTestMixin:
     @slow
     @require_torch_accelerator
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")

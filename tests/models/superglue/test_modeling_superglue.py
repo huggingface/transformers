@@ -13,12 +13,13 @@
 # limitations under the License.
 import inspect
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -423,3 +424,5 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
             torch.sum(~torch.isclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-2)) < 4
         )
         self.assertTrue(torch.sum(predicted_matches_values != expected_matches_values) < 4)
+        self.assertTrue(torch.all(outputs.matches[0, 1] < torch.sum(outputs.mask[0, 0])))
+        self.assertTrue(torch.all(outputs.matches[0, 0] < torch.sum(outputs.mask[0, 1])))

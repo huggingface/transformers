@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2025-07-15.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -47,7 +48,7 @@ from transformers import pipeline
 generator = pipeline(
     task="text-generation",
     model="jhu-clsp/ettin-decoder-17m",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 generator("The future of artificial intelligence is", max_length=50, num_return_sequences=1)
@@ -56,7 +57,7 @@ generator("The future of artificial intelligence is", max_length=50, num_return_
 classifier = pipeline(
     task="text-classification",
     model="jhu-clsp/ettin-decoder-17m",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 classifier("This movie is really great!")
@@ -72,12 +73,12 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-17m")
 model = AutoModelForCausalLM.from_pretrained(
     "jhu-clsp/ettin-decoder-17m",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
 )
 
 prompt = "The future of artificial intelligence is"
-inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model.generate(
@@ -97,13 +98,13 @@ from transformers import AutoModelForSequenceClassification
 
 classifier_model = AutoModelForSequenceClassification.from_pretrained(
     "jhu-clsp/ettin-decoder-17m",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     num_labels=2
 )
 
 text = "This movie is really great!"
-inputs = tokenizer(text, return_tensors="pt").to("cuda")
+inputs = tokenizer(text, return_tensors="pt").to(classifier_model.device)
 
 with torch.no_grad():
     outputs = classifier_model(**inputs)
@@ -129,13 +130,13 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-1b")
 model = AutoModelForCausalLM.from_pretrained(
     "jhu-clsp/ettin-decoder-1b",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     quantization_config=quantization_config
 )
 
 prompt = "The future of artificial intelligence is"
-inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model.generate(

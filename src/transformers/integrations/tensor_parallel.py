@@ -40,7 +40,7 @@ if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
 
 def initialize_tensor_parallelism(tp_plan, tp_size=None):
     r"""
-    Sets up the device mesh and initilized the backend for tensor parallelism.
+    Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
     """
     if tp_plan is None:
@@ -60,7 +60,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
 
             backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
             backend = backend_map.get(device_type)
-            if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", 0)):
+            if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", "0")):
                 backend = "ccl"
             if device_type == "xpu" and not is_torch_greater_or_equal("2.8", accept_dev=True):
                 backend = "ccl"
@@ -128,7 +128,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
 
     The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
-    not parrent classes for `post_init` calls
+    not parent classes for `post_init` calls
     """
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
     if generic_param_name in tp_plan:
@@ -138,7 +138,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     return None
 
 
-str_to_torch_dtype = {
+str_to_dtype = {
     "BOOL": torch.bool,
     "U8": torch.uint8,
     "I8": torch.int8,
@@ -150,7 +150,6 @@ str_to_torch_dtype = {
     "F64": torch.float64,
     "I64": torch.int64,
     "F8_E4M3": torch.float8_e4m3fn,
-    "F8_E5M2": torch.float8_e5m2,
 }
 
 
@@ -219,7 +218,7 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     if casted:
         return tensor
     else:
-        return tensor.to(str_to_torch_dtype[slice_dtype])
+        return tensor.to(str_to_dtype[slice_dtype])
 
 
 def repack_weights(
@@ -526,43 +525,6 @@ class ReplicateParallel(TensorParallelLayer):
         return param
 
 
-class ReduceFromModelParallelRegion(torch.autograd.Function):
-    """
-    All-reduce in forward pass, identity in backward pass.
-    This is the `g` function in the paper: https://arxiv.org/abs/1909.08053
-    """
-
-    @staticmethod
-    def forward(ctx, x, device_mesh):
-        if device_mesh.size() == 1:
-            return x
-        dist.all_reduce(x, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
-        return x
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return grad_output
-
-
-class CopyToModelParallelRegion(torch.autograd.Function):
-    """
-    Copy in forward pass, all-reduce in backward pass.
-    This is the `f` function in the paper: https://arxiv.org/abs/1909.08053
-    """
-
-    @staticmethod
-    def forward(ctx, x, device_mesh):
-        ctx.device_mesh = device_mesh
-        return x
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        if ctx.device_mesh.size() == 1:
-            return grad_output
-        dist.all_reduce(grad_output, op=dist.ReduceOp.SUM, group=ctx.device_mesh.get_group())
-        return grad_output
-
-
 class ColwiseParallel(TensorParallelLayer):
     """
     General tensor parallel layer for transformers.
@@ -585,8 +547,15 @@ class ColwiseParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        # TODO: figure out dynamo support for instance method and switch this to instance method
         # annotate module input placements/sharding with input_layouts
         input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        # transform the input layouts to the desired layouts of ColwiseParallel
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
         return input_tensor
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -595,19 +564,41 @@ class ColwiseParallel(TensorParallelLayer):
         # weight would become Shard(1)
         if param_type == "bias":
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
+            shard = [Shard(-1)]
         else:
+            shard = [Shard(-2)]
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
 
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
-
+        if self.use_dtensor:
+            parameter = DTensor.from_local(
+                parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride()
+            )
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        outputs = CopyToModelParallelRegion.apply(outputs, device_mesh)
-        return outputs
+        # outputs is a shard on last dimension DTensor, i.e. Shard(-1)
+        if outputs.placements != output_layouts:
+            outputs = outputs.redistribute(placements=output_layouts, async_op=False)
+        # back to local tensor
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
+
+
+class PackedColwiseParallel(ColwiseParallel):
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
+        # means Colwise as Linear is input * weight^T + bias, where
+        # weight would become Shard(1)
+        parameter = get_packed_weights(param, empty_param, device_mesh, rank, -2)
+        parameter = parameter.to(param_casting_dtype)
+        if to_contiguous:
+            parameter = parameter.contiguous()
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
+        return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
 class RowwiseParallel(TensorParallelLayer):
@@ -644,31 +635,50 @@ class RowwiseParallel(TensorParallelLayer):
         self.use_dtensor = use_dtensor
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        if param_type == "bias":
-            parameter = param[:]
-        else:
+        # Rowwise shard weight to Shard(1), bias to Replicate(), weight be Shard(1)
+        # means Rowwise as nn.Linear is input * weight^T + bias, where
+        # weight would become Shard(0)
+        if param_type != "bias":
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
+            shard = [Shard(-1)]
+        else:
+            shard = [Replicate()]
+            parameter = param[:]
 
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
-
+        if self.use_dtensor:
+            parameter = DTensor.from_local(
+                parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride()
+            )
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         if hasattr(mod, "bias") and mod.bias is not None:
-            mod._bias = mod.bias
+            mod._bias = mod.bias.to_local()
             mod.bias = None
 
         input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
         return input_tensor
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        outputs = ReduceFromModelParallelRegion.apply(outputs, device_mesh)
+        # Rowwise sharding produces partial output, depending on output layouts:
+        # 1. to replicate -> allreduce
+        # 2. to shard -> reduce_scatter
+        if outputs.placements != output_layouts:
+            outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+        outputs = outputs.to_local()  # otherwise the `+=` op will gather
         if hasattr(mod, "_bias"):
-            outputs += mod._bias
+            outputs = outputs + mod._bias
+        # back to local tensor if use_local_output is True
         return outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
@@ -692,21 +702,6 @@ class RowwiseParallel(TensorParallelLayer):
                 partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
                 partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
             )
-
-
-class PackedColwiseParallel(ColwiseParallel):
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        # NOTE(3outeille): need to be deprecated as no longer using dtensors
-        # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
-        # means Colwise as Linear is input * weight^T + bias, where
-        # weight would become Shard(1)
-        parameter = get_packed_weights(param, empty_param, device_mesh, rank, -2)
-        parameter = parameter.to(param_casting_dtype)
-        if to_contiguous:
-            parameter = parameter.contiguous()
-        if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
-        return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
 class PackedRowwiseParallel(RowwiseParallel):
@@ -851,7 +846,7 @@ class RouterParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         """
         Imagine if you had 4 tokens, top_k = 4, and 128experts.
-        With EP = 8.
+        With EP = 8. The num_local_expert should be 128/8 = 16
         Imagine router_indices being:
         [ 52,  42, 119,  67],
         [102,  89,  61,  40],
@@ -865,12 +860,12 @@ class RouterParallel(TensorParallelLayer):
         [5, 6, 0, 2],
         [5, 1, 6, 0],
 
-        Thus for say rank 0, you fill with 0 the index tensor
+        Thus for say rank 0, you fill with 16 (num_local_expert) the index tensor
 
-        [ 0, 0, 0, 0],
-        [ 0, 0, 0, 0],
-        [ 0, 0, 4, 0],
-        [ 0, 0, 0, 11],
+        [ 16, 16, 16, 16],
+        [ 16, 16, 16, 16],
+        [ 16, 16, 4, 16],
+        [ 16, 16, 16, 11],
 
         This works well. For another rank you need to make sure you round to num_local_expert
         because the next operation will one hot encode the router index vector.
@@ -881,13 +876,25 @@ class RouterParallel(TensorParallelLayer):
 
         The kinda naive training loop that we use for device_map "auto" uses a similar logic.
         Here we are just making each rank believe that he is alone, and he computes his part of the hiddenstates.
+        Mask invalid indices with num_local_expert for one-hot encoding, so the computes will skip the masking index.
         """
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
+        if mod.num_experts % ep_size != 0:
+            raise ValueError(
+                f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
+            )
         num_local_experts = mod.num_experts // ep_size
         router_scores, router_indices = outputs
         router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
-        router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, 0)
-        router_indices = router_indices % num_local_experts
+        router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
+        # As -1 % 1 is 0, we can only use mask fill when num_local_experts is 1
+        if num_local_experts > 1:
+            router_indices = torch.fmod(router_indices, num_local_experts)
+        else:
+            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
+        router_indices = router_indices.masked_fill(
+            router_indices == -1, num_local_experts
+        )  # masking class for one hot
         return router_scores, router_indices
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -1002,7 +1009,7 @@ def add_tensor_parallel_hooks_to_module(
 
 
 def shard_and_distribute_module(
-    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh
+    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh, set_param=True
 ):  # TODO: rename to shard_and_distribute_param
     r"""
     This function is called in `from_pretrained` when loading a model's checkpoints.
@@ -1018,8 +1025,7 @@ def shard_and_distribute_module(
 
     """
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
-    tp_plan = model._tp_plan or {}
-    tp_plan.update(getattr(type(model), "_tp_plan", {}))
+    tp_plan = model.tp_plan or {}
     module_to_tp = model.get_submodule(param_name)  # TODO: can i loop over modules?
     rank = int(rank)
     current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
@@ -1084,42 +1090,26 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 
 
 def distribute_model(model, distributed_config, device_mesh, tp_size):
-    _plan = "_tp_plan"
-    tp_plan = getattr(model, "_tp_plan", {}).copy()
-    model._tp_plan = getattr(model.config, "base_model_tp_plan").copy()
-    model._tp_plan.update(tp_plan)
     model._tp_size = tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
-        if distributed_config.enable_expert_parallel:
-            _plan = "_ep_plan"
-            model._tp_plan = getattr(model.config, "base_model_ep_plan", model._tp_plan).copy()
-
-    # now fetch my childrens
-    for name, module in model.named_children():
-        if plan := getattr(module, _plan, getattr(module, "tp_plan", None)):
-            model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
-        if hasattr(module, "config"):
-            plan = getattr(module.config, f"base_model{_plan}", {})
-            if plan == {}:
-                plan = getattr(module.config, "base_model_tp_plan", {})
-            model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
-
-    if model._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-        for v in model._tp_plan.values():
+        model.config.distributed_config = distributed_config
+    model_plan = model.tp_plan
+    if model_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+        for v in model_plan.values():
             if v not in ALL_PARALLEL_STYLES:
                 raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")
         for name, module in model.named_modules():
             if not getattr(module, "_is_hooked", False):
                 from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
 
-                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model._tp_plan, is_weight=False)
+                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model_plan, is_weight=False)
                 add_tensor_parallel_hooks_to_module(
                     model=model,
                     module=module,
-                    tp_plan=model._tp_plan,
+                    tp_plan=model_plan,
                     layer_name="",
                     current_module_plan=plan,
                     device_mesh=device_mesh,

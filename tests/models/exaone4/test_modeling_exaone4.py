@@ -18,7 +18,6 @@ import unittest
 
 import pytest
 from packaging import version
-from parameterized import parameterized
 
 from transformers import (
     AutoTokenizer,
@@ -31,7 +30,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -97,78 +95,6 @@ class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
         self.model_tester = Exaone4ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Exaone4Config, hidden_size=37)
 
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("EXAONE 4.0 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("EXAONE 4.0 has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("EXAONE 4.0 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("EXAONE 4.0 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("EXAONE 4.0 has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("EXAONE 4.0 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip("EXAONE 4.0 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("EXAONE 4.0 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("EXAONE 4.0 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(
-        "EXAONE 4.0 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "EXAONE 4.0 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "EXAONE 4.0 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip("EXAONE 4.0 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
-    def test_eager_matches_fa2_generate(self):
-        pass
-
-    @unittest.skip(
-        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
-        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 @require_torch
 class Exaone4IntegrationTest(unittest.TestCase):
@@ -185,7 +111,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
     def test_model_logits(self):
         input_ids = [405, 7584, 79579, 76636, 2907, 94640, 373]
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.float16, attn_implementation="eager"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.float16, attn_implementation="eager"
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
@@ -236,7 +162,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
     def test_model_logits_bf16(self):
         input_ids = [405, 7584, 79579, 76636, 2907, 94640, 373]
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.bfloat16, attn_implementation="eager"
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
@@ -289,7 +215,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         prompt = "Tell me about the Miracle on the Han river."
         tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.float16, attn_implementation="eager"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.float16, attn_implementation="eager"
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -301,13 +227,12 @@ class Exaone4IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @require_torch_sdpa
     def test_model_generation_bf16_sdpa(self):
         EXPECTED_TEXT = "Tell me about the Miracle on the Han river.\n\nThe Miracle on the Han River is a story about the miracle of the Korean War Armistice.\n\nThe Korean War broke out in 35 years ago in 1950. The war was the result of the ideological conflict between the communist north and the capitalist south. The war was brought to a halt in 1953. There was to be peace talks but no peace treaty. As a result of the stalemate the Korean people have neither a peace treaty nor a reunification nor a democratization of Korea. The stalemate of 35 years has produced a people of 70 million"
         prompt = "Tell me about the Miracle on the Han river."
         tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="sdpa"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.bfloat16, attn_implementation="sdpa"
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -325,7 +250,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT_TOKEN_IDS = [433, 9055]
         input_ids = [433, 9055] * 2048
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.float16, attn_implementation="flash_attention_2"
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
 
@@ -336,7 +261,6 @@ class Exaone4IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    @require_torch_sdpa
     def test_model_generation_beyond_sliding_window(self):
         EXPECTED_TEXT_COMPLETION = (
             " but I'm not sure if I'm going to be able to see it. I really enjoy the scenery, but I'm not sure if I"
@@ -344,7 +268,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
         prompt = "This is a nice place. " * 700 + "I really enjoy the scenery,"
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.float16, attn_implementation="sdpa"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.float16, attn_implementation="sdpa"
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -354,6 +278,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         del model
         cleanup(torch_device, gc_collect=True)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
@@ -381,7 +306,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         model = Exaone4ForCausalLM.from_pretrained(
             self.TEST_MODEL_ID,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,

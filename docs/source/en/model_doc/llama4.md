@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-05 and added to Hugging Face Transformers on 2025-04-05.*
 
 # Llama4
 
@@ -25,7 +26,7 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-Llama 4, developed by Meta, introduces a new auto-regressive Mixture-of-Experts (MoE) architecture.
+[Llama 4](https://ai.meta.com/blog/llama-4-multimodal-intelligence/), developed by Meta, introduces a new auto-regressive Mixture-of-Experts (MoE) architecture.
 This generation includes two models:
 - The highly capable Llama 4 Maverick with 17B active parameters out of ~400B total, with 128 experts.
 - The efficient Llama 4 Scout also  has 17B active parameters out of ~109B total, using just 16 experts.
@@ -70,7 +71,7 @@ pipe = pipeline(
     "text-generation",
     model=model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 output = pipe(messages, do_sample=False, max_new_tokens=200)
@@ -96,7 +97,7 @@ inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, ret
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
@@ -117,7 +118,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/0052a70beed5bf71b92610a43a52df6d286cd5f3/diffusers/rabbit.jpg"
@@ -161,7 +162,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 url1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/0052a70beed5bf71b92610a43a52df6d286cd5f3/diffusers/rabbit.jpg"
@@ -204,7 +205,7 @@ We will work to enable running with `device_map="auto"` and flex-attention witho
 tensor-parallel in the future.
 
 ```py
-from transformers import Llama4ForConditionalGeneration, AutoTokenizer
+from transformers import Llama4ForConditionalGeneration, AutoTokenizer, infer_device
 import torch
 import time
 
@@ -219,7 +220,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
     attn_implementation="flex_attention",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 messages = [
@@ -227,7 +228,9 @@ messages = [
 ]
 input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-torch.cuda.synchronize()
+device = infer_device()
+torch_device_module = getattr(torch, device, torch.cuda)
+torch_device_module.synchronize()
 start = time.time()
 out = model.generate(
     input_ids.to(model.device),
@@ -237,7 +240,7 @@ out = model.generate(
 )
 print(time.time()-start)
 print(tokenizer.batch_decode(out[:, input_ids.shape[-1]:]))
-print(f"{torch.cuda.max_memory_allocated(model.device) / 1024**3:.2f} GiB")
+print(f"{torch_device_module.max_memory_allocated(model.device) / 1024**3:.2f} GiB")
 ```
 
 </hfoption>
@@ -272,7 +275,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     attn_implementation="flex_attention",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 ```
 </hfoption>
@@ -287,7 +290,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     attn_implementation="sdpa",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 ```
 </hfoption>
@@ -301,7 +304,7 @@ import torch
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 ```
 </hfoption>
@@ -338,7 +341,7 @@ inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, ret
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     quantization_config=FbgemmFp8Config()
 )
 
@@ -368,7 +371,7 @@ inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, ret
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     tp_plan="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
@@ -393,7 +396,7 @@ import torch
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 ```
 

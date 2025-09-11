@@ -63,7 +63,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.55.0.dev0")
+check_min_version("4.57.0.dev0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)

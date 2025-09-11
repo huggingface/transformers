@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-02-20 and added to Hugging Face Transformers on 2025-02-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -49,7 +50,7 @@ from transformers import pipeline
 image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 
-pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip2-base-patch16-224", device=0, torch_dtype=torch.bfloat16)
+pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip2-base-patch16-224", device=0, dtype=torch.bfloat16)
 pipeline(image, candidate_labels=candidate_labels)
 ```
 
@@ -62,7 +63,7 @@ import requests
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -73,7 +74,7 @@ candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 texts = [f'This is a photo of {label}.' for label in candidate_labels]
 
 # IMPORTANT: we pass `padding=max_length` and `max_length=64` since the model was trained with this
-inputs = processor(text=texts, images=image, padding="max_length", max_length=64, return_tensors="pt").to("cuda")
+inputs = processor(text=texts, images=image, padding="max_length", max_length=64, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -92,7 +93,7 @@ import requests
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-naflex")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -101,7 +102,7 @@ candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 texts = [f'This is a photo of {label}.' for label in candidate_labels]
 
 # default value for `max_num_patches` is 256, but you can increase resulted image resolution providing higher values e.g. `max_num_patches=512`
-inputs = processor(text=texts, images=image, padding="max_length", max_num_patches=256, return_tensors="pt").to("cuda")
+inputs = processor(text=texts, images=image, padding="max_length", max_num_patches=256, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -136,7 +137,7 @@ candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 texts = [f'This is a photo of {label}.' for label in candidate_labels]
 
 # IMPORTANT: we pass `padding=max_length` and `max_length=64` since the model was trained with this
-inputs = processor(text=texts, images=image, padding="max_length", max_length=64, return_tensors="pt").to("cuda")
+inputs = processor(text=texts, images=image, padding="max_length", max_length=64, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -148,7 +149,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 
 ## Notes
 
-- Training is supported for DDP and FSDP on single-node multi-GPU setups. However, it does not use [torch.distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) utilities which may limit the scalability of batch size.
+- Training is supported for DDP and FSDP on single-node multi-accelerator setups. However, it does not use [torch.distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) utilities which may limit the scalability of batch size.
 - When using the standalone [`GemmaTokenizerFast`] make sure to pass `padding="max_length"` and `max_length=64` as that's how the model was trained.
 - Model was trained with *lowercased* text, so make sure your text labels are preprocessed the same way.
 - To get the same results as the [`Pipeline`], a prompt template of `"This is a photo of {label}."` should be passed to the processor.
@@ -164,7 +165,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
     model = SiglipModel.from_pretrained(
         "google/siglip2-so400m-patch14-384",
         attn_implementation="flash_attention_2",
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
         device_map=device,
     )
     ```

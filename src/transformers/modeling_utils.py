@@ -44,22 +44,18 @@ from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
-from transformers.utils import is_torchao_available
-
-
-if is_torchao_available():
-    from torchao.quantization import Int4WeightOnlyConfig
-
 from .configuration_utils import PretrainedConfig
+from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
+from .integrations.hub_kernels import is_kernel, load_and_register_kernel
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
@@ -72,17 +68,10 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
-from .pytorch_utils import (  # noqa: F401
-    Conv1D,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    id_tensor_storage,
-    prune_conv1d_layer,
-    prune_layer,
-    prune_linear_layer,
-)
-from .quantizers import AutoHfQuantizer, HfQuantizer
+from .modeling_flash_attention_utils import lazy_import_flash_attention
+from .pytorch_utils import id_tensor_storage
+from .quantizers import HfQuantizer
+from .quantizers.auto import get_hf_quantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
@@ -119,11 +108,10 @@ from .utils import (
     is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_npu_available,
-    is_torch_sdpa_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    is_torchao_available,
     logging,
-    strtobool,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
@@ -137,9 +125,8 @@ from .utils.import_utils import (
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 
-XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
-XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
-
+if is_torchao_available():
+    from torchao.quantization import Int4WeightOnlyConfig
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map
@@ -163,40 +150,13 @@ if is_safetensors_available():
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
 
+if is_peft_available():
+    from .utils import find_adapter_config_file
 
-if is_kernels_available():
-    from kernels import get_kernel
-
-
-logger = logging.get_logger(__name__)
-
-
-_init_weights = True
-_is_quantized = False
-_is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
-
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
-
-
-def is_fsdp_enabled():
-    return (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
-        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
-    )
-
-
-def is_local_dist_rank_0():
-    return (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and int(os.environ.get("LOCAL_RANK", -1)) == 0
-    )
-
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -206,11 +166,24 @@ if is_sagemaker_mp_enabled():
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
 
-if is_peft_available():
-    from .utils import find_adapter_config_file
 
+logger = logging.get_logger(__name__)
 
+XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
+XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
+_init_weights = True
+_is_quantized = False
+_is_ds_init_called = False
+
+
+def is_local_dist_rank_0():
+    return (
+        torch.distributed.is_available()
+        and torch.distributed.is_initialized()
+        and int(os.environ.get("LOCAL_RANK", "-1")) == 0
+    )
+
 
 TORCH_INIT_FUNCTIONS = {
     "uniform_": nn.init.uniform_,
@@ -300,7 +273,7 @@ def set_zero3_state():
         _is_ds_init_called = False
 
 
-def restore_default_torch_dtype(func):
+def restore_default_dtype(func):
     """
     Decorator to restore the default torch dtype
     at the end of the function. Serves
@@ -408,8 +381,7 @@ def get_state_dict_dtype(state_dict):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
-    else:
-        return next(state_dict.values()).dtype
+    return next(state_dict.values()).dtype
 
 
 def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
@@ -709,6 +681,7 @@ def _infer_parameter_dtype(
         if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
+            QuantizationMethod.MXFP4,
         }:
             return True, None
         else:
@@ -778,9 +751,8 @@ def _load_state_dict_into_meta_model(
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
     for param_name, empty_param in state_dict.items():
-        if param_name not in expected_keys:
+        if param_name not in expected_keys:  # when loading from ckpt, we skip param if doesnt exist in modeling
             continue
-
         # we need to use serialized_param_name as file pointer is untouched
         if is_meta_state_dict:
             # This is the name of the parameter as it appears on disk file
@@ -788,7 +760,6 @@ def _load_state_dict_into_meta_model(
             param = file_pointer.get_slice(serialized_param_name)
         else:
             param = empty_param.to(tensor_device)  # It is actually not empty!
-
         to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
             param_name,
@@ -797,17 +768,47 @@ def _load_state_dict_into_meta_model(
             hf_quantizer,
         )
 
-        if device_mesh is not None:  # In this case, the param is already on the correct device!
-            shard_and_distribute_module(
-                model,
-                param,
-                empty_param,
-                param_name,
-                casting_dtype,
-                to_contiguous,
-                device_mesh.get_local_rank(),
-                device_mesh,
-            )
+        if device_mesh is not None:
+            if (
+                not is_quantized
+                or (not hf_quantizer.requires_parameters_quantization)
+                or (
+                    not hf_quantizer.check_quantized_param(
+                        model,
+                        param,
+                        param_name,
+                        state_dict,
+                        device_map=device_map,
+                    )
+                )
+            ):  # In this case, the param is already on the correct device!
+                shard_and_distribute_module(
+                    model,
+                    param,
+                    empty_param,
+                    param_name,
+                    casting_dtype,
+                    to_contiguous,
+                    device_mesh.get_local_rank(),
+                    device_mesh,
+                )
+            else:  # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param:
+                sharding_kwargs = {
+                    "empty_param": empty_param,
+                    "casting_dtype": casting_dtype,
+                    "to_contiguous": to_contiguous,
+                    "rank": device_mesh.get_local_rank(),
+                    "device_mesh": device_mesh,
+                }
+                hf_quantizer.create_quantized_param(
+                    model,
+                    param,
+                    param_name,
+                    device_mesh.get_local_rank(),
+                    state_dict,
+                    unexpected_keys,
+                    **sharding_kwargs,
+                )
         else:
             param = param[...]
             if casting_dtype is not None:
@@ -849,20 +850,28 @@ def _load_state_dict_into_meta_model(
                 _load_parameter_into_model(model, param_name, param.to(param_device))
 
             else:
+                # TODO naming is stupid it loads it as well
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
                 )
+
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.
                 if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
+                    param_name = hf_quantizer.update_param_name(param_name)
                     module, param_type = get_module_from_name(model, param_name)
                     value = getattr(module, param_type)
+                    # special case for gpt_oss model, we wait for the param to be leave the meta device before casting it to cpu
+                    if model.config.model_type == "gpt_oss" and value.device.type == "meta":
+                        continue
                     param_to = "cpu"
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
                         param_to = "meta"
                     val_kwargs = {}
-                    if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
+                    if (hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params") or (
+                        value.dtype == torch.uint8 or value.dtype == torch.int8
+                    ):
                         val_kwargs["requires_grad"] = False
                     value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                     setattr(module, param_type, value)
@@ -917,7 +926,7 @@ def load_shard_file(args):
             or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
         )
     ):
-        map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+        map_location = torch.device([d for d in device_map.values() if d not in ["disk"]][0])
 
     # If shard_file is "", we use the existing state_dict instead of loading it
     if shard_file != "":
@@ -1315,84 +1324,84 @@ def _get_resolved_checkpoint_files(
     return checkpoint_files, sharded_metadata
 
 
-def _get_torch_dtype(
+def _get_dtype(
     cls,
-    torch_dtype: Optional[Union[str, torch.dtype, dict]],
+    dtype: Optional[Union[str, torch.dtype, dict]],
     checkpoint_files: Optional[list[str]],
     config: PretrainedConfig,
     sharded_metadata: Optional[dict],
     state_dict: Optional[dict],
     weights_only: bool,
 ) -> tuple[PretrainedConfig, Optional[torch.dtype], Optional[torch.dtype]]:
-    """Find the correct `torch_dtype` to use based on provided arguments. Also update the `config` based on the
+    """Find the correct `dtype` to use based on provided arguments. Also update the `config` based on the
     inferred dtype. We do the following:
-    1. If torch_dtype is not None, we use that dtype
-    2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
+    1. If dtype is not None, we use that dtype
+    2. If dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
         weights entry that is of a floating type - we assume all floating dtype weights are of the same dtype
-    we also may have config.torch_dtype available, but we won't rely on it till v5
+    we also may have config.dtype available, but we won't rely on it till v5
     """
     dtype_orig = None
     is_sharded = sharded_metadata is not None
 
-    if torch_dtype is not None:
-        if isinstance(torch_dtype, str):
-            if torch_dtype == "auto":
-                if hasattr(config, "torch_dtype") and config.torch_dtype is not None:
-                    torch_dtype = config.torch_dtype
-                    logger.info(f"Will use torch_dtype={torch_dtype} as defined in model's config object")
+    if dtype is not None:
+        if isinstance(dtype, str):
+            if dtype == "auto":
+                if hasattr(config, "dtype") and config.dtype is not None:
+                    dtype = config.dtype
+                    logger.info(f"Will use dtype={dtype} as defined in model's config object")
                 else:
                     if is_sharded and "dtype" in sharded_metadata:
-                        torch_dtype = sharded_metadata["dtype"]
+                        dtype = sharded_metadata["dtype"]
                     elif state_dict is not None:
-                        torch_dtype = get_state_dict_dtype(state_dict)
+                        dtype = get_state_dict_dtype(state_dict)
                     else:
                         state_dict = load_state_dict(
                             checkpoint_files[0], map_location="meta", weights_only=weights_only
                         )
-                        torch_dtype = get_state_dict_dtype(state_dict)
+                        dtype = get_state_dict_dtype(state_dict)
                     logger.info(
-                        "Since the `torch_dtype` attribute can't be found in model's config object, "
-                        "will use torch_dtype={torch_dtype} as derived from model's weights"
+                        "Since the `dtype` attribute can't be found in model's config object, "
+                        "will use dtype={dtype} as derived from model's weights"
                     )
-            elif hasattr(torch, torch_dtype):
-                torch_dtype = getattr(torch, torch_dtype)
-                config.torch_dtype = torch_dtype
+            elif hasattr(torch, dtype):
+                dtype = getattr(torch, dtype)
+                config.dtype = dtype
                 for sub_config_key in config.sub_configs:
                     sub_config = getattr(config, sub_config_key)
-                    sub_config.torch_dtype = torch_dtype
-        elif isinstance(torch_dtype, torch.dtype):
-            config.torch_dtype = torch_dtype
+                    sub_config.dtype = dtype
+        elif isinstance(dtype, torch.dtype):
+            config.dtype = dtype
             for sub_config_key in config.sub_configs:
                 sub_config = getattr(config, sub_config_key)
-                sub_config.torch_dtype = torch_dtype
-        elif isinstance(torch_dtype, dict):
-            for key, curr_dtype in torch_dtype.items():
+                sub_config.dtype = dtype
+        elif isinstance(dtype, dict):
+            for key, curr_dtype in dtype.items():
                 if hasattr(config, key):
                     value = getattr(config, key)
                     curr_dtype = curr_dtype if not isinstance(curr_dtype, str) else getattr(torch, curr_dtype)
-                    value.torch_dtype = curr_dtype
+                    value.dtype = curr_dtype
             # main torch dtype for modules that aren't part of any sub-config
-            torch_dtype = torch_dtype.get("")
-            torch_dtype = torch_dtype if not isinstance(torch_dtype, str) else getattr(torch, torch_dtype)
-            config.torch_dtype = torch_dtype
-            if torch_dtype is None:
-                torch_dtype = torch.float32
+            dtype = dtype.get("")
+            dtype = dtype if not isinstance(dtype, str) else getattr(torch, dtype)
+            config.dtype = dtype
+            if dtype is None:
+                dtype = torch.float32
         else:
             raise ValueError(
-                f"`torch_dtype` can be one of: `torch.dtype`, `'auto'`, a string of a valid `torch.dtype` or a `dict` with valid `torch_dtype` "
-                f"for each sub-config in composite configs, but received {torch_dtype}"
+                f"`dtype` can be one of: `torch.dtype`, `'auto'`, a string of a valid `torch.dtype` or a `dict` with valid `dtype` "
+                f"for each sub-config in composite configs, but received {dtype}"
             )
 
-        dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+        dtype_orig = cls._set_default_dtype(dtype)
     else:
         # set fp32 as the default dtype for BC
         default_dtype = torch.get_default_dtype()
-        config.torch_dtype = default_dtype
+        config.dtype = default_dtype
         for key in config.sub_configs:
             value = getattr(config, key)
-            value.torch_dtype = default_dtype
+            value.dtype = default_dtype
 
-    return config, torch_dtype, dtype_orig
+    return config, dtype, dtype_orig
 
 
 def _get_device_map(
@@ -1400,7 +1409,7 @@ def _get_device_map(
     device_map: Optional[Union[dict, str]],
     max_memory: Optional[dict],
     hf_quantizer: Optional[HfQuantizer],
-    torch_dtype: Optional[torch.dtype],
+    dtype: Optional[torch.dtype],
     keep_in_fp32_regex: Optional[re.Pattern],
 ) -> dict:
     """Compute the final `device_map` to use if we passed a value in ['auto', 'balanced', 'balanced_low_0', 'sequential'].
@@ -1409,13 +1418,13 @@ def _get_device_map(
     if isinstance(device_map, str):
         special_dtypes = {}
         if hf_quantizer is not None:
-            special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, torch_dtype))
+            special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, dtype))
         if keep_in_fp32_regex is not None:
             special_dtypes.update(
                 {name: torch.float32 for name, _ in model.named_parameters() if keep_in_fp32_regex.search(name)}
             )
 
-        target_dtype = torch_dtype
+        target_dtype = dtype
 
         if hf_quantizer is not None:
             target_dtype = hf_quantizer.adjust_target_dtype(target_dtype)
@@ -1578,9 +1587,7 @@ def _find_mismatched_keys(
                 # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                 # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
                 if not (
-                    is_quantized
-                    and new_state_dict[key].shape[-1] == 1
-                    and new_state_dict[key].numel() * 2 == model_state_dict[key].numel()
+                    is_quantized and tensor.shape[-1] == 1 and tensor.numel() * 2 == model_state_dict[key].numel()
                 ):
                     mismatched_keys.append(key)
                     mismatched_shapes.append((tensor.shape, model_state_dict[key].shape))
@@ -1589,8 +1596,8 @@ def _find_mismatched_keys(
 
 
 class PipelineParallel(Enum):
-    inputs: 0
-    outputs: 1
+    inputs = 0
+    outputs = 1
 
 
 class ModuleUtilsMixin:
@@ -1712,7 +1719,11 @@ class ModuleUtilsMixin:
         return extended_attention_mask
 
     def get_extended_attention_mask(
-        self, attention_mask: Tensor, input_shape: tuple[int], device: torch.device = None, dtype: torch.float = None
+        self,
+        attention_mask: Tensor,
+        input_shape: tuple[int],
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
     ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -2089,7 +2100,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _pp_plan = None
 
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
-    # In practice, it means that they support attention interface functions, fully pass the kwargs
+    # In practice, it means that they support attention (mask) interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
     _can_record_outputs = None
@@ -2252,7 +2263,87 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         )
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
-        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
+        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
+        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+        self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
+        for name, module in self.named_children():
+            if plan := getattr(module, "_ep_plan", None):
+                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_tp_plan", None):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_pp_plan", None):
+                self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+
+    @property
+    def tp_plan(self) -> dict[str, str]:
+        """
+        The full tp plan for the model's modules
+        """
+        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
+            return self._ep_plan
+        return self._tp_plan
+
+    @property
+    def pp_plan(self) -> dict[str, tuple[str, str]]:
+        return self._pp_plan
+
+    @tp_plan.setter
+    def tp_plan(self, plan: dict[str, str]):
+        if plan is not None:
+            # Validate that all parallel styles in the plan are supported
+            from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
+
+            for layer_pattern, parallel_style in plan.items():
+                if parallel_style not in ALL_PARALLEL_STYLES:
+                    raise ValueError(
+                        f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
+                        f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
+                    )
+
+            # Validate that the layer patterns match existing model structure
+            # We check this by getting all parameter names and seeing if any match the patterns
+            if hasattr(self, "named_parameters"):
+                model_param_names = [name for name, _ in self.named_parameters()]
+                if model_param_names:  # Only validate if model has parameters
+                    import re
+
+                    for layer_pattern in plan.keys():
+                        # Convert pattern to regex (replace * with .*)
+                        regex_pattern = layer_pattern.replace("*", r"\d+")
+                        pattern_matched = False
+                        for param_name in model_param_names:
+                            if re.match(regex_pattern, param_name):
+                                pattern_matched = True
+                                break
+                        if not pattern_matched:
+                            # Try more flexible matching - check if pattern components exist
+                            pattern_parts = layer_pattern.split(".")
+                            flexible_matched = False
+                            for param_name in model_param_names:
+                                param_parts = param_name.split(".")
+                                if len(pattern_parts) <= len(param_parts):
+                                    match_count = 0
+                                    for i, pattern_part in enumerate(pattern_parts):
+                                        if pattern_part == "*":
+                                            match_count += 1
+                                        elif i < len(param_parts) and pattern_part == param_parts[i]:
+                                            match_count += 1
+                                    if match_count == len(pattern_parts):
+                                        flexible_matched = True
+                                        break
+                            if not flexible_matched:
+                                import warnings
+
+                                warnings.warn(
+                                    f"Layer pattern '{layer_pattern}' does not match any parameters in the model. "
+                                    f"This rule may not be applied during tensor parallelization."
+                                )
+
+        self._tp_plan = plan if plan is not None else {}
+
+    @pp_plan.setter
+    def pp_plan(self, plan: dict[str, tuple[str, str]]):
+        self._pp_plan = plan
 
     def dequantize(self):
         """
@@ -2305,26 +2396,31 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self.model_tags.append(tag)
 
     @classmethod
-    @restore_default_torch_dtype
+    @restore_default_dtype
     def _from_config(cls, config, **kwargs):
         """
         All context managers that the model should be initialized under go here.
 
         Args:
-            torch_dtype (`torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model under this dtype.
+            dtype (`torch.dtype`, *optional*):
+                Override the default `dtype` and load the model under this dtype.
         """
         # when we init a model from within another model (e.g. VLMs) and dispatch on FA2
         # a warning is raised that dtype should be fp16. Since we never pass dtype from within
         # modeling code, we can try to infer it here same way as done in `from_pretrained`
-        torch_dtype = kwargs.pop("torch_dtype", config.torch_dtype)
-        if isinstance(torch_dtype, str):
-            torch_dtype = getattr(torch, torch_dtype)
+        # For BC on the old `torch_dtype`
+        dtype = kwargs.pop("dtype", config.dtype)
+        if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
+            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+            # if both kwargs are provided, use `dtype`
+            dtype = dtype if dtype != config.dtype else torch_dtype
+        if isinstance(dtype, str):
+            dtype = getattr(torch, dtype)
 
         # override default dtype if needed
         dtype_orig = None
-        if torch_dtype is not None:
-            dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+        if dtype is not None:
+            dtype_orig = cls._set_default_dtype(dtype)
 
         # If passing `attn_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
         if "attn_implementation" in kwargs:
@@ -2350,7 +2446,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return model
 
     @classmethod
-    def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
+    def _set_default_dtype(cls, dtype: torch.dtype) -> torch.dtype:
         """
         Change the default dtype and return the previous one. This is needed when wanting to instantiate the model
         under specific dtype.
@@ -2432,7 +2528,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
                 before instantiating the full models if we know that the model does not support the requested attention.
         """
-        torch_dtype = self.config.torch_dtype
+        dtype = self.config.dtype
 
         # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
         if not (self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False)):
@@ -2446,8 +2542,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             preface = "FlashAttention2 has been toggled on, but it cannot be used due to the following error:"
             install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install Flash Attention 2."
 
-            # package `flash-attn` can not be installed on Ascend NPU, ignore related validation logi
-            if importlib.util.find_spec("flash_attn") is None and not is_torch_npu_available():
+            # package `flash-attn` can not be installed on Ascend NPU, following validation logics can be ignored.
+            if is_torch_npu_available():
+                logger.info("Detect using FlashAttention2 on Ascend NPU.")
+                return True
+
+            if importlib.util.find_spec("flash_attn") is None:
                 raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
             else:
                 # Check FA2 installed version compatibility
@@ -2471,18 +2571,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     else:
                         raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
 
-        if torch_dtype is None:
+        if dtype is None:
             logger.warning_once(
                 "You are attempting to use Flash Attention 2 without specifying a torch dtype. This might lead to unexpected behaviour"
             )
-        elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
+        elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
             logger.warning_once(
                 "Flash Attention 2 only supports torch.float16 and torch.bfloat16 dtypes, but"
-                f" the current dype in {self.__class__.__name__} is {torch_dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
-                ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", torch_dtype=torch.float16)`'
+                f" the current dype in {self.__class__.__name__} is {dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
+                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", dtype=torch.float16)`'
             )
 
-        # With the early check, the parameters are not yet initalized correctly
+        # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
             if getattr(self, "use_bettertransformer", False):
                 raise ValueError(
@@ -2522,7 +2622,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
                 before instantiating the full models if we know that the model does not support the requested attention.
         """
-        torch_dtype = self.config.torch_dtype
+        dtype = self.config.dtype
 
         if not self._supports_flash_attn:
             raise ValueError(
@@ -2550,15 +2650,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"{preface} Flash Attention 3 is not available on CPU. Please make sure torch can access a CUDA device."
                 )
 
-        if torch_dtype is None:
+        if dtype is None:
             logger.warning_once(
                 "You are attempting to use Flash Attention 3 without specifying a torch dtype. This might lead to unexpected behaviour"
             )
-        elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
+        elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
             logger.warning_once(
                 "Flash Attention 3 only supports torch.float16 and torch.bfloat16 dtypes, but"
-                f" the current dype in {self.__class__.__name__} is {torch_dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
-                ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_3", torch_dtype=torch.float16)`'
+                f" the current dype in {self.__class__.__name__} is {dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
+                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_3", dtype=torch.float16)`'
             )
 
         if getattr(self.config, "alibi", False) or getattr(self.config, "use_alibi", False):
@@ -2570,7 +2670,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3."
             )
 
-        # With the early check, the parameters are not yet initalized correctly
+        # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
             param_devices = list({param.device for param in self.parameters()})
             if len(param_devices) == 1 and param_devices[0].type == "cpu":
@@ -2599,14 +2699,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
                 before instantiating the full models if we know that the model does not support the requested attention.
         """
-        if not self._supports_sdpa and not is_init_check:
+        if not self._supports_sdpa:
             raise ValueError(
                 f"{self.__class__.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
                 " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
                 ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
-        if not is_torch_sdpa_available():
-            raise ImportError("PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.1.1.")
 
         if (
             torch.version.hip is not None
@@ -2679,85 +2777,80 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
-        applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        if re.match(r"^[^/:]+/[^/:]+:?[^/:]+$", applicable_attn_implementation):
-            if not is_kernels_available():
-                raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
-            attention_wrapper = None
-            # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-            if "|" in applicable_attn_implementation:
-                attention_wrapper, applicable_attn_implementation = applicable_attn_implementation.split("|")
-                # `transformers` has wrapper for sdpa, paged, flash, flex etc.
-                attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
-            # Extract repo_id and kernel_name from the string
-            if ":" in applicable_attn_implementation:
-                repo_id, kernel_name = attn_implementation.split(":")
-                kernel_name = kernel_name.strip()
-            else:
-                repo_id = applicable_attn_implementation
-                kernel_name = None
-            repo_id = repo_id.strip()
+        applicable_attn_implementation = attn_implementation
+        # If FA not installed, do not fail but use kernels instead
+        if (
+            applicable_attn_implementation == "flash_attention_2"
+            and self._supports_flash_attn
+            and not is_flash_attn_2_available()
+            and is_kernels_available()
+        ):
+            applicable_attn_implementation = "kernels-community/flash-attn"
+        if is_kernel(applicable_attn_implementation):
             try:
-                kernel = get_kernel(repo_id)
-                if hasattr(kernel, "flash_attn_varlen_func"):
-                    if attention_wrapper is None:
-                        attention_wrapper = flash_attention_forward
-                    kernel_function = partial(attention_wrapper, implementation=kernel)
-                elif kernel_name is not None:
-                    kernel_function = getattr(kernel, kernel_name)
-                ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
-                ALL_MASK_ATTENTION_FUNCTIONS.register(
-                    attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
-                )
+                load_and_register_kernel(applicable_attn_implementation)
+                # log that we used kernel fallback if successful
+                if attn_implementation == "flash_attention_2":
+                    logger.warning_once(
+                        "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` "
+                        "library instead!"
+                    )
             except Exception as e:
+                if attn_implementation == "flash_attention_2":
+                    self._flash_attn_2_can_dispatch()  # will fail as fa2 is not available but raise the proper exception
                 logger.warning_once(
-                    f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
-                    "default attention implementation instead (sdpa if available, eager otherwise)."
+                    f"Could not find a kernel matching `{applicable_attn_implementation}` compatible with your device in the "
+                    f"hub:\n{e}.\nUsing default attention implementation instead (sdpa if available, eager otherwise)."
                 )
-
-                attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-            return attn_implementation
+                try:
+                    self._sdpa_can_dispatch(is_init_check)
+                    applicable_attn_implementation = "sdpa"
+                except (ValueError, ImportError) as e:
+                    applicable_attn_implementation = "eager"
         else:
-            return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
+            applicable_attn_implementation = self.get_correct_attn_implementation(
+                applicable_attn_implementation, is_init_check
+            )
+            # preload flash attention here to allow compile with fullgraph
+            if applicable_attn_implementation.startswith("flash_attention"):
+                lazy_import_flash_attention(applicable_attn_implementation)
 
-    def get_correct_attn_implementation(self, _requested_attention: str, is_init_check: bool = False) -> str:
-        requested_attention = "sdpa" if _requested_attention is None else _requested_attention
-        if is_init_check and requested_attention == "sdpa":
-            if not self._supports_sdpa:
-                requested_attention = "eager"
-        if requested_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+        return applicable_attn_implementation
+
+    def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
+        applicable_attention = "sdpa" if requested_attention is None else requested_attention
+
+        if applicable_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
-                f'Specified `attn_implementation="{requested_attention}"` is not supported. The only possible arguments are '
-                '`attn_implementation="eager"` (manual attention implementation)'
+                f'Specified `attn_implementation="{applicable_attention}"` is not supported. The only possible arguments are '
+                '`attn_implementation="eager"`'
             )
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
-                message += (
-                    ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
-                    ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
-                )
+                message += ', `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`'
             if self._supports_sdpa:
-                message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
+                message += ', `"attn_implementation=sdpa"'
             if self._supports_flex_attn:
-                message += ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
+                message += ', `"attn_implementation=flex_attention"`'
             raise ValueError(message + ".")
 
         # Perform relevant checks
-        if requested_attention == "flash_attention_2":
+        if applicable_attention == "flash_attention_2":
             self._flash_attn_2_can_dispatch(is_init_check)
-        elif requested_attention == "flash_attention_3":
+        elif applicable_attention == "flash_attention_3":
             self._flash_attn_3_can_dispatch(is_init_check)
-        elif requested_attention == "flex_attention":
+        elif applicable_attention == "flex_attention":
             self._flex_attn_can_dispatch(is_init_check)
-        elif requested_attention == "sdpa":
+        elif applicable_attention == "sdpa":
             # Sdpa is the default, so we try it and fallback to eager otherwise when not possible
             try:
                 self._sdpa_can_dispatch(is_init_check)
             except (ValueError, ImportError) as e:
-                if _requested_attention == "sdpa":
+                if requested_attention == "sdpa":
                     raise e
-                requested_attention = "eager"
-        return requested_attention
+                applicable_attention = "eager"
+
+        return applicable_attention
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
@@ -2768,9 +2861,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         with open(class_file, "r") as f:
             code = f.read()
         # heuristic -> if we find those patterns, the model uses the correct interface
-        return (
-            "eager_attention_forward" in code and "ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]" in code
-        )
+        if re.search(r"class \w+Attention\(nn.Module\)", code):
+            return (
+                "eager_attention_forward" in code
+                and "ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]" in code
+            )
+        else:
+            # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
+            return True
 
     def set_attn_implementation(self, attn_implementation: Union[str, dict]):
         """
@@ -2799,18 +2897,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "(see https://huggingface.co/docs/transformers/en/attention_interface)"
                 )
             else:
-                try:
-                    applicable_attn_implementation = self._check_and_adjust_attn_implementation(
-                        requested_implementation, is_init_check=False
-                    )
-                    # Apply the change (on the internal attr, to avoid setting it recursively)
-                    self.config._attn_implementation_internal = applicable_attn_implementation
-                except Exception as e:
-                    logger.warning(
-                        f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"
-                    )
+                requested_implementation = self._check_and_adjust_attn_implementation(
+                    requested_implementation, is_init_check=False
+                )
+                # Apply the change (on the internal attr, to avoid setting it recursively)
+                self.config._attn_implementation_internal = requested_implementation
 
-        subconfigs_changed = set()
         # Apply it to all submodels as well
         for submodule in self.modules():
             # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
@@ -2819,44 +2911,65 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 submodule is not self
                 and isinstance(submodule, PreTrainedModel)
                 and submodule.config.__class__ != self.config.__class__
+                # If it was already changed, no need to do it again
+                and not hasattr(submodule.config, "_attn_was_changed")
             ):
-                sub_implementation = attn_implementation
-                if isinstance(attn_implementation, dict):
-                    for subconfig_key in self.config.sub_configs:
-                        # We need to check for exact object match here, with `is`
-                        if getattr(self.config, subconfig_key) is submodule.config:
-                            sub_implementation = attn_implementation.get(
-                                subconfig_key, submodule.config._attn_implementation
-                            )
-                            break
-                # check the module can use correctly, otherwise we silently set the config without the model using it
-                try:
+                # In this case, warn and skip
+                if not submodule._can_set_attn_implementation():
+                    logger.warning(
+                        f"{submodule.__class__.__name__} does not support setting its attention implementation dynamically, because it "
+                        "does not follow the functional approach based on AttentionInterface "
+                        "(see https://huggingface.co/docs/transformers/en/attention_interface)"
+                    )
+                # Set the attn on the submodule
+                else:
+                    sub_implementation = requested_implementation
+                    if isinstance(attn_implementation, dict):
+                        for subconfig_key in self.config.sub_configs:
+                            # We need to check for exact object match here, with `is`
+                            if getattr(self.config, subconfig_key) is submodule.config:
+                                sub_implementation = attn_implementation.get(
+                                    subconfig_key, submodule.config._attn_implementation
+                                )
+                                break
+                    # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
                     sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
-                    submodule.config._attn_implementation = sub_implementation
-                    subconfigs_changed.add(submodule.config.__class__)
-                except Exception:
-                    pass
+                    submodule.config._attn_implementation_internal = sub_implementation
+
+                # Still add it as "changed" even if it was skipped, as we would otherwise try to set it in the dark afterwards
+                # We need to set it on the config itself, to differentiate 2 subconfigs of the same __class__ potentially
+                submodule.config._attn_was_changed = True
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
             subconfig = getattr(self.config, subconfig_key)
-            requested_implementation = (
-                attn_implementation
+            sub_implementation = (
+                requested_implementation
                 if not isinstance(attn_implementation, dict)
                 else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
             )
             # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
             if (
-                subconfig.__class__ not in subconfigs_changed
-                and requested_implementation != subconfig._attn_implementation
-                and requested_implementation in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys()
+                not hasattr(subconfig, "_attn_was_changed")
+                # If it's already the same, then no need to enter here and raise warnings
+                and sub_implementation != subconfig._attn_implementation
             ):
-                subconfig._attn_implementation_internal = requested_implementation
+                if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+                    raise ValueError(
+                        f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
+                        'The only possible arguments are "eager" (manual attention implementation)'
+                        f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
+                    )
+                subconfig._attn_implementation_internal = sub_implementation
                 logger.warning(
-                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{requested_implementation}` "
+                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
                     "without finding the associated sub-model. For this reason we could not check if the model supports it. "
                     "You may encounter undefined behavior."
                 )
+            # Unset the attribute in this case, to avoid issues in the future
+            else:
+                if hasattr(subconfig, "_attn_was_changed"):
+                    del subconfig._attn_was_changed
 
     def enable_input_require_grads(self):
         """
@@ -2875,16 +2988,57 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         self._require_grads_hook.remove()
 
+    def get_decoder(self):
+        """
+        Best-effort lookup of the *decoder* module.
+
+        Order of attempts (covers ~85 % of current usages):
+
+        1. `self.decoder`
+        2. `self.model`                       (many wrappers store the decoder here)
+        3. `self.model.get_decoder()`         (nested wrappers)
+        4. fallback: raise for the few exotic models that need a bespoke rule
+        """
+        if hasattr(self, "decoder"):
+            return self.decoder
+
+        if hasattr(self, "model"):
+            inner = self.model
+            if hasattr(inner, "get_decoder"):
+                return inner.get_decoder()
+            return inner
+
+        return None  # raise AttributeError(f"{self.__class__.__name__} has no decoder; override `get_decoder()` if needed.")
+
+    def set_decoder(self, decoder):
+        """
+        Symmetric setter. Mirrors the lookup logic used in `get_decoder`.
+        """
+
+        if hasattr(self, "decoder"):
+            self.decoder = decoder
+            return
+
+        if hasattr(self, "model"):
+            inner = self.model
+            if hasattr(inner, "set_decoder"):
+                inner.set_decoder(decoder)
+            else:
+                self.model = decoder
+            return
+
+        return  # raise AttributeError(f"{self.__class__.__name__} cannot accept a decoder; override `set_decoder()`.")
+
     def _init_weights(self, module):
         """
         Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex
-        initialization scheme, it should be overriden by the derived `PreTrainedModel` class. In case a model adds an explicit
-        `nn.Parameter`, this method should also be overriden in order to initialize it correctly.
+        initialization scheme, it should be overridden by the derived `PreTrainedModel` class. In case a model adds an explicit
+        `nn.Parameter`, this method should also be overridden in order to initialize it correctly.
         """
         if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range
         else:
-            # 0.02 is the standard default value accross the library
+            # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
@@ -2951,9 +3105,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
 
-    def tie_weights(self):
+    def tie_embeddings_and_encoder_decoder(self):
         """
-        Tie the weights between the input embeddings and the output embeddings.
+        If set in the config, tie the weights between the input embeddings and the output embeddings,
+        and the encoder and decoder.
 
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
@@ -2974,7 +3129,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Leading to issues on subsequent calls by different tests or subsequent calls.
             self._dynamic_tied_weights_keys = tied_weights
 
+    def tie_weights(self):
+        """
+        Recursively (for all submodels) tie all the weights of the model.
+        """
+        # Note that `self` is included in `self.modules` so we also apply to current PreTrainedModel with this call
         for module in self.modules():
+            # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
+            if isinstance(module, PreTrainedModel):
+                module.tie_embeddings_and_encoder_decoder()
+            # Additionally, if it has a custom `_tie_weights`, honor it
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
 
@@ -3844,19 +4008,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            create_pr = kwargs.pop("create_pr", False)
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
+        if hf_quantizer is not None:
+            state_dict = hf_quantizer.get_state_dict(self)
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
-
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = get_parameter_dtype(model_to_save)
-        model_to_save.config.torch_dtype = str(dtype).split(".")[1]
+        model_to_save.config.dtype = str(dtype).split(".")[1]
 
         # Attach architecture to the config
-        model_to_save.config.architectures = [model_to_save.__class__.__name__]
+        # When using FSDP2, unwrapping is a noop, so the model name doesn't change back to the original model name
+        model_to_save.config.architectures = [model_to_save.__class__.__name__.removeprefix("FSDP")]
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
@@ -4087,16 +4254,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                if _is_dtensor_available and getattr(self, "_device_mesh", None) is not None:
-                    plan = _get_parameter_tp_plan(tensor, self._tp_plan)
-                    full_tensor = state_dict[tensor]
-                    if isinstance(state_dict[tensor], DTensor):
-                        full_tensor = full_tensor.full_tensor()
-                    elif plan is not None:
-                        shard_dim = -1 if "rowwise" in plan else 0
-                        gather_list = [torch.empty_like(full_tensor) for _ in range(self._device_mesh.size())]
-                        torch.distributed.all_gather(gather_list, full_tensor)
-                        full_tensor = torch.cat(gather_list, dim=shard_dim)
+                if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
+                    full_tensor = state_dict[tensor].full_tensor()
+                    # to get the correctly ordered tensor we need to repack if packed
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
                         full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
                     shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
@@ -4168,6 +4328,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 files_timestamps,
                 commit_message=commit_message,
                 token=token,
+                create_pr=create_pr,
             )
 
     @wraps(PushToHubMixin.push_to_hub)
@@ -4281,7 +4442,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if dtype_present_in_args:
                 raise ValueError(
                     "You cannot cast a bitsandbytes model in a new `dtype`. Make sure to load the model using `from_pretrained` using the"
-                    " desired `dtype` by passing the correct `torch_dtype` argument."
+                    " desired `dtype` by passing the correct `dtype` argument."
                 )
 
             if getattr(self, "is_loaded_in_8bit", False):
@@ -4298,7 +4459,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if dtype_present_in_args:
                 raise ValueError(
                     "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
-                    " `dtype` by passing the correct `torch_dtype` argument."
+                    " `dtype` by passing the correct `dtype` argument."
                 )
         return super().to(*args, **kwargs)
 
@@ -4340,7 +4501,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return init_contexts
 
     @classmethod
-    @restore_default_torch_dtype
+    @restore_default_dtype
     def from_pretrained(
         cls: type[SpecificPreTrainedModelType],
         pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
@@ -4450,17 +4611,33 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             attn_implementation (`str`, *optional*):
                 The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)), or `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
+                Accept HF kernel references in the form:
+                  <namespace>/<repo_name>[@<revision>][:<kernel_name>]
+
+                - <namespace> and <repo_name> are any non-"/" and non-":" sequences.
+                - "@<revision>" is optional (branch, tag, or commit-ish), e.g. "@main", "@v1.2.0", "@abc123".
+                - ":<kernel_name>" is optional and selects a function inside the kernel repo.
+                - Both options can appear together and in this order only: @revision first, then :kernel_name.
+                - We intentionally allow a leading "<wrapper>|" prefix (e.g., "flash|...") because the code
+                  strips it before loading; '|' is not excluded in the character classes here.
+
+                Examples that match:
+                  "org/model"
+                  "org/model@main"
+                  "org/model:custom_kernel"
+                  "org/model@v1.2.3:custom_kernel"
+
             > Parameters for big model inference
 
-            torch_dtype (`str` or `torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model under a specific `dtype`. The different options
+            dtype (`str` or `torch.dtype`, *optional*):
+                Override the default `torch_dtype` and load the model under a specific `dtype`. The different options
                 are:
 
                 1. `torch.float16` or `torch.bfloat16` or `torch.float`: load in a specified
-                  `dtype`, ignoring the model's `config.torch_dtype` if one exists. If not specified
+                  `dtype`, ignoring the model's `config.dtype` if one exists. If not specified
                   - the model will get loaded in `torch.float` (fp32).
 
-                2. `"auto"` - A `torch_dtype` entry in the `config.json` file of the model will be
+                2. `"auto"` - A `dtype` or `torch_dtype` entry in the `config.json` file of the model will be
                   attempted to be used. If this entry isn't found then next check the `dtype` of the first weight in
                   the checkpoint that's of a floating point type and use that as `dtype`. This will load the model
                   using the `dtype` it was saved in at the end of the training. It can't be used as an indicator of how
@@ -4472,7 +4649,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 For some models the `dtype` they were trained in is unknown - you may try to check the model's paper or
                 reach out to the authors and ask them to add this information to the model's card and to insert the
-                `torch_dtype` entry in `config.json` on the hub.
+                `dtype` or `torch_dtype` entry in `config.json` on the hub.
 
                 </Tip>
 
@@ -4576,7 +4753,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         use_auth_token = kwargs.pop("use_auth_token", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        torch_dtype = kwargs.pop("torch_dtype", None)
+        dtype = kwargs.pop("dtype", None)
+        torch_dtype = kwargs.pop("torch_dtype", None)  # kept for BC
         device_map = kwargs.pop("device_map", None)
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
@@ -4585,7 +4763,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         load_in_4bit = kwargs.pop("load_in_4bit", False)
         quantization_config = kwargs.pop("quantization_config", None)
-        distributed_config = kwargs.pop("distributed_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
@@ -4595,6 +4772,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
+        distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         use_kernels = kwargs.pop("use_kernels", False)
@@ -4615,6 +4793,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _ = kwargs.pop("_fast_init", True)
         _ = kwargs.pop("low_cpu_mem_usage", None)
 
+        # For BC on torch_dtype argument
+        if torch_dtype is not None:
+            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+            # If both kwargs are provided, use `dtype`
+            dtype = dtype if dtype is not None else torch_dtype
+
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(
                 "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
@@ -4629,7 +4813,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
 
-        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", 0)):
+        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
             logger.info(
                 "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
                 "If your plan is to load the model on each device, you should set device_map={"
@@ -4826,42 +5010,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"{transformers_explicit_filename}"
                 )
 
-        pre_quantized = hasattr(config, "quantization_config")
-        if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
-            pre_quantized = False
-
-        if pre_quantized or quantization_config is not None:
-            if pre_quantized:
-                config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                    config.quantization_config, quantization_config
-                )
-            else:
-                config.quantization_config = quantization_config
-
-            hf_quantizer = AutoHfQuantizer.from_config(
-                config.quantization_config,
-                pre_quantized=pre_quantized,
-            )
-        else:
-            hf_quantizer = None
-
-        if hf_quantizer is not None:
-            hf_quantizer.validate_environment(
-                torch_dtype=torch_dtype,
-                from_tf=from_tf,
-                from_flax=from_flax,
-                device_map=device_map,
-                weights_only=weights_only,
-            )
-            torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
-            device_map = hf_quantizer.update_device_map(device_map)
-            config = hf_quantizer.update_tp_plan(config)
-
-            # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
-            if hasattr(hf_quantizer.quantization_config.quant_method, "value"):
-                user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
-            else:
-                user_agent["quant"] = hf_quantizer.quantization_config.quant_method
+        hf_quantizer, config, dtype, device_map = get_hf_quantizer(
+            config, quantization_config, dtype, from_tf, from_flax, device_map, weights_only, user_agent
+        )
 
         if gguf_file is not None and hf_quantizer is not None:
             raise ValueError(
@@ -4945,8 +5096,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ]
 
             # Find the correct dtype based on current state
-            config, torch_dtype, dtype_orig = _get_torch_dtype(
-                cls, torch_dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only
+            config, dtype, dtype_orig = _get_dtype(
+                cls, dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only
             )
 
         config.name_or_path = pretrained_model_name_or_path
@@ -4955,9 +5106,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
-
-        if _torch_distributed_available and device_mesh is not None:
-            model = distribute_model(model, distributed_config, device_mesh, tp_size)
 
         # Make sure to tie the weights correctly
         model.tie_weights()
@@ -4971,13 +5119,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
         # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
         if model._keep_in_fp32_modules is not None and (
-            torch_dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
+            dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
         ):
             keep_in_fp32_modules.extend(model._keep_in_fp32_modules)
 
-        if model._keep_in_fp32_modules_strict is not None and (
-            torch_dtype == torch.float16 or torch_dtype == torch.bfloat16
-        ):
+        if model._keep_in_fp32_modules_strict is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
             keep_in_fp32_modules.extend(model._keep_in_fp32_modules_strict)
 
         keep_in_fp32_regex = None
@@ -4987,13 +5133,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
-                model=model, device_map=device_map, keep_in_fp32_modules=model._keep_in_fp32_modules, config=config
+                model=model,
+                device_map=device_map,
+                keep_in_fp32_modules=model._keep_in_fp32_modules,
+                config=config,
+                use_kernels=use_kernels,
             )
             # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
             # remain a single source of truth
-            original_dtype = torch_dtype if torch_dtype is not None else torch.get_default_dtype()
+            original_dtype = dtype if dtype is not None else torch.get_default_dtype()
 
             def _assign_original_dtype(module):
                 for child in module.children():
@@ -5004,9 +5154,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config._pre_quantization_dtype = original_dtype
             _assign_original_dtype(model)
 
+        if _torch_distributed_available and device_mesh is not None:
+            model = distribute_model(model, distributed_config, device_mesh, tp_size)
+
         # Prepare the full device map
         if device_map is not None:
-            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
+            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype, keep_in_fp32_regex)
 
         # Finalize model weight initialization
         if from_tf:
@@ -5035,7 +5188,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 device_map=device_map,
                 disk_offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
-                dtype=torch_dtype,
+                dtype=dtype,
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_regex=keep_in_fp32_regex,
                 device_mesh=device_mesh,
@@ -5050,6 +5203,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # check if using kernels
         if use_kernels:
+            if not is_kernels_available():
+                raise ValueError(
+                    "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+                )
+
             from kernels import Device, kernelize
 
             kernelize(model, device=Device(type=model.device.type))
@@ -5123,8 +5281,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
-            hf_quantizer.postprocess_model(model, config=config)
             model.hf_quantizer = hf_quantizer
+            hf_quantizer.postprocess_model(model, config=config)
 
         if _adapter_model_path is not None:
             adapter_kwargs["key_mapping"] = key_mapping
@@ -5268,7 +5426,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         key_mapping: Optional[dict[str, str]] = None,
         weights_only: bool = True,
     ):
-        # Useful flags
+        # TODO: we should only be calling hf_quantizer.skip_placement or something like that
         is_quantized = hf_quantizer is not None
         is_hqq_or_quark = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
@@ -5803,7 +5961,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if loss_type is None or loss_type not in LOSS_MAPPING:
             logger.warning_once(
-                f"`loss_type={loss_type}` was set in the config but it is unrecognised."
+                f"`loss_type={loss_type}` was set in the config but it is unrecognized. "
                 f"Using the default loss: `ForCausalLMLoss`."
             )
             loss_type = "ForCausalLM"
@@ -6014,7 +6172,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
     However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
-    factor = 2 if hf_quantizer is None else hf_quantizer.get_cuda_warm_up_factor()
+    factor = 2 if hf_quantizer is None else hf_quantizer.get_accelerator_warm_up_factor()
 
     # Remove disk, cpu and meta devices, and cast to proper torch.device
     accelerator_device_map = {
@@ -6036,7 +6194,16 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         if param_name in tied_param_names:
             continue
 
-        param = model.get_parameter_or_buffer(param_name)
+        # For example in the case of MXFP4 quantization, we need to update the param name to the original param name
+        # because the checkpoint contains blocks, and scales, but since we are dequantizing, we need to use the original param name
+        if hf_quantizer is not None:
+            param_name = hf_quantizer.update_param_name(param_name)
+
+        try:
+            param = model.get_parameter_or_buffer(param_name)
+        except AttributeError:
+            raise AttributeError(f"Parameter {param_name} not found in model")
+
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
         param_byte_count = param.numel() * param.element_size()
 

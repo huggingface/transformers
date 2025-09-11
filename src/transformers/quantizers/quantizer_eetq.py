@@ -92,19 +92,19 @@ class EetqHfQuantizer(HfQuantizer):
                     " This is not supported. Please remove the CPU or disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.float16
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.float16
             logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.float16` due to "
+                "Overriding dtype=%s with `dtype=torch.float16` due to "
                 "requirements of `eetq` to enable model loading in 8-bit. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                " torch_dtype=torch.float16 to remove this warning.",
-                torch_dtype,
+                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
+                " dtype=torch.float16 to remove this warning.",
+                dtype,
             )
-        elif torch_dtype != torch.float16:
-            logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with EETQ.")
-        return torch_dtype
+        elif dtype != torch.float16:
+            logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with EETQ.")
+        return dtype
 
     def check_quantized_param(
         self,

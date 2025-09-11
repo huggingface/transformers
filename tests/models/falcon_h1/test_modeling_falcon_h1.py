@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, Cache, FalconH1ForCausalLM, FalconH1Model
+    from transformers import AutoTokenizer, FalconH1ForCausalLM, FalconH1Model
     from transformers.models.falcon_h1.modeling_falcon_h1 import (
         FalconHybridMambaAttentionDynamicCache,
     )
@@ -273,7 +273,7 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     )
 
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
+        self.assertIsInstance(decoder_past_key_values, FalconHybridMambaAttentionDynamicCache)
 
         # (batch, head, seq_length, head_features)
         expected_shape = (
@@ -283,31 +283,14 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             config.hidden_size // config.num_attention_heads,
         )
 
-        if isinstance(decoder_past_key_values, Cache):
-            self.assertListEqual(
-                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
-                [expected_shape] * len(decoder_past_key_values.key_cache),
-            )
-            self.assertListEqual(
-                [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
-                [expected_shape] * len(decoder_past_key_values.value_cache),
-            )
-
-        # Legacy cache format checks. This branch should be removed when all models use `Cache` by default
-        else:
-            self.assertListEqual(
-                [isinstance(iter_past_key_values, tuple) for iter_past_key_values in decoder_past_key_values],
-                [True] * len(decoder_past_key_values),
-            )
-            # check shape key, value
-            self.assertListEqual(
-                [layer_past_key_values[0].shape for layer_past_key_values in decoder_past_key_values],
-                [expected_shape] * len(decoder_past_key_values),
-            )
-            self.assertListEqual(
-                [layer_past_key_values[1].shape for layer_past_key_values in decoder_past_key_values],
-                [expected_shape] * len(decoder_past_key_values),
-            )
+        self.assertListEqual(
+            [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+            [expected_shape] * len(decoder_past_key_values.key_cache),
+        )
+        self.assertListEqual(
+            [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
+            [expected_shape] * len(decoder_past_key_values.value_cache),
+        )
 
     def setUp(self):
         self.model_tester = FalconH1ModelTester(self)
@@ -320,7 +303,7 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_casual_lm(self):
+    def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
@@ -581,7 +564,7 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
 
         model_id = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = FalconH1ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
+        model = FalconH1ForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
         device = "cuda"
         messages = [{"role": "user", "content": "Tell me about the french revolution."}]
         input_text = tokenizer.apply_chat_template(messages, tokenize=False)

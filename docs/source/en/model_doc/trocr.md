@@ -12,105 +12,107 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
+*This model was released on 2021-09-21 and added to Hugging Face Transformers on 2021-10-13.*
+
+
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # TrOCR
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[TrOCR](https://huggingface.co/papers/2109.10282) is a text recognition model for both image understanding and text generation. It doesn't require separate models for image processing or character generation. TrOCR is a simple single end-to-end system that uses a transformer to handle visual understanding and text generation.
 
-## Overview
-
-The TrOCR model was proposed in [TrOCR: Transformer-based Optical Character Recognition with Pre-trained
-Models](https://huggingface.co/papers/2109.10282) by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
-Zhoujun Li, Furu Wei. TrOCR consists of an image Transformer encoder and an autoregressive text Transformer decoder to
-perform [optical character recognition (OCR)](https://en.wikipedia.org/wiki/Optical_character_recognition).
-
-The abstract from the paper is the following:
-
-*Text recognition is a long-standing research problem for document digitalization. Existing approaches for text recognition
-are usually built based on CNN for image understanding and RNN for char-level text generation. In addition, another language
-model is usually needed to improve the overall accuracy as a post-processing step. In this paper, we propose an end-to-end
-text recognition approach with pre-trained image Transformer and text Transformer models, namely TrOCR, which leverages the
-Transformer architecture for both image understanding and wordpiece-level text generation. The TrOCR model is simple but
-effective, and can be pre-trained with large-scale synthetic data and fine-tuned with human-labeled datasets. Experiments
-show that the TrOCR model outperforms the current state-of-the-art models on both printed and handwritten text recognition
-tasks.*
+You can find all the original TrOCR checkpoints under the [Microsoft](https://huggingface.co/microsoft/models?search=trocr) organization.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/trocr_architecture.jpg"
 alt="drawing" width="600"/>
-
 <small> TrOCR architecture. Taken from the <a href="https://huggingface.co/papers/2109.10282">original paper</a>. </small>
 
-Please refer to the [`VisionEncoderDecoder`] class on how to use this model.
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
-[here](https://github.com/microsoft/unilm/tree/6f60612e7cc86a2a1ae85c47231507a587ab4e01/trocr).
+> [!TIP]
+> This model was contributed by [nielsr](https://huggingface.co/nielsr).
+>
+> Click on the TrOCR models in the right sidebar for more examples of how to apply TrOCR to different image and text tasks.
 
-## Usage tips
 
-- The quickest way to get started with TrOCR is by checking the [tutorial
-  notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/TrOCR), which show how to use the model
-  at inference time as well as fine-tuning on custom data.
-- TrOCR is pre-trained in 2 stages before being fine-tuned on downstream datasets. It achieves state-of-the-art results
-  on both printed (e.g. the [SROIE dataset](https://paperswithcode.com/dataset/sroie) and handwritten (e.g. the [IAM
-  Handwriting dataset](https://fki.tic.heia-fr.ch/databases/iam-handwriting-database>) text recognition tasks. For more
-  information, see the [official models](https://huggingface.co/models?other=trocr>).
-- [Fine‑tune TrOCR on your own OCR dataset](https://github.com/Ashutosh-4485/trocr-custom-fine-tune.git).
+The example below demonstrates how to perform optical character recognition (OCR) with the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="AutoModel">
+
+```python
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+import requests
+from PIL import Image
+
+processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
+model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
+
+# load image from the IAM dataset
+url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+
+pixel_values = processor(image, return_tensors="pt").pixel_values
+generated_ids = model.generate(pixel_values)
+
+generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(generated_text)
+```
+
+</hfoption>
+</hfoptions>
+
+## Quantization
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 8-bits.
+
+```python
+# pip install bitsandbytes accelerate
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel, BitsandBytesConfig
+import requests
+from PIL import Image
+
+# Set up the quantization configuration
+quantization_config = BitsandBytesConfig(load_in_8bit=True)
+
+# Use a large checkpoint for a more noticeable impact
+processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
+model = VisionEncoderDecoderModel.from_pretrained(
+    "microsoft/trocr-large-handwritten",
+    quantization_config=quantization_config
+)
+
+# load image from the IAM dataset
+url = "[https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg](https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg)"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+
+pixel_values = processor(image, return_tensors="pt").pixel_values
+generated_ids = model.generate(pixel_values)
+
+generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(generated_text)
+```
+
+## Notes
+
+- TrOCR wraps [`ViTImageProcessor`]/[`DeiTImageProcessor`] and [`RobertaTokenizer`]/[`XLMRobertaTokenizer`] into a single instance of [`TrOCRProcessor`] to handle images and text.
 - TrOCR is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with TrOCR. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-<PipelineTag pipeline="text-classification"/>
-
 - A blog post on [Accelerating Document AI](https://huggingface.co/blog/document-ai) with TrOCR.
 - A blog post on how to [Document AI](https://github.com/philschmid/document-ai-transformers) with TrOCR.
 - A notebook on how to [finetune TrOCR on IAM Handwriting Database using Seq2SeqTrainer](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Fine_tune_TrOCR_on_IAM_Handwriting_Database_using_Seq2SeqTrainer.ipynb).
+- An interactive-demo on [TrOCR handwritten character recognition](https://huggingface.co/spaces/nielsr/TrOCR-handwritten).
 - A notebook on [inference with TrOCR](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Inference_with_TrOCR_%2B_Gradio_demo.ipynb) and Gradio demo.
-- A notebook on [finetune TrOCR on the IAM Handwriting Database](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Fine_tune_TrOCR_on_IAM_Handwriting_Database_using_native_PyTorch.ipynb) using native PyTorch.
 - A notebook on [evaluating TrOCR on the IAM test set](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/TrOCR/Evaluating_TrOCR_base_handwritten_on_the_IAM_test_set.ipynb).
 
-<PipelineTag pipeline="text-generation"/>
-
-- [Casual language modeling](https://huggingface.co/docs/transformers/tasks/language_modeling) task guide.
-
-⚡️ Inference
-
-- An interactive-demo on [TrOCR handwritten character recognition](https://huggingface.co/spaces/nielsr/TrOCR-handwritten).
-
-## Inference
-
-TrOCR's [`VisionEncoderDecoder`] model accepts images as input and makes use of
-[`~generation.GenerationMixin.generate`] to autoregressively generate text given the input image.
-
-The [`ViTImageProcessor`/`DeiTImageProcessor`] class is responsible for preprocessing the input image and
-[`RobertaTokenizer`/`XLMRobertaTokenizer`] decodes the generated target tokens to the target string. The
-[`TrOCRProcessor`] wraps [`ViTImageProcessor`/`DeiTImageProcessor`] and [`RobertaTokenizer`/`XLMRobertaTokenizer`]
-into a single instance to both extract the input features and decode the predicted token ids.
-
-- Step-by-step Optical Character Recognition (OCR)
-
-``` py
->>> from transformers import TrOCRProcessor, VisionEncoderDecoderModel
->>> import requests
->>> from PIL import Image
-
->>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
->>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
-
->>> # load image from the IAM dataset
->>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-
->>> pixel_values = processor(image, return_tensors="pt").pixel_values
->>> generated_ids = model.generate(pixel_values)
-
->>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-```
-
-See the [model hub](https://huggingface.co/models?filter=trocr) to look for TrOCR checkpoints.
 
 ## TrOCRConfig
 

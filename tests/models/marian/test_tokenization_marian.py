@@ -14,7 +14,6 @@
 
 import tempfile
 import unittest
-from functools import lru_cache
 from pathlib import Path
 from shutil import copyfile
 
@@ -26,7 +25,7 @@ from transformers.utils import is_sentencepiece_available, is_tf_available, is_t
 if is_sentencepiece_available():
     from transformers.models.marian.tokenization_marian import VOCAB_FILES_NAMES, save_json
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -67,8 +66,6 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> MarianTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return MarianTokenizer.from_pretrained(pretrained_name, **kwargs)

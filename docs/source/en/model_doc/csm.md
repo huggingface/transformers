@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-02-27 and added to Hugging Face Transformers on 2025-05-07.*
 
 # Csm
 
@@ -37,10 +38,10 @@ CSM can be used to simply generate speech from a text prompt:
 
 ```python
 import torch
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 
 model_id = "sesame/csm-1b"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -58,7 +59,7 @@ inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-).to(device)
+).to(model.device)
 
 # infer the model
 audio = model.generate(**inputs, output_audio=True)
@@ -71,11 +72,11 @@ CSM can be used to generate speech given a conversation, allowing consistency in
 
 ```python
 import torch
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -103,7 +104,7 @@ inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-).to(device)
+).to(model.device)
 
 # infer the model
 audio = model.generate(**inputs, output_audio=True)
@@ -116,11 +117,11 @@ CSM supports batched inference!
 
 ```python
 import torch
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -160,7 +161,7 @@ inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-).to(device)
+).to(model.device)
 
 audio = model.generate(**inputs, output_audio=True)
 processor.save_audio(audio, [f"speech_batch_idx_{i}.wav" for i in range(len(audio))])
@@ -250,7 +251,7 @@ padded_inputs_1 = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-).to(device)
+).to(model.device)
 
 print("\n" + "="*50)
 print("First generation - compiling and recording CUDA graphs...")
@@ -291,7 +292,7 @@ padded_inputs_2 = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-).to(device)
+).to(model.device)
 
 print("\n" + "="*50)
 print("Generation with other inputs!")
@@ -305,11 +306,11 @@ print("="*50)
 CSM Transformers integration supports training!
 
 ```python
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = "cuda"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -336,7 +337,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     output_labels=True,
-).to(device)
+).to(model.device)
 
 out = model(**inputs)
 out.loss.backward()

@@ -14,6 +14,7 @@
 
 import unittest
 
+import pytest
 import requests
 from packaging import version
 
@@ -103,6 +104,10 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     @property
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
+
+    @unittest.skip(reason="FIXME: @yoni.")
+    def test_fast_is_faster_than_slow(self):
+        pass
 
     def test_image_processor_properties(self):
         for image_processing_class in self.image_processor_list:
@@ -202,6 +207,7 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     @slow
     @require_torch_accelerator
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")

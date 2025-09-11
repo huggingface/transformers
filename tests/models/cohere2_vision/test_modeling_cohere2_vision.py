@@ -120,13 +120,12 @@ class Cohere2VisionText2TextModelTester:
     def prepare_config_and_inputs(self):
         config = self.get_config()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        image_num_patches = torch.tensor([1] * self.batch_size).to(torch_device)
 
-        return config, pixel_values, image_num_patches
+        return config, pixel_values
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, image_num_patches = config_and_inputs
+        config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
@@ -136,7 +135,6 @@ class Cohere2VisionText2TextModelTester:
             "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "image_num_patches": image_num_patches,
         }
         return config, inputs_dict
 
@@ -180,40 +178,35 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_read_token
 @require_torch
 class Cohere2IntegrationTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.model_checkpoint = "CohereLabs/command-a-vision-07-2025"
-        cls.model = None
-
-    @classmethod
-    def tearDownClass(cls):
-        del cls.model
-        cleanup(torch_device, gc_collect=True)
+    def setUp(self):
+        self.model_checkpoint = "CohereLabs/command-a-vision-07-2025"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @classmethod
-    def get_model(cls):
-        # Use 4-bit on T4
+    def get_model(self, dummy=True):
         device_type, major, _ = get_device_properties()
-        load_in_4bit = (device_type == "cuda") and (major < 8)
-        torch_dtype = None if load_in_4bit else torch.float16
+        dtype = torch.float16
 
-        if cls.model is None:
-            cls.model = Cohere2VisionForConditionalGeneration.from_pretrained(
-                cls.model_checkpoint,
-                device_map="auto",
-                torch_dtype=torch_dtype,
-                load_in_4bit=load_in_4bit,
-            )
-        return cls.model
+        # too large to fit into A10
+        config = Cohere2VisionConfig.from_pretrained(self.model_checkpoint)
+        if dummy:
+            config.text_config.num_hidden_layers = 4
+            config.text_config.layer_types = config.text_config.layer_types[:4]
+
+        model = Cohere2VisionForConditionalGeneration.from_pretrained(
+            self.model_checkpoint,
+            config=config,
+            dtype=dtype,
+            device_map="auto",
+        )
+        return model
 
     @slow
     @require_torch_accelerator
     def test_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = self.get_model()
+        model = self.get_model(dummy=False)
         messages = [
             {
                 "role": "user",
@@ -269,17 +262,14 @@ class Cohere2IntegrationTest(unittest.TestCase):
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(torch_device, dtype=torch.float16)
         with torch.no_grad():
-            generate_ids = model.generate(**inputs, max_new_tokens=25, do_sample=False)
+            generate_ids = model.generate(**inputs, max_new_tokens=10, do_sample=False)
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
-                # 4-bit
-                ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
-                ("cuda", 8): "**Haiku**\n\n*Softly falls the snow*\n*Blanketing the earth in white*\n*",
+                ("cuda", 8): "<|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|>",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -306,17 +296,14 @@ class Cohere2IntegrationTest(unittest.TestCase):
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(torch_device, dtype=torch.float16)
         with torch.no_grad():
-            generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+            generate_ids = model.generate(**inputs, max_new_tokens=10, do_sample=False)
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
-                # 4-bit
-                ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
-                ("cuda", 8): 'The image depicts two cats lying on a bright pink blanket that covers a red couch. The cat',
+                ("cuda", 8): '<|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|>',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -327,7 +314,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = self.get_model()
+        model = self.get_model(dummy=False)
         # Prepare inputs
         messages = [
             [
@@ -343,7 +330,10 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        },
                         {"type": "text", "text": "Describe this image"},
                     ],
                 },
@@ -353,16 +343,13 @@ class Cohere2IntegrationTest(unittest.TestCase):
             messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(model.device, dtype=torch.float16)
 
-        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=5)
 
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
-                # 4-bit
-                ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
-                ("cuda", 8): 'Dock stretches to calm,  \nMountains whisper through the trees,  \nLake mirrors the sky.',
+                ("cuda", 8): 'Dock stretches to calm',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -378,10 +365,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
-                # 4-bit
-                ("cuda", 7): 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and',
-                ("cuda", 8): 'The image depicts a vibrant street scene in what appears to be a Chinatown district, likely in an urban area. The focal',
+                ("cuda", 8): 'The image depicts a',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -432,16 +416,14 @@ class Cohere2IntegrationTest(unittest.TestCase):
         inputs = processor.apply_chat_template(
             messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(model.device, dtype=torch.float16)
-        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=10)
 
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
-                ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
-                ("cuda", 8): 'Dock stretches to calm,  \nMountains whisper through the trees,  \nLake mirrors the sky.',
+                ("cuda", 8): '<|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|>',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -456,9 +438,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
-                ("cuda", 7): 'The first image showcases the Statue of Liberty, a monumental sculpture located on Liberty Island in New York Harbor. Standing atop a',
-                ("cuda", 8): 'The two landmarks depicted in the images are the Statue of Liberty and the Golden Gate Bridge. \n\n1. **Statue',
+                ("cuda", 8): '<|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|>',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

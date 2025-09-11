@@ -42,6 +42,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_clvp import (
     ClvpConfig,
     ClvpDecoderConfig,
@@ -298,13 +299,14 @@ class ClvpSelfAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.FloatTensor,
         rotary_pos_emb: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -322,8 +324,8 @@ class ClvpSelfAttention(nn.Module):
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        if past_key_value is not None:
-            key_states, value_states = past_key_value.update(
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(
                 key_states, value_states, self.layer_idx, {"cache_position": cache_position}
             )
 
@@ -607,10 +609,11 @@ class ClvpDecoderLayer(nn.Module):
 
         self.mlp = ClvpDecoderMLP(inner_dim, config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
@@ -622,7 +625,7 @@ class ClvpDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
         attn_outputs = self.attn(
             hidden_states,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
             head_mask=head_mask,
@@ -1066,14 +1069,14 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 )
                 use_cache = False
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `DynamicCache` instead, e.g. "
                 "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1128,7 +1131,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
             else:
                 outputs = block(
                     hidden_states,
-                    past_key_value=past_key_values,
+                    past_key_values=past_key_values,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     head_mask=head_mask[i],
@@ -1151,9 +1154,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
@@ -1187,9 +1187,6 @@ class ClvpModel(ClvpPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.input_embeds_layer = value
 
-    def get_decoder(self):
-        return self.decoder
-
     @auto_docstring
     def forward(
         self,
@@ -1213,7 +1210,7 @@ class ClvpModel(ClvpPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1260,8 +1257,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         self.post_init()
 
     def get_output_embeddings(self):
-        # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
-        # See e.g. https://github.com/huggingface/transformers/pull/39339#discussion_r2219126400
         return None
 
     def get_input_embeddings(self):
@@ -1300,7 +1295,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
 
         # Check if conditioning_embeds are provided or not, if yes then concatenate the bos_token_id at the end of the conditioning_embeds.
         # Then we must subtract the positional_ids because during the forward pass it will be added anyways, so we must cancel them out here.
-        conditioning_embeds = model_kwargs.get("conditioning_embeds", None)
+        conditioning_embeds = model_kwargs.get("conditioning_embeds")
 
         if conditioning_embeds is not None:
             mel_start_token_embedding = self.model.decoder.input_embeds_layer(
