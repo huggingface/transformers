@@ -168,8 +168,6 @@ class ImagesKwargs(TypedDict, total=False):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
-        size_divisor (`int`, *optional*):
-            The size by which to make sure both the height and width can be divided.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
         resample (`PILImageResampling`, *optional*):
@@ -200,7 +198,6 @@ class ImagesKwargs(TypedDict, total=False):
 
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
-    size_divisor: Optional[int]
     crop_size: Optional[dict[str, int]]
     resample: Optional[Union["PILImageResampling", int]]
     do_rescale: Optional[bool]
@@ -229,8 +226,6 @@ class VideosKwargs(TypedDict, total=False):
             Resize the shorter side of the input to `size["shortest_edge"]`.
         default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
             Whether to default to a square when resizing, if size is an int.
-        size_divisor (`int`, *optional*):
-            The size by which to make sure both the height and width can be divided.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the video.
         do_rescale (`bool`, *optional*):
@@ -268,7 +263,6 @@ class VideosKwargs(TypedDict, total=False):
     do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
-    size_divisor: Optional[int]
     default_to_square: Optional[bool]
     resample: Optional["PILImageResampling"]
     do_rescale: Optional[bool]

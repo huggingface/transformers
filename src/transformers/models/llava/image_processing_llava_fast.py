@@ -56,14 +56,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class LlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        do_pad (`bool`, *optional*):
-            Whether to pad the image to a square based on the longest edge.
-    """
-
-    do_pad: Optional[bool]
+class LlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs): ...
 
 
 @auto_docstring

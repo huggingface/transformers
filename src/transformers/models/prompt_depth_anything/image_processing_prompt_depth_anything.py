@@ -381,8 +381,6 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size_divisor,
             do_resize=do_resize,
             size=size,
             resample=resample,

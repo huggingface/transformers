@@ -456,7 +456,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_pad=do_pad,
-            size_divisibility=size,  # There is no pad divisibility in this processor, but pad requires the size arg.
+            pad_image=size,
             do_resize=do_resize,
             size=size,
             resample=resample,

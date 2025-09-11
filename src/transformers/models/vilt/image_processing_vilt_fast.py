@@ -51,16 +51,12 @@ MAX_SHORTER_EDGE = 800
 class ViltFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     Args:
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image. If `True`, will pad the images in the batch to the largest height and width
-            in the batch. Padding will be applied to the bottom and right with zeros.
         size_divisor (`int`, *optional*, defaults to 32):
             The size to make the height and width divisible by.
         rescale_factor (`float`, *optional*, defaults to 1/255):
             The factor to rescale the image by.
     """
 
-    do_pad: Optional[bool]
     size_divisor: Optional[int]
     rescale_factor: Optional[float]
 

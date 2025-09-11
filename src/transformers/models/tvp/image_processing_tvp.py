@@ -295,7 +295,7 @@ class TvpImageProcessor(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_pad=do_pad,
-            size_divisibility=pad_size,  # here the pad() method simply requires the pad_size argument.
+            pad_size=pad_size,
             do_center_crop=do_center_crop,
             crop_size=crop_size,
             do_resize=do_resize,

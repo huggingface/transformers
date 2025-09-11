@@ -181,6 +181,8 @@ class DefaultFastImageProcessorKwargs(TypedDict, total=False):
     do_normalize: Optional[bool]
     image_mean: Optional[Union[float, list[float]]]
     image_std: Optional[Union[float, list[float]]]
+    do_pad: Optional[bool]
+    pad_size: Optional[dict[str, int]]
     do_convert_rgb: Optional[bool]
     return_tensors: Optional[Union[str, TensorType]]
     data_format: Optional[ChannelDimension]
@@ -199,6 +201,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
     crop_size = None
     do_resize = None
     do_center_crop = None
+    do_pad = None
+    pad_size = None
     do_rescale = None
     rescale_factor = 1 / 255
     do_normalize = None
@@ -222,6 +226,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         )
         crop_size = kwargs.pop("crop_size", self.crop_size)
         self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
+        pad_size = kwargs.pop("pad_size", self.pad_size)
+        self.pad_size = get_size_dict(size=pad_size, param_name="pad_size") if pad_size is not None else None
+
         for key in self.valid_kwargs.__annotations__:
             kwarg = kwargs.pop(key, None)
             if kwarg is not None:
@@ -238,6 +245,72 @@ class BaseImageProcessorFast(BaseImageProcessor):
         `bool`: Whether or not this image processor is a fast processor (backed by PyTorch and TorchVision).
         """
         return True
+
+    def pad(
+        self,
+        images: "torch.Tensor",
+        pad_size: SizeDict = None,
+        fill_value: Optional[int] = 0,
+        padding_mode: Optional[str] = "constant",
+        return_mask: Optional[bool] = False,
+        disable_grouping: Optional[bool] = False,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """
+        Pads images to `(pad_size["height"], pad_size["width"])` or to the largest size in the batch.
+
+        Args:
+            images (`torch.Tensor`):
+                Images to pad.
+            pad_size (`SizeDict`, *optional*):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+            fill_value (`int`, *optional*, defaults to `0`):
+                The constant value used to fill the padded area.
+            padding_mode (`str`, *optional*, defaults to "constant"):
+                The padding mode to use. Can be any of the modes supported by
+                `torch.nn.functional.pad` (e.g. constant, reflection, replication).
+            return_mask (`bool`, *optional*, defaults to `False`):
+                Whether to return a pixel mask to denote padded regions.
+            disable_grouping (`bool`, *optional*, defaults to `False`):
+                Whether to disable grouping of images by size.
+
+        Returns:
+            `torch.Tensor`: The resized image.
+        """
+        if pad_size is not None:
+            if not (pad_size.height and pad_size.width):
+                raise ValueError(f"Pad size must contain 'height' and 'width' keys only. Got pad_size={pad_size}.")
+        else:
+            pad_size = get_max_height_width(images)
+
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        processed_masks_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            image_size = stacked_images.shape[-2:]
+            padding_height = pad_size[0] - image_size[0]
+            padding_width = pad_size[1] - image_size[1]
+            if padding_height < 0 or padding_width < 0:
+                raise ValueError(
+                    f"Padding dimensions are negative. Please make sure that the `pad_size` is larger than the "
+                    f"image size. Got pad_size={pad_size}, image_size={image_size}."
+                )
+            if image_size != pad_size:
+                padding = [0, 0, padding_height, padding_width]
+                stacked_images = F.pad(stacked_images, padding, fill=fill_value, padding_mode=padding_mode)
+            processed_images_grouped[shape] = stacked_images
+
+            if return_mask:
+                stacked_masks = torch.zeros_like(stacked_images.shape, dtype=torch.int64)
+                stacked_masks[..., : image_size[0], : image_size[1]] = 1
+                processed_masks_grouped[shape] = stacked_masks
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        if return_mask:
+            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index)
+            return processed_images, processed_masks
+
+        return processed_images
 
     def resize(
         self,
@@ -559,6 +632,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self,
         size: Optional[SizeDict] = None,
         crop_size: Optional[SizeDict] = None,
+        pad_size: Optional[SizeDict] = None,
         default_to_square: Optional[bool] = None,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
@@ -575,6 +649,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
             size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
         if crop_size is not None:
             crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
+        if pad_size is not None:
+            size = SizeDict(**get_size_dict(size=pad_size), param_name="pad_size")
         if isinstance(image_mean, list):
             image_mean = tuple(image_mean)
         if isinstance(image_std, list):
@@ -584,6 +660,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         kwargs["size"] = size
         kwargs["crop_size"] = crop_size
+        kwargs["pad_size"] = pad_size
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["data_format"] = data_format
@@ -696,9 +773,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        do_pad: bool,
+        pad_size: SizeDict,
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -721,10 +799,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
-
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
+        if do_pad:
+            processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
+
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def to_dict(self):

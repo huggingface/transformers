@@ -131,6 +131,22 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    do_pad = {
+        "description": """
+    Whether to pad the image to the images in the batch.
+    """,
+        "shape": None,
+    }
+
+    pad_size = {
+        "description": """
+    The size in `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+        height and width in the batch. Applied only when `do_pad=True.`
+    """,
+        "shape": None,
+    }
+
     do_rescale = {
         "description": """
     Whether to rescale the image.
