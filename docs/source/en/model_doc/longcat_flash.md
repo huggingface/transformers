@@ -16,13 +16,14 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-09-01 and added to Hugging Face Transformers on 2025-09-05.*
 
 
 # LongCatFlash
 
 ## Overview
 
-The LongCatFlash model was proposed in [LongCat-Flash Technical Report](https://arxiv.org/abs/2509.01322) by the Meituan LongCat Team.
+The LongCatFlash model was proposed in [LongCat-Flash Technical Report](https://huggingface.co/papers/2509.01322) by the Meituan LongCat Team.
 LongCat-Flash is a 560B parameter Mixture-of-Experts (MoE) model that activates 18.6B-31.3B parameters dynamically (average ~27B). The model features a shortcut-connected architecture enabling high inference speed (>100 tokens/second) and advanced reasoning capabilities.
 
 The abstract from the paper is the following:
