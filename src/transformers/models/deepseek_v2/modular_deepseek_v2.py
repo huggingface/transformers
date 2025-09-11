@@ -21,10 +21,11 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -310,8 +311,8 @@ class DeepseekV2MoE(nn.Module):
         cnts = topk_ids.new_zeros((topk_ids.shape[0], len(self.experts)))
         cnts.scatter_(1, topk_ids, 1)
         tokens_per_expert = cnts.sum(dim=0)
-        indicies = topk_ids.view(-1).argsort()
-        sorted_tokens = hidden_states[indicies // topk_ids.shape[1]]
+        indices = topk_ids.view(-1).argsort()
+        sorted_tokens = hidden_states[indices // topk_ids.shape[1]]
 
         # Process experts
         outputs = []
@@ -330,7 +331,7 @@ class DeepseekV2MoE(nn.Module):
 
         # Reorder and combine outputs
         new_x = torch.empty_like(outs)
-        new_x[indicies] = outs
+        new_x[indices] = outs
         hidden_states = (
             new_x.view(*topk_ids.shape, -1)
             .type(topk_weight.dtype)
@@ -422,11 +423,12 @@ class DeepseekV2Attention(nn.Module):
 
         self.scaling = self.qk_head_dim ** (-0.5)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -459,10 +461,10 @@ class DeepseekV2Attention(nn.Module):
         query_states = torch.cat((q_nope, q_pe), dim=-1)
         key_states = torch.cat((k_nope, k_pe), dim=-1)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
@@ -502,8 +504,10 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
+    _can_compile_fullgraph = False
+
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2MoEGate):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 

@@ -23,13 +23,17 @@ from os.path import abspath, dirname, join
 import _pytest
 import pytest
 
-from transformers.testing_utils import HfDoctestModule, HfDocTestParser
+from transformers.testing_utils import (
+    HfDoctestModule,
+    HfDocTestParser,
+    is_torch_available,
+    patch_torch_compile_force_graph,
+)
 
 
 NOT_DEVICE_TESTS = {
     "test_tokenization",
     "test_tokenization_mistral_common",
-    "test_processor",
     "test_processing",
     "test_beam_constraints",
     "test_configuration_utils",
@@ -84,6 +88,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
+    config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
+    config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
 
 
 def pytest_collection_modifyitems(items):
@@ -128,3 +134,14 @@ class CustomOutputChecker(OutputChecker):
 doctest.OutputChecker = CustomOutputChecker
 _pytest.doctest.DoctestModule = HfDoctestModule
 doctest.DocTestParser = HfDocTestParser
+
+if is_torch_available():
+    import torch
+
+    # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
+    # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
+    torch.backends.cudnn.allow_tf32 = False
+
+    # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
+    # the patched version will always run with `fullgraph=True`.
+    patch_torch_compile_force_graph()

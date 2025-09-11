@@ -201,6 +201,39 @@ class FalconMambaConfig(MambaConfig):
 
 
 class FalconMambaCache(MambaCache):
+    """
+    Cache for falcon_mamba model which does not have attention mechanism and key value states.
+
+    Arguments:
+        config (`PretrainedConfig):
+            The configuration file defining the shape-related attributes required to initialize the static cache.
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
+            a smaller batch size is used.
+        dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
+            The default `dtype` to use when initializing the layer.
+        device (`torch.device` or `str`, *optional*):
+            The device on which the cache should be initialized. Should be the same as the layer.
+
+    Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, FalconMambaForCausalLM, FalconMambaCache
+
+        >>> model = FalconMambaForCausalLM.from_pretrained("tiiuae/falcon-mamba-7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b")
+
+        >>> inputs = tokenizer(text="My name is FalconMamba", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> cache_params = FalconMambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
+        >>> cache_position = torch.arange(len(inputs["input_ids"][0]), device=model.device)  # sequence length
+        >>> outputs = model(**inputs, cache_params=cache_params, cache_position=cache_position, use_cache=True)
+        >>> outputs.cache_params
+        ```
+    """
+
     pass
 
 
@@ -517,7 +550,7 @@ class FalconMambaCausalLMOutput(MambaCausalLMOutput):
 
 class FalconMambaModel(MambaModel, FalconMambaPreTrainedModel):
     def __init__(self, config):
-        FalconMambaPreTrainedModel.__init__(config)
+        FalconMambaPreTrainedModel.__init__(self, config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(

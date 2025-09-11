@@ -114,5 +114,9 @@ class SuperGlueConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
+    @property
+    def sub_configs(self):
+        return {"keypoint_detector_config": type(self.keypoint_detector_config)}
+
 
 __all__ = ["SuperGlueConfig"]

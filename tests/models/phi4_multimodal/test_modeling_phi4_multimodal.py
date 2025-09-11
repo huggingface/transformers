@@ -14,6 +14,7 @@
 
 import unittest
 
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -212,10 +213,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="Right padding not supported")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
     @unittest.skip(reason="Depending on input modalities, some params may not have gradients")
     def test_training_gradient_checkpointing(self):
         pass
@@ -253,7 +250,8 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     @unittest.skip(
         reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
     )
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
@@ -283,8 +281,8 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 class Phi4MultimodalIntegrationTest(unittest.TestCase):
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
     revision = "refs/pr/70"
-    image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-    audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
+    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+    audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
 
     def setUp(self):
         # Currently, the Phi-4 checkpoint on the hub is not working with the latest Phi-4 code, so the slow integration tests
@@ -306,7 +304,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_text_only_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}What is the answer for 1+1? Explain it.{self.end_token}{self.assistant_token}"
@@ -325,7 +323,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|image|>What is shown in this image?{self.end_token}{self.assistant_token}"
@@ -351,7 +349,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     @require_torch_large_accelerator
     def test_multi_image_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         images = []
@@ -378,7 +376,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     @require_torchcodec
     def test_audio_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|audio|>What is happening in this audio?{self.end_token}{self.assistant_token}"

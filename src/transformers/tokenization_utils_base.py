@@ -2015,6 +2015,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             revision=revision,
                             cache_dir=cache_dir,
                         ):
+                            template = template.removesuffix(".jinja")
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
         # Get files from url, cache, or disk depending on the case

@@ -761,7 +761,7 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[0.0126, 0.2109, 0.0609], [0.0448, 0.5862, -0.1688], [-0.0881, 0.8525, -0.3044]],
-                ("cuda", 8): [[0.0141, 0.2114, 0.0599], [0.0446, 0.5866, -0.1674], [-0.0876, 0.8592, -0.3025]],
+                ("cuda", 8): [[0.0126, 0.2109, 0.0609], [0.0448, 0.5862, -0.1688], [-0.0881, 0.8525, -0.3044]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

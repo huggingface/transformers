@@ -151,7 +151,7 @@ class FuyuModel(FuyuPreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -174,9 +174,10 @@ class FuyuModel(FuyuPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches_indices: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches: Optional[torch.Tensor] = None,
+        image_patches_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -225,7 +226,7 @@ class FuyuModel(FuyuPreTrainedModel):
         if image_patches is not None:
             patch_embeddings = self.get_image_features(image_patches)
             patch_embeddings = torch.cat(patch_embeddings, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            special_image_mask = self.get_placeholder_tokens(
+            special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
@@ -280,9 +281,10 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches_indices: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches: Optional[torch.Tensor] = None,
+        image_patches_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -379,6 +381,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         image_patches=None,
         image_patches_indices=None,
+        cache_position=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -390,10 +393,12 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             image_patches=image_patches,
             image_patches_indices=image_patches_indices,
+            cache_position=cache_position,
             **kwargs,
         )
 
-        if past_key_values is not None:
+        if cache_position[0] != 0:
+            # set image_patches and image_patches_indices to `None` for decoding stage
             model_inputs["image_patches_indices"] = None
             model_inputs["image_patches"] = None
 

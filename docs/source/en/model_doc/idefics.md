@@ -13,12 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-06-21 and added to Hugging Face Transformers on 2023-08-18.*
 
 # IDEFICS
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
@@ -57,16 +57,6 @@ To train a new IDEFICS model from scratch use the m4 codebase (a link will be pr
 
 [[autodoc]] IdeficsForVisionText2Text
     - forward
-
-## TFIdeficsModel
-
-[[autodoc]] TFIdeficsModel
-    - call
-
-## TFIdeficsForVisionText2Text
-
-[[autodoc]] TFIdeficsForVisionText2Text
-    - call
 
 ## IdeficsImageProcessor
 

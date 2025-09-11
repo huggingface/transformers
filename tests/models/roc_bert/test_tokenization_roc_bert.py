@@ -255,8 +255,8 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_change_tokenize_chinese_chars
     def test_change_tokenize_chinese_chars(self):
-        list_of_commun_chinese_char = ["的", "人", "有"]
-        text_with_chinese_char = "".join(list_of_commun_chinese_char)
+        list_of_common_chinese_char = ["的", "人", "有"]
+        text_with_chinese_char = "".join(list_of_common_chinese_char)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 kwargs["tokenize_chinese_chars"] = True
@@ -270,8 +270,8 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokens_without_spe_char_p = tokenizer_p.convert_ids_to_tokens(ids_without_spe_char_p)
 
                 # it is expected that each Chinese character is not preceded by "##"
-                self.assertListEqual(tokens_without_spe_char_p, list_of_commun_chinese_char)
-                self.assertListEqual(tokens_without_spe_char_r, list_of_commun_chinese_char)
+                self.assertListEqual(tokens_without_spe_char_p, list_of_common_chinese_char)
+                self.assertListEqual(tokens_without_spe_char_r, list_of_common_chinese_char)
 
                 kwargs["tokenize_chinese_chars"] = False
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
@@ -285,7 +285,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # it is expected that only the first Chinese character is not preceded by "##".
                 expected_tokens = [
-                    f"##{token}" if idx != 0 else token for idx, token in enumerate(list_of_commun_chinese_char)
+                    f"##{token}" if idx != 0 else token for idx, token in enumerate(list_of_common_chinese_char)
                 ]
                 self.assertListEqual(tokens_without_spe_char_p, expected_tokens)
                 self.assertListEqual(tokens_without_spe_char_r, expected_tokens)

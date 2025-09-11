@@ -1,0 +1,134 @@
+name: PR - build doc via comment
+on:
+  issue_comment:
+    types:
+      - created
+    branches-ignore:
+      - main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'build-doc') }}
+  cancel-in-progress: true
+permissions: {}
+
+
+jobs:
+  get-pr-number:
+    name: Get PR number
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "qubvel", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "muellerzr", "eustlb", "MekkCyber", "manueldeprada", "vasqu", "ivarflakstad", "stevhliu", "ebezzam"]'), github.actor) && (startsWith(github.event.comment.body, 'build-doc')) }}
+    uses: ./.github/workflows/get-pr-number.yml
+
+  get-pr-info:
+    name: Get PR commit SHA
+    needs: get-pr-number
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
+    uses: ./.github/workflows/get-pr-info.yml
+    with:
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+
+  verity_pr_commit:
+    name: Verity PR commit corresponds to a specific event by comparing timestamps
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
+    runs-on: ubuntu-22.04
+    needs: get-pr-info
+    env:
+      COMMENT_DATE: ${{ github.event.comment.created_at }}
+      PR_MERGE_COMMIT_DATE: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_DATE }}
+      PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
+    steps:
+      - run: |
+          COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+          echo "COMMENT_DATE: $COMMENT_DATE"
+          echo "PR_MERGE_COMMIT_DATE: $PR_MERGE_COMMIT_DATE"
+          echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+          echo "PR_MERGE_COMMIT_TIMESTAMP: $PR_MERGE_COMMIT_TIMESTAMP"
+          if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+            echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+            exit -1;
+          fi
+
+  create_run:
+    name: Create run
+    needs: [get-pr-number, get-pr-info]
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
+    permissions:
+      statuses: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Create Run
+        id: create_run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Create a commit status (pending) for a run of this workflow. The status has to be updated later in `update_run_status`.
+          # See https://docs.github.com/en/rest/commits/statuses?apiVersion=2022-11-28#create-a-commit-status
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            repos/${{ github.repository }}/statuses/${{ needs.get-pr-info.outputs.PR_HEAD_SHA }} \
+            -f "target_url=$GITHUB_RUN_URL" -f "state=pending" -f "description=Custom doc building job" -f "context=custom-doc-build"
+
+  reply_to_comment:
+    name: Reply to the comment
+    if: ${{ needs.create_run.result == 'success' }}
+    needs: [get-pr-number, create_run]
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Reply to the comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
+            -f "body=[Building docs for all languages...](${{ env.GITHUB_RUN_URL }})"
+
+  build-doc:
+    name: Build doc
+    needs: [get-pr-number, get-pr-info]
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@main
+    with:
+      commit_sha: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+      package: transformers
+      languages: ar de en es fr hi it ko pt tr zh ja te
+
+  update_run_status:
+    name: Update Check Run Status
+    needs: [ get-pr-info, create_run, build-doc ]
+    permissions:
+      statuses: write
+    if: ${{ always() && needs.create_run.result == 'success' }}
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      STATUS_OK: ${{ contains(fromJSON('["skipped", "success"]'), needs.create_run.result) }}
+    steps:
+      - name: Get `build-doc` job status
+        run: |
+          echo "${{ needs.build-doc.result }}"
+          echo $STATUS_OK
+          if [ "$STATUS_OK" = "true" ]; then
+            echo "STATUS=success" >> $GITHUB_ENV
+          else
+            echo "STATUS=failure" >> $GITHUB_ENV
+          fi
+
+      - name: Update PR commit statuses
+        run: |
+          echo "${{ needs.build-doc.result }}"
+          echo "${{ env.STATUS }}"
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            repos/${{ github.repository }}/statuses/${{ needs.get-pr-info.outputs.PR_HEAD_SHA }} \
+            -f "target_url=$GITHUB_RUN_URL" -f "state=${{ env.STATUS }}" -f "description=Custom doc building job" -f "context=custom-doc-build"

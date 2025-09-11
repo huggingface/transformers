@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-06-18 and added to Hugging Face Transformers on 2024-10-18.*
 
 # GLM
 
@@ -60,8 +61,8 @@ Tips:
 In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> device = "cuda" # the device to load the model onto
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+>>> device = infer_device() # the device to load the model onto
 
 >>> model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto", trust_remote_code=True)
 >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
@@ -72,7 +73,7 @@ In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. N
 
 >>> text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
->>> model_inputs = tokenizer([text], return_tensors="pt").to(device)
+>>> model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
 

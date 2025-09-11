@@ -15,7 +15,8 @@
 Processor class for PerceptionLM.
 """
 
-from typing import Iterable, Union
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import numpy as np
 
@@ -86,10 +87,10 @@ class PerceptionLMProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[PerceptionLMProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -170,7 +171,7 @@ class PerceptionLMProcessor(ProcessorMixin):
             mm_token_type_ids[array_ids == self.image_token_id] = 1
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     def _expand_media_tokens(self, sample, media_token: str, media_iter: Iterable):
         media_count = sample.count(media_token)
@@ -212,11 +213,12 @@ class PerceptionLMProcessor(ProcessorMixin):
             images_kwargs = PerceptionLMProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
             tile_size = images_kwargs.get("tile_size", None) or self.image_processor.tile_size
+            vision_input_type = images_kwargs.get("vision_input_type", None) or self.image_processor.vision_input_type
 
             num_image_tokens = []
             num_image_patches = []
             for height, width in image_sizes:
-                if self.image_processor.vision_input_type == "thumb+tile":
+                if vision_input_type == "thumb+tile":
                     aspect_ratio = self.image_processor._fit_image_to_canvas(
                         img_width=width, img_height=height, tile_size=tile_size
                     )
@@ -237,26 +239,6 @@ class PerceptionLMProcessor(ProcessorMixin):
 
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PerceptionLMTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PerceptionLMTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["PerceptionLMProcessor"]

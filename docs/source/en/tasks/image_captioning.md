@@ -256,9 +256,9 @@ image
 Prepare image for the model.
 
 ```python
-from accelerate.test_utils.testing import get_backend
-# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
-device, _, _ = get_backend()
+from transformers import infer_device
+
+device = infer_device()
 inputs = processor(images=image, return_tensors="pt").to(device)
 pixel_values = inputs.pixel_values
 ```

@@ -14,7 +14,7 @@ Models uploaded on the Hugging Face Hub come in different formats. We heavily re
 models in the [`safetensors`](https://github.com/huggingface/safetensors) format (which is the default prioritized
 by the transformers library), as developed specifically to prevent arbitrary code execution on your system.
 
-To avoid loading models from unsafe formats(e.g. [pickle](https://docs.python.org/3/library/pickle.html), you should use the `use_safetensors` parameter. If doing so, in the event that no .safetensors file is present, transformers will error when loading the model.
+To avoid loading models from unsafe formats (e.g. [pickle](https://docs.python.org/3/library/pickle.html), you should use the `use_safetensors` parameter. If doing so, in the event that no .safetensors file is present, transformers will error when loading the model.
 
 ### Remote code
 
