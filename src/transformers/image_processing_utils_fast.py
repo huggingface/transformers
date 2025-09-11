@@ -276,6 +276,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         if pad_size is not None:
             if not (pad_size.height and pad_size.width):
                 raise ValueError(f"Pad size must contain 'height' and 'width' keys only. Got pad_size={pad_size}.")
+            pad_size = (pad_size.height, pad_size.width)
         else:
             pad_size = get_max_height_width(images)
 
@@ -292,12 +293,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
                     f"image size. Got pad_size={pad_size}, image_size={image_size}."
                 )
             if image_size != pad_size:
-                padding = [0, 0, padding_height, padding_width]
+                padding = (0, padding_width, 0, padding_height)
                 stacked_images = F.pad(stacked_images, padding, fill=fill_value, padding_mode=padding_mode)
             processed_images_grouped[shape] = stacked_images
 
             if return_mask:
-                stacked_masks = torch.zeros_like(stacked_images.shape, dtype=torch.int64)
+                stacked_masks = torch.zeros_like(stacked_images, dtype=torch.int64)
                 stacked_masks[..., : image_size[0], : image_size[1]] = 1
                 processed_masks_grouped[shape] = stacked_masks
 
@@ -646,7 +647,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         if crop_size is not None:
             crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
         if pad_size is not None:
-            size = SizeDict(**get_size_dict(size=pad_size, param_name="pad_size"))
+            pad_size = SizeDict(**get_size_dict(size=pad_size, param_name="pad_size"))
         if isinstance(image_mean, list):
             image_mean = tuple(image_mean)
         if isinstance(image_std, list):
@@ -773,6 +774,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         pad_size: Optional[SizeDict],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

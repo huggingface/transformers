@@ -230,6 +230,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
             # Pad if needed
             if do_pad:
                 stacked_frames = self.pad(stacked_frames, pad_size, fill_value=constant_values, pad_mode=pad_mode)
+                stacked_frames = torch.stack(stacked_frames, dim=0)
 
             # Flip channel order if needed (RGB to BGR)
             if do_flip_channel_order:

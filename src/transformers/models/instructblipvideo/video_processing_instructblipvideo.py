@@ -79,12 +79,10 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        size_divisor: Optional[int],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
-        do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
@@ -99,9 +97,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(
-                    stacked_videos, size=size, size_divisor=size_divisor, interpolation=interpolation
-                )
+                stacked_videos = self.resize(stacked_videos, size=size, interpolation=interpolation)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 

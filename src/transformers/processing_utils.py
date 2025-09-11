@@ -238,8 +238,6 @@ class VideosKwargs(TypedDict, total=False):
             Mean to use if normalizing the video.
         image_std (`float` or `list[float]`, *optional*):
             Standard deviation to use if normalizing the video.
-        do_pad (`bool`, *optional*):
-            Whether to pad the video to the `(max_height, max_width)` of the videos in the batch.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the video.
         do_sample_frames (`bool`, *optional*):
@@ -270,7 +268,6 @@ class VideosKwargs(TypedDict, total=False):
     do_normalize: Optional[bool]
     image_mean: Optional[Union[float, list[float]]]
     image_std: Optional[Union[float, list[float]]]
-    do_pad: Optional[bool]
     do_center_crop: Optional[bool]
     crop_size: Optional[dict[str, int]]
     data_format: Optional[ChannelDimension]

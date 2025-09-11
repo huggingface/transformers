@@ -68,6 +68,7 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = True
+    do_pad = True
     valid_kwargs = JanusFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[JanusFastImageProcessorKwargs]):
