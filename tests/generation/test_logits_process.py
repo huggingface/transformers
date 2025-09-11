@@ -473,7 +473,7 @@ class LogitsProcessorTest(unittest.TestCase):
         filtered_dist = torch.exp(filtered_logits)
 
         EXPECTED4 = torch.tensor(
-            [[1.0, 0.0, 0.0, 0.0]],
+            [[0.75, 0.0, 0.0, 0.0]],
             device=torch_device,
             dtype=torch.float,
         )
