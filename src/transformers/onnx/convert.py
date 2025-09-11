@@ -188,7 +188,7 @@ def export(
     device: str = "cpu",
 ) -> tuple[list[str], list[str]]:
     """
-    Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
+    Export a Pytorch model to an ONNX Intermediate Representation (IR)
 
     Args:
         preprocessor: ([`PreTrainedTokenizer`], [`FeatureExtractionMixin`] or [`ProcessorMixin`]):

@@ -973,7 +973,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             save_directory (`str` or `os.PathLike`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
             safe_serialization (`str`):
-                Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
+                Whether to save the model using `safetensors` or PyTorch serialization.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
