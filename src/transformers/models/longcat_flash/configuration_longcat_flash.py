@@ -29,15 +29,15 @@ class LongcatFlashConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
+        vocab_size (`int`, *optional*, defaults to 131072):
             Vocabulary size of the LongCat Flash model. Defines the number of different tokens that can be represented by the
             `input_ids` passed when calling [`LongcatFlashModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 6144):
             Dimension of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 28):
+        num_hidden_layers (`int`, *optional*, defaults to 56):
             Number of hidden layers in the Transformer decoder.
         num_layers (`int`, *optional*, defaults to 28): Original number of layers, each with 2 sublayers.
-        num_attention_heads (`int`, *optional*, defaults to 32):
+        num_attention_heads (`int`, *optional*, defaults to 64):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
@@ -49,12 +49,12 @@ class LongcatFlashConfig(PretrainedConfig):
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon value used by the RMS normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -67,7 +67,7 @@ class LongcatFlashConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
+        rope_theta (`float`, *optional*, defaults to 10000000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
@@ -110,9 +110,9 @@ class LongcatFlashConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        ffn_hidden_size (`int`, *optional*, defaults to 14336):
+        ffn_hidden_size (`int`, *optional*, defaults to 12288):
             Dimension of the MLP representations.
-        q_lora_rank (`int`, *optional*, defaults to 512):
+        q_lora_rank (`int`, *optional*, defaults to 1536):
             The rank of the query LoRA projection in MLA (Multi-head Latent Attention).
         kv_lora_rank (`int`, *optional*, defaults to 512):
             The rank of the key-value LoRA projection in MLA.
@@ -125,18 +125,18 @@ class LongcatFlashConfig(PretrainedConfig):
             The dimension of value heads.
         qk_head_dim (`int`, *optional*):
             The total dimension of query/key heads. If not specified, defaults to `qk_nope_head_dim + qk_rope_head_dim`.
-        moe_topk (`int`, *optional*, defaults to 6):
+        moe_topk (`int`, *optional*, defaults to 12):
             Number of experts to route to for each token in the MoE layer.
-        n_routed_experts (`int`, *optional*, defaults to 64):
+        n_routed_experts (`int`, *optional*, defaults to 512):
             Number of routed experts in the MoE layer.
-        zero_expert_num (`int`, *optional*):
+        zero_expert_num (`int`, *optional*, defaults to 256):
             Number of zero experts (identity function) to add to the expert pool.
         zero_expert_type (`str`, *optional*, defaults to `"identity"`):
             Type of zero expert. Currently only "identity" is supported.
-        expert_ffn_hidden_size (`int`, *optional*, defaults to 1408):
+        expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
             Hidden size of individual expert FFN layers.
-        moe_intermediate_size (`int`, *optional*, defaults to 1408): size of the moe mlp.
-        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
+        moe_intermediate_size (`int`, *optional*, defaults to 2048): size of the moe mlp.
+        routed_scaling_factor (`float`, *optional*, defaults to 6.0):
             Scaling factor applied to the routing weights.
         router_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the router projection.
@@ -176,39 +176,39 @@ class LongcatFlashConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        num_hidden_layers=28,
-        num_layers=28,  # to remap to num_hidden_layers unless we refactor
-        num_attention_heads=32,
+        vocab_size=131072,
+        hidden_size=6144,
+        num_hidden_layers=56,
+        num_layers=28,
+        num_attention_heads=64,
         num_key_value_heads=None,
         hidden_act="silu",
-        max_position_embeddings=2048,
+        max_position_embeddings=131072,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        rms_norm_eps=1e-5,
         use_cache=True,
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
+        rope_theta=10000000.0,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        ffn_hidden_size=14336,
-        q_lora_rank=512,
+        ffn_hidden_size=12288,
+        q_lora_rank=1536,
         kv_lora_rank=512,
         qk_nope_head_dim=128,
         qk_rope_head_dim=64,
-        head_dim=64,  # for rope
+        head_dim=64,
         v_head_dim=128,
         qk_head_dim=None,
-        moe_topk=6,
-        n_routed_experts=64,
+        moe_topk=12,
+        n_routed_experts=512,
         zero_expert_num=256,
-        expert_ffn_hidden_size=1408,
-        moe_intermediate_size=1408,
-        routed_scaling_factor=1.0,
+        expert_ffn_hidden_size=2048,
+        moe_intermediate_size=2048,
+        routed_scaling_factor=6.0,
         **kwargs,
     ):
         if num_key_value_heads is None:
@@ -235,7 +235,6 @@ class LongcatFlashConfig(PretrainedConfig):
 
         self.ffn_hidden_size = ffn_hidden_size
 
-        # MLA configuration
         self.q_lora_rank = q_lora_rank
         self.kv_lora_rank = kv_lora_rank
         self.qk_nope_head_dim = qk_nope_head_dim
@@ -244,7 +243,6 @@ class LongcatFlashConfig(PretrainedConfig):
         self.qk_head_dim = qk_head_dim
         self.head_dim = head_dim
 
-        # MoE configuration
         self.moe_topk = moe_topk
         self.n_routed_experts = n_routed_experts
         self.zero_expert_num = zero_expert_num
@@ -252,8 +250,6 @@ class LongcatFlashConfig(PretrainedConfig):
         self.moe_intermediate_size = moe_intermediate_size
         self.routed_scaling_factor = routed_scaling_factor
 
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
 
