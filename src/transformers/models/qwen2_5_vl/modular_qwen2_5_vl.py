@@ -41,8 +41,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     VisionAttention,
     VisionRotaryEmbedding,
 )
-from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
-from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessorInitKwargs
+from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -840,18 +839,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         return model_inputs
 
 
-class Qwen2_5_VLVideosKwargs(Qwen2VLVideoProcessorInitKwargs):
-    pass
-
-
-class Qwen2_5_VLImagesKwargs(Qwen2VLImagesKwargs):
-    pass
-
-
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Qwen2_5_VLImagesKwargs
-    videos_kwargs: Qwen2_5_VLVideosKwargs
-
     _defaults = {
         "text_kwargs": {
             "padding": False,

@@ -27,28 +27,16 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ...video_utils import VideoInput
-from .video_processing_qwen2_vl import Qwen2VLVideoProcessorInitKwargs
 
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen2VLImagesKwargs(ImagesKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-
-
 class Qwen2VLProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Qwen2VLImagesKwargs
-    videos_kwargs: Qwen2VLVideoProcessorInitKwargs
-
     _defaults = {
         "text_kwargs": {
             "padding": False,

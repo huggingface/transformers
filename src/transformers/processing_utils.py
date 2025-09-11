@@ -72,6 +72,8 @@ from .utils.deprecation import deprecate_kwarg
 
 
 if is_torch_available():
+    import torch
+
     from .modeling_utils import PreTrainedAudioTokenizerBase
 
 
@@ -164,6 +166,8 @@ class ImagesKwargs(TypedDict, total=False):
     class methods and docstrings.
 
     Attributes:
+        do_convert_rgb (`bool`):
+            Whether to convert the video to RGB format.
         do_resize (`bool`, *optional*):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
@@ -194,10 +198,13 @@ class ImagesKwargs(TypedDict, total=False):
             The channel dimension format for the output image.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
-        device (`str`, *optional*):
+        device (`Union[str, torch.Tensor]`, *optional*):
             The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
+        disable_grouping (`bool`, *optional*):
+            Whether to group images by shapes when processing or not, only relevant for fast image processing.
     """
 
+    do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
     size_divisor: Optional[int]
@@ -213,7 +220,8 @@ class ImagesKwargs(TypedDict, total=False):
     do_center_crop: Optional[bool]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[str]
+    device: Optional[Union[str, "torch.device"]]
+    disable_grouping: Optional[bool]
 
 
 class VideosKwargs(TypedDict, total=False):
@@ -261,6 +269,8 @@ class VideosKwargs(TypedDict, total=False):
             The channel dimension format for the output video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input video.
+        device (`Union[str, torch.Tensor]`, *optional*):
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
         return_metadata (`ChannelDimension` or `str`, *optional*):
             Whether to return video metadata or not.
     """
@@ -281,7 +291,7 @@ class VideosKwargs(TypedDict, total=False):
     crop_size: Optional[dict[str, int]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[str]
+    device: Optional[Union[str, "torch.device"]]
     do_sample_frames: Optional[bool]
     video_metadata: Optional[Union[VideoMetadata, dict]]
     fps: Optional[Union[int, float]]
@@ -1259,14 +1269,29 @@ class ProcessorMixin(PushToHubMixin):
             "common_kwargs": {},
         }
 
+        map_preprocessor_kwargs = {
+            "images_kwargs": "image_processor",
+            "audio_kwargs": "feature_extractor",
+            "videos_kwargs": "video_processor",
+        }
+
         possible_modality_keywords = {"text", "audio", "videos", "images"}
         used_keys = set()
 
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:  # noqa: PLC0206
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
+            # Some preprocessors have set of acceptable "valid_kwargs" (for now only fast processors)
+            # Give priority to "valid_kwargs" if it exists for model-specific kwargs, otherwise go with general kwarg set
+            preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+            modality_valid_kwargs = getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
+            modality_valid_kwargs = (
+                modality_valid_kwargs
+                if modality_valid_kwargs is not None
+                else ModelProcessorKwargs.__annotations__[modality].__annotations__
+            )
             # update defaults with arguments from tokenizer init
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
+            for modality_key in modality_valid_kwargs:
                 # init with tokenizer init kwargs if necessary
                 if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
                     value = (
@@ -1282,7 +1307,14 @@ class ProcessorMixin(PushToHubMixin):
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality, output_kwarg in output_kwargs.items():
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
+            preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+            modality_valid_kwargs = getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
+            modality_valid_kwargs = (
+                modality_valid_kwargs
+                if modality_valid_kwargs is not None
+                else ModelProcessorKwargs.__annotations__[modality].__annotations__
+            )
+            for modality_key in modality_valid_kwargs:
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
                     kwarg_value = kwargs[modality].pop(modality_key, "__empty__")

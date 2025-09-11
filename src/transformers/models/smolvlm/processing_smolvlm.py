@@ -21,11 +21,10 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import AllKwargsForChatTemplate, ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput
-from .video_processing_smolvlm import SmolVLMVideoProcessorInitKwargs
 
 
 if is_vision_available():
@@ -104,15 +103,7 @@ def get_image_prompt_string(
     )
 
 
-class SmolVLMImagesKwargs(ImagesKwargs, total=False):
-    return_row_col_info: Optional[bool]
-    max_image_size: Optional[dict[str, int]]
-
-
 class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: SmolVLMImagesKwargs
-    videos_kwargs: SmolVLMVideoProcessorInitKwargs
-
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

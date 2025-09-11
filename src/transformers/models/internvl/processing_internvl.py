@@ -19,22 +19,12 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
-from .video_processing_internvl import InternVLVideoProcessorInitKwargs
-
-
-class InternVLImagesKwargs(ImagesKwargs, total=False):
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
 
 
 class InternVLProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: InternVLImagesKwargs
-    videos_kwargs: InternVLVideoProcessorInitKwargs
-
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",

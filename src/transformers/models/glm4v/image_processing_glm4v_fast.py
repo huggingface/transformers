@@ -21,7 +21,6 @@ from ...image_processing_utils import (
 )
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
 )
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -39,7 +38,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from .image_processing_glm4v import smart_resize
+from .image_processing_glm4v import Glm4vImageProcessorKwargs, smart_resize
 
 
 if is_torch_available():
@@ -54,19 +53,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class Glm4vFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 2):
-        The temporal patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+Glm4vFastImageProcessorKwargs = Glm4vImageProcessorKwargs
 
 
 @auto_docstring

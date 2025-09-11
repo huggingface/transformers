@@ -18,12 +18,13 @@ from typing import Optional, Union
 
 import numpy as np
 
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...utils import is_vision_available, logging
+from .image_processing_got_ocr2_fast import GotOcr2FastImageProcessorKwargs
 
 
 if is_vision_available():
@@ -36,14 +37,11 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
     format: Optional[bool]
 
 
-class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
+class GotOcr2ImagesKwargs(GotOcr2FastImageProcessorKwargs, total=False):
     box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
     color: Optional[str]
     num_image_tokens: Optional[int]
     multi_page: Optional[bool]
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
 
 
 class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):

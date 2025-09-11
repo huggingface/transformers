@@ -46,7 +46,7 @@ from ...utils import (
     logging,
 )
 from ...video_utils import VideoInput, make_batched_videos
-from .image_processing_qwen2_vl import smart_resize
+from .image_processing_qwen2_vl import Qwen2VLImageProcessorKwargs, smart_resize
 
 
 if is_torch_available():
@@ -62,25 +62,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class Qwen2VLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    min_pixels (`int`, *optional*, defaults to `56 * 56`):
-        The min pixels of the image to resize the image.
-    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-        The max pixels of the image to resize the image.
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 2):
-        The temporal patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+Qwen2VLFastImageProcessorKwargs = Qwen2VLImageProcessorKwargs
 
 
 @auto_docstring
