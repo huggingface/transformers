@@ -28,6 +28,7 @@ class LongcatFlashConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
+
     Args:
         vocab_size (`int`, *optional*, defaults to 131072):
             Vocabulary size of the LongCat Flash model. Defines the number of different tokens that can be represented by the
@@ -36,7 +37,8 @@ class LongcatFlashConfig(PretrainedConfig):
             Dimension of the hidden representations.
         num_hidden_layers (`int`, *optional*, defaults to 56):
             Number of hidden layers in the Transformer decoder.
-        num_layers (`int`, *optional*, defaults to 28): Original number of layers, each with 2 sublayers.
+        num_layers (`int`, *optional*, defaults to 28):
+            number of layers, each with 2 sublayers.
         num_attention_heads (`int`, *optional*, defaults to 64):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
@@ -54,7 +56,7 @@ class LongcatFlashConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon value used by the RMS normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -70,42 +72,9 @@ class LongcatFlashConfig(PretrainedConfig):
         rope_theta (`float`, *optional*, defaults to 10000000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
+            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
+            `{"type": strategy name, "factor": scaling factor}`.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -120,26 +89,22 @@ class LongcatFlashConfig(PretrainedConfig):
             The dimension of the non-position encoding part of query/key heads.
         qk_rope_head_dim (`int`, *optional*, defaults to 64):
             The dimension of the RoPE part of query/key heads.
-        head_dim (`int`, *optional*, defaults to 64): Legacy dimension of qk heads.
+        head_dim (`int`, *optional*, defaults to 64):
+            Standard dimension of qk heads, unused except for CI.
         v_head_dim (`int`, *optional*, defaults to 128):
             The dimension of value heads.
         qk_head_dim (`int`, *optional*):
-            The total dimension of query/key heads. If not specified, defaults to `qk_nope_head_dim + qk_rope_head_dim`.
+            The total dimension of query/key heads. If not specified, set to `qk_nope_head_dim + qk_rope_head_dim`.
         moe_topk (`int`, *optional*, defaults to 12):
             Number of experts to route to for each token in the MoE layer.
         n_routed_experts (`int`, *optional*, defaults to 512):
             Number of routed experts in the MoE layer.
         zero_expert_num (`int`, *optional*, defaults to 256):
             Number of zero experts (identity function) to add to the expert pool.
-        zero_expert_type (`str`, *optional*, defaults to `"identity"`):
-            Type of zero expert. Currently only "identity" is supported.
         expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
             Hidden size of individual expert FFN layers.
-        moe_intermediate_size (`int`, *optional*, defaults to 2048): size of the moe mlp.
         routed_scaling_factor (`float`, *optional*, defaults to 6.0):
             Scaling factor applied to the routing weights.
-        router_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the router projection.
 
     ```python
     >>> from transformers import LongcatFlashModel, LongcatFlashConfig
@@ -207,7 +172,6 @@ class LongcatFlashConfig(PretrainedConfig):
         n_routed_experts=512,
         zero_expert_num=256,
         expert_ffn_hidden_size=2048,
-        moe_intermediate_size=2048,
         routed_scaling_factor=6.0,
         **kwargs,
     ):
@@ -247,7 +211,6 @@ class LongcatFlashConfig(PretrainedConfig):
         self.n_routed_experts = n_routed_experts
         self.zero_expert_num = zero_expert_num
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
-        self.moe_intermediate_size = moe_intermediate_size
         self.routed_scaling_factor = routed_scaling_factor
 
         if self.rope_scaling is not None and "type" in self.rope_scaling:

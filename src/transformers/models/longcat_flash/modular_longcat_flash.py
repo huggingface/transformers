@@ -13,34 +13,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
-    DeepseekV3MoE,
     DeepseekV3Model,
+    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
     DeepseekV3TopkRouter,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
-    )
+)
 
 
 logger = logging.get_logger(__name__)
@@ -99,6 +98,7 @@ class LongcatFlashMoE(DeepseekV3MoE):
     """
     A mixed expert module containing zero compute (identity) experts.
     """
+
     def __init__(self, config):
         self.intermediate_size = config.expert_ffn_hidden_size
         super().__init__(config)
@@ -126,7 +126,6 @@ class LongcatFlashMLA(DeepseekV3Attention):
 
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
-
 
     def forward(
         self,
@@ -156,7 +155,6 @@ class LongcatFlashMLA(DeepseekV3Attention):
         q_pass = q_pass * self.mla_scale_q_lora
         q_rot = q_rot * self.mla_scale_q_lora
         k_pass = k_pass * self.mla_scale_kv_lora
-
 
         k_pass = self.kv_b_proj(k_pass).view(key_shape).transpose(1, 2)
         k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
