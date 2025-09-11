@@ -66,8 +66,8 @@ class VocosProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        audio: torch.FloatTensor = None,
-        codes: torch.LongTensor = None,
+        audio=None,
+        codes=None,
         bandwidth: Optional[float] = None,
         return_tensors: str = "pt",
         **kwargs: Unpack[VocosProcessorKwargs],
@@ -154,7 +154,7 @@ class VocosProcessor(ProcessorMixin):
         features = self._audio_codes_to_features(codes)
         return BatchFeature({"features": features, "bandwidth": float(bandwidth)}, tensor_type=return_tensors)
 
-    def _audio_codes_to_features(self, codes: torch.LongTensor):
+    def _audio_codes_to_features(self, codes):
         """Convert audio codes to embedding features"""
         if codes.dim() == 2:
             codes = codes.unsqueeze(1)
