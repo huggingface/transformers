@@ -447,7 +447,7 @@ def torch_chunk_gated_delta_rule(
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
         head_dim = query.size(-1)
-        inv_scale = query.size(-1) ** -0.5
+        inv_scale = head_dim**-0.5
         query = F.rms_norm(query, (head_dim,), eps=1e-6) * inv_scale
         key = F.rms_norm(key, (head_dim,), eps=1e-6) * inv_scale
     query, key, value, beta, g = [
@@ -521,7 +521,7 @@ def torch_recurrent_gated_delta_rule(
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
         head_dim = query.size(-1)
-        inv_scale = query.size(-1) ** -0.5
+        inv_scale = head_dim**-0.5
         query = F.rms_norm(query, (head_dim,), eps=1e-6) * inv_scale
         key = F.rms_norm(key, (head_dim,), eps=1e-6) * inv_scale
     query, key, value, beta, g = [
