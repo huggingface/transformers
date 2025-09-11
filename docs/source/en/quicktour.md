@@ -124,7 +124,7 @@ Create a [`Pipeline`] object and select a task. By default, [`Pipeline`] downloa
 <hfoptions id="pipeline-tasks">
 <hfoption id="text generation">
 
-Use [`~infer_device`] to automatically detect an available accelerator for inference.
+Use [`infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
 from transformers import pipeline, infer_device
@@ -144,7 +144,7 @@ pipeline("The secret to baking a good cake is ", max_length=50)
 </hfoption>
 <hfoption id="image segmentation">
 
-Use [`~infer_device`] to automatically detect an available accelerator for inference.
+Use [`infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
 from transformers import pipeline, infer_device
@@ -171,7 +171,7 @@ segments[1]["label"]
 </hfoption>
 <hfoption id="automatic speech recognition">
 
-Use [`~infer_device`] to automatically detect an available accelerator for inference.
+Use [`infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
 from transformers import pipeline, infer_device

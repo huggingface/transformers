@@ -477,11 +477,14 @@ else:
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
         "get_cosine_with_hard_restarts_schedule_with_warmup",
+        "get_cosine_with_min_lr_schedule_with_warmup",
+        "get_cosine_with_min_lr_schedule_with_warmup_lr_rate",
         "get_inverse_sqrt_schedule",
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
         "get_wsd_schedule",
+        "get_reduce_on_plateau_schedule",
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",
@@ -795,6 +798,12 @@ if TYPE_CHECKING:
     from .optimization import get_cosine_schedule_with_warmup as get_cosine_schedule_with_warmup
     from .optimization import (
         get_cosine_with_hard_restarts_schedule_with_warmup as get_cosine_with_hard_restarts_schedule_with_warmup,
+    )
+    from .optimization import (
+        get_cosine_with_min_lr_schedule_with_warmup as get_cosine_with_min_lr_schedule_with_warmup,
+    )
+    from .optimization import (
+        get_cosine_with_min_lr_schedule_with_warmup_lr_rate as get_cosine_with_min_lr_schedule_with_warmup_lr_rate,
     )
     from .optimization import get_inverse_sqrt_schedule as get_inverse_sqrt_schedule
     from .optimization import get_linear_schedule_with_warmup as get_linear_schedule_with_warmup

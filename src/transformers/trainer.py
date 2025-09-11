@@ -5577,7 +5577,7 @@ class Trainer:
 
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
-    ) -> tuple[list, Optional[torch.Tensor]]:
+    ) -> tuple[list, Optional[Union[torch.Tensor, int]]]:
         """
         Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
         """
@@ -5614,7 +5614,7 @@ class Trainer:
 
         if num_items_in_batch is not None:
             if self.args.average_tokens_across_devices:
-                num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum()
+                num_items_in_batch = self.accelerator.gather(num_items_in_batch.to(device)).sum()
 
             if torch.is_tensor(num_items_in_batch):
                 num_items_in_batch = num_items_in_batch.to(device)
