@@ -3004,11 +3004,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hasattr(self, "model"):
             inner = self.model
-            if hasattr(inner, "get_decoder"):
+            # See: https://github.com/huggingface/transformers/issues/40815
+            if hasattr(inner, "get_decoder") and type(inner) != type(self):
                 return inner.get_decoder()
             return inner
 
-        return None  # raise AttributeError(f"{self.__class__.__name__} has no decoder; override `get_decoder()` if needed.")
+        # If this is a base transformer model (no decoder/model attributes), return self
+        # This handles cases like MistralModel which is itself the decoder
+        return self
 
     def set_decoder(self, decoder):
         """
@@ -3027,8 +3030,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self.model = decoder
             return
 
-        return  # raise AttributeError(f"{self.__class__.__name__} cannot accept a decoder; override `set_decoder()`.")
-
+        return
     def _init_weights(self, module):
         """
         Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex
