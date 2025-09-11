@@ -1101,28 +1101,16 @@ def append_new_import_node(
 ):
     """Insert the new `node` to the list of `imports_to_keep` in-place, if it is not part of the `unused_imports` or `added_names`.
     Also modifies `added_names` in-place accordingly."""
-    # Unwrap single-line statements (e.g., imports wrapped in SimpleStatementLine)
-    is_simple = isinstance(node, cst.SimpleStatementLine)
-    inner_stmt = node.body[0] if is_simple and len(node.body) > 0 else node
-
-    # Handle imports with filtering
-    if isinstance(inner_stmt, (cst.Import, cst.ImportFrom)):
-        names_to_keep = []
-        for name in inner_stmt.names:
-            name_value = name.evaluated_alias or name.evaluated_name
-            if name_value not in unused_imports and name_value not in added_names:
-                names_to_keep.append(name.with_changes(comma=cst.MaybeSentinel.DEFAULT))
-                added_names.add(name_value)
-        if len(names_to_keep) > 0:
-            new_import = inner_stmt.with_changes(names=names_to_keep)
-            new_node = node.with_changes(body=[new_import]) if is_simple else new_import
-            imports_to_keep.append(new_node)
-        return
-
-    # Handle assignment-like header statements (e.g., kernel setup) by preserving them as-is
-    if is_simple and isinstance(inner_stmt, (cst.Assign, cst.AnnAssign)):
-        imports_to_keep.append(node)
-        return
+    import_node = node.body[0]
+    names_to_keep = []
+    for name in import_node.names:
+        name_value = name.evaluated_alias or name.evaluated_name
+        if name_value not in unused_imports and name_value not in added_names:
+            names_to_keep.append(name.with_changes(comma=cst.MaybeSentinel.DEFAULT))
+            added_names.add(name_value)
+    if len(names_to_keep) > 0:
+        new_node = node.with_changes(body=[import_node.with_changes(names=names_to_keep)])
+        imports_to_keep.append(new_node)
 
 
 def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
