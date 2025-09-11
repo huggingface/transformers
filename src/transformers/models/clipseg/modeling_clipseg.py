@@ -625,7 +625,7 @@ class CLIPSegTextTransformer(nn.Module):
                 input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(dim=-1),
             ]
         else:
-            # The config gets updated `eos_token_id` from PR #24773 (so the use of exta new tokens is possible)
+            # The config gets updated `eos_token_id` from PR #24773 (so the use of extra new tokens is possible)
             pooled_output = last_hidden_state[
                 torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)

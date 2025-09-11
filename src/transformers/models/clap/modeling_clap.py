@@ -1717,7 +1717,7 @@ class ClapModel(ClapPreTrainedModel):
         >>> model = ClapModel.from_pretrained("laion/clap-htsat-unfused")
         >>> processor = AutoProcessor.from_pretrained("laion/clap-htsat-unfused")
 
-        >>> input_text = ["Sound of a dog", "Sound of vaccum cleaner"]
+        >>> input_text = ["Sound of a dog", "Sound of vacuum cleaner"]
 
         >>> inputs = processor(text=input_text, audios=audio_sample, return_tensors="pt", padding=True)
 
