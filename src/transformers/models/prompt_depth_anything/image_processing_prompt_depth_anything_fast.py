@@ -80,7 +80,7 @@ def _get_resize_output_image_size(
     """Get the output size for resizing an image."""
     output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
 
-    input_height, input_width = get_image_size(input_image, ChannelDimension.FIRST)
+    input_height, input_width =  input_image.shape[-2:]
     output_height, output_width = output_size
 
     # determine new height and width
@@ -223,7 +223,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         return padded_image
 
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -258,14 +257,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         prompt_scale_to_meter = (
             prompt_scale_to_meter if prompt_scale_to_meter is not None else self.prompt_scale_to_meter
         )
-
-        # Set default
-        if disable_grouping is None:
-            disable_grouping = False
-        if image_mean is None:
-            image_mean = self.image_mean
-        if image_std is None:
-            image_std = self.image_std
 
         # Process prompt depth
         processed_prompt_depths = None
