@@ -3005,7 +3005,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if hasattr(self, "model"):
             inner = self.model
             # See: https://github.com/huggingface/transformers/issues/40815
-            if hasattr(inner, "get_decoder") and type(inner) != type(self):
+            if hasattr(inner, "get_decoder") and type(inner) is not type(self):
                 return inner.get_decoder()
             return inner
 
@@ -3031,6 +3031,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         return
+
     def _init_weights(self, module):
         """
         Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex

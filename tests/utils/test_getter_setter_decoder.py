@@ -1,18 +1,16 @@
-import pytest
-
 from transformers import (
-    MistralConfig,
-    MistralForCausalLM,
     BartConfig,
     BartForConditionalGeneration,
-    OPTConfig,
-    OPTForCausalLM,
-    T5Config,
-    T5ForConditionalGeneration,
     GPT2Config,
     GPT2LMHeadModel,
     LlavaConfig,
     LlavaForConditionalGeneration,
+    MistralConfig,
+    MistralForCausalLM,
+    OPTConfig,
+    OPTForCausalLM,
+    T5Config,
+    T5ForConditionalGeneration,
 )
 from transformers.models.mistral.modeling_mistral import MistralModel
 
@@ -59,7 +57,7 @@ def test_base_model_returns_self():
     )
     base_model = MistralModel(cfg)
     dec = base_model.get_decoder()
-    
+
     assert dec is base_model, f"Base model get_decoder() should return self, got {type(dec)}"
 
 
@@ -75,7 +73,7 @@ def test_explicit_decoder_attribute_opt():
     )
     model = OPTForCausalLM(cfg)
     dec = model.get_decoder()
-    
+
     assert dec is model.model.decoder, f"OPT get_decoder() should return model.decoder, got {type(dec)}"
 
 
@@ -90,7 +88,7 @@ def test_explicit_decoder_attribute_t5():
     )
     model = T5ForConditionalGeneration(cfg)
     dec = model.get_decoder()
-    
+
     assert dec is model.decoder, f"T5 get_decoder() should return decoder attribute, got {type(dec)}"
 
 
@@ -104,12 +102,12 @@ def test_same_type_recursion_prevention():
         num_attention_heads=4,
     )
     model = MistralForCausalLM(cfg)
-    
-    assert type(model) != type(model.model), "Types should be different to prevent recursion"
-    
+
+    assert type(model) is not type(model.model), "Types should be different to prevent recursion"
+
     dec = model.get_decoder()
     assert dec is model.model, f"Should return model.model without infinite recursion, got {type(dec)}"
-    
+
     inner_dec = model.model.get_decoder()
     assert inner_dec is model.model, f"Inner model should return itself, got {type(inner_dec)}"
 
@@ -126,37 +124,39 @@ def test_nested_wrapper_recursion():
     )
     model = GPT2LMHeadModel(cfg)
     dec = model.get_decoder()
-    
+
     # GPT2LMHeadModel has no 'decoder' or 'model' attributes, so should return self
     assert dec is model, f"GPT2 get_decoder() should return self (fallback), got {type(dec)}"
 
 
 def test_model_without_get_decoder():
     """Test edge case where model has model attribute but no get_decoder method."""
-    
+
     class MockInnerModel:
         """Mock model without get_decoder method."""
+
         pass
-    
+
     class MockWrapperModel:
         """Mock wrapper with model attribute but inner has no get_decoder."""
+
         def __init__(self):
             self.model = MockInnerModel()
-        
+
         def get_decoder(self):
             # Use the same logic as modeling_utils.py
             if hasattr(self, "decoder"):
                 return self.decoder
             if hasattr(self, "model"):
                 inner = self.model
-                if hasattr(inner, "get_decoder") and type(inner) != type(self):
+                if hasattr(inner, "get_decoder") and type(inner) is not type(self):
                     return inner.get_decoder()
                 return inner
             return self
-    
+
     wrapper = MockWrapperModel()
     dec = wrapper.get_decoder()
-    
+
     # Should return the inner model since it doesn't have get_decoder
     assert dec is wrapper.model, f"Should return inner model when no get_decoder, got {type(dec)}"
 
@@ -170,7 +170,7 @@ def test_vision_language_model():
         num_hidden_layers=2,
         num_attention_heads=4,
     )
-    
+
     vision_config = {
         "hidden_size": 32,
         "intermediate_size": 64,
@@ -180,14 +180,14 @@ def test_vision_language_model():
         "image_size": 224,
         "patch_size": 16,
     }
-    
+
     cfg = LlavaConfig(
         text_config=text_config.to_dict(),
         vision_config=vision_config,
         vocab_size=128,
     )
-    
+
     model = LlavaForConditionalGeneration(cfg)
     dec = model.get_decoder()
-    
+
     assert dec is model.language_model, f"LLaVA get_decoder() should return language_model, got {type(dec)}"
