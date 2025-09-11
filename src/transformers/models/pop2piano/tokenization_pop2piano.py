@@ -608,7 +608,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         transformer to midi_notes and returns them.
 
         Args:
-            token_ids (`Union[np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[np.ndarray, torch.Tensor]`):
                 Output token_ids of `Pop2PianoConditionalGeneration` model.
             feature_extractor_output (`BatchFeature`):
                 Denotes the output of `Pop2PianoFeatureExtractor.__call__`. It must contain `"beatstep"` and

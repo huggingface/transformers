@@ -897,7 +897,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # each pipeline with text generation capabilities should define its own default generation in a
             # `_default_generation_config` class attribute
             default_pipeline_generation_config = getattr(self, "_default_generation_config", GenerationConfig())
-            if hasattr(self.model, "_prepare_generation_config"):  # TF doesn't have `_prepare_generation_config`
+            if hasattr(self.model, "_prepare_generation_config"):
                 # Uses `generate`'s logic to enforce the following priority of arguments:
                 # 1. user-defined config options in `**kwargs`
                 # 2. model's generation config values

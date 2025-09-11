@@ -461,8 +461,6 @@ class GitPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.patch_embedding.weight, std=self.config.initializer_range)
             nn.init.normal_(module.position_embedding.weight, std=self.config.initializer_range)
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()

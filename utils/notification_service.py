@@ -445,7 +445,7 @@ class Message:
 
         # (Possibly truncated) reports for the current workflow run - to be sent to Slack channels
         if job_name == "run_models_gpu":
-            model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
+            model_header = "Single PT |  Multi PT |     Other | Category\n"
         else:
             model_header = "Single |  Multi | Category\n"
 

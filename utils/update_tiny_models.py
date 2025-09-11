@@ -135,13 +135,6 @@ def get_tiny_model_summary_from_hub(output_path):
             content["model_classes"].add(m.__class__.__name__)
         except Exception:
             pass
-        try:
-            time.sleep(1)
-            model_class = getattr(transformers, f"TF{model}")
-            m = model_class.from_pretrained(repo_id)
-            content["model_classes"].add(m.__class__.__name__)
-        except Exception:
-            pass
 
         content["tokenizer_classes"] = sorted(content["tokenizer_classes"])
         content["processor_classes"] = sorted(content["processor_classes"])

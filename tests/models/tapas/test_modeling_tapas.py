@@ -576,9 +576,6 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        # ideally we want to test this with the weights of tapas_inter_masklm_base_reset,
-        # but since it's not straightforward to do this with the TF 1 implementation, we test it with
-        # the weights of the WTQ base model (i.e. tapas_wtq_wikisql_sqa_inter_masklm_base_reset)
         model = TapasModel.from_pretrained("google/tapas-base-finetuned-wtq").to(torch_device)
 
         tokenizer = self.default_tokenizer
@@ -767,7 +764,6 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # note that google/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
         model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq").to(torch_device)
         model.to(torch_device)
-        # normally we should put the model in training mode but it's a pain to do this with the TF 1 implementation
 
         tokenizer = self.default_tokenizer
         # let's test on a batch

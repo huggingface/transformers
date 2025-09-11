@@ -344,10 +344,6 @@ class PretrainedConfig(PushToHubMixin):
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
-        # TODO: remove later, deprecated arguments for TF models
-        self.tf_legacy_loss = kwargs.pop("tf_legacy_loss", False)
-        self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
-
     def _create_id_label_maps(self, num_labels: int):
         self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
         self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
