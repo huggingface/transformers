@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import unittest
+from functools import cached_property
 
 from transformers import BertGenerationTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_torch, slow
-from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
