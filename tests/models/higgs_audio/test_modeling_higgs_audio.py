@@ -292,6 +292,7 @@ class HiggsAudioForConditionalGenerationTest(
         # Skipping `has_text_modality` but manually testing down below
         self.config_tester = ConfigTester(self, has_text_modality=False, config_class=HiggsAudioConfig)
         self.skip_non_greedy_generate()
+        self.skip_input_embeds()
 
     def skip_non_greedy_generate(self):
         skippable_tests = [
@@ -306,13 +307,22 @@ class HiggsAudioForConditionalGenerationTest(
             "test_model_parallel_beam_search",
             "test_generate_without_input_ids",
             "test_generate_with_head_masking",
-            "test_generate_from_random_inputs_embeds",
-            "test_generate_from_inputs_embeds_1_beam_search",
         ]
 
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
                 self.skipTest(reason="HiggsAudio only supports greedy search / sampling with one sequence.")
+
+    def skip_input_embeds(self):
+        skippable_tests = [
+            "test_generate_from_random_inputs_embeds",
+            "test_generate_from_inputs_embeds",
+            "test_generate_continue_from_inputs_embeds",
+        ]
+
+        for test in skippable_tests:
+            if self._testMethodName.startswith(test):
+                self.skipTest(reason="HiggsAudio does not support generation from input_embeds.")
 
     @pytest.mark.generate
     @unittest.skip(reason="HiggsAudio does not support input_embeds.")
