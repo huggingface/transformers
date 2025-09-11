@@ -128,37 +128,6 @@ class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwarg
 
 @auto_docstring
 class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
-    r"""
-    Constructs a fast PromptDepthAnything image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions.
-        size (`dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
-            Size of the image after resizing.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Defines the resampling filter to use if resizing the image.
-        keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
-            If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
-        ensure_multiple_of (`int`, *optional*, defaults to 1):
-            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image.
-        do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to apply center padding.
-        size_divisor (`int`, *optional*):
-            If `do_pad` is `True`, pads the image dimensions to be divisible by this value.
-        prompt_scale_to_meter (`float`, *optional*, defaults to 0.001):
-            Scale factor to convert the prompt depth to meters.
-    """
 
     model_input_names = ["pixel_values", "prompt_depth"]
 
