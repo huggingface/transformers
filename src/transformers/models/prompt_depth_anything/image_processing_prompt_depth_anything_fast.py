@@ -104,22 +104,18 @@ def _get_resize_output_image_size(
 
 class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-    Extended kwargs for PromptDepthAnything fast image processor.
-    We need to add these kwargs to take into account the PromptDepthAnything-specific parameters.
-
-    Args:
-        keep_aspect_ratio (`bool`, *optional*):
-            If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
-        ensure_multiple_of (`int`, *optional*):
-            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
-        do_pad (`bool`, *optional*):
-            Whether to apply center padding.
-        size_divisor (`int`, *optional*):
-            If `do_pad` is `True`, pads the image dimensions to be divisible by this value.
-        prompt_depth (`ImageInput`, *optional*):
-            Prompt depth to preprocess.
-        prompt_scale_to_meter (`float`, *optional*):
-            Scale factor to convert the prompt depth to meters.
+    keep_aspect_ratio (`bool`, *optional*):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
+    ensure_multiple_of (`int`, *optional*):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
+    do_pad (`bool`, *optional*):
+        Whether to apply center padding.
+    size_divisor (`int`, *optional*):
+        If `do_pad` is `True`, pads the image dimensions to be divisible by this value.
+    prompt_depth (`ImageInput`, *optional*):
+        Prompt depth to preprocess.
+    prompt_scale_to_meter (`float`, *optional*):
+        Scale factor to convert the prompt depth to meters.
     """
 
     keep_aspect_ratio: Optional[bool]
