@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from dataclasses import MISSING, field, make_dataclass
-from typing import Annotated, Any, Optional, TypedDict, Union, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, ForwardRef, Optional, TypedDict, Union, get_args, get_origin
 
 from huggingface_hub.dataclasses import as_validated_field, strict
 
@@ -19,6 +19,24 @@ def unpack_annotated_type(type):
         base, *meta = get_args(type)
         return base, meta[0]
     return type, field(default=MISSING)
+
+
+def get_type_hints_from_typed_dict(obj: type[TypedDict]):
+    """
+    Same as `typing.get_type_hints` but does not perform evaluation
+    on the ForwardRefs. Evaluating might fails if the package is not imported
+    or installed, therefore we will have our own "guarded" type validations.
+    All `ForwardRef` will be ignored by the hub validator
+    """
+    raw_annots = obj.__dict__.get("__annotations__", {})
+    type_hints = {}
+    for name, value in raw_annots.items():
+        if value is None:
+            value = type(None)
+        if isinstance(value, str):
+            value = ForwardRef(value, is_argument=False)
+        type_hints[name] = value
+    return type_hints
 
 
 # Minimalistic version of pydantic.TypeAdapter tailored for `TypedDict`
@@ -75,7 +93,7 @@ class TypedDictAdapter:
         # The dataclass can also be used as a simple config class for easier kwarg management
         dataclass = dataclass_from_typed_dict(TokenizerKwargs)
         """
-        hints = get_type_hints(self.type, globalns=self.globalns, localns=self.localns, include_extras=True)
+        hints = get_type_hints_from_typed_dict(self.type)
         fields = [(k, *unpack_annotated_type(v)) for k, v in hints.items()]
         self.fields = fields
         return make_dataclass(self.type.__name__ + "Config", fields)
@@ -133,8 +151,8 @@ def device_validator(value: Optional[Union[str, int]] = None):
         raise ValueError(
             f"If device is an integer, the value must be a strictly positive integer but got device={value}"
         )
-    elif isinstance(value, str) or value.split(":")[0] not in possible_names:
-        raise ValueError(f"If device is an integer, the value must be one of {possible_names} but got device={value}")
+    elif isinstance(value, str) and value.split(":")[0] not in possible_names:
+        raise ValueError(f"If device is an string, the value must be one of {possible_names} but got device={value}")
     elif not isinstance(value, (int, str)):
         raise ValueError(
             f"Device must be either an integer device ID or a string (e.g., 'cpu', 'cuda:0'), but got device={value}"
@@ -149,7 +167,7 @@ def resampling_validator(value: Optional[Union[int, "PILImageResampling"]] = Non
         raise ValueError(
             f"The resampling should be one of {list(range(6))} when provided as integer, but got resampling={value}"
         )
-    elif isinstance(value, (PILImageResampling, int)):
+    elif is_vision_available() and not isinstance(value, (PILImageResampling, int)):
         raise ValueError(f"The resampling should an integer or `PIL.Image.Resampling`, but got resampling={value}")
 
 

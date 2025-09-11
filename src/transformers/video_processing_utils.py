@@ -52,6 +52,7 @@ from .utils import (
 )
 from .utils.hub import cached_files
 from .utils.import_utils import requires
+from .utils.type_validators import TypedDictAdapter
 from .video_utils import (
     VideoInput,
     VideoMetadata,
@@ -364,6 +365,11 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             captured_kwargs=kwargs.keys(),
             valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
         )
+
+        # Perform type validation on received kwargs
+        type_validator = TypedDictAdapter(self.valid_kwargs)
+        type_validator.validate_fields(**kwargs)
+
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:

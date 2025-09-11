@@ -117,7 +117,7 @@ class SamProcessor(ProcessorMixin):
             input_points=input_points,
             input_labels=input_labels,
             input_boxes=input_boxes,
-            return_tensors=output_kwargs["common_kwargs"].get("return_tensors"),
+            return_tensors=output_kwargs["images_kwargs"].get("return_tensors"),
             point_pad_value=point_pad_value,
         )
 

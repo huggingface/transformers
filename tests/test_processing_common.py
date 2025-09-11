@@ -839,7 +839,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1, "do_sample_frames": False},
+            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1.0, "do_sample_frames": False},
             "text_kwargs": {"padding": "max_length", "max_length": 176},
         }
 
@@ -862,7 +862,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1, "do_sample_frames": False},
+            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1.0, "do_sample_frames": False},
             "text_kwargs": {"padding": "max_length", "max_length": 176},
         }
 

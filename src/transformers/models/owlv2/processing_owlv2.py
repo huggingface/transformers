@@ -30,7 +30,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, is_torch_available
+from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_available
 
 
 if TYPE_CHECKING:
@@ -125,7 +125,7 @@ class Owlv2Processor(ProcessorMixin):
             **kwargs,
         )
         query_images = output_kwargs["images_kwargs"].pop("query_images", None)
-        return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
+        return_tensors = output_kwargs["text_kwargs"]["return_tensors"]
 
         if text is None and query_images is None and images is None:
             raise ValueError(
@@ -157,11 +157,23 @@ class Owlv2Processor(ProcessorMixin):
                 input_ids = np.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
                 attention_mask = np.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
 
+            elif return_tensors == "jax" and is_flax_available():
+                import jax.numpy as jnp
+
+                input_ids = jnp.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
+                attention_mask = jnp.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
+
             elif return_tensors == "pt" and is_torch_available():
                 import torch
 
                 input_ids = torch.cat([encoding["input_ids"] for encoding in encodings], dim=0)
                 attention_mask = torch.cat([encoding["attention_mask"] for encoding in encodings], dim=0)
+
+            elif return_tensors == "tf" and is_tf_available():
+                import tensorflow as tf
+
+                input_ids = tf.stack([encoding["input_ids"] for encoding in encodings], axis=0)
+                attention_mask = tf.stack([encoding["attention_mask"] for encoding in encodings], axis=0)
 
             else:
                 raise ValueError("Target return tensor type could not be returned")

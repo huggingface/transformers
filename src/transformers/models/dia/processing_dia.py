@@ -46,6 +46,7 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
             "padding_side": "right",
             "add_special_tokens": False,
+            "return_tensors": "pt",
         },
         "audio_kwargs": {
             "eos_token_id": 1024,
@@ -54,8 +55,8 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
             "delay_pattern": [0, 8, 9, 10, 11, 12, 13, 14, 15],
             "generation": True,
             "sampling_rate": 44100,
+            "return_tensors": "pt",
         },
-        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
@@ -111,9 +112,7 @@ class DiaProcessor(ProcessorMixin):
 
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
-
-        return_tensors = common_kwargs.pop("return_tensors", None)
+        return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
