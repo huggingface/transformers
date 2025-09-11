@@ -100,7 +100,7 @@ class VideoMetadata(Mapping):
         return setattr(self, key, value)
 
     @property
-    def timestamps(self) -> float:
+    def timestamps(self) -> list[float]:
         "Timestamps of the sampled frames in seconds."
         if self.fps is None or self.frames_indices is None:
             raise ValueError("Cannot infer video `timestamps` when `fps` or `frames_indices` is None.")
@@ -845,7 +845,7 @@ def pad(
 
 def group_videos_by_shape(
     videos: list["torch.Tensor"],
-) -> tuple[dict[tuple[int, int], list["torch.Tensor"]], dict[int, tuple[tuple[int, int], int]]]:
+) -> tuple[dict[tuple[int, int], "torch.Tensor"], dict[int, tuple[tuple[int, int], int]]]:
     """
     Groups videos by shape.
     Returns a dictionary with the shape as key and a list of videos with that shape as value,
@@ -867,7 +867,7 @@ def group_videos_by_shape(
 
 
 def reorder_videos(
-    processed_videos: dict[tuple[int, int], "torch.Tensor"], grouped_videos_index: dict[int, tuple[int, int]]
+    processed_videos: dict[tuple[int, int], "torch.Tensor"], grouped_videos_index: dict[int, tuple[tuple[int, int], int]]
 ) -> list["torch.Tensor"]:
     """
     Reconstructs a list of videos in the original order.
