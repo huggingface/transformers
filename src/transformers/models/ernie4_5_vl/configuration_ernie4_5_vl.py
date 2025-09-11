@@ -32,9 +32,8 @@ class Ernie4_5_VLVisionConfig(PretrainedConfig):
         in_channels=3,
         patch_size=14,
         spatial_merge_size=2,
+        temporal_merge_size=2,
         text_hidden_size=2560,
-        spatial_conv_size=2,
-        temporal_conv_size=2,
         rms_norm_eps=1e-5,
         vision_rms_norm_eps=1e-6,
         initializer_range=0.02,
@@ -54,8 +53,7 @@ class Ernie4_5_VLVisionConfig(PretrainedConfig):
 
         # resampler
         self.text_hidden_size = text_hidden_size
-        self.spatial_conv_size = spatial_conv_size
-        self.temporal_conv_size = temporal_conv_size
+        self.temporal_merge_size = temporal_merge_size
         self.rms_norm_eps = rms_norm_eps
         self.vision_rms_norm_eps = vision_rms_norm_eps
 

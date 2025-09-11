@@ -238,7 +238,7 @@ def convert_vision_config_to_hf(vision_config, original_config, original_vision_
 
     # convert originally text attributes to vision
     for key in TEXT_TO_VISION_CONFIG_KEYS:
-        vision_config[key] = original_config[key]
+        vision_config[key.replace("conv", "merge")] = original_config[key]
     vision_config["text_hidden_size"] = original_config["hidden_size"]
     vision_config["vision_rms_norm_eps"] = 1e-6
 
@@ -351,14 +351,14 @@ convert_weights(
 )
 #"""
 
-"""
+#"""
 convert_config(
     model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
     save_dir='AntonV/ErnieVL',
 )
 #"""
 
-#"""
+"""
 convert_tokenizer(
     # can use any preconverted tokenizer (as they are the same)
     original_tokenizer_path='baidu/ERNIE-4.5-0.3B-PT',

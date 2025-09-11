@@ -463,7 +463,6 @@ class Ernie4_5_VLTextModel(Ernie4_5_MoeModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
-            # position_ids=position_ids[..., -1],  # TODO: needs separate text pos ids
         )
 
         hidden_states = inputs_embeds
@@ -593,13 +592,13 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
 
         self.in_dim = config.hidden_size
         self.out_dim = config.text_hidden_size
-        self.spatial_conv_size = config.spatial_conv_size
-        self.temporal_conv_size = config.temporal_conv_size
+        self.spatial_merge_size = config.spatial_merge_size
+        self.temporal_merge_size = config.temporal_merge_size
 
         # compress 2d conv(picture) to 1d
-        self.spatial_dim = self.in_dim * self.spatial_conv_size**2
+        self.spatial_dim = self.in_dim * self.spatial_merge_size**2
         # compress 3d conv(video) to 1d
-        self.temporal_dim = self.in_dim * self.spatial_conv_size**2 * self.temporal_conv_size
+        self.temporal_dim = self.in_dim * self.spatial_merge_size**2 * self.temporal_merge_size
 
         self.spatial_linear = nn.Sequential(
             nn.Linear(self.spatial_dim, self.spatial_dim),
@@ -624,13 +623,13 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
 
         If a "real" (video) slicing happens, then we change [1,2,1,2,1,2] to [1,1,1,2,2,2] patterns.
         Otherwise, we repeat along the axis, i.e. [1,1,1] to [1,1,1,1,1,1]. NOTE: It is hard-coded
-        for `temporal_conv_size == 2`.
+        for `temporal_merge_size == 2`.
         """
         # Calculating offsets (based on flattened tensors)
         grid_t, grid_hw = grid_thw[:, 0], grid_thw[:, 1:]
-        grid_hw_after_conv = grid_hw.prod(-1) // (self.spatial_conv_size**2)
+        grid_hw_after_conv = grid_hw.prod(-1) // (self.spatial_merge_size**2)
 
-        tokens_per_img_or_vid = (grid_thw.prod(-1) // (self.spatial_conv_size**2)).flatten()
+        tokens_per_img_or_vid = (grid_thw.prod(-1) // (self.spatial_merge_size**2)).flatten()
         batch_offsets = torch.empty(
             tokens_per_img_or_vid.size(), dtype=tokens_per_img_or_vid.dtype
         )
@@ -686,7 +685,7 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
 
     def forward(self, x, grid_thw):
         # image spatial
-        x = x.reshape([-1, x.shape[-1] * (self.spatial_conv_size**2)])
+        x = x.reshape([-1, x.shape[-1] * (self.spatial_merge_size**2)])
         x = self.spatial_linear(x.to(self.mlp.weight.dtype))
 
         # video temporal
@@ -829,9 +828,8 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         image_token_id = self.config.image_token_id
         video_start_token_id = self.config.video_start_token_id
         video_end_token_id = self.config.video_end_token_id
-        # TODO: rename `conv -> merge`
-        temporal_merge_size = self.config.vision_config.temporal_conv_size
-        spatial_merge_size = self.config.vision_config.spatial_conv_size
+        temporal_merge_size = self.config.vision_config.temporal_merge_size
+        spatial_merge_size = self.config.vision_config.spatial_merge_size
 
         mrope_position_deltas = []
         if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
