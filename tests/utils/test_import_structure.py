@@ -53,10 +53,8 @@ class TestImportStructures(unittest.TestCase):
             },
             frozenset({"random_item_that_should_not_exist"}): {"failing_export": {"A0"}},
             frozenset({"torch"}): {
-                "import_structure_register_with_duplicates": {"C0", "C1", "C2", "C3", "c0", "c1", "c2", "c3"}
-            },
-            frozenset({"torch"}): {
                 "import_structure_raw_register": {"A1", "A2", "A3", "a1", "a2", "a3"},
+                "import_structure_register_with_duplicates": {"C0", "C1", "C2", "C3", "c0", "c1", "c2", "c3"},
                 "import_structure_register_with_comments": {"B1", "B2", "B3", "b1", "b2", "b3"},
             },
             frozenset({"torch>=2.5"}): {"import_structure_raw_register_with_versions": {"D0", "d0"}},
