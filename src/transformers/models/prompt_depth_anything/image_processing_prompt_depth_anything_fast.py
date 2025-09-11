@@ -366,7 +366,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
                 crop_dict = {"height": crop_size["height"], "width": crop_size["width"]}
                 stacked_images = self.center_crop(stacked_images, crop_dict)
 
-            if do_pad and size_divisor is not None:
+            if do_pad:
                 stacked_images = self.pad_image(stacked_images, size_divisor) # Apply padding if requested
 
             stacked_images = self.rescale_and_normalize(
