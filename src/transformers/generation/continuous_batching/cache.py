@@ -253,7 +253,7 @@ class PagedAttentionCache:
         return len(self._free_blocks)
 
     @traced
-    def get_read_indices(
+    def extend_read_indices(
         self, request_id: str, past_length: int, query_length: int, read_index: list[list[int]]
     ) -> None:
         """Retrieve physical cache indices for reading KV states in the cache across all layer groups. This method
@@ -264,7 +264,7 @@ class PagedAttentionCache:
             read_indices.extend(indices)
 
     @traced
-    def get_write_indices(
+    def extend_write_indices(
         self, request_id: str, past_length: int, query_length: int, write_index: list[list[int]]
     ) -> None:
         """Retrieve physical cache indices for writing new KV states to the cache across all layer groups. This method
@@ -273,6 +273,18 @@ class PagedAttentionCache:
         for cm, write_indices in zip(self.group_cache_managers, write_index):
             indices = cm.get_write_indices(request_id, past_length, query_length)
             write_indices.extend(indices)
+
+    @traced
+    def get_seqlens_k(
+        self, request_id: str, past_length: int, query_length: int
+    ) -> dict[str, int]:
+        """Retrieve the key sequence length for the given request_id across all layer types. Returns a dictionary of
+        layer types to their corresponding key sequence lengths."""
+        seqlens_k = {}
+        for cm in self.group_cache_managers:
+            attn_type, seqlen_k = cm.get_seqlens_k(request_id, past_length, query_length)
+            seqlens_k[attn_type] = seqlen_k
+        return seqlens_k
 
     @traced
     def update(
