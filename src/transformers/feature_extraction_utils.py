@@ -50,9 +50,6 @@ from .utils.hub import cached_files
 if TYPE_CHECKING:
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
-    if is_torch_available():
-        import torch  # noqa
-
 
 logger = logging.get_logger(__name__)
 
@@ -129,7 +126,7 @@ class BatchFeature(UserDict):
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-            import torch  # noqa
+            import torch
 
             def as_tensor(value):
                 if isinstance(value, (list, tuple)) and len(value) > 0:
