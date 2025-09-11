@@ -64,8 +64,6 @@
     title: Entrenador
   - local: sagemaker
     title: Ejecutar el entrenamiento en Amazon SageMaker
-  - local: converting_tensorflow_models
-    title: Convertir checkpoints de TensorFlow
   - local: serialization
     title: Exportar a ONNX
   - local: torchscript
