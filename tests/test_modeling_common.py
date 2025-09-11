@@ -3238,7 +3238,7 @@ class ModelTesterMixin:
 
     def test_load_with_mismatched_shapes(self):
         if not self.test_mismatched_shapes:
-            self.skipTest(reason="test_missmatched_shapes is set to False")
+            self.skipTest(reason="test_mismatched_shapes is set to False")
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -3282,7 +3282,7 @@ class ModelTesterMixin:
 
     def test_mismatched_shapes_have_properly_initialized_weights(self):
         if not self.test_mismatched_shapes:
-            self.skipTest(reason="test_missmatched_shapes is set to False")
+            self.skipTest(reason="test_mismatched_shapes is set to False")
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
@@ -3715,7 +3715,7 @@ class ModelTesterMixin:
             model = model_class(config)
             self.assertTrue(model.config.get_text_config(decoder=True)._attn_implementation == "eager")
 
-            # Test that using `dict` atttention implementation works with `from_pretrained`
+            # Test that using `dict` attention implementation works with `from_pretrained`
             #  Set all backbones to "eager" because "eager" attention is always available
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -3770,7 +3770,7 @@ class ModelTesterMixin:
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
         This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
 

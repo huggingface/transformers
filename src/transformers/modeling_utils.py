@@ -1596,8 +1596,8 @@ def _find_mismatched_keys(
 
 
 class PipelineParallel(Enum):
-    inputs: 0
-    outputs: 1
+    inputs = 0
+    outputs = 1
 
 
 class ModuleUtilsMixin:
