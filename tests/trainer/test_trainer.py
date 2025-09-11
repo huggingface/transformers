@@ -5148,11 +5148,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             training_args = TrainingArguments(
-                output_dir=tmpdir,
-                report_to="none",
-                max_steps=5,
-                per_device_train_batch_size=1,
-                use_cpu=True
+                output_dir=tmpdir, report_to="none", max_steps=5, per_device_train_batch_size=1, use_cpu=True
             )
             trainer = Trainer(
                 model=model,
@@ -5388,7 +5384,7 @@ class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
@@ -5434,7 +5430,7 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
@@ -5482,7 +5478,7 @@ class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
@@ -5527,7 +5523,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
                 b = config["b"]
             model_config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(model_config)
+            return RegressionPreTrainedModel(model_config).to(torch_device)
 
         def hp_name(params):
             return MyTrialShortNamer.shortname(params)
@@ -5590,7 +5586,7 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.assignments)
@@ -6169,7 +6165,7 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
                 b = config["b"]
             model_config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(model_config)
+            return RegressionPreTrainedModel(model_config).to(torch_device)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
