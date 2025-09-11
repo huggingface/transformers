@@ -1264,15 +1264,9 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        if image_grid_thw is not None:
-            grid_thw = image_grid_thw[image_grid_thw > 0].reshape([-1, 3])
-            grid_thw = F.pad(
-                torch.repeat_interleave(grid_thw[:, 1:], grid_thw[:, 0], 0),
-                [1, 0, 0, 0],
-                value=1,
-            )
-        image_embeds = self.vision_tower(pixel_values, grid_thw)
-        image_embeds = self.resampler_model(image_embeds, grid_thw)
+        pixel_values = pixel_values.to(self.vision_tower.device)
+        image_embeds = self.vision_tower(pixel_values, image_grid_thw)
+        image_embeds = self.resampler_model(image_embeds, image_grid_thw)
         return image_embeds
 
     def get_placeholder_mask(
@@ -1349,8 +1343,6 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        token_type_ids = self.get_tokentype_mask(input_ids, inputs_embeds)
-
         # TODO: remove after refactoring all
         if pixel_values is None and images is not None:
             pixel_values = images
@@ -1385,6 +1377,9 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
                 video_grid_thw=video_grid_thw,
                 cache_position=cache_position,
             )
+
+        if token_type_ids is None:
+            token_type_ids = self.get_tokentype_mask(input_ids, inputs_embeds)
 
         outputs = self.language_model(
             input_ids=None,
@@ -1650,9 +1645,9 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         grid_thw=None,  # TODO remove after refactor
         image_grid_thw=None,
         video_grid_thw=None,
-        # Intentionally ignore position ids to force
-        # custom cache logic of 3D position ids
+        # Intentionally ignore position ids and token type ids to force custom cache logic of 3D position ids
         position_ids=None,
+        token_type_ids=None,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
@@ -1681,6 +1676,11 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             cache_position=cache_position,
+        )
+        # Using our own token type logic
+        model_inputs["token_type_ids"] = self.model.get_tokentype_mask(
+            model_inputs["input_ids"],
+            model_inputs["inputs_embeds"],
         )
 
         if model_inputs["cache_position"][0] != 0:
