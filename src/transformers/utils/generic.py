@@ -544,7 +544,7 @@ def squeeze(array, axis=None):
     if is_numpy_array(array):
         return np.squeeze(array, axis=axis)
     elif is_torch_tensor(array):
-        return array.squeeze(dim=axis)
+        return array.squeeze() if axis is None else array.squeeze(dim=axis)
     else:
         raise ValueError(f"Type not supported for squeeze: {type(array)}.")
 

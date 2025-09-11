@@ -61,7 +61,6 @@ if is_torch_available():
     from torch.utils.data import DataLoader, Dataset
 
     from ..modeling_utils import PreTrainedModel
-    from ..models.auto.modeling_auto import AutoModel
 
     # Re-export for backward compatibility
     from .pt_utils import KeyDataset
@@ -233,7 +232,7 @@ def load_model(
 
     if isinstance(model, str):
         model_kwargs["_from_pipeline"] = task
-        class_tuple = model_classes if model_classes is not None else (AutoModel,)
+        class_tuple = model_classes if model_classes is not None else ()
         if config.architectures:
             classes = []
             for architecture in config.architectures:
