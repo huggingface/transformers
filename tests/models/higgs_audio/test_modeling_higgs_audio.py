@@ -208,7 +208,7 @@ class HiggsAudioModelTester:
             (
                 self.batch_size,
                 self.seq_length + (self.audio_length - 1) * (self.num_audio_in + self.num_audio_out),
-                config.text_config.hidden_size,
+                config.hidden_size,
             ),
         )
 
@@ -374,7 +374,7 @@ class HiggsAudioForConditionalGenerationTest(
                 token_index = getattr(config, key, None)
                 if token_index is None and hasattr(self, "model_tester"):
                     token_index = getattr(self.model_tester, key, None)
-                if token_index is not None and token_index < config.get_text_config().vocab_size:
+                if token_index is not None and token_index < config.vocab_size:
                     logits_processor_kwargs["bad_words_ids"].append([token_index])
 
         return logits_processor_kwargs
@@ -392,7 +392,7 @@ class HiggsAudioForConditionalGenerationTest(
         # Manual testing because of composite configs
         config = self.model_tester.prepare_config_and_inputs()[0]
         self.assertTrue(
-            hasattr(config.text_config, "vocab_size"),
+            hasattr(config, "vocab_size"),
             msg="LLM backbone `vocab_size` does not exist",
         )
 

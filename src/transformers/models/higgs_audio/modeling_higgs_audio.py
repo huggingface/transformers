@@ -315,9 +315,9 @@ class HiggsAudioDecoderProjector(nn.Module):
 
     def __init__(self, config: HiggsAudioConfig):
         super().__init__()
-        self.text_lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.text_lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.audio_lm_head = nn.Linear(
-            config.text_config.hidden_size, config.audio_num_codebooks * (config.audio_codebook_size + 2), bias=False
+            config.hidden_size, config.audio_num_codebooks * (config.audio_codebook_size + 2), bias=False
         )
 
     def forward(
@@ -371,15 +371,14 @@ class HiggsAudioDualFFNFastDecoderLayer(nn.Module):
 
     def __init__(self, config: AutoConfig, layer_idx: int):
         super().__init__()
-        text_config = config
-        self.hidden_size = text_config.hidden_size
+        self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
-        self.self_attn = HiggsAudioAttention(config=text_config, layer_idx=layer_idx)
+        self.self_attn = HiggsAudioAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = HiggsAudioMLP(text_config)
+        self.mlp = HiggsAudioMLP(config)
 
-        self.input_layernorm = HiggsAudioRMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
-        self.post_attention_layernorm = HiggsAudioRMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
+        self.input_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -551,19 +550,18 @@ class HiggsAudioDualFFNDecoderLayer(nn.Module):
 
     def __init__(self, config: AutoConfig, layer_idx: int):
         super().__init__()
-        text_config = config
-        self.hidden_size = text_config.hidden_size
+        self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
-        self.self_attn = HiggsAudioAttention(config=text_config, layer_idx=layer_idx)
+        self.self_attn = HiggsAudioAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = HiggsAudioMLP(text_config)
+        self.mlp = HiggsAudioMLP(config)
 
-        self.audio_mlp = HiggsAudioMLP(text_config)
-        self.audio_input_layernorm = HiggsAudioRMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
-        self.audio_post_attention_layernorm = HiggsAudioRMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
+        self.audio_mlp = HiggsAudioMLP(config)
+        self.audio_input_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.audio_post_attention_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.input_layernorm = HiggsAudioRMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
-        self.post_attention_layernorm = HiggsAudioRMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
+        self.input_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -694,7 +692,7 @@ class HiggsAudioPreTrainedModel(PreTrainedModel):
             std = self.config.initializer_range
         else:
             # 0.02 is the standard default value across the library
-            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+            std = getattr(self.config, "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -865,51 +863,41 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         self.audio_out_token_idx = config.audio_out_token_idx
         self.audio_out_bos_token_id = config.audio_out_bos_token_id if "audio_out_bos_token_id" in config else None
         self.audio_eos_token_id = config.audio_eos_token_id if "audio_eos_token_id" in config else None
-        self.vocab_size = config.text_config.vocab_size
+        self.vocab_size = config.vocab_size
         self.audio_num_codebooks = config.audio_num_codebooks
         self.use_delay_pattern = config.use_delay_pattern
         self.use_audio_out_embed_projector = config.use_audio_out_embed_projector
 
-        self.embed_tokens = nn.Embedding(self.vocab_size, config.text_config.hidden_size, self.padding_idx)
-        self.config.text_config._attn_implementation = self.config._attn_implementation
+        self.embed_tokens = nn.Embedding(self.vocab_size, config.hidden_size, self.padding_idx)
+        self.config._attn_implementation = self.config._attn_implementation
 
         if config.audio_adapter_type == "dual_ffn_fast_forward":
             layers = []
-            for j in range(config.text_config.num_hidden_layers):
+            for j in range(config.num_hidden_layers):
                 if j in config.audio_dual_ffn_layers:
-                    layers.append(
-                        HiggsAudioDualFFNDecoderLayer(
-                            config.text_config,
-                            j,
-                        )
-                    )
+                    layers.append(HiggsAudioDualFFNDecoderLayer(config, j))
                 else:
-                    layers.append(HiggsAudioDualFFNFastDecoderLayer(config.text_config, j))
+                    layers.append(HiggsAudioDualFFNFastDecoderLayer(config, j))
             self.layers = nn.ModuleList(layers)
         elif config.audio_adapter_type == "stack":
             self.layers = nn.ModuleList(
-                [
-                    HiggsAudioDecoderLayer(config.text_config, layer_idx)
-                    for layer_idx in range(config.text_config.num_hidden_layers)
-                ]
+                [HiggsAudioDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
             )
 
         self.num_activation_checkpointing_layers = len(self.layers)
 
-        self.norm = HiggsAudioRMSNorm(config.text_config.hidden_size, eps=config.text_config.rms_norm_eps)
-        self.rotary_emb = HiggsAudioRotaryEmbedding(config=config.text_config)
+        self.norm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = HiggsAudioRotaryEmbedding(config=config)
 
         self.audio_codebook_size = (
             config.audio_codebook_size + 2
         )  # We add 1 for the audio_stream_bos token and 1 for the audio_stream_eos token
 
         if config.use_audio_out_embed_projector:
-            self.audio_out_embed_projector = nn.Linear(
-                config.text_config.hidden_size, config.text_config.hidden_size, bias=False
-            )
+            self.audio_out_embed_projector = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
         self.audio_codebook_embeddings = nn.Embedding(
-            config.audio_num_codebooks * self.audio_codebook_size, config.text_config.hidden_size
+            config.audio_num_codebooks * self.audio_codebook_size, config.hidden_size
         )
 
         self.gradient_checkpointing = False
@@ -1526,7 +1514,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         )
 
     def _copy_kv_cache(self, from_cache: Cache, to_cache: Cache):
-        num_layers = self.config.text_config.num_hidden_layers
+        num_layers = self.config.num_hidden_layers
         if self.config.audio_dual_ffn_layers is not None:
             num_layers += len(self.config.audio_dual_ffn_layers)
         """ Copy the key-value pairs from one cache to another. """
@@ -1658,7 +1646,7 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
                 loss = shift_logits.sum() * 0.0  # Connect the gradient
             else:
                 # Flatten the tokens
-                shift_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
+                shift_logits = shift_logits.view(-1, self.config.vocab_size)
                 shift_labels = shift_labels.view(-1)
                 # Enable model parallelism
                 shift_labels = shift_labels.to(shift_logits.device)

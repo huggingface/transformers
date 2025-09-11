@@ -158,7 +158,6 @@ class HiggsAudioConfig(LlamaConfig):
         elif text_config is not None:
             for k, v in text_config.to_dict().items():
                 kwargs.setdefault(k, v)
-        kwargs.setdefault("pad_token_id", pad_token_id)
         super().__init__(**kwargs)
 
         if audio_adapter_type not in [
@@ -187,6 +186,7 @@ class HiggsAudioConfig(LlamaConfig):
         self.audio_stream_eos_id = audio_stream_eos_id
         self.audio_out_bos_token_id = audio_out_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
+        self.pad_token_id = pad_token_id
 
 
 __all__ = ["HiggsAudioConfig"]
