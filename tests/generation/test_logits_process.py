@@ -460,6 +460,25 @@ class LogitsProcessorTest(unittest.TestCase):
         )
         torch.testing.assert_close(filtered_dist, EXPECTED3, rtol=1e-3, atol=1e-3)
 
+        # --- Case 4: Probabilities including 0 value
+        dist4 = torch.log(
+            torch.tensor(
+                [[0.75, 0.25, 0.0, 0.0]],
+                device=torch_device,
+                dtype=torch.float,
+            )
+        )
+        top_h_warp = TopHLogitsWarper(top_h=0.4)
+        filtered_logits = top_h_warp(input_ids, dist3.clone())
+        filtered_dist = torch.exp(filtered_logits)
+
+        EXPECTED4 = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        torch.testing.assert_close(filtered_dist, EXPECTED4, rtol=1e-3, atol=1e-3)
+        
         # Processor should not change logits in-place
         top_h_warp = TopHLogitsWarper(top_h=0.5)
         out_again = top_h_warp(input_ids, dist3)
