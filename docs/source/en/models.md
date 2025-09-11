@@ -45,43 +45,6 @@ There are two general types of models you can load:
 1. A barebones model, like [`AutoModel`] or [`LlamaModel`], that outputs hidden states.
 2. A model with a specific *head* attached, like [`AutoModelForCausalLM`] or [`LlamaForCausalLM`], for performing specific tasks.
 
-For each model type, there is a separate class for each machine learning framework (PyTorch, TensorFlow, Flax). Pick the corresponding prefix for the framework you're using.
-
-<hfoptions id="backend">
-<hfoption id="PyTorch">
-
-```py
-from transformers import AutoModelForCausalLM, MistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", dtype="auto", device_map="auto")
-model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", dtype="auto", device_map="auto")
-```
-
-</hfoption>
-<hfoption id="TensorFlow">
-
-```py
-from transformers import TFAutoModelForCausalLM, TFMistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = TFAutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-model = TFMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-```
-
-</hfoption>
-<hfoption id="Flax">
-
-```py
-from transformers import FlaxAutoModelForCausalLM, FlaxMistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = FlaxAutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-model = FlaxMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-```
-
-</hfoption>
-</hfoptions>
 
 ## Model classes
 

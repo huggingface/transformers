@@ -140,6 +140,10 @@ def get_aligned_output_features_output_indices(
 class BackboneMixin:
     backbone_type: Optional[BackboneType] = None
 
+    # Attribute to indicate if the backbone has attention and can return attention outputs.
+    # Should be set to `False` for conv-based models to be able to run `forward_with_filtered_kwargs`
+    has_attentions: bool = True
+
     def _init_timm_backbone(self, config) -> None:
         """
         Initialize the backbone model from timm The backbone must already be loaded to self._backbone
@@ -230,9 +234,12 @@ class BackboneMixin:
         return [self.out_feature_channels[name] for name in self.out_features]
 
     def forward_with_filtered_kwargs(self, *args, **kwargs):
-        signature = dict(inspect.signature(self.forward).parameters)
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
-        return self(*args, **filtered_kwargs)
+        if not self.has_attentions:
+            kwargs.pop("output_attentions", None)
+        if self.backbone_type == BackboneType.TIMM:
+            signature = dict(inspect.signature(self.forward).parameters)
+            kwargs = {k: v for k, v in kwargs.items() if k in signature}
+        return self(*args, **kwargs)
 
     def forward(
         self,

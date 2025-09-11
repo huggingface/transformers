@@ -214,11 +214,6 @@ class IdeficsProcessor(ProcessorMixin):
     tokenizer_class = "LlamaTokenizerFast"
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
         self.image_token_id = (
@@ -358,9 +353,10 @@ class IdeficsProcessor(ProcessorMixin):
             if not all(isinstance(i, str) for i in text):
                 raise ValueError("When using the image-text-to-text behavior, the prompts should only contain text.")
             if isinstance(images[0], (list, tuple)):
-                # if nested images, nest text as well
-                text = [[i] for i in text]
-            prompts = list(zip(images, text))
+                # if nested images, un-nest each sublist and create `prompts`
+                prompts = [[sample, *image_list] for image_list, sample in zip(images, text)]
+            else:
+                prompts = list(zip(images, text))
 
         output_kwargs = self._merge_kwargs(
             IdeficsProcessorKwargs,

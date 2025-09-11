@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.56.0.dev0"
+__version__ = "4.57.0.dev0"
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -163,6 +163,7 @@ _import_structure = {
         "ImageToImagePipeline",
         "ImageToTextPipeline",
         "JsonPipelineDataFormat",
+        "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
         "NerPipeline",
         "ObjectDetectionPipeline",
@@ -410,7 +411,6 @@ else:
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
             "BeamScorer",
-            "BeamSearchScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
             "ConstrainedBeamSearchScorer",
             "Constraint",
@@ -425,7 +425,6 @@ else:
             "ForcedBOSTokenLogitsProcessor",
             "ForcedEOSTokenLogitsProcessor",
             "GenerationMixin",
-            "HammingDiversityLogitsProcessor",
             "InfNanRemoveLogitsProcessor",
             "LogitNormalization",
             "LogitsProcessor",
@@ -478,11 +477,14 @@ else:
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
         "get_cosine_with_hard_restarts_schedule_with_warmup",
+        "get_cosine_with_min_lr_schedule_with_warmup",
+        "get_cosine_with_min_lr_schedule_with_warmup_lr_rate",
         "get_inverse_sqrt_schedule",
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
         "get_wsd_schedule",
+        "get_reduce_on_plateau_schedule",
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",
@@ -586,7 +588,6 @@ if TYPE_CHECKING:
     from .cache_utils import HQQQuantizedCache as HQQQuantizedCache
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
     from .cache_utils import HybridCache as HybridCache
-    from .cache_utils import MambaCache as MambaCache
     from .cache_utils import OffloadedCache as OffloadedCache
     from .cache_utils import OffloadedStaticCache as OffloadedStaticCache
     from .cache_utils import QuantizedCache as QuantizedCache
@@ -655,7 +656,6 @@ if TYPE_CHECKING:
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import BeamScorer as BeamScorer
-    from .generation import BeamSearchScorer as BeamSearchScorer
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
     from .generation import ConstrainedBeamSearchScorer as ConstrainedBeamSearchScorer
@@ -686,7 +686,6 @@ if TYPE_CHECKING:
     from .generation import ForcedEOSTokenLogitsProcessor as ForcedEOSTokenLogitsProcessor
     from .generation import GenerationConfig as GenerationConfig
     from .generation import GenerationMixin as GenerationMixin
-    from .generation import HammingDiversityLogitsProcessor as HammingDiversityLogitsProcessor
     from .generation import InfNanRemoveLogitsProcessor as InfNanRemoveLogitsProcessor
     from .generation import LogitNormalization as LogitNormalization
     from .generation import LogitsProcessor as LogitsProcessor
@@ -789,6 +788,7 @@ if TYPE_CHECKING:
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
     from .models import *
+    from .models.mamba.modeling_mamba import MambaCache as MambaCache
     from .models.timm_wrapper import TimmWrapperImageProcessor as TimmWrapperImageProcessor
 
     # Optimization
@@ -798,6 +798,12 @@ if TYPE_CHECKING:
     from .optimization import get_cosine_schedule_with_warmup as get_cosine_schedule_with_warmup
     from .optimization import (
         get_cosine_with_hard_restarts_schedule_with_warmup as get_cosine_with_hard_restarts_schedule_with_warmup,
+    )
+    from .optimization import (
+        get_cosine_with_min_lr_schedule_with_warmup as get_cosine_with_min_lr_schedule_with_warmup,
+    )
+    from .optimization import (
+        get_cosine_with_min_lr_schedule_with_warmup_lr_rate as get_cosine_with_min_lr_schedule_with_warmup_lr_rate,
     )
     from .optimization import get_inverse_sqrt_schedule as get_inverse_sqrt_schedule
     from .optimization import get_linear_schedule_with_warmup as get_linear_schedule_with_warmup
@@ -826,6 +832,7 @@ if TYPE_CHECKING:
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
     from .pipelines import ImageToTextPipeline as ImageToTextPipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
+    from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
     from .pipelines import NerPipeline as NerPipeline
     from .pipelines import ObjectDetectionPipeline as ObjectDetectionPipeline

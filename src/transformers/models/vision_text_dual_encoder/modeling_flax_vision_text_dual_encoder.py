@@ -556,7 +556,7 @@ VISION_TEXT_DUAL_ENCODER_MODEL_DOCSTRING = r"""
     ... )
 
     >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-    >>> image_processor = AutoImageProcesor.from_pretrained("google/vit-base-patch16-224")
+    >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
     >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
     >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
     ...     "google/vit-base-patch16-224", "google-bert/bert-base-uncased"

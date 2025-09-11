@@ -281,7 +281,7 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
 
         This implementation uses a different algorithm for windowing and preemphasis compared to the built-in
         `transformers.audio_utils.spectrogram()` function that _will_ result in different outputs. Consider this
-        carefully when selecting an audio feature extactor, especially with pre-trained models.
+        carefully when selecting an audio feature extractor, especially with pre-trained models.
 
         Args:
             raw_speech:

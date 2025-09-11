@@ -363,6 +363,12 @@ Pipelines available for computer vision tasks include the following.
     - __call__
     - all
 
+### KeypointMatchingPipeline
+
+[[autodoc]] KeypointMatchingPipeline
+    - __call__
+    - all
+
 ### ObjectDetectionPipeline
 
 [[autodoc]] ObjectDetectionPipeline
