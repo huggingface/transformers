@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Descript and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,13 +14,16 @@
 # limitations under the License.
 import argparse
 import io
+import os
 
 import torch
 
 from transformers import (
+    EncodecModel,
     VocosConfig,
     VocosFeatureExtractor,
     VocosModel,
+    VocosProcessor,
 )
 
 
@@ -60,7 +63,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
 
     new_state_dict = convert_old_keys_to_new_keys(original_state_dict)
 
-    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False, assign=True)  # , strict=False)
+    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False, assign=True)
 
     if len(unexpected_keys) != 0:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
@@ -68,14 +71,42 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     if len(missing_keys) != 0:
         raise ValueError(f"missing keys found: {missing_keys}")
 
+    os.makedirs(pytorch_dump_folder_path, exist_ok=True)
+
     model.save_pretrained(pytorch_dump_folder_path, safe_serialization=False)
+    print(f"Saving model to {pytorch_dump_folder_path}")
+
     feature_extractor = VocosFeatureExtractor()
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+
+    # don't have to convert it here  because it's not used in mel variant
+    audio_tokenizer = EncodecModel.from_pretrained("facebook/encodec_24khz")
+
+    processor = VocosProcessor(feature_extractor=feature_extractor, audio_tokenizer=audio_tokenizer)
+
+    processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model.push_to_hub(push_to_hub)
-        feature_extractor.push_to_hub(push_to_hub)
-        print(f"Pushed model to {push_to_hub}")
+        processor.push_to_hub(push_to_hub)
+        print(f"Pushed model and processor to {push_to_hub}")
+
+
+"""
+# Download the original model checkpoint
+wget https://huggingface.co/charactr/vocos-mel-24khz/resolve/main/pytorch_model.bin -0 vocos_mel_original.bin
+
+# run conversion:
+mkdir -p vocos-mel-converted
+python src/transformers/models/vocos/convert_vocos_weights_to_hf.py \
+    --checkpoint_path vocos_mel_original.bin \
+    --pytorch_dump_folder_path vocos-mel-converted/ \
+    --push_to_hub hf-audio/vocos-mel-24khz
+
+# quick sanity check from local folder that everything loads fine
+model = VocosModel.from_pretrained("vocos-mel-converted")
+processor  = VocosProcessor.from_pretrained("vocos-mel-converted")
+
+"""
 
 
 if __name__ == "__main__":

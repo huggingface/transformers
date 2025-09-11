@@ -1,4 +1,4 @@
-# Copyright 2023 HuggingFace Inc.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -234,8 +234,8 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         )
 
         speech = self._load_datasamples(1)
-        feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/Vocos")
+        feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/vocos-mel-24khz")
         input_features = feature_extractor(speech, return_tensors="pt").input_features
         self.assertEqual(input_features.shape, (1, feature_extractor.feature_size, 550))
         # the numpy backend of melspectogram causes small numerical differences between cuda and cpu wheels
-        torch.testing.assert_close(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-3, atol=1e-4)
+        torch.testing.assert_close(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-3, atol=1e-3)

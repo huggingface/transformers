@@ -397,7 +397,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vivit", "VivitModel"),
         ("vjepa2", "VJEPA2Model"),
         ("vocos", "VocosModel"),
-        ("vocos", "VocosWithEncodecModel"),
         ("voxtral", "VoxtralForConditionalGeneration"),
         ("voxtral_encoder", "VoxtralEncoder"),
         ("wav2vec2", "Wav2Vec2Model"),

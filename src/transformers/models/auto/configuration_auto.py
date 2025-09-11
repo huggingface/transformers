@@ -417,7 +417,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("vivit", "VivitConfig"),
         ("vjepa2", "VJEPA2Config"),
         ("vocos", "VocosConfig"),
-        ("vocos", "VocosWithEncodecConfig"),
         ("voxtral", "VoxtralConfig"),
         ("voxtral_encoder", "VoxtralEncoderConfig"),
         ("wav2vec2", "Wav2Vec2Config"),

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Descript and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,8 @@
 # limitations under the License.
 """Vocos model configuration"""
 
-from typing import Literal, Optional, Sequence
-
-from transformers import EncodecConfig
+from collections.abc import Sequence
+from typing import Literal
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -60,6 +59,10 @@ class VocosConfig(PretrainedConfig):
             Hop length between STFT frames used in VocosISTFT head.
         spec_padding (`str`, *optional*, defaults to `"center"`):
             Padding mode for spectrogram inversion (`"center"` or `"same"`).
+        bandwidths (`Sequence[float]`, *optional*, defaults to `(1.5, 3.0, 6.0, 12.0)`):
+            Supported target bandwidths in kbps, This determines
+            the number of quantizers/codebooksused in RVQ part
+            of Encodec [2, 4, 6, 8].
 
     Example:
 
@@ -86,6 +89,7 @@ class VocosConfig(PretrainedConfig):
         n_fft: int = 1024,
         hop_length: int = 256,
         spec_padding: Literal["center", "same"] = "center",
+        bandwidths: Sequence[float] = (1.5, 3.0, 6.0, 12.0),
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -101,93 +105,7 @@ class VocosConfig(PretrainedConfig):
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.spec_padding = spec_padding
-
-
-class VocosWithEncodecConfig(VocosConfig):
-    r"""
-    This is the configuration class to store the configuration of a
-    [`VocosWithEncodecModel`]. It extends [`VocosConfig`] by adding EnCodec‐specific parameters
-    for audio encoding and quantization. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    [Manel/Vocos-Encodec](https://huggingface.co/Manel/Vocos-Encodec) architecture.
-
-    Args:
-        encodec_config (Union[Dict, EncodecConfig], *optional*):
-            Configuration for the neural codec model EnCodec.
-        train_codebooks (`bool`, *optional*, defaults to `False`):
-            Whether to finetune the EnCodec codebook embeddings.
-        bandwidths (`Sequence[float]`, *optional*, defaults to `(1.5, 3.0, 6.0, 12.0)`):
-            Supported target bandwidths in kbps, This determines
-            the number of quantizers/codebooksused in RVQ part
-            of Encodec [2, 4, 6, 8].
-        input_channels (`int`, *optional*, defaults to 128):
-            Number of mel‐spectrogram input channels.
-        hidden_dim (`int`, *optional*, defaults to 384):
-            Hidden dimension for the ConvNeXt backbone.
-        intermediate_dim (`int`, *optional*, defaults to 1152):
-            Dimension of feed‐forward layers in ConvNeXt.
-        num_layers (`int`, *optional*, defaults to 8):
-            Number of ConvNeXt blocks.
-        use_adaptive_norm (`bool`, *optional*, defaults to `True`):
-            Whether to use adaptive layer normalization.
-        adanorm_num_embeddings (`int`, *optional*, defaults to 4):
-            Number of the embeddings in adaptive Norm layer.
-        n_fft (`int`, *optional*, defaults to 1280):
-            FFT size for STFT/ISTFT used in VocosISTFT head.
-        hop_length (`int`, *optional*, defaults to 320):
-            Hop length for STFT/ISTFT used in VocosISTFT head.
-        spec_padding (`str`, *optional*, defaults to `"same"`):
-            Padding mode for spectrogram inversion (`"center"` or `"same"`).
-
-    Example:
-
-    ```python
-    >>> from transformers import VocosWithEncodecModel, VocosWithEncodecConfig
-    >>> config = VocosWithEncodecConfig()
-    >>> model = VocosWithEncodecModel(config)
-    ```
-    """
-
-    model_type = "vocos_with_encodec"
-    sub_configs = {"encodec_config": EncodecConfig}
-
-    def __init__(
-        self,
-        encodec_config: Optional[dict] = None,
-        train_codebooks: bool = False,
-        bandwidths: Sequence[float] = (1.5, 3.0, 6.0, 12.0),
-        input_channels: int = 128,
-        hidden_dim: int = 384,
-        intermediate_dim: int = 1152,
-        num_layers: int = 8,
-        use_adaptive_norm: bool = True,
-        adanorm_num_embeddings: int = 4,
-        n_fft: int = 1280,
-        hop_length: int = 320,
-        spec_padding: Literal["center", "same"] = "same",
-        **kwargs,
-    ):
-        super().__init__(
-            input_channels=input_channels,
-            hidden_dim=hidden_dim,
-            intermediate_dim=intermediate_dim,
-            num_layers=num_layers,
-            use_adaptive_norm=use_adaptive_norm,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            spec_padding=spec_padding,
-            **kwargs,
-        )
-
-        if encodec_config is None:
-            self.encodec_config = EncodecConfig()
-        elif isinstance(encodec_config, dict):
-            self.encodec_config = EncodecConfig(**encodec_config)
-        elif isinstance(encodec_config, EncodecConfig):
-            self.encodec_config = encodec_config
-
-        self.train_codebooks = train_codebooks
         self.bandwidths = list(bandwidths)
-        self.adanorm_num_embeddings = adanorm_num_embeddings
 
 
-__all__ = ["VocosConfig", "VocosWithEncodecConfig"]
+__all__ = ["VocosConfig"]

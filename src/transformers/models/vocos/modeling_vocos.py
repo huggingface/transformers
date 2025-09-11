@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Descript and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,8 +22,7 @@ import torch.nn.functional as F
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ..auto import AutoModel
-from .configuration_vocos import VocosConfig, VocosWithEncodecConfig
+from .configuration_vocos import VocosConfig
 
 
 def _vocos_inverse_stft(spectrogram, padding, n_fft, hop_length, win_length, window):
@@ -33,6 +32,7 @@ def _vocos_inverse_stft(spectrogram, padding, n_fft, hop_length, win_length, win
         if `center` : uses PyTorch's built-in ISTFT implementation since it uses `center=True` by default.
         if `same` : uses custom implementation of ISTFT with the overlap-add method, since the Pytorch version fails the
         Nonzero Overlap Add (NOLA) condition when center is False. See issue: https://github.com/pytorch/pytorch/issues/62323
+        You can find the original vocos implementation here: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L7
     """
     if padding == "center":
         audio = torch.istft(
@@ -83,14 +83,15 @@ class VocosAdaptiveLayerNorm(nn.Module):
         super().__init__()
         self.eps = config.layer_norm_eps
         self.hidden_dim = config.hidden_dim
-        self.weight = nn.Parameter(torch.ones(config.adanorm_num_embeddings, config.hidden_dim))
-        self.bias = nn.Parameter(torch.zeros(config.adanorm_num_embeddings, config.hidden_dim))
+        adanorm_num_embeddings = len(config.bandwidths)
+        self.weight = nn.Parameter(torch.ones(adanorm_num_embeddings, config.hidden_dim))
+        self.bias = nn.Parameter(torch.zeros(adanorm_num_embeddings, config.hidden_dim))
 
     def forward(self, hidden_states: torch.Tensor, cond_embedding_id: torch.LongTensor = None):
         if cond_embedding_id is None:
             # the index used to select the target bandwidth is used to index into Adaptive Normalization lookup table (adanorm_num_embeddings, hidden_dim)
             raise ValueError(
-                "When using adaptive LayerNorm `use_adaptive_norm=True`, you must pass conditional id via `bandwidth_id`."
+                "Adaptive LayerNorm is enabled because `use_adaptive_norm=True`, but no `bandwidth` was provided, `bandwidth` to derive the cond_embedding_id."
             )
 
         hidden_states = F.layer_norm(hidden_states, (self.hidden_dim,), weight=None, bias=None, eps=self.eps)
@@ -240,8 +241,7 @@ class VocosPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Main Vocos model for neural vocoding. This model takes mel-spectrogram or other acoustic feature inputs and generates high-quality
-    audio waveforms.
+    Main Vocos model for neural vocoding for high-quality audio generation. This model can be paired with [`VocosProcessor`] to generate audio from either mel-spectrograms or EnCodec embeddings.
     """
 )
 class VocosModel(VocosPreTrainedModel):
@@ -253,15 +253,20 @@ class VocosModel(VocosPreTrainedModel):
         super().__init__(config)
         self.backbone = VocosBackbone(config)
         self.head = VocosISTFTHead(config)
+        self._bandwidth_to_id = {bandwidth: id for id, bandwidth in enumerate(config.bandwidths)}
         self.post_init()
 
     @auto_docstring
-    def forward(self, features: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, features: torch.FloatTensor, bandwidth: Optional[float] = None) -> torch.FloatTensor:
         r"""
-        Convert input spectrogram features to audio waveform.
-        Args:
-            features (`torch.FloatTensor`):
-                Mel-spectrogram of shape (batch_size, n_mels, num_time_frames).
+        features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time)`):
+            Output of [`VocosProcessor`] is either:
+                - Mel-spectrogram features: computed directly from audio via (`processor(audio=waveform)`)
+                - EnCodec neural audio codec features: computed either from precomputed EnCodec RVQ codes via `processor(codes=codes, bandwidth=1.5)`
+                            or from raw audio via `processor(audio=waveform, bandwidth=1.5)`, you need to provide bandwidth for both.
+
+        bandwidth (`float`, *optional*):
+            Target bandwidth for EnCodec quantizer [1.5, 3, 6, 12] kbps respectively, `None` for Mel-spectrogram features.
 
         Returns:
             `torch.FloatTensor` of shape (batch_size, time): Reconstructed audio waveform .
@@ -270,144 +275,40 @@ class VocosModel(VocosPreTrainedModel):
 
         ```python
         >>> from datasets import load_dataset, Audio
-        >>> from transformers import VocosModel, VocosFeatureExtractor
+        >>> from transformers import VocosProcessor, VocosModel
 
-        >>> model = VocosModel.from_pretrained("Manel/Vocos")
-        >>> feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/Vocos")
+        >>> processor = VocosProcessor.from_pretrained("idk/vocos-mel-24khz")
+        >>> model = VocosModel.from_pretrained("idk/vocos-mel-24khz")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
         >>> audio_sample= ds[0]["audio"]["array"]
 
-        >>> inputs = feature_extractor(audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
-        >>> audio = model(inputs.input_features)
+        >>> # extract mel-spectrogram features from audio and reconstruct high-quality audio
+        >>> inputs = processor(audio=audio_sample)
+        >>> reconstructed_audio = model(**inputs)
+
+
+        >>> # Encode audio using EnCodec neural codec and reconstruct from audio from that
+        >>> processor = VocosProcessor.from_pretrained("idk/vocos-encodec-24khz")
+        >>> model = VocosModel.from_pretrained("idk/vocos-encodec-24khz")
+
+        >>> inputs = processor(audio=audio_sample, bandwidth=bandwidth)
+        >>> reconstructed_audio = model(**inputs)
+
+        >>> # Reconstruct audio directly from pre-computed EnCodec quantized codes
+        >>> inputs = processor(codes=audio_codes, bandwidth=bandwidth)
+        >>> reconstructed_audio = model(**inputs)
+
         ```
         """
-        hidden_states = self.backbone(features)
+        if bandwidth is not None:
+            bandwidth_id = self._bandwidth_to_id[float(bandwidth)]
+        else:
+            bandwidth_id = None
+        hidden_states = self.backbone(features, bandwidth_id)
         audio = self.head(hidden_states)
         return audio
 
 
-@auto_docstring(
-    custom_intro="""
-    Vocos model with integrated EnCodec neural audio codec for end-to-end audio compression and reconstruction.
-    It accepts raw audio or pre-computed EnCodec RVQ codes (quantized audio features) and reconstructs a higher quality audio.
-    """
-)
-class VocosWithEncodecModel(VocosPreTrainedModel):
-    config_class = VocosWithEncodecConfig
-    main_input_name = "audio"
-
-    def __init__(self, config: VocosWithEncodecConfig):
-        super().__init__(config)
-
-        self.encodec_model = AutoModel.from_config(config.encodec_config)
-        self.num_quantizers = self.encodec_model.quantizer.get_num_quantizers_for_bandwidth(
-            bandwidth=max(config.bandwidths)
-        )
-        codebook_weights = torch.cat(
-            [layer.codebook.embed for layer in self.encodec_model.quantizer.layers[: self.num_quantizers]], dim=0
-        )
-        self.codebook_weights = nn.Parameter(codebook_weights, requires_grad=config.train_codebooks)
-        self.backbone = VocosBackbone(config)
-        self.head = VocosISTFTHead(config)
-        self.post_init()
-
-    def _audio_codes_to_features(self, codes: torch.LongTensor) -> torch.FloatTensor:
-        r"""
-        Transform a sequence of discrete tokens (codes) into feature embeddings using codebook weights.
-
-        Args:
-            codes (torch.LongTensor): Discrete codes of shape (n_codebooks, seq_len) or
-                (n_codebooks, batch_size, seq_len).
-
-        Returns:
-            torch.FloatTensor: Feature embeddings of shape (batch_size, hidden_dim, seq_len).
-        """
-        if codes.dim() == 2:
-            codes = codes.unsqueeze(1)
-        num_bins = self.encodec_model.quantizer.codebook_size
-        offsets = torch.arange(0, num_bins * codes.size(0), num_bins, device=codes.device).reshape(-1, 1, 1)
-        embeddings_idxs = codes + offsets
-        features = F.embedding(embeddings_idxs, self.codebook_weights).sum(dim=0)
-        return features.transpose(1, 2)
-
-    @auto_docstring
-    def forward(
-        self,
-        audio: Optional[torch.FloatTensor] = None,
-        codes: Optional[torch.LongTensor] = None,
-        *,
-        bandwidth_id: torch.LongTensor,
-        return_codes: bool = False,
-    ):
-        r"""
-        Forward pass through the VocosWithEncodec model, it accepts raw audio or discrete codes from EnCodec model
-        and returns a reconstructed audio and optionally the Encodec quantized codes.
-
-
-        Args:
-            audio (torch.FloatTensor, optional):
-                Raw audio input of shape (batch_size, n_samples).
-            codes (torch.LongTensor, optional):
-                Pre-computed RVQ discrete codes of shape
-                (n_codebooks, seq_len) or (n_codebooks, batch_size, seq_len).
-            bandwidth_id (torch.LongTensor):
-                Index in [0, 1, 2, 3] used to select the desired bandwidth for EnCodec
-                quantizer [1.5, 3, 6, 12] kbps respectively. This determines
-                the number of RVQ codebooks used[2, 4, 6, 8].
-            return_codes (bool):
-                Whether to return the codes along with reconstructed audio.
-
-        Returns:
-            torch.FloatTensor:
-                Reconstructed audio waveform of shape (batch_size, n_samples).
-                tuple: If return_codes=True, returns (audio, codes).
-
-        Example:
-
-        ```python
-        >>> import torch
-        >>> from datasets import load_dataset, Audio
-        >>> from transformers import VocosWithEncodecModel, VocosWithEncodecConfig
-
-        >>> model = VocosWithEncodecModel.from_pretrained("Manel/Vocos-Encodec")
-        >>> config = VocosWithEncodecConfig.from_pretrained("Manel/Vocos-Encodec")
-
-        >>> # load audio sample
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=24000))
-
-        >>> # reconstructing audio from raw audio
-        >>> bandwidth_id = torch.tensor([0], dtype=torch.long)
-        >>> audio_sample = torch.tensor(ds[0]["audio"]["array"], dtype=torch.float32).unsqueeze(0)
-        >>> audio = model(audio=audio_sample, bandwidth_id=bandwidth_id)
-
-        >>> # reconstructing audio from encoded codes
-        >>> codes = torch.randint(low=0, high=1024, size=(8, 200))
-        >>> audio = model(codes=codes, bandwidth_id=bandwidth_id)
-        ```
-        """
-        if audio is None and codes is None:
-            raise ValueError("One of `audio` or `codes` must be provided as input.")
-
-        if codes is not None and codes.ndim not in (2, 3):
-            raise ValueError(
-                f"`codes` must have shape (num_codebooks, sequence_length) or (num_codebooks, batch_size, sequence_length), but got {codes.shape}."
-            )
-
-        if audio is not None:
-            embedding = self.encodec_model.encoder(audio.unsqueeze(1))
-            bandwidth = self.config.encodec_config.target_bandwidths[bandwidth_id.item()]
-            codes = self.encodec_model.quantizer.encode(embedding, bandwidth=bandwidth)
-
-        hidden_states = self._audio_codes_to_features(codes)
-        hidden_states = self.backbone(hidden_states, bandwidth_id)
-        reconstructed_audio = self.head(hidden_states)
-
-        if return_codes:
-            return reconstructed_audio, codes
-        return reconstructed_audio
-
-
-__all__ = ["VocosModel", "VocosWithEncodecModel", "VocosPreTrainedModel"]
+__all__ = ["VocosModel", "VocosPreTrainedModel"]
