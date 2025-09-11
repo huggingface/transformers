@@ -5152,7 +5152,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 report_to="none",
                 max_steps=5,
                 per_device_train_batch_size=1,
-                remove_unused_columns=False,
+                use_cpu=True
             )
             trainer = Trainer(
                 model=model,
