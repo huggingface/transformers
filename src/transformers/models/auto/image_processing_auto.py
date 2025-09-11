@@ -151,7 +151,7 @@ else:
             ("pix2struct", ("Pix2StructImageProcessor", None)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
-            ("prompt_depth_anything", ("PromptDepthAnythingImageProcessorFast", None)),
+            ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", PromptDepthAnythingImageProcessorFast)),
             ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
