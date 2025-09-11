@@ -564,7 +564,7 @@ class PipelineUtilsTest(unittest.TestCase):
                 # test table in separate test due to more dependencies
                 continue
 
-            self.check_default_pipeline(task, "pt", set_seed_fn, self.check_models_equal_pt)
+            self.check_default_pipeline(task, set_seed_fn, self.check_models_equal_pt)
 
             # clean-up as much as possible GPU memory occupied by PyTorch
             gc.collect()
@@ -576,7 +576,7 @@ class PipelineUtilsTest(unittest.TestCase):
         import torch
 
         set_seed_fn = lambda: torch.manual_seed(0)  # noqa: E731
-        self.check_default_pipeline("table-question-answering", "pt", set_seed_fn, self.check_models_equal_pt)
+        self.check_default_pipeline("table-question-answering", set_seed_fn, self.check_models_equal_pt)
 
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
@@ -624,17 +624,17 @@ class PipelineUtilsTest(unittest.TestCase):
                     self.assertEqual(k1, k2)
                     self.assertEqual(v1.dtype, v2.dtype)
 
-    def check_default_pipeline(self, task, framework, set_seed_fn, check_models_equal_fn):
+    def check_default_pipeline(self, task, set_seed_fn, check_models_equal_fn):
         from transformers.pipelines import SUPPORTED_TASKS, pipeline
 
         task_dict = SUPPORTED_TASKS[task]
         # test to compare pipeline to manually loading the respective model
         model = None
-        relevant_auto_classes = task_dict[framework]
+        relevant_auto_classes = task_dict["pt"]
 
         if len(relevant_auto_classes) == 0:
             # task has no default
-            self.skipTest(f"{task} in {framework} has no default")
+            self.skipTest(f"{task} in pytorch has no default")
 
         # by default use first class
         auto_model_cls = relevant_auto_classes[0]
@@ -646,14 +646,14 @@ class PipelineUtilsTest(unittest.TestCase):
             revisions = []
             tasks = []
             for translation_pair in task_dict["default"]:
-                model_id, revision = task_dict["default"][translation_pair]["model"][framework]
+                model_id, revision = task_dict["default"][translation_pair]["model"]
 
                 model_ids.append(model_id)
                 revisions.append(revision)
                 tasks.append(task + f"_{'_to_'.join(translation_pair)}")
         else:
             # normal case - non-translation pipeline
-            model_id, revision = task_dict["default"]["model"][framework]
+            model_id, revision = task_dict["default"]["model"]
 
             model_ids = [model_id]
             revisions = [revision]

@@ -2322,7 +2322,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
-    @unittest.skip(reason="Doesn't support another framework than PyTorch")
+    @unittest.skip(reason="Doesn't support returning Numpy arrays")
     def test_np_encode_plus_sent_to_model(self):
         pass
 

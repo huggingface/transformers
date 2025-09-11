@@ -1150,7 +1150,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(column_ids.tolist(), expected_results["column_ids"])
         self.assertListEqual(row_ids.tolist(), expected_results["row_ids"])
 
-    @unittest.skip(reason="Doesn't support another framework than PyTorch")
+    @unittest.skip(reason="Doesn't support returning Numpy arrays")
     def test_np_encode_plus_sent_to_model(self):
         pass
 
