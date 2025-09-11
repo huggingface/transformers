@@ -194,6 +194,19 @@ def convert_state_dict_to_hf(state_dict, is_tied=True):
                 converted_state_dict[re.sub(".experts", "", prefix) + converted_key] = tensor.contiguous()
             else:
                 converted_state_dict[key] = tensor.contiguous()
+        # Convert sequential to its own module
+        elif "spatial_linear" in key or "temporal_linear" in key:
+            sequential_number = int(re.findall(r'\d+', key)[-1])
+            match sequential_number:
+                case 0:
+                    converted_key = re.sub(r'(?<=\.)\d+(?=\.)', 'fc1', key)
+                case 2:
+                    converted_key = re.sub(r'(?<=\.)\d+(?=\.)', 'fc2', key)
+                case 3:
+                    converted_key = re.sub(r'(?<=\.)\d+(?=\.)', 'ln', key)
+                case _:
+                    converted_key = key
+            converted_state_dict[converted_key] = tensor.contiguous()
         else:
             converted_state_dict[key] = tensor.contiguous()
     return converted_state_dict
@@ -344,14 +357,14 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
     tokenizer.save_pretrained(save_dir)
 
 
-"""
+#"""
 convert_weights(
     model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
     save_dir='AntonV/ErnieVL',
 )
 #"""
 
-#"""
+"""
 convert_config(
     model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
     save_dir='AntonV/ErnieVL',

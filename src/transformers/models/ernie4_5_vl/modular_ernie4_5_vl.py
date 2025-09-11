@@ -587,6 +587,23 @@ class Ernie4_5_VLVisionTransformerPretrainedModel(Qwen2_5_VisionTransformerPretr
         return hidden_states
 
 
+class Ernie4_5_VLVisionMLP(nn.Module):
+    def __init__(self, config, in_dim, out_dim):
+        super().__init__()
+
+        self.fc1 = nn.Linear(in_dim, out_dim)
+        self.act_fn = nn.GELU()
+        self.fc2 = nn.Linear(out_dim, out_dim)
+        self.ln = nn.LayerNorm(out_dim, eps=config.vision_rms_norm_eps)
+
+    def forward(self, hidden_states):
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.ln(hidden_states)
+        return hidden_states
+
+
 class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -602,19 +619,8 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
         # compress 3d conv(video) to 1d
         self.temporal_dim = self.in_dim * self.spatial_merge_size**2 * self.temporal_merge_size
 
-        self.spatial_linear = nn.Sequential(
-            nn.Linear(self.spatial_dim, self.spatial_dim),
-            nn.GELU(),
-            nn.Linear(self.spatial_dim, self.spatial_dim),
-            nn.LayerNorm(self.spatial_dim, eps=config.vision_rms_norm_eps),
-        )
-
-        self.temporal_linear = nn.Sequential(
-            nn.Linear(self.temporal_dim, self.spatial_dim),
-            nn.GELU(),
-            nn.Linear(self.spatial_dim, self.spatial_dim),
-            nn.LayerNorm(self.spatial_dim, eps=config.vision_rms_norm_eps),
-        )
+        self.spatial_linear = Ernie4_5_VLVisionMLP(config, self.spatial_dim, self.spatial_dim)
+        self.temporal_linear = Ernie4_5_VLVisionMLP(config, self.temporal_dim, self.spatial_dim)
 
         self.mlp = nn.Linear(self.spatial_dim, self.out_dim)
         self.after_norm = Ernie4_5_VLRMSNorm(self.out_dim, config.rms_norm_eps)
