@@ -3077,7 +3077,6 @@ class GenerationMixin(ContinuousMixin):
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
-        prefill_outputs: torch.FloatTensor = None,
         **model_kwargs,
     ) -> Union[GenerateBeamOutput, torch.LongTensor]:
         r"""
@@ -3115,8 +3114,6 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateBeamEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        if prefill_outputs is None:
-            raise ValueError("Prefill outputs must be provided.")
         # 1. init beam_search values
         pad_token_id = generation_config._pad_token_tensor
         eos_token_id = generation_config._eos_token_tensor
@@ -3228,16 +3225,11 @@ class GenerationMixin(ContinuousMixin):
 
         # 4. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            if prefill_outputs is not None:
-                model_outputs = prefill_outputs
-                flat_running_sequences = input_ids
-                prefill_outputs = None
-            else:
-                # a. Forward current tokens, obtain the logits
-                flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
-                model_inputs = self.prepare_inputs_for_generation(flat_running_sequences, **model_kwargs)
+            # a. Forward current tokens, obtain the logits
+            flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
+            model_inputs = self.prepare_inputs_for_generation(flat_running_sequences, **model_kwargs)
 
-                model_outputs = self(**model_inputs, return_dict=True)
+            model_outputs = self(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
