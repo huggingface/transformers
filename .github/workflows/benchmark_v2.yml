@@ -7,26 +7,6 @@ on:
         description: 'GH Actions runner group to use'
         required: true
         type: string
-      model_id:
-        description: 'Model ID to benchmark (e.g., meta-llama/Llama-2-7b-hf)'
-        required: false
-        type: string
-        default: ''
-      warmup_iterations:
-        description: 'Number of warmup iterations'
-        required: false
-        type: number
-        default: 3
-      measurement_iterations:
-        description: 'Number of measurement iterations'
-        required: false
-        type: number
-        default: 5
-      num_tokens_to_generate:
-        description: 'Number of tokens to generate'
-        required: false
-        type: number
-        default: 100
       commit_sha:
         description: 'Commit SHA to benchmark'
         required: false
@@ -36,7 +16,7 @@ on:
         description: 'Enable/disable uploading results to a HuggingFace Dataset'
         required: false
         type: string
-        default: ''
+        default: 'false'
       run_id:
         description: 'Custom run ID for organizing results (auto-generated if not provided)'
         required: false
@@ -85,44 +65,15 @@ jobs:
           python3 -c "import torch; print(f'CUDA device count: {torch.cuda.device_count()}')" || true
           nvidia-smi || true
 
-      - name: Prepare benchmark arguments
-        id: prepare-args
-        run: |
-          args="--log-level INFO"
-          
-          # Add model ID if specified
-          if [ -n "${{ inputs.model_id }}" ]; then
-            args="$args --model-id '${{ inputs.model_id }}'"
-          fi
-          
-          # Add iterations
-          args="$args --warmup-iterations ${{ inputs.warmup_iterations }}"
-          args="$args --measurement-iterations ${{ inputs.measurement_iterations }}"
-          args="$args --num-tokens-to-generate ${{ inputs.num_tokens_to_generate }}"
-
-          # Add commit ID if available
-          if [ -n "${{ inputs.commit_sha }}" ]; then
-            args="$args --commit-id '${{ inputs.commit_sha }}'"
-          elif [ -n "${{ github.sha }}" ]; then
-            args="$args --commit-id '${{ github.sha }}'"
-          fi
-          
-          # Add HuggingFace upload parameters if specified
-          if [ -n "${{ inputs.upload_to_hub }}" ]; then
-            args="$args --upload-to-hub '${{ inputs.upload_to_hub }}'"
-          fi
-          
-          if [ -n "${{ inputs.run_id }}" ]; then
-            args="$args --run-id '${{ inputs.run_id }}'"
-          fi
-          
-          echo "benchmark_args=$args" >> $GITHUB_OUTPUT
-          echo "Benchmark arguments: $args"
-
       - name: Run benchmark v2
         working-directory: benchmark_v2
         run: |
-          echo "Running benchmark with args: ${{ steps.prepare-args.outputs.benchmark_args }}"
-          python3 run_benchmarks.py ${{ steps.prepare-args.outputs.benchmark_args }}
+          echo "Running benchmarks"
+          python3 run_benchmarks.py \
+          --commit-id '${{ inputs.commit_sha || github.sha }}' \
+          --upload-to-hub '${{ inputs.upload_to_hub || false}}' \
+          --run-id '${{ inputs.run_id }}' \
+          --benchmark-repo-id '${{ inputs.benchmark_repo_id}}' \
+          --log-level INFO
         env:
           HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
