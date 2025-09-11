@@ -120,20 +120,11 @@ class LongcatFlashMLP(nn.Module):
 class LongcatFlashTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        del self.n_group
-        del self.topk_group
-        del self.weight  # Remove inherited weight parameter
-        del self.norm_topk_prob
         self.config = config
 
         self.top_k = config.moe_topk
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
         self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
         self.router_bias = getattr(config, "router_bias", False)
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
@@ -154,45 +145,47 @@ class LongcatFlashTopkRouter(nn.Module):
         return topk_indices, topk_weights
 
 
-# remap config key expert_ffn_hidden_size -> moe_intermediate_size
 class LongcatFlashMoE(nn.Module):
-    def __init__(self, config):
-        # ugly double getattr, will be solved when model and configs are converted
+    """
+    A mixed expert module containing zero compute (identity) experts.
+    """
 
-        self.intermediate_size = getattr(config, "expert_ffn_hidden_size", getattr(config, "moe_intermediate_size"))
-        self.zero_expert_num = config.zero_expert_num
-        self.zero_expert_type = getattr(config, "zero_expert_type", "identity")
-        super().__init__(config)
-        del self.gate
-        del self.shared_experts
+    def __init__(self, config):
+        super().__init__()
+        self.intermediate_size = config.expert_ffn_hidden_size
+        self.config = config
 
         self.experts = nn.ModuleList(
             [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)]
-            + [nn.Identity() for _ in range(self.zero_expert_num)]
+            + [nn.Identity() for _ in range(config.zero_expert_num)]
         )
 
-        # Override total_experts to include zero experts
-        self.total_experts = len(self.experts) + self.zero_expert_num
         self.router = LongcatFlashTopkRouter(config)
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
+        r"""
+        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
+        to not have to do a loop here (deepseek has 256 experts soooo yeah).
+        """
         final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=self.total_experts)
+        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
         expert_mask = expert_mask.permute(2, 0, 1)
 
-        for expert_idx in range(self.total_experts):
+        for expert_idx in range(len(self.experts)):
+            expert = self.experts[expert_idx]
             mask = expert_mask[expert_idx]
             token_indices, weight_indices = torch.where(mask)
 
             if token_indices.numel() > 0:
                 expert_weights = topk_weights[token_indices, weight_indices]
                 expert_input = hidden_states[token_indices]
-                expert_output = self.experts[expert_idx](expert_input)
-
+                expert_output = expert(expert_input)
                 weighted_output = expert_output * expert_weights.unsqueeze(-1)
                 final_hidden_states.index_add_(0, token_indices, weighted_output)
 
+        # in original deepseek, the output of the experts are gathered once we leave this module
+        # thus the moe module is itelsf an IsolatedParallel module
+        # and all expert are "local" meaning we shard but we don't gather
         return final_hidden_states.type(hidden_states.dtype)
 
     def forward(self, hidden_states):
@@ -208,33 +201,6 @@ def rotate_half(x):
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -324,8 +290,6 @@ class LongcatFlashMLA(nn.Module):
 
     def __init__(self, config, layer_idx: int):
         super().__init__()
-        # Force LongCat to always use interleaved RoPE (MLA)
-        config.rope_interleave = True
         self.config = config
         self.layer_idx = layer_idx
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
@@ -376,15 +340,6 @@ class LongcatFlashMLA(nn.Module):
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
 
-    def _apply_lora_scaling(self, q_pass, q_rot, k_pass):
-        """Apply LongCat LoRA scaling if configured."""
-        if hasattr(self, "mla_scale_q_lora"):
-            q_pass = q_pass * self.mla_scale_q_lora
-            q_rot = q_rot * self.mla_scale_q_lora
-        if hasattr(self, "mla_scale_kv_lora"):
-            k_pass = k_pass * self.mla_scale_kv_lora
-        return q_pass, q_rot, k_pass
-
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -410,8 +365,10 @@ class LongcatFlashMLA(nn.Module):
         k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         k_pass = self.kv_a_layernorm(k_pass)
 
-        # Apply LoRA scaling hook (no-op by default, overridden by subclasses)
-        q_pass, q_rot, k_pass = self._apply_lora_scaling(q_pass, q_rot, k_pass)
+        # Only difference: apply LoRA scaling hook (no-op by default, overridden by subclasses)
+        q_pass = q_pass * self.mla_scale_q_lora
+        q_rot = q_rot * self.mla_scale_q_lora
+        k_pass = k_pass * self.mla_scale_kv_lora
 
         k_pass = self.kv_b_proj(k_pass).view(key_shape).transpose(1, 2)
         k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
@@ -419,10 +376,9 @@ class LongcatFlashMLA(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
-        if self.config.rope_interleave:  # support using interleaved weights for efficiency
-            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        else:
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+
         k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)

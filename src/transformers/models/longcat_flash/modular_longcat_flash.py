@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Callable
 
 import torch
 import torch.nn.functional as F
 from torch import nn
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
@@ -26,16 +27,20 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
+    DeepseekV3MoE,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
     DeepseekV3TopkRouter,
-)
+    apply_rotary_pos_emb_interleave,
+    eager_attention_forward,
+    )
 
 
 logger = logging.get_logger(__name__)
@@ -59,11 +64,11 @@ class LongcatFlashMLP(DeepseekV3MLP):
 # TODO remap config key moe_topk -> num_experts_per_tok
 class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config):
+        super().__init__(config)
         del self.n_group
         del self.topk_group
-        del self.weight  # Remove inherited weight parameter
+        del self.weight
         del self.norm_topk_prob
-        super().__init__(config)
 
         self.top_k = config.moe_topk
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
@@ -90,45 +95,22 @@ class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
 
 
 # remap config key expert_ffn_hidden_size -> moe_intermediate_size
-class LongcatFlashMoE(nn.Module):
+class LongcatFlashMoE(DeepseekV3MoE):
+    """
+    A mixed expert module containing zero compute (identity) experts.
+    """
     def __init__(self, config):
-        # ugly double getattr, will be solved when model and configs are converted
-
-        self.intermediate_size = getattr(config, "expert_ffn_hidden_size", getattr(config, "moe_intermediate_size"))
-        self.zero_expert_num = config.zero_expert_num
-        self.zero_expert_type = getattr(config, "zero_expert_type", "identity")
+        self.intermediate_size = config.expert_ffn_hidden_size
         super().__init__(config)
         del self.gate
         del self.shared_experts
 
         self.experts = nn.ModuleList(
             [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)]
-            + [nn.Identity() for _ in range(self.zero_expert_num)]
+            + [nn.Identity() for _ in range(config.zero_expert_num)]
         )
 
-        # Override total_experts to include zero experts
-        self.total_experts = len(self.experts) + self.zero_expert_num
         self.router = LongcatFlashTopkRouter(config)
-
-    def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=self.total_experts)
-        expert_mask = expert_mask.permute(2, 0, 1)
-
-        for expert_idx in range(self.total_experts):
-            mask = expert_mask[expert_idx]
-            token_indices, weight_indices = torch.where(mask)
-
-            if token_indices.numel() > 0:
-                expert_weights = topk_weights[token_indices, weight_indices]
-                expert_input = hidden_states[token_indices]
-                expert_output = self.experts[expert_idx](expert_input)
-
-                weighted_output = expert_output * expert_weights.unsqueeze(-1)
-                final_hidden_states.index_add_(0, token_indices, weighted_output)
-
-        return final_hidden_states.type(hidden_states.dtype)
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
@@ -140,21 +122,85 @@ class LongcatFlashMoE(nn.Module):
 
 class LongcatFlashMLA(DeepseekV3Attention):
     def __init__(self, config, layer_idx: int):
-        # Force LongCat to always use interleaved RoPE (MLA)
-        config.rope_interleave = True
         super().__init__(config, layer_idx)
 
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
 
-    def _apply_lora_scaling(self, q_pass, q_rot, k_pass):
-        """Apply LongCat LoRA scaling if configured."""
-        if hasattr(self, "mla_scale_q_lora"):
-            q_pass = q_pass * self.mla_scale_q_lora
-            q_rot = q_rot * self.mla_scale_q_lora
-        if hasattr(self, "mla_scale_kv_lora"):
-            k_pass = k_pass * self.mla_scale_kv_lora
-        return q_pass, q_rot, k_pass
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        batch_size, seq_length = hidden_states.shape[:-1]
+        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
+
+        if self.q_lora_rank is None:
+            q_states = self.q_proj(hidden_states)
+        else:
+            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+        q_states = q_states.view(query_shape).transpose(1, 2)
+        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+
+        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
+        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_pass = self.kv_a_layernorm(k_pass)
+
+        # Only difference: apply LoRA scaling hook (no-op by default, overridden by subclasses)
+        q_pass = q_pass * self.mla_scale_q_lora
+        q_rot = q_rot * self.mla_scale_q_lora
+        k_pass = k_pass * self.mla_scale_kv_lora
+
+
+        k_pass = self.kv_b_proj(k_pass).view(key_shape).transpose(1, 2)
+        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+
+        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+
+        cos, sin = position_embeddings
+
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+
+        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
+
+        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        key_states = torch.cat((k_pass, k_rot), dim=-1)
+
+        if past_key_values is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+            attn_output = attn_output[:, :, :, : self.v_head_dim]
+
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
