@@ -432,13 +432,14 @@ class BltPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
         "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
-        "encoder_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_encoder"),
-        "global_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="global_transformer"),
     }
 
 
 class BltLocalEncoder(BltPreTrainedModel):
     config: BltLocalEncoderConfig
+    _can_record_outputs = {
+        "encoder_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_encoder"),
+    }
 
     def __init__(self, config: BltLocalEncoderConfig):
         super().__init__(config)
@@ -630,6 +631,9 @@ class BltLocalDecoder(BltPreTrainedModel):
 
 class BltGlobalTransformer(BltPreTrainedModel):
     config: BltGlobalTransformerConfig
+    _can_record_outputs = {
+        "global_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="global_transformer"),
+    }
 
     def __init__(self, config: BltGlobalTransformerConfig):
         super().__init__(config)
