@@ -289,8 +289,11 @@ class ChatArguments:
     def __post_init__(self):
         """Only used for BC `torch_dtype` argument."""
         # In this case only the BC torch_dtype was given
-        if self.torch_dtype is not None and self.dtype == "auto":
-            self.dtype = self.torch_dtype
+        if self.torch_dtype is not None:
+            if self.dtype is None:
+                self.dtype = self.torch_dtype
+            elif self.torch_dtype != self.dtype:
+                raise ValueError(f"torch_dtype {self.torch_dtype} and dtype {self.dtype} have different values")
 
 
 def chat_command_factory(args: Namespace):
