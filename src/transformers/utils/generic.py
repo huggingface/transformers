@@ -961,7 +961,14 @@ def check_model_inputs(func):
                 )
                 use_cache = False
 
-            kwargs["use_cache"] = use_cache
+            if "use_cache" in func.__code__.co_varnames:
+                use_cache_index = func.__code__.co_varnames.index("use_cache") - 1  # -1 for self
+                if len(args) > use_cache_index:
+                    args = list(args)
+                    args[use_cache_index] = use_cache
+                    args = tuple(args)
+                else:
+                    kwargs["use_cache"] = use_cache
 
         return_dict = kwargs.pop("return_dict", None)
         if return_dict is None:
@@ -972,7 +979,9 @@ def check_model_inputs(func):
             for k, v in all_args["kwargs"].items():
                 all_args[k] = v
 
-        capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__), {})  # there is a weak ref for executorch
+        # _can_record_outputs is None by default
+        capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__)) or {}  # there is a weak ref for executorch
+
         recordable_keys = {
             f"output_{k}": all_args.get(
                 f"output_{k}",
