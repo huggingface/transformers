@@ -52,14 +52,7 @@ elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
 
-class Owlv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with grey pixels.
-    """
-
-    do_pad: Optional[bool]
+class Owlv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs): ...
 
 
 @auto_docstring
@@ -83,38 +76,6 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
         return BaseImageProcessorFast.preprocess(self, images, **kwargs)
-
-    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
-        """
-        Pad an image with zeros to the given size.
-        """
-        height, width = images.shape[-2:]
-        size = max(height, width)
-        pad_bottom = size - height
-        pad_right = size - width
-
-        padding = (0, 0, pad_right, pad_bottom)
-        padded_image = F.pad(images, padding, fill=constant_value)
-        return padded_image
-
-    def pad(
-        self,
-        images: list["torch.Tensor"],
-        disable_grouping: Optional[bool],
-        constant_value: float = 0.5,
-    ) -> list["torch.Tensor"]:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            stacked_images = self._pad_images(
-                stacked_images,
-                constant_value=constant_value,
-            )
-            processed_images_grouped[shape] = stacked_images
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        return processed_images
 
     def resize(
         self,
@@ -202,7 +163,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
-            processed_images = self.pad(processed_images, disable_grouping=disable_grouping)
+            processed_images = self.pad(processed_images, fill_value=0.5, disable_grouping=disable_grouping)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             processed_images, disable_grouping=disable_grouping

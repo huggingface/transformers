@@ -264,19 +264,6 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
         return super().preprocess(images, **kwargs)
 
-    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
-        """
-        Pad an image with zeros to the given size.
-        """
-        height, width = images.shape[-2:]
-        size = max(height, width)
-        pad_bottom = size - height
-        pad_right = size - width
-
-        padding = (0, 0, pad_right, pad_bottom)
-        padded_image = F.pad(images, padding, fill=constant_value)
-        return padded_image
-
     def resize(
         self,
         image: "torch.Tensor",
