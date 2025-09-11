@@ -1248,9 +1248,10 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
                 The temporal, height and width of feature shape of each video in LLM.
         """
-        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        pixel_values_videos = pixel_values_videos.to(self.vision_tower.device)
+        video_embeds = self.vision_tower(pixel_values_videos, video_grid_thw)
+        video_embeds = self.resampler_model(video_embeds, video_grid_thw)
+        split_sizes = (video_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
         video_embeds = torch.split(video_embeds, split_sizes)
         return video_embeds
 
@@ -1267,6 +1268,8 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         pixel_values = pixel_values.to(self.vision_tower.device)
         image_embeds = self.vision_tower(pixel_values, image_grid_thw)
         image_embeds = self.resampler_model(image_embeds, image_grid_thw)
+        split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(image_embeds, split_sizes)
         return image_embeds
 
     def get_placeholder_mask(
@@ -1351,8 +1354,7 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-            # TODO
-            # image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -1360,8 +1362,7 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
-            # TODO
-            # video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
