@@ -1,5 +1,5 @@
 from collections import OrderedDict
-
+from torch import nn
 import mediapy
 import numpy as np
 import torch
@@ -398,16 +398,18 @@ def convert(
 
     if load_model:
         config = VideoPrismConfig(**checkpoint_info["config"])
-        model = VideoPrismModel(config) if checkpoint_info["model_type"] == "backbone" else VideoPrismClipModel(config)
+        model = VideoPrismFactorizedEncoderModel(config) if checkpoint_info["model_type"] == "backbone" else VideoPrismClipModel(config)
 
-        try:
-            state_dict = load_file(path)
-        except:
-            hf_hub_download(repo_id="MHRDYN7/videoprism-base", filename=path, local_dir="./")
-            state_dict = load_file(path)
+        # try:
+        state_dict = load_file(path)
+        # except:
+        #     hf_hub_download(repo_id="MHRDYN7/videoprism-base", filename=path, local_dir="./")
+        #     state_dict = load_file(path)
             # raise ValueError("File not found, please download first")
-        # key_list = list(state_dict.keys())
 
+        # for lvt
+
+        # key_list = list(state_dict.keys())
         # for k in key_list:
         #     # shape = v.shape
         #     # print(f"Key: {k}, Value shape: {shape}")
@@ -420,21 +422,25 @@ def convert(
         
         # state_dict["video_model.backbone.spatial_embeddings.position_embeddings"] = state_dict.pop("video_model.backbone.spatial_embeddings.spatial_pos_emb")
         # state_dict["video_model.backbone.temporal_embeddings.position_embeddings"] = state_dict.pop("video_model.backbone.temporal_embeddings.temporal_pos_emb")
-        #     if k == "spatial_embeddings.spatial_pos_emb":
+        
+        
+        # For video encoder
         # state_dict["spatial_embeddings.position_embeddings"] = state_dict.pop("spatial_embeddings.spatial_pos_emb")
-
-            # if k == "temporal_embeddings.temporal_pos_emb":
         # state_dict["temporal_embeddings.position_embeddings"] = state_dict.pop("temporal_embeddings.temporal_pos_emb")    
-            # new_shape = ()
-            # for i in range(len(shape)):
-            #     new_shape += (shape[i]-1,)
-            # print(f"Key: {k}, Value shape: {shape}, values: {v[new_shape]} ")
-        # print(state_dict["text_encoder.token_embeddings.weight"][:5,:5])
+          
+        # for scale buffer
 
-        # dim = int(checkpoint_info["config"]["hidden_size"] / checkpoint_info["config"]["num_attention_heads"])
+        # self.dim = int(config.intermediate_size / config.num_attention_heads)
+        # self.per_dim_scale = nn.Parameter(torch.zeros(self.dim))
+        # r_softplus_0 = 1.442695041
+        # _scale = torch.tensor(r_softplus_0 / (self.dim**0.5))
+
+        # dim = int(checkpoint_info["config"]["intermediate_size"] / checkpoint_info["config"]["num_attention_heads"])
         # r_softplus_0 = 1.442695041
 
         # scale = torch.tensor(r_softplus_0 / (dim**0.5))
+        # softplus = nn.functional.softplus(state_dict["video_model.contrastive_vision_pooler.per_dim_scale.per_dim_scale"])
+        # scale = scale * softplus
         # state_dict["video_model.contrastive_vision_pooler.per_dim_scale.scale"] = scale
         
         model.load_state_dict(state_dict)
@@ -442,7 +448,7 @@ def convert(
 
     if load_video:
         VIDEO_FILE_PATH = "./src/transformers/models/videoprism/water_bottle_drumming.mp4"
-        NUM_FRAMES = 16 # checkpoint_info["config"]["num_frames"]  # ? 16 for base, 8 for large
+        NUM_FRAMES = checkpoint_info["config"]["num_frames"]  # ? 16 for base, 8 for large
         FRAME_SIZE = 288
         frames = read_and_preprocess_video(
             VIDEO_FILE_PATH,
@@ -488,10 +494,10 @@ def convert(
                     "Output does not match expected tensor."
                 )
                 print("Inference successful, output matches expected tensor.")
-                # path = f"videoprism_{checkpoint_info['model_size']}_{checkpoint_info['id']}.safetensors"
-                # print(path)
-                # save_file(state_dict, path, metadata={"format": "safetensors"})
-                # print("done")
+                path = f"videoprism_{checkpoint_info['model_size']}_{checkpoint_info['id']}.safetensors"
+                print(path)
+                save_file(state_dict, path, metadata={"format": "safetensors"})
+                print("done")
 
             elif checkpoint_info["model_type"] == "lvt":
                 sentences = [
@@ -558,26 +564,27 @@ def convert(
                 if checkpoint_info["model_size"] == "base":
 
                     path = f"videoprism_lvt_{checkpoint_info['model_size']}_{checkpoint_info['id']}.safetensors"
-                    # print(path)
                     # save_file(state_dict, path, metadata={"format": "safetensors"})
-                    # print("done")                    
-                    
                     assert torch.allclose(outputs.video_embeds[:, :9], lvt_video_base_expected_tensor, atol=1e-5), (
                         "Video output does not match expected tensor."
                     )
-                    print("video ok")
                     assert torch.allclose(outputs.text_embeds[:, :3], lvt_text_base_expected_tensor, atol=1e-5), (
                         "Text output does not match expected tensor."
                     )
                     print("Inference successful, output matches expected tensor.")
-                elif checkpoint_info["model_size"] == "large":
-                    assert torch.allclose(outputs[0][:, :9], lvt_video_large_expected_tensor, atol=1e-5), (
+                elif checkpoint_info["model_size"] == "large":                    
+                    
+                    assert torch.allclose(outputs.video_embeds[:, :9], lvt_video_large_expected_tensor, atol=1e-5), (
                         "Video output does not match expected tensor."
                     )
-                    # assert torch.allclose(outputs[1][:, :3], lvt_text_large_expected_tensor, atol=1e-5), (
-                    #     "Text output does not match expected tensor."
-                    # )
+                    print("video ok")
+                    assert torch.allclose(outputs.text_embeds[:, :3], lvt_text_large_expected_tensor, atol=1e-5), (
+                        "Text output does not match expected tensor."
+                    )
                     print("Inference successful, output matches expected tensor.")
+                    print(path)
+                    save_file(state_dict, path, metadata={"format": "safetensors"})
+                    print("done")
 
                 # print(outputs[0].shape)
                 # print(outputs[0][:, :9])
@@ -595,3 +602,8 @@ if __name__ == "__main__":
         load_video=True,
         inference=True,
     )
+
+
+# fix the tokenizer
+# fix pos embed for text
+# fix the attn mask so that  

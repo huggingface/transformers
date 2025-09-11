@@ -452,17 +452,15 @@ class PerDimScale(nn.Module):
         self.per_dim_scale = nn.Parameter(torch.zeros(self.dim))
         r_softplus_0 = 1.442695041
         scale = torch.tensor(r_softplus_0 / (self.dim**0.5))
-        self.register_buffer('scale', scale)
-        # self.register_buffer('scale_factor', self.scale, persistent=True)
-    
+        softplus = nn.functional.softplus(self.per_dim_scale)
+        scale = scale * softplus
+        self.register_buffer("scale", scale)
+
     def forward(self, inputs):
         # ? original comments
         # 1.0/jax.nn.softplus(0.0) = 1.442695041. Hard code this number so that we
         # can avoid unnecessary XLA op fusion mess on TPU.
-        softplus = nn.functional.softplus(self.per_dim_scale)
-        scale = self.scale * softplus
-        
-        return inputs * scale.expand(*inputs.shape)
+        return inputs * self.scale.expand(*inputs.shape)
 
 
 class VideoPrismMultiheadAttentionPoolingHead(nn.Module):   # ? same name pattern as in siglip 2 or aimv2
@@ -539,31 +537,10 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):   # ? same name patter
         )
 
 
-class PositionalEmbedding(nn.Module):
-    def __init__(self, config: VideoPrismConfig):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.min_timescale = 1
-        self.max_timescale = 10000
-
-    def forward(self, seq_length):
-        position = torch.arange(seq_length, dtype=torch.float32).unsqueeze(0)  # ? (1, seq_length)
-        num_timescales = self.hidden_size // 2
-
-        log_timescale_increment = math.log(
-            float(self.max_timescale) / float(self.min_timescale)  # ? log(10000/1) = ln(10000)
-        ) / torch.maximum(torch.tensor(num_timescales, dtype=torch.float32) - 1, torch.tensor(1))
-
-        inv_timescales = self.min_timescale * torch.exp(
-            torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment
-        )
-
-        scaled_time = position.unsqueeze(-1) * inv_timescales.expand(1, 1, -1)
-
-        embs = torch.cat((torch.sin(scaled_time), torch.cos(scaled_time)), dim=-1)
-
-        return embs
-
+def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
+    inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / (dim-2)))
+    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
+    return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 class VideoPrismTextModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
@@ -574,7 +551,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
             self.config.is_causal = True
         self.config.num_hidden_layers = config.num_unimodal_layers
         self.unimodal_encoder = VideoPrismEncoder(self.config)
-        self.pos_embeddings = PositionalEmbedding(config)
+        # self.pos_embeddings = PositionalEmbedding(config)
         self.token_embeddings = nn.Embedding(config.vocabulary_size, config.hidden_size)
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -605,7 +582,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype) + causal_attention_mask
 
         # ? the shape of input_embeds is (B, 64, 768)
-        features = hidden_states + self.pos_embeddings(seq_length)
+        features = hidden_states + create_sinusoidal_positions(seq_length, self.config.hidden_size)  # self.pos_embeddings(seq_length)
         cls_emb = self.cls_emb * (self.config.hidden_size**0.5)
         cls_emb = cls_emb.expand(features.shape[0], -1, -1)         # ? expand to (B, 1, 768)
         features = torch.cat((features, cls_emb), dim=1)            # ? features shape (B, 65, 768)
@@ -650,13 +627,10 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
 
         backbone_outputs = self.backbone(pixel_values=pixel_values)        # ? returns (B, 4096, 768)        
         video_features = backbone_outputs.last_hidden_state
-        print(f"{video_features[0, :2, :3]=}")
         auxiliary_output = self.auxiliary_encoder(video_features)          # ? returns (B, 4096, 768) 
         auxiliary_output_features = auxiliary_output.last_hidden_state
-        print(f"{auxiliary_output_features[0, :3, :3]=}")
         contrastive_vision_pooler_output = self.contrastive_vision_pooler(auxiliary_output_features)
         video_embeddings = contrastive_vision_pooler_output.pooled_output  # ? (B, 1, 768)
-        print(f"{video_embeddings[0, :3, :3]=}")
         if self.normalize:
             video_embeddings = self.l2norm(video_embeddings, dim=-1)
 
@@ -692,10 +666,7 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         text_model_outputs = self.text_model(input_ids=input_ids, attention_mask=attention_mask)
 
         video_embeddings = video_model_outputs.video_last_hidden_state  # ? (video_batch, 1, 768)
-        print(f"{video_embeddings[0, 0, :3]}")
         text_embeddings = text_model_outputs.last_hidden_state          # ? (text_batch, 768)
-        print(f"{text_embeddings[0, :3]}")
-
         emb_dim = video_embeddings[0].shape[-1]
         assert emb_dim == text_embeddings[0].shape[-1]
 
