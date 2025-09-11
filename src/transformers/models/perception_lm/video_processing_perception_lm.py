@@ -29,9 +29,6 @@ if is_vision_available():
     from ...image_utils import PILImageResampling
 
 
-class PerceptionLMFastVideoProcessorInitKwargs(VideosKwargs): ...
-
-
 @requires(backends=("torchvision",))
 class PerceptionLMVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
@@ -43,10 +40,8 @@ class PerceptionLMVideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = PerceptionLMFastVideoProcessorInitKwargs
-    model_input_names = ["pixel_values_videos"]
 
-    def __init__(self, **kwargs: Unpack[PerceptionLMFastVideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[VideosKwargs]):
         super().__init__(**kwargs)
 
 

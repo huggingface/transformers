@@ -24,17 +24,14 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ...video_utils import VideoInput
+from .video_processing_glm4v import Glm4vVideoProcessorInitKwargs
 
 
 logger = logging.get_logger(__name__)
-
-
-class Glm4vVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[list[float], float]
 
 
 class Glm4vImagesKwargs(ImagesKwargs):
@@ -45,6 +42,8 @@ class Glm4vImagesKwargs(ImagesKwargs):
 
 class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Glm4vImagesKwargs
+    videos_kwargs: Glm4vVideoProcessorInitKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -53,7 +52,6 @@ class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
         },
         "videos_kwargs": {"return_metadata": True},
     }
-    videos_kwargs: Glm4vVideosProcessorKwargs
 
 
 class Glm4vProcessor(ProcessorMixin):

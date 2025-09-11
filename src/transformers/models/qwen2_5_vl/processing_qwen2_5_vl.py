@@ -35,8 +35,14 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
 
 
-class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[list[float], float]
+class Qwen2_5_VLVideosKwargs(VideosKwargs):
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
+    min_frames: Optional[int]
+    max_frames: Optional[int]
 
 
 class Qwen2_5_VLImagesKwargs(ImagesKwargs):
@@ -49,7 +55,8 @@ class Qwen2_5_VLImagesKwargs(ImagesKwargs):
 
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Qwen2_5_VLImagesKwargs
-    videos_kwargs: Qwen2_5_VLVideosProcessorKwargs
+    videos_kwargs: Qwen2_5_VLVideosKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,

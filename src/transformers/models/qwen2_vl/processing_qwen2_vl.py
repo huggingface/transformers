@@ -31,6 +31,7 @@ from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, 
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ...video_utils import VideoInput
+from .video_processing_qwen2_vl import Qwen2VLVideoProcessorInitKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -46,6 +47,8 @@ class Qwen2VLImagesKwargs(ImagesKwargs):
 
 class Qwen2VLProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Qwen2VLImagesKwargs
+    videos_kwargs: Qwen2VLVideoProcessorInitKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,

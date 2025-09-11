@@ -25,6 +25,7 @@ from ...processing_utils import AllKwargsForChatTemplate, ImagesKwargs, Processi
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput
+from .video_processing_smolvlm import SmolVLMVideoProcessorInitKwargs
 
 
 if is_vision_available():
@@ -110,6 +111,7 @@ class SmolVLMImagesKwargs(ImagesKwargs, total=False):
 
 class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: SmolVLMImagesKwargs
+    videos_kwargs: SmolVLMVideoProcessorInitKwargs
 
     _defaults = {
         "text_kwargs": {

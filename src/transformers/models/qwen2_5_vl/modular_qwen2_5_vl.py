@@ -42,6 +42,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     VisionRotaryEmbedding,
 )
 from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
+from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessorInitKwargs
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -50,7 +51,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
-from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torchdynamo_compiling, logging
 from ...video_utils import VideoInput
@@ -839,8 +840,8 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         return model_inputs
 
 
-class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[list[float], float]
+class Qwen2_5_VLVideosKwargs(Qwen2VLVideoProcessorInitKwargs):
+    pass
 
 
 class Qwen2_5_VLImagesKwargs(Qwen2VLImagesKwargs):
@@ -849,7 +850,8 @@ class Qwen2_5_VLImagesKwargs(Qwen2VLImagesKwargs):
 
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Qwen2_5_VLImagesKwargs
-    videos_kwargs: Qwen2_5_VLVideosProcessorKwargs
+    videos_kwargs: Qwen2_5_VLVideosKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,

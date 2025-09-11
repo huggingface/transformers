@@ -31,10 +31,10 @@ from ...video_utils import VideoInput
 
 
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    fps: Optional[list[Union[int, float]]] = None
-    use_audio_in_video: Optional[bool] = None
-    seconds_per_chunk: Optional[float] = None
-    position_id_per_seconds: Optional[int] = None
+    fps: Optional[Union[list[Union[int, float]], int, float]]
+    use_audio_in_video: Optional[bool]
+    seconds_per_chunk: Optional[float]
+    position_id_per_seconds: Optional[int]
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]

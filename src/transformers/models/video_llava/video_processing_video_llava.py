@@ -30,9 +30,6 @@ if is_vision_available():
     from ...image_utils import PILImageResampling
 
 
-class VideoLlavaFastVideoProcessorInitKwargs(VideosKwargs): ...
-
-
 @requires(backends=("torchvision",))
 class VideoLlavaVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
@@ -47,10 +44,8 @@ class VideoLlavaVideoProcessor(BaseVideoProcessor):
     do_normalize = True
     do_convert_rgb = True
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
-    valid_kwargs = VideoLlavaFastVideoProcessorInitKwargs
-    model_input_names = ["pixel_values_videos"]
 
-    def __init__(self, **kwargs: Unpack[VideoLlavaFastVideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[VideosKwargs]):
         super().__init__(**kwargs)
 
 
