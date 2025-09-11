@@ -461,8 +461,6 @@ class NougatImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            pad_image=size,
             do_resize=do_resize,
             size=size,
             resample=resample,

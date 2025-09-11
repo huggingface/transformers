@@ -546,7 +546,7 @@ def validate_preprocess_arguments(
 
     if do_pad and pad_size is None:
         # Processors pad images using different args depending on the model, so the below check is pointless
-        # but we keep it for BC for now. TODO: remove in v5, only 10 models actually pass this arg for validation
+        # but we keep it for BC for now. TODO: remove in v5
         # Usually padding can be called with:
         #   - "pad_size/size" if we're padding to specific values
         #   - "size_divisor" if we're padding to any value divisible by X
