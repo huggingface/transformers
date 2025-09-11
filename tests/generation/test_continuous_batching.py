@@ -20,7 +20,7 @@ from parameterized import parameterized
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.generation.continuous_batching.cache import group_layers_by_attn_type
-from transformers.testing_utils import require_kernels, require_torch_gpu, slow
+from transformers.testing_utils import require_kernels, require_torch_gpu, slow, Expectations
 
 
 CB_MODELS_TO_TEST = [
@@ -170,33 +170,94 @@ class ContinuousBatchingTest(unittest.TestCase):
                         f"Exp:{repr(expected_output)}\nOut:{repr(cb_decoded_output)}",
                     )
 
+
+    # Eager tests
     @require_torch_gpu
     @slow
-    @parameterized.expand(CB_MODELS_TO_TEST)
-    def test_continuous_batching_parity_eager(self, model_id: str) -> None:
-        expected_outputs = {
-            "meta-llama/Llama-3.1-8B": {
+    def test_continuous_batching_parity_llama_eager(self) -> None:
+        expected_outputs = Expectations({
+            ("rocm", (9, 4)): {
                 "req_0": " $16. How did I get that answer? I used the following equation: 16 - 3 - 4 = 9. 9 x $2 = $18. $18 -"
-            },
-            "google/gemma-2-2b-it": {
-                "req_1":  " \n\n**Answer:** 3 bolts\n\n**Solution:**\n\n* **White fiber:** The robe needs half as much white fiber as blue fiber, so it needs 2 bolts / 2 ="
-            },
-        }.get(model_id, {})  # fmt: skip
-        self._test_continuous_batching_parity(model_id, "eager_paged", expected_outputs)
+            }
+        }).get_expectation() # fmt: skip
+        self._test_continuous_batching_parity("meta-llama/Llama-3.1-8B", "eager_paged", expected_outputs)
 
     @require_torch_gpu
     @slow
-    @parameterized.expand(CB_MODELS_TO_TEST[:-1])  # GPT-OSS is not collected: it has an attn sink incompatible w/ SDPA
-    def test_continuous_batching_parity_sdpa(self, model_id: str) -> None:
-        expected_outputs = {
-            "meta-llama/Llama-3.1-8B": {
+    def test_continuous_batching_parity_gemma_eager(self) -> None:
+        expected_outputs = Expectations({
+            ("rocm", (9, 4)): {
+                "req_1": " \n\n**Answer:** 3 bolts\n\n**Solution:**\n\n* **White fiber:** The robe needs half as much white fiber as blue fiber, so it needs 2 bolts / 2 ="
+            }
+        }).get_expectation() # fmt: skip
+        self._test_continuous_batching_parity("google/gemma-2-2b-it", "eager_paged", expected_outputs)
+
+    @require_torch_gpu
+    @slow
+    def test_continuous_batching_parity_qwen_eager(self) -> None:
+        expected_outputs = {}
+        self._test_continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "eager_paged", expected_outputs)
+
+    @require_torch_gpu
+    @slow
+    def test_continuous_batching_parity_gpt_oss_eager(self) -> None:
+        expected_outputs = {}
+        self._test_continuous_batching_parity("openai/gpt-oss-20b", "eager_paged", expected_outputs)
+
+
+    # SDPA tests
+    @require_torch_gpu
+    @slow
+    def test_continuous_batching_parity_llama_sdpa(self) -> None:
+        expected_outputs = Expectations({
+            ("rocm", (9, 4)): {
                 "req_2": " $50,000. This is because the value of the house increased by 150%, which means that the value of the house increased by $50,000. This is because the value of the"
             }
-        }.get(model_id, {})  # fmt: skip
-        self._test_continuous_batching_parity(model_id, "sdpa_paged", expected_outputs)
+        }).get_expectation() # fmt: skip
+        self._test_continuous_batching_parity("meta-llama/Llama-3.1-8B", "sdpa_paged", expected_outputs)
+
+    @require_torch_gpu
+    @slow
+    def test_continuous_batching_parity_gemma_sdpa(self) -> None:
+        expected_outputs = {}
+        self._test_continuous_batching_parity("google/gemma-2-2b-it", "sdpa_paged", expected_outputs)
+
+    @require_torch_gpu
+    @slow
+    def test_continuous_batching_parity_qwen_sdpa(self) -> None:
+        expected_outputs = {}
+        self._test_continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "sdpa_paged", expected_outputs)
+
+    # GPT-OSS is not compatible with SDPA because it has an attention sink. TODO: is this fixable?
+
+
+    # Flash attention test
+    @require_torch_gpu
+    @require_kernels
+    @slow
+    def test_continuous_batching_parity_llama_flash(self) -> None:
+        expected_outputs = {}
+        self._test_continuous_batching_parity(
+            "meta-llama/Llama-3.1-8B", "paged_attention|kernels-community/flash-attn", expected_outputs
+        )
 
     @require_torch_gpu
     @require_kernels
     @slow
-    def test_continuous_batching_parity_flash(self, model_id: str) -> None:
-        self._test_continuous_batching_parity(model_id, "paged_attention|kernels-community/flash-attn")
+    def test_continuous_batching_parity_gemma_flash(self) -> None:
+        expected_outputs = {}
+        self._test_continuous_batching_parity("google/gemma-2-2b-it", "paged_attention|kernels-community/flash-attn", expected_outputs)
+
+    @require_torch_gpu
+    @require_kernels
+    @slow
+    def test_continuous_batching_parity_qwen_flash(self) -> None:
+        expected_outputs = {}
+        self._test_continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged_attention|kernels-community/flash-attn", expected_outputs)
+
+    @require_torch_gpu
+    @require_kernels
+    @slow
+    def test_continuous_batching_parity_gpt_oss_flash(self) -> None:
+        expected_outputs = {}
+        self._test_continuous_batching_parity("openai/gpt-oss-20b", "paged_attention|kernels-community/flash-attn", expected_outputs)
