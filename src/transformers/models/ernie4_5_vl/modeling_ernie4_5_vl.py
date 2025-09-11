@@ -1412,17 +1412,16 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         video_grid_thw: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ):
-        """TODO description"""
-        attention_mask_tensor = (
-            attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
-        )
-        if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
-            attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
-            # Only apply conversion for floating point tensors (inverted masks)
-            if attention_mask_tensor.dtype.is_floating_point:
-                attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
-                attention_mask_tensor = (1.0 - attention_mask_tensor).int()
+        """
+        Calculating the 3D position ids with a custom mechanism / caching
+            - First forward calculates the initial positions and the respective
+              deltas (offset) for subsequent positions. See `get_rope_index` for
+              more details.
+            - Second and on (generation), uses the cache position combined with the
+              cached deltas to determine the current position.
 
+        NOTE: We assume that the position ids are `None` and recalculate them here in any case.
+        """
         # Calculate RoPE index once per generation in the pre-fill stage only.
         # When compiling, we can't check tensor values thus we check only input length
         # It is safe to assume that `length!=1` means we're in pre-fill because compiled
@@ -1440,7 +1439,7 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
                 input_ids,
                 image_grid_thw,
                 video_grid_thw,
-                attention_mask=attention_mask_tensor,
+                attention_mask=attention_mask,
             )
             self.rope_deltas = rope_deltas
         # then use the prev pre-calculated rope-deltas to get the correct position ids
@@ -1484,6 +1483,88 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         return total_mask
 
 
+def load_balancing_loss_func(
+    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
+    num_experts: Optional[int] = None,
+    top_k=2,
+    attention_mask: Optional[torch.Tensor] = None,
+) -> Union[torch.Tensor, int]:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
+
+
 class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
@@ -1494,6 +1575,10 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         super().__init__(config)
         self.model = Ernie4_5_VLModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
+        self.num_experts = config.text_config.moe_num_experts
+        self.num_experts_per_tok = config.text_config.moe_k
 
         self.post_init()
 
@@ -1536,6 +1621,7 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         token_type_ids: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         images: Optional[torch.Tensor] = None,  # TODO: remove after refactoring all
@@ -1616,14 +1702,25 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
             **kwargs,
         )
 
-        if not use_cache:
-            logits = self.lm_head(outputs.last_hidden_state)
-        else:
-            logits = self.lm_head(outputs.last_hidden_state[:, -1:, :])
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
-        # aka Generate Decoding
-        loss = None  # TODO
-        aux_loss = None  # TODO: load balancing loss
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
@@ -1645,7 +1742,7 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         grid_thw=None,  # TODO remove after refactor
         image_grid_thw=None,
         video_grid_thw=None,
-        # Intentionally ignore position ids and token type ids to force custom cache logic of 3D position ids
+        # Intentionally ignore position ids and token type ids to force custom cache logic
         position_ids=None,
         token_type_ids=None,
         **kwargs,

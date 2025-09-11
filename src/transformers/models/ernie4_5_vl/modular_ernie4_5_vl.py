@@ -71,6 +71,7 @@ from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeStatics,
 )
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
+from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
@@ -719,17 +720,16 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         video_grid_thw: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ):
-        """TODO description"""
-        attention_mask_tensor = (
-            attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
-        )
-        if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
-            attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
-            # Only apply conversion for floating point tensors (inverted masks)
-            if attention_mask_tensor.dtype.is_floating_point:
-                attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
-                attention_mask_tensor = (1.0 - attention_mask_tensor).int()
+        """
+        Calculating the 3D position ids with a custom mechanism / caching
+            - First forward calculates the initial positions and the respective
+              deltas (offset) for subsequent positions. See `get_rope_index` for
+              more details.
+            - Second and on (generation), uses the cache position combined with the
+              cached deltas to determine the current position.
 
+        NOTE: We assume that the position ids are `None` and recalculate them here in any case.
+        """
         # Calculate RoPE index once per generation in the pre-fill stage only.
         # When compiling, we can't check tensor values thus we check only input length
         # It is safe to assume that `length!=1` means we're in pre-fill because compiled
@@ -747,7 +747,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 input_ids,
                 image_grid_thw,
                 video_grid_thw,
-                attention_mask=attention_mask_tensor,
+                attention_mask=attention_mask,
             )
             self.rope_deltas = rope_deltas
         # then use the prev pre-calculated rope-deltas to get the correct position ids
@@ -1076,6 +1076,13 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
 
 
 class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
+        self.num_experts = config.text_config.moe_num_experts
+        self.num_experts_per_tok = config.text_config.moe_k
+
     @property
     def visual(self):
         return self.model.vision_tower
@@ -1090,7 +1097,7 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
         grid_thw=None,  # TODO remove after refactor
         image_grid_thw=None,
         video_grid_thw=None,
-        # Intentionally ignore position ids and token type ids to force custom cache logic of 3D position ids
+        # Intentionally ignore position ids and token type ids to force custom cache logic
         position_ids=None,
         token_type_ids=None,
         **kwargs,
@@ -1145,6 +1152,7 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
         token_type_ids: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         images: Optional[torch.Tensor] = None,  # TODO: remove after refactoring all
@@ -1183,14 +1191,25 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
             **kwargs,
         )
 
-        if not use_cache:
-            logits = self.lm_head(outputs.last_hidden_state)
-        else:
-            logits = self.lm_head(outputs.last_hidden_state[:, -1:, :])
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
-        # aka Generate Decoding
-        loss = None  # TODO
-        aux_loss = None  # TODO: load balancing loss
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
