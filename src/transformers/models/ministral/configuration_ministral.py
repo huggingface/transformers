@@ -4,12 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_ministral.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 class MinistralConfig(PretrainedConfig):
@@ -157,11 +152,6 @@ class MinistralConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
-
-        if "layer_types" in kwargs:
-            logger.warning_once(
-                "Detected Ministral model with layer_types. Consider using AutoModel or Ministral classes instead to enable alternating attention compatibility."
-            )
         self.layer_types = layer_types
 
         if self.layer_types is None:

@@ -4,6 +4,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PretrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
@@ -25,7 +26,7 @@ from ..qwen2.modeling_qwen2 import (
 )
 
 
-class MinistralConfig(MistralConfig):
+class MinistralConfig(MistralConfig, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MinistralModel`]. It is used to instantiate an
     Ministral model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -127,28 +128,34 @@ class MinistralConfig(MistralConfig):
         layer_types=None,
         **kwargs,
     ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            head_dim=head_dim,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
+        PretrainedConfig.__init__(
+            self,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
-            sliding_window=sliding_window,
-            attention_dropout=attention_dropout,
             **kwargs,
         )
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.sliding_window = sliding_window
+        self.head_dim = head_dim
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.attention_dropout = attention_dropout
         self.layer_types = layer_types
 
         if self.layer_types is None:
