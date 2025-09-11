@@ -58,6 +58,7 @@ class CacheAllocator(ABC):
         """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
         pass
 
+
 class FullAttentionCacheAllocator(CacheAllocator):
     """Cache manager for a group of full attention layers."""
 
@@ -116,6 +117,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
         seqlens_k = past_length + query_length
         return "full_attention", seqlens_k
+
 
 class SlidingAttentionCacheAllocator(CacheAllocator):
     """Cache manager for sliding window attention layers."""

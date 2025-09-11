@@ -64,7 +64,6 @@ def paged_attention_forward(
         cu_seq_lens_k = cu_seq_lens_k.clone()
         max_seqlen_k = max_seqlen_k
 
-    # If there is no cache, we assume this is full attention, and we check if cu_seq_lens_k is a list of tensors
     if implementation is not None and hasattr(implementation, "flash_attn_varlen_func"):
         flash_attn_varlen_func = implementation.flash_attn_varlen_func
 

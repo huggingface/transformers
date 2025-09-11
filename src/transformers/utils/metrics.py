@@ -4,10 +4,6 @@ import time
 from enum import Enum
 from typing import Any, Callable, Optional, Union
 
-import torch
-
-from transformers.generation.continuous_batching.cache import PagedAttentionCache
-
 
 class RequestStatus(Enum):
     """Status of a generation request through its lifecycle."""

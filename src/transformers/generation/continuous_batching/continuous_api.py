@@ -352,7 +352,6 @@ class ContinuousBatchProcessor:
 
         # Go through all the requests in the batch
         for state in self.requests_in_batch:
-
             # First we retrieve the lengths related to the request
             past_length = state.position_offset
             query_length = len(state.prompt_ids)
@@ -360,7 +359,7 @@ class ContinuousBatchProcessor:
 
             # Then we update the total lengths that are used for slicing
             self.total_query_length += query_length
-            self.total_key_length += max(seqlens_k.values())  # total_key_length is used to slice the keys, so we take the max
+            self.total_key_length += max(seqlens_k.values())  # this is used to slice the keys, so we need take the max
             self.total_batch_size += 1
             # And the attribute tracking the position in the request object
             state.position_offset += query_length
@@ -375,9 +374,9 @@ class ContinuousBatchProcessor:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
 
             if isinstance(self.cumulative_seqlens_k, dict):
-                for layer_type, layer_type_seqlens_k in seqlens_k.items():
-                    cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + layer_type_seqlens_k)
-                    self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], layer_type_seqlens_k)
+                for layer_type, layer_type_seqlen_k in seqlens_k.items():
+                    cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + layer_type_seqlen_k)
+                    self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], layer_type_seqlen_k)
             else:
                 _, seqlens_k = seqlens_k.popitem()
                 cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seqlens_k)

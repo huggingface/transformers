@@ -24,10 +24,10 @@ from transformers.testing_utils import require_torch_gpu, slow
 
 
 CB_MODELS_TO_TEST = [
-    ("Qwen/Qwen3-4B-Instruct-2507", ), # for full attention
-    ("meta-llama/Llama-3.1-8B", ),  # same, but has different modeling code
-    ("google/gemma-2-2b-it", ),  # for hybrid attention
-    ("openai/gpt-oss-20b", ),  # same, but has an attn sink
+    ("Qwen/Qwen3-4B-Instruct-2507",),  # for full attention
+    ("meta-llama/Llama-3.1-8B",),  # same, but has different modeling code
+    ("google/gemma-2-2b-it",),  # for hybrid attention
+    ("openai/gpt-oss-20b",),  # same, but has an attn sink
 ]
 
 
@@ -110,9 +110,8 @@ class ContinuousBatchingTest(unittest.TestCase):
         batched_inputs = [tokenizer.encode(prompt) for prompt in prompts]
 
         # Generation with continuous batching
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, dtype="auto",
-        ).cuda().eval()
+        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype="auto")
+        model = model.cuda().eval()
         model.generation_config.max_new_tokens = 40
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = False
@@ -129,18 +128,20 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         # We regenerate the model because just changing the attn_implementation does not work
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=non_cb_attn_implementation, dtype="auto",
-        ).cuda().eval()
+            model_id, attn_implementation=non_cb_attn_implementation, dtype="auto"
+        )
+        model = model.cuda().eval()
         model.generation_config.max_new_tokens = 40
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = False
 
         for request_id, request in cb_outputs.items():
-
             # Generate without continuous batching
             input_ids = torch.tensor([request.prompt_ids]).cuda()
             attention_mask = torch.ones_like(input_ids)
-            outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=model.generation_config)
+            outputs = model.generate(
+                input_ids, attention_mask=attention_mask, generation_config=model.generation_config
+            )
             generated_tokens = outputs[0][input_ids.shape[1] :]
             non_cb_decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
             input_ids = input_ids.tolist()[0]
@@ -164,7 +165,7 @@ class ContinuousBatchingTest(unittest.TestCase):
                         expected_output,
                         cb_decoded_output,
                         msg=f"Test {request_id = } failed, expected output did not match.\n"
-                            f"Exp:{repr(expected_output)}\nOut:{repr(cb_decoded_output)}"
+                        f"Exp:{repr(expected_output)}\nOut:{repr(cb_decoded_output)}",
                     )
 
     @require_torch_gpu
@@ -183,7 +184,7 @@ class ContinuousBatchingTest(unittest.TestCase):
 
     @require_torch_gpu
     @slow
-    @parameterized.expand(CB_MODELS_TO_TEST[: -1])  # GPT-OSS is not collected: it has an attn sink incompatible w/ SDPA
+    @parameterized.expand(CB_MODELS_TO_TEST[:-1])  # GPT-OSS is not collected: it has an attn sink incompatible w/ SDPA
     def test_continuous_batching_parity_sdpa(self, model_id: str) -> None:
         expected_outputs = {
             "meta-llama/Llama-3.1-8B": {

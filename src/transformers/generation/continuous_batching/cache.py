@@ -275,9 +275,7 @@ class PagedAttentionCache:
             write_indices.extend(indices)
 
     @traced
-    def get_seqlens_k(
-        self, request_id: str, past_length: int, query_length: int
-    ) -> dict[str, int]:
+    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> dict[str, int]:
         """Retrieve the key sequence length for the given request_id across all layer types. Returns a dictionary of
         layer types to their corresponding key sequence lengths."""
         seqlens_k = {}
