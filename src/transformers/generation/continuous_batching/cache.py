@@ -198,7 +198,7 @@ class PagedAttentionCache:
         # Add the inferred attributes to the class
         self.num_blocks = num_blocks
         self.max_batch_tokens = max_batch_tokens
-        logger.warning(
+        logger.info(
             f"PagedAttentionCache initialized with {self.num_blocks = }, {self.block_size = }, {page_size = }, "
             f"{self.max_batch_tokens = } {num_attention_masks = }"
         )
