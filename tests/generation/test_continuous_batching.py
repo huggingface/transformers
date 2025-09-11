@@ -20,7 +20,7 @@ from parameterized import parameterized
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.generation.continuous_batching.cache import group_layers_by_attn_type
-from transformers.testing_utils import require_torch_gpu, slow
+from transformers.testing_utils import require_kernels, require_torch_gpu, slow
 
 
 CB_MODELS_TO_TEST = [
@@ -123,6 +123,8 @@ class ContinuousBatchingTest(unittest.TestCase):
             non_cb_attn_implementation = "sdpa"
         elif attn_implementation == "eager_paged":
             non_cb_attn_implementation = "eager"
+        elif attn_implementation == "paged_attention|kernels-community/flash-attn":
+            non_cb_attn_implementation = "eager"
         else:
             raise ValueError(f"Invalid attention implementation: {attn_implementation}")
 
@@ -193,8 +195,8 @@ class ContinuousBatchingTest(unittest.TestCase):
         }.get(model_id, {})  # fmt: skip
         self._test_continuous_batching_parity(model_id, "sdpa_paged", expected_outputs)
 
-    # @require_torch_gpu
-    # @require_flash_attn
-    # @slow
-    # def test_continuous_batching_parity_flash(self, model_id: str) -> None:
-    #     self._test_continuous_batching_parity(model_id, "flash_attn")
+    @require_torch_gpu
+    @require_kernels
+    @slow
+    def test_continuous_batching_parity_flash(self, model_id: str) -> None:
+        self._test_continuous_batching_parity(model_id, "paged_attention|kernels-community/flash-attn")
