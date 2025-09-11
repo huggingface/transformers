@@ -25,6 +25,8 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.nn import LayerNorm
 
+from transformers.utils.generic import check_model_inputs
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -1047,6 +1049,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
     def set_input_embeddings(self, value):
         self.word_embeddings = value
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
