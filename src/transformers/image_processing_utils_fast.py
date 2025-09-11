@@ -773,8 +773,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        do_pad: bool,
-        pad_size: SizeDict,
+        do_pad: Optional[bool],
+        pad_size: Optional[SizeDict],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:

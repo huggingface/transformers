@@ -76,16 +76,22 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = VitMatteFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[VitMatteFastImageProcessorKwargs]) -> None:
+        size_divisibility = kwargs.pop("size_divisibility", None)
+        kwargs.setdefault("size_divisor", size_divisibility)
         super().__init__(**kwargs)
 
     @property
     def size_divisibility(self):
-        # raise warning here for deprecation, we'll use size divisor from now on
+        logger.warning(
+            "`self.size_divisibility` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead"
+        )
         return self.size_divisor
 
     @size_divisibility.setter
     def size_divisibility(self, value):
-        # raise warning here for deprecation, we'll use size divisor from now on
+        logger.warning(
+            "`self.size_divisibility` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead"
+        )
         self.size_divisor = value
 
     def _pad_image(

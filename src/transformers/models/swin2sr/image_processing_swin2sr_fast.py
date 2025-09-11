@@ -14,6 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Swin2SR."""
 
+import warnings
 from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
@@ -64,14 +65,24 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = Swin2SRFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]):
+        pad_size = kwargs.pop("pad_size", None)
+        kwargs.setdefault("size_divisor", pad_size)
         super().__init__(**kwargs)
 
     @property
     def pad_size(self):
+        warnings.warn(
+            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
+            FutureWarning,
+        )
         return self.size_divisor
 
     @pad_size.setter
     def pad_size(self, value):
+        warnings.warn(
+            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
+            FutureWarning,
+        )
         self.size_divisor = value
 
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]) -> BatchFeature:

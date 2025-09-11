@@ -31,6 +31,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -56,7 +57,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
-        pad_size: int = 8,
+        size_divisor: int = 8,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -64,7 +65,8 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
-        self.pad_size = pad_size
+        pad_size = kwargs.get("pad_size")
+        self.size_divisor = size_divisor if size_divisor is not None else pad_size
 
     def pad(
         self,
@@ -108,13 +110,14 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         )
 
     @filter_out_non_signature_kwargs()
+    @deprecate_kwarg("pad_size", version="v5", new_name="size_divisor")
     def preprocess(
         self,
         images: ImageInput,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_pad: Optional[bool] = None,
-        pad_size: Optional[int] = None,
+        size_divisor: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -132,7 +135,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_pad (`bool`, *optional*, defaults to `True`):
                 Whether to pad the image to make the height and width divisible by `window_size`.
-            pad_size (`int`, *optional*, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The size of the sliding window for the local attention.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
@@ -157,7 +160,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_pad = do_pad if do_pad is not None else self.do_pad
-        pad_size = pad_size if pad_size is not None else self.pad_size
+        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
 
         images = make_flat_list_of_images(images)
 
@@ -169,8 +172,6 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
-            do_pad=do_pad,
-            pad_size=pad_size,
         )
 
         # All transformations expect numpy arrays.
@@ -193,7 +194,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
             ]
 
         if do_pad:
-            images = [self.pad(image, size=pad_size, input_data_format=input_data_format) for image in images]
+            images = [self.pad(image, size=size_divisor, input_data_format=input_data_format) for image in images]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
