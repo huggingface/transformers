@@ -79,6 +79,9 @@ RUN python3 -m pip install --no-cache-dir liger-kernel
 # `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
 RUN python3 -m pip uninstall -y kernels
 
+# remove lib that deals with hyperparameter search
+RUN python3 -m pip uninstall -y optuna ray
+
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
