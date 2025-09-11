@@ -1242,7 +1242,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        image_sizes: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Llama4CausalLMOutputWithPast]:
         r"""
@@ -1305,7 +1304,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-                image_sizes=image_sizes,
             )
 
             vision_flat = image_features.view(-1, image_features.size(-1))
