@@ -1269,7 +1269,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(torch.allclose(trainer.model.a, a))
             self.assertFalse(torch.allclose(trainer.model.b, b))
             self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
-            
+
     @require_torch_fp16
     @require_torch_accelerator
     def test_mixed_fp16(self):
@@ -1280,7 +1280,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_trained_model(trainer.model, atol=ATOL, rtol=RTOL)
             log_0 = trainer.state.log_history[:-1][0]
             # check that the grads were properly clipped due to the grad scaler. Otherwise, we get huge values
-            self.assertEqual(log_0['grad_norm'] < 100, True)
+            self.assertEqual(log_0["grad_norm"] < 100, True)
 
     @require_torch_bf16
     @require_torch_accelerator
