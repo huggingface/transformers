@@ -262,7 +262,7 @@ class GenericForTokenClassification:
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:
         outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,
