@@ -644,7 +644,7 @@ class TopHLogitsWarper(LogitsProcessor):
         probs = probs/torch.sum(probs)
         return -torch.sum(probs * torch.log2(probs))
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:   
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         """
         Filters logits using Top-H sampling.
 
