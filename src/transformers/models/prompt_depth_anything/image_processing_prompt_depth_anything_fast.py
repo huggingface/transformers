@@ -258,9 +258,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
                     f"Number of prompt depth images ({len(processed_prompt_depths)}) does not match number of input images ({len(images)})"
                 )
 
-            if prompt_scale_to_meter is None:
-                prompt_scale_to_meter = self.prompt_scale_to_meter
-
             final_prompt_depths = []
             for depth in processed_prompt_depths:
                 depth = depth * prompt_scale_to_meter
