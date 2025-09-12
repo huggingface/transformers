@@ -721,8 +721,7 @@ class Sam2VideoProcessor(ProcessorMixin):
                     "(please use clear_old_points=True instead)"
                 )
             box_coords = input_boxes.reshape(1, -1, 2, 2)
-            box_labels = torch.tensor([2, 3], dtype=torch.int32)
-            box_labels = box_labels.reshape(1, -1, 2)
+            box_labels = torch.tensor([2, 3], dtype=torch.int32).repeat(1, box_coords.shape[1], 1)
             input_points = torch.cat([box_coords, input_points], dim=2)
             input_labels = torch.cat([box_labels, input_labels], dim=2)
 
