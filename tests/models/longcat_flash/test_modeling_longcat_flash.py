@@ -267,20 +267,22 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
-@require_torch
+@slow
 class LongcatFlashIntegrationTest(unittest.TestCase):
     model_id = "Molbap/LongCat-ShortCat"
     # This is a cut-down model that matches part of the early logits of the larger one
     # Only a couple experts + layers
     # But if it fails, it means the larger model might have issues as well
 
-    @classmethod
-    def setUpClass(cls):
-        cls.model = LongcatFlashForCausalLM.from_pretrained(cls.model_id, trust_remote_code=True)
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id, trust_remote_code=True)
-
     @slow
     def test_shortcat_generation(self):
+        self.model = LongcatFlashForCausalLM.from_pretrained(
+            self.model_id,
+            device_map="auto",
+            dtype=torch.bfloat16,
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+
         chat = [{"role": "user", "content": "Paris is..."}]
         inputs = self.tokenizer.apply_chat_template(
             chat, tokenize=True, add_generation_prompt=True, return_tensors="pt"
