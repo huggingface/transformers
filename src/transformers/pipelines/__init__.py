@@ -118,6 +118,7 @@ if is_torch_available():
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForCTC,
+        AutoModelForTDT,
         AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
@@ -171,6 +172,13 @@ SUPPORTED_TASKS = {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
         "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
+        "default": {"model": {"pt": ("facebook/wav2vec2-base-960h", "22aad52")}},
+        "type": "multimodal",
+    },
+    "tdt-automatic-speech-recognition": {
+        "impl": AutomaticSpeechRecognitionPipeline,
+        "tf": (),
+        "pt": (AutoModelForTDT, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/wav2vec2-base-960h", "22aad52")}},
         "type": "multimodal",
     },
@@ -1023,6 +1031,7 @@ def pipeline(
 
     # Load the correct model if possible
     # Infer the framework from the model if not already defined
+    print("INTERMEDIATE BEFORE model is", model)
     if isinstance(model, str) or framework is None:
         model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"]}
         framework, model = infer_framework_load_model(
@@ -1034,6 +1043,9 @@ def pipeline(
             **hub_kwargs,
             **model_kwargs,
         )
+        print("INTERMEDIATE BEFORE model class is", model_classes, framework)
+
+    print("INTERMEDIATE model is", model)
 
     hub_kwargs["_commit_hash"] = model.config._commit_hash
 

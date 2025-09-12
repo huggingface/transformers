@@ -676,8 +676,11 @@ def create_hf_model(
     hf_config: Union[ParakeetConfig, ParakeetTDTConfig],
     hf_state_dict: dict[str, torch.Tensor],
     model_info: dict[str, Any],
-) -> Union[ParakeetForCTC]:
+) -> Union[ParakeetForCTC,ParakeetForTDT]:
     """Create the appropriate HuggingFace model and load weights."""
+
+
+    print("CREATE hf_config", hf_config)
 
     if model_info["is_ctc_model"]:
         # Check if we already have a ParakeetCTCConfig or need to create one
@@ -737,9 +740,6 @@ def create_hf_model(
     # Load weights
     model_state_dict = model.state_dict()
 
-    print("HEREHERE", model_state_dict.keys())
-    print("HEREHERE hf_state_dict", hf_state_dict.keys())
-
     updated_state_dict = model_state_dict.copy()
 
     matched_params = 0
@@ -750,7 +750,6 @@ def create_hf_model(
                 updated_state_dict[param_name] = hf_state_dict[param_name]
                 matched_params += 1
             else:
-                print("FAILING", param_name)
                 logger.warning(
                     f"Shape mismatch for {param_name}: "
                     f"HF {model_state_dict[param_name].shape} vs "
@@ -759,7 +758,6 @@ def create_hf_model(
                 shape_mismatches += 1
         else:
             print("FAILING not in hf_model_state", param_name)
-        print("UPDATE", matched_params, "out of", len(model_state_dict.keys()))
 
     model.load_state_dict(updated_state_dict, strict=False)
     if matched_params != len(model_state_dict):
@@ -771,6 +769,7 @@ def create_hf_model(
     if shape_mismatches > 0:
         logger.warning(f"Found {shape_mismatches} shape mismatches")
 
+    print("CONVERTED MODEL IS", model)
     return model
 
 
@@ -837,8 +836,6 @@ def convert_nemo_to_hf(input_path: str, output_dir: str, push_to_hub: str | None
 
     # Create HuggingFace config
     hf_config = create_hf_config_from_nemo(model_info, state_dict, vocab_dict)
-
-    print("HERE2 hf_config", model_info,  hf_config)
 
     # Convert weights
     hf_state_dict = convert_weights(state_dict, model_info)
@@ -955,6 +952,8 @@ def verify_conversion(output_dir: str) -> bool:
     try:
         from transformers import AutoConfig, AutoModelForCTC
 
+        assert False
+
         # Load config to determine model type
         config = AutoConfig.from_pretrained(output_dir)
 
@@ -985,6 +984,49 @@ def verify_conversion(output_dir: str) -> bool:
         logger.info("✅ Verification PASSED")
         return True
 
+    except Exception as e:
+        logger.error(f"❌ Verification FAILED: {e}")
+        return False
+
+def verify_conversion_tdt(output_dir: str) -> bool:
+    """Verify that the conversion was successful by loading the model."""
+    logger.info("Verifying conversion...")
+
+    try:
+        from transformers import AutoConfig, AutoModelForTDT
+
+        # Load config to determine model type
+        config = AutoConfig.from_pretrained(output_dir)
+
+        print("HERE CONFIG IS", config)
+
+        # Load model
+        model = AutoModelForTDT.from_pretrained(output_dir)
+        print("HERE MODEL IS", model)
+        model.eval()
+
+        # Create test input
+        batch_size, seq_len = 1, 100
+        if hasattr(config, "encoder_config"):
+            mel_bins = config.encoder_config.num_mel_bins
+        else:
+            mel_bins = config.num_mel_bins
+
+        test_input = torch.randn(batch_size, seq_len, mel_bins)
+        lengths = torch.tensor([seq_len], dtype=torch.long)
+
+        # Forward pass
+        with torch.no_grad():
+            outputs = model(test_input, input_lengths=lengths)
+
+        # Check output
+        if hasattr(outputs, "logits"):
+            logger.info(f"Model output shape: {outputs.logits.shape}")
+        else:
+            logger.info(f"Model output shape: {outputs.last_hidden_state.shape}")
+
+        logger.info("✅ Verification PASSED")
+        return True
     except Exception as e:
         logger.error(f"❌ Verification FAILED: {e}")
         return False
@@ -1025,7 +1067,7 @@ def main():
 
         # Verify if requested
         if args.verify:
-            verification_success = verify_conversion(model_path)
+            verification_success = verify_conversion_tdt(model_path)
             conversion_info["verification_passed"] = verification_success
 
         # Print summary
@@ -1043,8 +1085,9 @@ def main():
         # Usage example
         logger.info("\nUsage example:")
         logger.info("# Load ParakeetForCTC model:")
-        logger.info("from transformers import AutoModelForCTC, AutoFeatureExtractor, AutoTokenizer")
+        logger.info("from transformers import AutoModelForCTC, AutoModelForTDT, AutoFeatureExtractor, AutoTokenizer")
         logger.info(f"model = AutoModelForCTC.from_pretrained('{model_path}')")
+        logger.info(f"model = AutoModelForTDT.from_pretrained('{model_path}')")
         logger.info(f"feature_extractor = AutoFeatureExtractor.from_pretrained('{model_path}')")
         if conversion_info.get("has_tokenizer", False):
             logger.info(f"tokenizer = AutoTokenizer.from_pretrained('{model_path}')")

@@ -562,7 +562,6 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
         self.config = config
         self.gradient_checkpointing = False
 
-        print("HERE config is", config)
         self.enc = torch.nn.Linear(config.encoder_hidden, config.joint_hidden)
         self.pred = torch.nn.Linear(config.pred_hidden, config.joint_hidden)
 
@@ -777,8 +776,6 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
 
         self.prediction = ParakeetTDTPredictor(config)
 
-#        self.joint = ParakeetTDTJoint(config)
-
         self.post_init()
 
 
@@ -900,6 +897,9 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
             **kwargs,
         )
 
+        print("WEIRD self.ctc_head", self.ctc_head)
+        assert False
+
         hidden_states = encoder_outputs.last_hidden_state
         logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
 
@@ -981,8 +981,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         super().__init__(config)
         self.encoder = ParakeetEncoder(config.encoder_config)
         self.decoder = ParakeetTDTDecoder(config.decoder_config)
-
-        print("HERE config.joint_config", config.joint_config)
         self.joint = ParakeetTDTJoint(config.joint_config)
 
         self.post_init()
@@ -1003,6 +1001,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         )
 
         hidden_states = encoder_outputs.last_hidden_state
+
+        print("WEIRD self.ctc_head", self.ctc_head)
+        exit(-1)
         logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         loss = None

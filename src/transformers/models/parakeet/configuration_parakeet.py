@@ -240,7 +240,7 @@ class ParakeetConfig(PretrainedConfig):
                 f"`encoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
             )
 
-        self.model_type = model_type
+        self.model_type = 'tdt'
 
         self.vocab_size = vocab_size
         self.blank_token_id = blank_token_id

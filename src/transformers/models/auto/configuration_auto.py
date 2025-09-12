@@ -727,6 +727,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("owlvit", "OWL-ViT"),
         ("paligemma", "PaliGemma"),
         ("parakeet", "ParakeetForCTC"),
+        ("parakeet_tdt", "ParakeetForTDT"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),

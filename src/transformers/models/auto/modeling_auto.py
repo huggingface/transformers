@@ -1572,6 +1572,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("hubert", "HubertForCTC"),
         ("mctct", "MCTCTForCTC"),
         ("parakeet", "ParakeetForCTC"),
+        ("parakeet_tdt", "ParakeetForTDT"),
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
         ("unispeech", "UniSpeechForCTC"),
@@ -1580,6 +1581,13 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-bert", "Wav2Vec2BertForCTC"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForCTC"),
         ("wavlm", "WavLMForCTC"),
+    ]
+)
+
+MODEL_FOR_TDT_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Connectionist temporal classification (CTC) mapping
+        ("parakeet", "ParakeetForTDT"),
     ]
 )
 
@@ -1838,6 +1846,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
 )
 MODEL_FOR_CTC_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_CTC_MAPPING_NAMES)
+MODEL_FOR_TDT_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TDT_MAPPING_NAMES)
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES)
 MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
@@ -2156,6 +2165,12 @@ class AutoModelForCTC(_BaseAutoModelClass):
 AutoModelForCTC = auto_class_update(AutoModelForCTC, head_doc="connectionist temporal classification")
 
 
+class AutoModelForTDT(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TDT_MAPPING
+
+
+AutoModelForTDT = auto_class_update(AutoModelForTDT, head_doc="token and duration transducer")
+
 class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
@@ -2307,6 +2322,7 @@ __all__ = [
     "AutoModelForAudioXVector",
     "AutoModelForCausalLM",
     "AutoModelForCTC",
+    "AutoModelForTDT",
     "AutoModelForDepthEstimation",
     "AutoModelForImageClassification",
     "AutoModelForImageSegmentation",

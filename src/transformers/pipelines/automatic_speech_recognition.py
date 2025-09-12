@@ -210,8 +210,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         ):
             self.decoder = decoder
             self.type = "ctc_with_lm"
+        elif model.config.model_type == "tdt":
+            self.type = 'tdt'
         else:
             self.type = "ctc"
+
+        print("HERE model", model)
+
+        assert  False
+        print("HERE model.config.model_type", model.config.model_type)
 
         super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
 
@@ -550,6 +557,29 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 if stride is not None:
                     out["stride"] = stride
 
+        elif self.type == 'tdt':
+            print("MODEL IS", self.model)
+            assert False
+            inputs = {
+                self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
+                "attention_mask": attention_mask,
+            }
+            outputs = self.model(**inputs)
+            logits = outputs.logits
+
+            if self.type == "ctc_with_lm":
+                out = {"logits": logits}
+            else:
+                out = {"tokens": logits.argmax(dim=-1)}
+            if stride is not None:
+                # Send stride to `postprocess`.
+                # it needs to be handled there where
+                # the pieces are to be concatenated.
+                ratio = 1 / self.model.config.inputs_to_logits_ratio
+                if isinstance(stride, tuple):
+                    out["stride"] = rescale_stride([stride], ratio)[0]
+                else:
+                    out["stride"] = rescale_stride(stride, ratio)
         else:
             inputs = {
                 self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
