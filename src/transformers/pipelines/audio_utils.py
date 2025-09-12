@@ -6,45 +6,63 @@ from typing import Optional, Union
 
 import numpy as np
 
+import tempfile
+import os
 
 def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
+    """Decode audio bytes to numpy array using FFmpeg.
+
+    Args:
+        bpayload: Audio file bytes (e.g., m4a, mp3, wav)
+        sampling_rate: Target sample rate for output audio
+
+    Returns:
+        np.array: Decoded audio data as float32 numpy array
+
+    Raises:
+        RuntimeError: If FFmpeg fails to decode the input
+        ValueError: If input data is invalid
     """
-    Helper function to read an audio file through ffmpeg.
-    """
-    ar = f"{sampling_rate}"
-    ac = "1"
-    format_for_conversion = "f32le"
+    # Create temporary input file
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_in:
+        tmp_in.write(bpayload)
+        tmp_in.flush()
+        input_path = tmp_in.name
+
+    # Create temporary output file with .raw extension
+    with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tmp_out:
+        output_path = tmp_out.name
+
+    # FFmpeg command configuration
     ffmpeg_command = [
         "ffmpeg",
-        "-i",
-        "pipe:0",
-        "-ac",
-        ac,
-        "-ar",
-        ar,
-        "-f",
-        format_for_conversion,
-        "-hide_banner",
-        "-loglevel",
-        "quiet",
-        "pipe:1",
+        "-y",  # Overwrite output file without asking
+        "-hide_banner",  # Suppress banner information
+        "-loglevel", "error",  # Only show errors
+        "-i", input_path,  # Input file path
+        "-ac", "1",  # Convert to mono
+        "-ar", str(sampling_rate),  # Target sample rate
+        "-f", "f32le",  # Output format (32-bit float little-endian)
+        output_path  # Output file path
     ]
 
+    # Execute FFmpeg command
     try:
-        with subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE) as ffmpeg_process:
-            output_stream = ffmpeg_process.communicate(bpayload)
-    except FileNotFoundError as error:
-        raise ValueError("ffmpeg was not found but is required to load audio files from filename") from error
-    out_bytes = output_stream[0]
-    audio = np.frombuffer(out_bytes, np.float32)
-    if audio.shape[0] == 0:
-        raise ValueError(
-            "Soundfile is either not in the correct format or is malformed. Ensure that the soundfile has "
-            "a valid audio file extension (e.g. wav, flac or mp3) and is not corrupted. If reading from a remote "
-            "URL, ensure that the URL is the full address to **download** the audio file."
+        subprocess.run(
+            ffmpeg_command,
+            check=True,
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE
         )
-    return audio
-
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.decode("utf-8", errors="replace")
+        raise RuntimeError(f"FFmpeg processing failed: {error_msg}") from e
+    finally:
+        # Clean up input file
+        try:
+            os.unlink(input_path)
+        except OSError:
+            pass
 
 def ffmpeg_microphone(
     sampling_rate: int,
