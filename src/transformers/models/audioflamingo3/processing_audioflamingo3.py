@@ -30,22 +30,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,  # Pad to longest sequence in the batch
-            "truncation": True,  # Truncate overlong prompts for safety
-        },
-        "audio_kwargs": {
-            "return_attention_mask": True,
-            "padding": "max_length",
-            "truncation": True,
-            "max_seconds": 30,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 class AudioFlamingo3Processor(ProcessorMixin):
     """
     Constructs an AudioFlamingo3 processor which wraps an AudioFlamingo3 feature extractor and an AudioFlamingo3 tokenizer into a single processor.
@@ -59,7 +43,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         self,
         text: Union[TextInput, list[TextInput]],
         audio: Union[np.ndarray, list[np.ndarray]],
-        **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         # Normalize inputs
         if isinstance(text, str):
@@ -71,16 +55,10 @@ class AudioFlamingo3Processor(ProcessorMixin):
         if len(text) != len(audio):
             raise ValueError(f"Got {len(text)} texts but {len(audio)} audios.")
 
-        # Kwargs / defaults
-        cfg = self._merge_kwargs(AudioFlamingo3ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
-        text_kwargs, audio_kwargs, common_kwargs = cfg["text_kwargs"], cfg["audio_kwargs"], cfg["common_kwargs"]
-        if common_kwargs.pop("return_tensors", None) != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
-
         # Window planning (single pass)
-        max_seconds = float(audio_kwargs.get("max_seconds"))
-        sr = int(getattr(self.feature_extractor, "sampling_rate"))
-        n_samples = int(max_seconds * sr)
+        max_seconds = float(getattr(self.feature_extractor, "chunk_length"))
+        sampling_rate = int(getattr(self.feature_extractor, "sampling_rate"))
+        n_samples = int(max_seconds * sampling_rate)
         CAP_WINDOWS = 20  # 10 minutes at 30s windows
 
         final_texts: list[str] = []
@@ -90,7 +68,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             T = a.shape[0]
             n_win = max(1, int(math.ceil(T / n_samples)))
             if n_win > CAP_WINDOWS:
-                logger.warning(f"Audio duration ({T/sr:.1f}s) exceeds maximum supported length (600s). " "Audio will be truncated to first 10 minutes.")
+                logger.warning(f"Audio duration ({T/sampling_rate:.1f}s) exceeds maximum supported length (600s). " "Audio will be truncated to first 10 minutes.")
                 n_win = CAP_WINDOWS
             final_texts.append("<sound>" * n_win + t)
 
@@ -102,25 +80,18 @@ class AudioFlamingo3Processor(ProcessorMixin):
         # Single batched FE call
         audio_inputs = self.feature_extractor(
             audio_chunks,
-            padding=audio_kwargs.get("padding", "max_length"),
-            truncation=audio_kwargs.get("truncation", True),
-            return_attention_mask=audio_kwargs.get("return_attention_mask", True),
-            return_tensors="pt",
+            return_attention_mask=getattr(self.feature_extractor, "return_attention_mask"),
+            sampling_rate=sampling_rate,
         )
         audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
         # Tokenize expanded prompts (single call)
         convs = [[{"role": "user", "content": txt}] for txt in final_texts]
         prompts = [self.tokenizer.apply_chat_template(c, add_generation_prompt=True, tokenize=False) for c in convs]
-        inputs = self.tokenizer(
-            prompts,
-            padding=text_kwargs.get("padding", True),
-            truncation=text_kwargs.get("truncation", True),
-            return_tensors="pt",
-        )
+        inputs = self.tokenizer(prompts, padding=True)
 
         inputs.update(audio_inputs)
-        return BatchFeature(data=inputs)
+        return BatchFeature(data=inputs, tensor_type=kwargs.pop("tensor_type", None))
 
 
 __all__ = ["AudioFlamingo3Processor"]
