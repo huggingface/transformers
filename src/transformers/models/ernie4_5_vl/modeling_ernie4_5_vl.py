@@ -1327,8 +1327,6 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        images: Optional[torch.Tensor] = None,  # TODO: remove after refactoring all
-        grid_thw: Optional[torch.Tensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
@@ -1347,12 +1345,6 @@ class Ernie4_5_VLModel(Ernie4_5_VLPreTrainedModel):
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        # TODO: remove after refactoring all
-        if pixel_values is None and images is not None:
-            pixel_values = images
-        if image_grid_thw is None and grid_thw is not None:
-            image_grid_thw = grid_thw
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
@@ -1627,8 +1619,6 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        images: Optional[torch.Tensor] = None,  # TODO: remove after refactoring all
-        grid_thw: Optional[torch.Tensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
@@ -1664,8 +1654,6 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
             use_cache=use_cache,
             output_router_logits=output_router_logits,
             return_dict=True,
-            images=images,
-            grid_thw=grid_thw,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
@@ -1712,7 +1700,6 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         attention_mask=None,
         cache_position=None,
         past_key_values=None,
-        grid_thw=None,  # TODO remove after refactor
         image_grid_thw=None,
         video_grid_thw=None,
         # Intentionally ignore position ids and token type ids to force custom cache logic
@@ -1726,16 +1713,10 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
-            grid_thw=grid_thw,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             **kwargs,
         )
-
-        # TODO: remove after refactor
-        if image_grid_thw is None and grid_thw is not None:
-            image_grid_thw = grid_thw
-            model_inputs["image_grid_thw"] = grid_thw
 
         # Using our own caching with rope delta
         model_inputs["position_ids"] = self.model.get_position_ids(
@@ -1754,7 +1735,6 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
         )
 
         if model_inputs["cache_position"][0] != 0:
-            model_inputs["images"] = None  # TODO remove when refactoring preprocessing
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 
