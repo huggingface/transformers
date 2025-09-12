@@ -337,10 +337,12 @@ class Olmo3Model(Olmo2Model):
         self.layers = nn.ModuleList(
             [Olmo3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.rotary_embs = {
-            "sliding_attention": Olmo3RotaryEmbedding(config=config, rope_type="default"),
-            "full_attention": Olmo3RotaryEmbedding(config=config),
-        }
+        self.rotary_embs = nn.ModuleDict(
+            {
+                "sliding_attention": Olmo3RotaryEmbedding(config=config, rope_type="default"),
+                "full_attention": Olmo3RotaryEmbedding(config=config),
+            }
+        )
         del self.rotary_emb
 
     def forward(
@@ -391,7 +393,8 @@ class Olmo3Model(Olmo2Model):
 
         hidden_states = inputs_embeds
         position_embeddings_mapping = {
-            layer_type: rotary_emb(hidden_states, position_ids) for layer_type, rotary_emb in self.rotary_embs.items()
+            "sliding_attention": self.rotary_embs["sliding_attention"](hidden_states, position_ids),
+            "full_attention": self.rotary_embs["full_attention"](hidden_states, position_ids),
         }
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:

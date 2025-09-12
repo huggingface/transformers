@@ -348,10 +348,12 @@ class Olmo3Model(Olmo3PreTrainedModel):
         )
         self.norm = Olmo3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
-        self.rotary_embs = {
-            "sliding_attention": Olmo3RotaryEmbedding(config=config, rope_type="default"),
-            "full_attention": Olmo3RotaryEmbedding(config=config),
-        }
+        self.rotary_embs = nn.ModuleDict(
+            {
+                "sliding_attention": Olmo3RotaryEmbedding(config=config, rope_type="default"),
+                "full_attention": Olmo3RotaryEmbedding(config=config),
+            }
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -406,7 +408,8 @@ class Olmo3Model(Olmo3PreTrainedModel):
 
         hidden_states = inputs_embeds
         position_embeddings_mapping = {
-            layer_type: rotary_emb(hidden_states, position_ids) for layer_type, rotary_emb in self.rotary_embs.items()
+            "sliding_attention": self.rotary_embs["sliding_attention"](hidden_states, position_ids),
+            "full_attention": self.rotary_embs["full_attention"](hidden_states, position_ids),
         }
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
