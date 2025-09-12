@@ -446,6 +446,7 @@ def mel_filter_bank(
     norm: Optional[str] = None,
     mel_scale: str = "htk",
     triangularize_in_mel_space: bool = False,
+    dtype: np.dtype = np.float64,
 ) -> np.ndarray:
     """
     Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*, and
@@ -485,6 +486,8 @@ def mel_filter_bank(
         triangularize_in_mel_space (`bool`, *optional*, defaults to `False`):
             If this option is enabled, the triangular filter is applied in mel space rather than frequency space. This
             should be set to `true` in order to get the same results as `torchaudio` when computing mel filters.
+        dtype (`np.dtype`, *optional*, defaults to `np.float64`):
+            Data type of the returned mel filter bank matrix.
 
     Returns:
         `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix. This is a
@@ -502,19 +505,20 @@ def mel_filter_bank(
     # center points of the triangular mel filters
     mel_min = hertz_to_mel(min_frequency, mel_scale=mel_scale)
     mel_max = hertz_to_mel(max_frequency, mel_scale=mel_scale)
-    mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
+    mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=dtype)
     filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_scale)
 
     if triangularize_in_mel_space:
         # frequencies of FFT bins in Hz, but filters triangularized in mel space
         fft_bin_width = sampling_rate / ((num_frequency_bins - 1) * 2)
-        fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
+        fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins, dtype=dtype), mel_scale=mel_scale)
         filter_freqs = mel_freqs
     else:
         # frequencies of FFT bins in Hz
-        fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
+        fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins, dtype=dtype)
 
     mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
+    mel_filters = mel_filters.astype(dtype, copy=False)
 
     if norm is not None and norm == "slaney":
         # Slaney-style mel is scaled to be approx constant energy per channel
