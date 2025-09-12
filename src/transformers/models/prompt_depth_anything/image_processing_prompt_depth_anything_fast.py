@@ -111,8 +111,6 @@ class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwarg
         Whether to apply center padding.
     size_divisor (`int`, *optional*):
         If `do_pad` is `True`, pads the image dimensions to be divisible by this value.
-    prompt_depth (`ImageInput`, *optional*):
-        Prompt depth to preprocess.
     prompt_scale_to_meter (`float`, *optional*):
         Scale factor to convert the prompt depth to meters.
     """
@@ -121,7 +119,6 @@ class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwarg
     ensure_multiple_of: Optional[int]
     do_pad: Optional[bool]
     size_divisor: Optional[int]
-    prompt_depth: Optional[ImageInput]
     prompt_scale_to_meter: Optional[float]
 
 
