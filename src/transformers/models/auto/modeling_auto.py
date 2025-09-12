@@ -249,6 +249,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("metaclip_2", "MetaClip2Model"),
         ("mgp-str", "MgpstrForSceneTextRecognition"),
         ("mimi", "MimiModel"),
+        ("minicpm_o_2_6", "MiniCPM_o_2_6ForConditionalGeneration"),
         ("minimax", "MiniMaxModel"),
         ("ministral", "MinistralModel"),
         ("mistral", "MistralModel"),

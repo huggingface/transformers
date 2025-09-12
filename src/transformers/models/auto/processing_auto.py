@@ -102,6 +102,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mctct", "MCTCTProcessor"),
         ("metaclip_2", "CLIPProcessor"),
         ("mgp-str", "MgpstrProcessor"),
+        ("minicpm_o_2_6", "MiniCPM_o_2_6Processor"),
         ("mistral3", "PixtralProcessor"),
         ("mllama", "MllamaProcessor"),
         ("mm-grounding-dino", "GroundingDinoProcessor"),

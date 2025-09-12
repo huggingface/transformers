@@ -207,6 +207,7 @@ if TYPE_CHECKING:
     from .megatron_gpt2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minicpm_o_2_6 import *
     from .minimax import *
     from .ministral import *
     from .mistral import *

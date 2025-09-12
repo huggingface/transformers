@@ -98,6 +98,10 @@ PRIVATE_MODELS = [
     "Glm4vMoeVisionModel",
     "EvollaSaProtPreTrainedModel",
     "Ovis2VisionModel",
+    "MiniCPMConditionalChatTTSModel",
+    "MiniCPMConditionalTTSTextModel",
+    "MiniCPMVisionModel",
+    "MiniCPM_o_2_6TextModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
