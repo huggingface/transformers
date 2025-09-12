@@ -1222,18 +1222,16 @@ class Sam2VideoPromptEncoder(nn.Module):
 
         return point_embedding
 
-    def _embed_boxes(self, boxes: torch.Tensor, pad: bool = True) -> torch.Tensor:
+    def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
         boxes += 0.5  # Shift to center of pixel
         coords = boxes.view(*boxes.shape[:2], 2, 2)
         # add padding point for consistency with the original implementation
-        if pad:
-            coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
+        coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
         corner_embedding = self.shared_embedding(coords, (self.input_image_size, self.input_image_size))
         corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
         corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
-        if pad:
-            corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.expand_as(corner_embedding[:, :, 2, :])
+        corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.expand_as(corner_embedding[:, :, 2, :])
         return corner_embedding
 
     def forward(
