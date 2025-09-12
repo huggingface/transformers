@@ -271,7 +271,7 @@ class FalconMambaMixer(nn.Module):
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
                         " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
-                        " https://github.com/Dao-AILab/causal-conv1d or install kernels for causal-conv1d"
+                        " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d"
                     )
                 else:
                     raise ImportError(
@@ -281,7 +281,7 @@ class FalconMambaMixer(nn.Module):
                 logger.warning_once(
                     "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
                     " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
-                    " https://github.com/Dao-AILab/causal-conv1d or install kernels for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                    " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
     def cuda_kernels_forward(
