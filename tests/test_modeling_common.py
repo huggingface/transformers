@@ -263,7 +263,19 @@ def _test_eager_matches_sdpa_inference(
         set_model_for_less_flaky_test(model_eager)
         set_model_for_less_flaky_test(model_sdpa)
 
-        can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
+        parameters = inspect.signature(model_sdpa.forward).parameters
+        can_output_attn = False
+        if "output_attentions" in parameters:
+            can_output_attn = True
+        else:
+            kwargs_param = parameters.get("kwargs")
+            if kwargs_param is not None:
+                try:
+                    annotation = kwargs_param.annotation.__args__
+                    can_output_attn = "output_attentions" in annotation[0].__annotations__
+                except AttributeError:
+                    pass
+
         if not (self.has_attentions and can_output_attn) and output_attentions:
             self.skipTest(reason="Model does not support output_attentions")
 
