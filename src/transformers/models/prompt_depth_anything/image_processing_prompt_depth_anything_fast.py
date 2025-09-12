@@ -36,7 +36,6 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    get_image_size,
 )
 from ...utils import (
     TensorType,
@@ -57,6 +56,7 @@ if is_torchvision_available():
     else:
         from torchvision.transforms import functional as F
 
+
 # Copied from transformers.models.prompt_depth_anything.image_processing_prompt_depth_anything (i.e. the slow processor)
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
     """Constrain a value to be a multiple of another value."""
@@ -70,6 +70,7 @@ def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
 
     return x
 
+
 # Copied from transformers.models.prompt_depth_anything.image_processing_prompt_depth_anything (i.e. the slow processor)
 def _get_resize_output_image_size(
     input_image: "torch.Tensor",
@@ -80,7 +81,7 @@ def _get_resize_output_image_size(
     """Get the output size for resizing an image."""
     output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
 
-    input_height, input_width =  input_image.shape[-2:]
+    input_height, input_width = input_image.shape[-2:]
     output_height, output_width = output_size
 
     # determine new height and width
@@ -125,7 +126,6 @@ class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwarg
 
 @auto_docstring
 class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
-
     model_input_names = ["pixel_values", "prompt_depth"]
 
     resample = PILImageResampling.BICUBIC
@@ -207,7 +207,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
             pad_size_right = pad_size - pad_size_left
             return pad_size_left, pad_size_right
 
-        height, width = get_image_size(image, ChannelDimension.FIRST)
+        height, width = image.shape[-2:]
 
         pad_w_left, pad_w_right = _get_pad(width, size_divisor)
         pad_h_top, pad_h_bottom = _get_pad(height, size_divisor)
@@ -223,22 +223,22 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        keep_aspect_ratio: Optional[bool],
+        ensure_multiple_of: Optional[int],
+        interpolation: Optional["F.InterpolationMode"],
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        do_pad: Optional[bool],
+        prompt_scale_to_meter: Optional[float],
+        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: Optional[bool],
         prompt_depth: Optional[ImageInput] = None,
-        do_resize: bool = None,
-        size: SizeDict = None,
-        keep_aspect_ratio: Optional[bool] = None,
-        ensure_multiple_of: Optional[int] = None,
-        interpolation: Optional["F.InterpolationMode"] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
         size_divisor: Optional[int] = None,
-        prompt_scale_to_meter: Optional[float] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        disable_grouping: Optional[bool] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -294,7 +294,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         for shape, stacked_images in grouped_images.items():
             if do_pad:
-                stacked_images = self.pad_image(stacked_images, size_divisor) # Apply padding if requested
+                stacked_images = self.pad_image(stacked_images, size_divisor)  # Apply padding if requested
 
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
