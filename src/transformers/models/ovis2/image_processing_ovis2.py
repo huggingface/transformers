@@ -316,7 +316,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         crop_to_patches: Optional[bool] = None,
         min_patches: Optional[int] = None,
         max_patches: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -481,7 +481,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         max_patches: int,
         use_covering_area_grid: bool = True,
         patch_size: Optional[Union[tuple, int, dict]] = None,
-        data_format: ChannelDimension = None,
+        data_format: Optional[ChannelDimension] = None,
         covering_threshold: float = 0.9,
     ):
         """

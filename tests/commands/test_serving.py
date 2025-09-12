@@ -19,6 +19,7 @@ from threading import Thread
 from unittest.mock import patch
 
 import aiohttp.client_exceptions
+import requests
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 from parameterized import parameterized
 
@@ -71,7 +72,7 @@ class ServeCLITest(unittest.TestCase):
 
     def test_build_chat_completion_chunk(self):
         """
-        Tests that the chunks are correctly built for the Chat Completion API. The `choices` checks implictly
+        Tests that the chunks are correctly built for the Chat Completion API. The `choices` checks implicitly
         confirm that empty fields are not emitted.
         """
         dummy = ServeCommand.__new__(ServeCommand)
@@ -492,6 +493,52 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
         self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
 
+def _get_scheduler(serve_command):
+    # Defensive navigation in case any layer is renamed in the future
+    cbm = getattr(serve_command, "running_continuous_batching_manager", None)
+    assert cbm is not None, "ServeCommand has no running_continuous_batching_manager"
+    bp = getattr(cbm, "batch_processor", None)
+    assert bp is not None, "running_continuous_batching_manager has no batch_processor"
+    sched = getattr(bp, "scheduler", None)
+    assert sched is not None, "batch_processor has no scheduler"
+    return sched
+
+
+def _call_healthcheck(base_url: str):
+    response = None
+    retries = 10
+    while retries > 0:
+        try:
+            response = requests.get(f"{base_url}/health")
+            break
+        except requests.exceptions.ConnectionError:
+            time.sleep(0.1)
+            retries -= 1
+    return response
+
+
+def _open_stream_and_cancel(base_url: str, request_id: str):
+    with requests.Session() as s:
+        with s.post(
+            f"{base_url}/v1/chat/completions",
+            headers={"X-Request-ID": request_id},
+            json={
+                "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                "stream": True,
+                "messages": [{"role": "user", "content": "Count slowly so I can cancel you."}],
+            },
+            stream=True,
+            timeout=30,
+        ) as resp:
+            assert resp.status_code == 200
+
+            wait_for_n_chunks = 3
+            for i, _ in enumerate(resp.iter_content(chunk_size=None)):
+                if i >= wait_for_n_chunks:
+                    resp.close()
+                    break
+
+
 @slow  # server startup time is slow on our push CI
 @require_openai
 class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, unittest.TestCase):
@@ -558,6 +605,38 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
             full_text.startswith(
                 "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
             )
+        )
+
+    def test_request_cancellation(self):
+        """Tests that a request can be cancelled."""
+
+        base_url = f"http://127.0.0.1:{self.port}"
+        request_id = "test-cancel"
+
+        # Ensure the server is up before sending a request
+        response = _call_healthcheck(base_url)
+        self.assertIsNotNone(response, "Failed to connect to the server health endpoint.")
+        self.assertEqual(response.status_code, 200)
+
+        _open_stream_and_cancel(base_url, request_id)
+
+        scheduler = _get_scheduler(self.serve_command)
+
+        # Because cancellation is non-blocking, poll for a short, bounded time.
+        deadline = time.time() + 8.0  # generous but still CI-friendly
+        last_seen = None
+        while time.time() < deadline:
+            is_cancelled = scheduler.request_is_cancelled(request_id)
+            if is_cancelled:
+                break
+            last_seen = time.time()
+            time.sleep(0.1)  # don't spin the CPU
+
+        is_cancelled = scheduler.request_is_cancelled(request_id)
+        self.assertTrue(
+            is_cancelled,
+            f"Request {request_id} still present in scheduler after cancellation "
+            f"(last seen at {last_seen}). Check cancellation propagation.",
         )
 
 
@@ -651,3 +730,21 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
                 "As an AI language model, I am designed to assist with various tasks and provide information on different topics related to sports."
             )
         )
+
+
+class ServeInfrastructureTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.port = 8042
+        args = ServeArguments(port=cls.port)
+        serve_command = ServeCommand(args)
+        thread = Thread(target=serve_command.run)
+        thread.daemon = True
+        thread.start()
+
+    def test_healthcheck(self):
+        """Tests that the healthcheck endpoint works."""
+        response = _call_healthcheck(f"http://localhost:{self.port}")
+        self.assertIsNotNone(response, "Failed to connect to the server health endpoint.")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})

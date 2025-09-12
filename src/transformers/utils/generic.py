@@ -53,29 +53,6 @@ if is_torch_available():
     from ..model_debugging_utils import model_addition_debugger_context
 
 
-class cached_property(property):
-    """
-    Descriptor that mimics @property but caches output in member variable.
-
-    From tensorflow_datasets
-
-    Built-in in functools from Python 3.8.
-    """
-
-    def __get__(self, obj, objtype=None):
-        # See docs.python.org/3/howto/descriptor.html#properties
-        if obj is None:
-            return self
-        if self.fget is None:
-            raise AttributeError("unreadable attribute")
-        attr = "__cached_" + self.fget.__name__
-        cached = getattr(obj, attr, None)
-        if cached is None:
-            cached = self.fget(obj)
-            setattr(obj, attr, cached)
-        return cached
-
-
 # vendored from distutils.util
 def strtobool(val):
     """Convert a string representation of truth to true (1) or false (0).
@@ -836,12 +813,11 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
 
 class TransformersKwargs(TypedDict, total=False):
     """
-    Keyword arguments to be passed to the loss function
+    Keyword arguments to be passed to the forward pass of a `PreTrainedModel`.
 
     Attributes:
         num_items_in_batch (`Optional[torch.Tensor]`, *optional*):
-            Number of items in the batch. It is recommended to pass it when
-            you are doing gradient accumulation.
+            Number of items in the batch. It is recommended to pass it when you are doing gradient accumulation.
         output_hidden_states (`Optional[bool]`, *optional*):
             Most of the models support outputting all hidden states computed during the forward pass.
         output_attentions (`Optional[bool]`, *optional*):
@@ -1007,6 +983,12 @@ def check_model_inputs(func):
             )
             for k in capture_flags
         }
+
+        # We let cross attentions to be saved separately because some models add `cross-attn` layer
+        # when certain condtions are met. Let's output cross attention if attentions are requested (for BC)
+        if "output_attentions" in recordable_keys:
+            recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
+
         collected_outputs = defaultdict(tuple)
         monkey_patched_layers = []
 
@@ -1076,7 +1058,22 @@ def check_model_inputs(func):
                         module.forward = make_capture_wrapper(module, original_forward, key, specs.index)
                         monkey_patched_layers.append((module, original_forward))
 
-        outputs = func(self, *args, **kwargs)
+        try:
+            outputs = func(self, *args, **kwargs)
+        except TypeError as original_exception:
+            # If we get a TypeError, it's possible that the model is not receiving the recordable kwargs correctly.
+            # Get a TypeError even after removing the recordable kwargs -> re-raise the original exception
+            # Otherwise -> we're probably missing `**kwargs` in the decorated function
+            kwargs_without_recordable = {k: v for k, v in kwargs.items() if k not in recordable_keys}
+            try:
+                outputs = func(self, *args, **kwargs_without_recordable)
+            except TypeError:
+                raise original_exception
+            raise TypeError(
+                "Missing `**kwargs` in the signature of the `@check_model_inputs`-decorated function "
+                f"({func.__qualname__})"
+            )
+
         # Restore original forward methods
         for module, original_forward in monkey_patched_layers:
             module.forward = original_forward
@@ -1084,10 +1081,11 @@ def check_model_inputs(func):
         # Inject collected outputs into model output
         for key in collected_outputs:
             if key == "hidden_states":
-                collected_outputs[key] = collected_outputs[key][:-1]
                 if hasattr(outputs, "vision_hidden_states"):
+                    collected_outputs[key] = collected_outputs[key][:-1]
                     collected_outputs[key] += (outputs.vision_hidden_states,)
                 elif hasattr(outputs, "last_hidden_state"):
+                    collected_outputs[key] = collected_outputs[key][:-1]
                     collected_outputs[key] += (outputs.last_hidden_state,)
 
                 outputs[key] = collected_outputs[key]
