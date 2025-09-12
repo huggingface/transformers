@@ -118,14 +118,23 @@ class ObjectDetectionPipeline(Pipeline):
         return super().__call__(*args, **kwargs)
 
     def preprocess(self, image, timeout=None):
-        image = load_image(image, timeout=timeout)
-        target_size = torch.IntTensor([[image.height, image.width]])
-        inputs = self.image_processor(images=[image], return_tensors="pt")
+        # Handle both single images and batches
+        if isinstance(image, (list, tuple)):
+            # Batch of images
+            images = [load_image(img, timeout=timeout) for img in image]
+            target_sizes = torch.IntTensor([[img.height, img.width] for img in images])
+            inputs = self.image_processor(images=images, return_tensors="pt")
+        else:
+            # Single image
+            image = load_image(image, timeout=timeout)
+            target_sizes = torch.IntTensor([[image.height, image.width]])
+            inputs = self.image_processor(images=[image], return_tensors="pt")
+
         if self.framework == "pt":
             inputs = inputs.to(self.dtype)
         if self.tokenizer is not None:
             inputs = self.tokenizer(text=inputs["words"], boxes=inputs["boxes"], return_tensors="pt")
-        inputs["target_size"] = target_size
+        inputs["target_size"] = target_sizes
         return inputs
 
     def _forward(self, model_inputs):
@@ -163,21 +172,44 @@ class ObjectDetectionPipeline(Pipeline):
         else:
             # This is a regular ForObjectDetectionModel
             raw_annotations = self.image_processor.post_process_object_detection(model_outputs, threshold, target_size)
-            raw_annotation = raw_annotations[0]
-            scores = raw_annotation["scores"]
-            labels = raw_annotation["labels"]
-            boxes = raw_annotation["boxes"]
 
-            raw_annotation["scores"] = scores.tolist()
-            raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
-            raw_annotation["boxes"] = [self._get_bounding_box(box) for box in boxes]
+            # Handle both single and batched inputs
+            if len(raw_annotations) == 1:
+                # Single image case
+                raw_annotation = raw_annotations[0]
+                scores = raw_annotation["scores"]
+                labels = raw_annotation["labels"]
+                boxes = raw_annotation["boxes"]
 
-            # {"scores": [...], ...} --> [{"score":x, ...}, ...]
-            keys = ["score", "label", "box"]
-            annotation = [
-                dict(zip(keys, vals))
-                for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["boxes"])
-            ]
+                raw_annotation["scores"] = scores.tolist()
+                raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
+                raw_annotation["boxes"] = [self._get_bounding_box(box) for box in boxes]
+
+                # {"scores": [...], ...} --> [{"score":x, ...}, ...]
+                keys = ["score", "label", "box"]
+                annotation = [
+                    dict(zip(keys, vals))
+                    for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["boxes"])
+                ]
+            else:
+                # Batched images case - process all annotations
+                annotation = []
+                for raw_annotation in raw_annotations:
+                    scores = raw_annotation["scores"]
+                    labels = raw_annotation["labels"]
+                    boxes = raw_annotation["boxes"]
+
+                    scores_list = scores.tolist()
+                    labels_list = [self.model.config.id2label[label.item()] for label in labels]
+                    boxes_list = [self._get_bounding_box(box) for box in boxes]
+
+                    # {"scores": [...], ...} --> [{"score":x, ...}, ...]
+                    keys = ["score", "label", "box"]
+                    image_annotation = [
+                        dict(zip(keys, vals))
+                        for vals in zip(scores_list, labels_list, boxes_list)
+                    ]
+                    annotation.append(image_annotation)
 
         return annotation
 
