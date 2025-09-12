@@ -201,49 +201,54 @@ class ContinuousBatchProcessor:
         """Reset static tensors for the next batch. In between batches, reset only the parts that were used in the last
         batch, but for initialisation, we can reset everything using the (full_reset) flag."""
         # Compute the slice to reset
-        t = self.total_query_length if self.slice_inputs and not full_reset else self.write_index_storage[0].size(-1)
-        c = self.total_key_length if self.slice_inputs and not full_reset else self.read_index_storage[0].size(-1)
-        b = self.total_batch_size if self.slice_inputs and not full_reset else self.write_index_storage[0].size(0)
+        if full_reset or not self.slice_inputs:
+            q_len = self.write_index_storage[0].size(-1)
+            k_len = self.read_index_storage[0].size(-1)
+            b_size = self.write_index_storage[0].size(0)
+        else:
+            q_len = self.total_query_length
+            k_len = self.total_key_length
+            b_size = self.total_batch_size
 
         # Reset the attributes that always have the same shape
-        self.input_ids[:, :t].zero_()
-        self.position_ids[:, :t].zero_()
-        self.cumulative_seqlens_q[: b + 1].zero_()
+        self.input_ids[:, :q_len].zero_()
+        self.position_ids[:, :q_len].zero_()
+        self.cumulative_seqlens_q[: b_size + 1].zero_()
         self.max_seqlen_q = 0
-        self.logits_indices[:t].fill_(-1)
-        self.output_ids[:, :t].fill_(-1)
+        self.logits_indices[:q_len].fill_(-1)
+        self.output_ids[:, :q_len].fill_(-1)
 
         # Reset the attributes that are either tensors or dict of tensors
         if isinstance(self.cumulative_seqlens_k, dict):
             for layer_type in self.cumulative_seqlens_k:
-                self.cumulative_seqlens_k[layer_type][: b + 1].zero_()
+                self.cumulative_seqlens_k[layer_type][: b_size + 1].zero_()
                 self.max_seqlen_k[layer_type] = 0
                 if self.attention_mask is not None:
-                    self.attention_mask[layer_type][:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
+                    self.attention_mask[layer_type][:, :, :q_len, :k_len].fill_(torch.finfo(self.model_dtype).min)
         else:
-            self.cumulative_seqlens_k[: b + 1].zero_()
+            self.cumulative_seqlens_k[: b_size + 1].zero_()
             self.max_seqlen_k = 0
             if self.attention_mask is not None:
-                self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
+                self.attention_mask[:, :, :q_len, :k_len].fill_(torch.finfo(self.model_dtype).min)
 
         # Reset the attributes that are lists of tensors
         for i in range(self.cache.num_groups):
-            self.write_index_storage[i][:t].fill_(-1)
-            self.read_index_storage[i][: t + c].fill_(-1)
+            self.write_index_storage[i][:q_len].fill_(-1)
+            self.read_index_storage[i][: q_len + k_len].fill_(-1)
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
         # Compute the slice to return
-        t = self.total_query_length if self.slice_inputs else self.write_index_storage[0].size(-1)
-        b = self.total_batch_size
+        q_len = self.total_query_length if self.slice_inputs else self.write_index_storage[0].size(-1)
+        b_size = self.total_batch_size
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts
         kwargs = {
-            "input_ids": self.input_ids[:, :t],
-            "position_ids": self.position_ids[:, :t],
-            "cu_seq_lens_q": self.cumulative_seqlens_q[: b + 1],
+            "input_ids": self.input_ids[:, :q_len],
+            "position_ids": self.position_ids[:, :q_len],
+            "cu_seq_lens_q": self.cumulative_seqlens_q[: b_size + 1],
             "max_seqlen_q": self.max_seqlen_q,
-            "logits_indices": self.logits_indices[:t],
+            "logits_indices": self.logits_indices[:q_len],
             "cu_seq_lens_k": {},
             "max_seqlen_k": {},
             "attention_mask": {},
@@ -256,16 +261,17 @@ class ContinuousBatchProcessor:
         # For the attributes that are tensors or dict of tensors, we populate the dict or replace it with the tensor
         if isinstance(self.cumulative_seqlens_k, dict):
             for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
-                kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: b + 1]
+                kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: b_size + 1]
                 kwargs["max_seqlen_k"][layer_type] = self.max_seqlen_k[layer_type]
                 if self.attention_mask is not None:
-                    kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :t, : seqlens_k[b]]
+                    k_len = seqlens_k[b_size]
+                    kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_len, :k_len]
 
         else:
-            kwargs["cu_seq_lens_k"] = self.cumulative_seqlens_k[: b + 1]
+            kwargs["cu_seq_lens_k"] = self.cumulative_seqlens_k[: b_size + 1]
             kwargs["max_seqlen_k"] = self.max_seqlen_k
             if self.attention_mask is not None:
-                kwargs["attention_mask"] = self.attention_mask[..., :t, : self.cumulative_seqlens_k[b]]
+                kwargs["attention_mask"] = self.attention_mask[..., :q_len, : self.cumulative_seqlens_k[b_size]]
 
         if self.attention_mask is None:
             kwargs["attention_mask"] = None
