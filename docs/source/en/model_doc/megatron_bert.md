@@ -97,3 +97,4 @@ visualizer('The capital of France is [MASK].')
 
 [[autodoc]] MegatronBertForTokenClassification
     - forward
+
