@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch LongcatFlash model."""
 
+import copy
 import unittest
 
 from transformers import LongcatFlashConfig, is_torch_available
@@ -59,7 +60,9 @@ class LongcatFlashModelTester(CausalLMModelTester):
         max_position_embeddings=128,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
-        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
+        pad_token_id=3,
         type_sequence_label_size=2,
         num_labels=3,
         num_choices=4,
@@ -93,6 +96,8 @@ class LongcatFlashModelTester(CausalLMModelTester):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.type_sequence_label_size = type_sequence_label_size
         self.num_labels = num_labels
@@ -193,6 +198,17 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (LongcatFlashModel, LongcatFlashForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (LongcatFlashForCausalLM,) if is_torch_available() else ()
 
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": LongcatFlashModel,
+            "text-generation": LongcatFlashForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    model_split_percents = [0.3, 0.5]
+
     test_headmasking = False
     test_pruning = False
 
@@ -266,6 +282,23 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = copy.deepcopy(config)
+        config.attention_dropout = 0
+
+        if requested_dim > config.qk_rope_head_dim:
+            config.qk_rope_head_dim = requested_dim
+            config.qk_nope_head_dim = max(config.qk_nope_head_dim, requested_dim)
+            config.v_head_dim = max(config.v_head_dim, requested_dim)
+            config.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+            config.head_dim = requested_dim
+            config.q_lora_rank = max(config.q_lora_rank, requested_dim * 4)
+            config.kv_lora_rank = max(config.kv_lora_rank, requested_dim * 2)
+            config.hidden_size = max(config.hidden_size, config.num_attention_heads * requested_dim)
+
+        return config
+
 
 @slow
 class LongcatFlashIntegrationTest(unittest.TestCase):
@@ -281,17 +314,20 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=torch.bfloat16,
         )
+        self.model.generation_config.bos_token_id = 1
+        self.model.generation_config.pad_token_id = 3
+        self.model.generation_config.eos_token_id = 2
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
         chat = [{"role": "user", "content": "Paris is..."}]
         inputs = self.tokenizer.apply_chat_template(
             chat, tokenize=True, add_generation_prompt=True, return_tensors="pt"
-        )
+        ).to(self.model.device)
 
         with torch.no_grad():
             outputs = self.model.generate(inputs, max_new_tokens=10, do_sample=False)
 
         response = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
-        expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年冬季奥林匹克运动会菁四方级以上揽胜可视lexible"
+        expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年车龄juanaheast稍achaotingupebarebones"
 
         self.assertEqual(response, expected_output)
