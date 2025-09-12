@@ -58,7 +58,7 @@ if is_vision_available():
 
 
 # Copied from transformers.models.llava_next.image_processing_llava_next.divide_to_patches
-def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> list[np.array]:
+def divide_to_patches(image: np.ndarray, patch_size: int, input_data_format) -> list[np.array]:
     """
     Divides an image into patches of a specified size.
 
@@ -87,7 +87,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> li
 
 
 # Copied from transformers.models.llava_next.image_processing_llava_next.expand_to_square
-def expand_to_square(image: np.array, background_color, input_data_format) -> np.array:
+def expand_to_square(image: np.ndarray, background_color, input_data_format) -> np.array:
     """
     Expands an image to a square by adding a background color.
     """
@@ -291,7 +291,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessor._resize_for_patching
     def _resize_for_patching(
-        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
+        self, image: np.ndarray, target_resolution: tuple, resample, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
@@ -326,7 +326,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessor._pad_for_patching
     def _pad_for_patching(
-        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
+        self, image: np.ndarray, target_resolution: tuple, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
@@ -341,7 +341,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessor.get_image_patches
     def get_image_patches(
         self,
-        image: np.array,
+        image: np.ndarray,
         grid_pinpoints,
         size: tuple,
         patch_size: int,
@@ -527,7 +527,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -603,7 +603,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         image_grid_pinpoints: Optional[list] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
