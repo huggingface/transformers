@@ -520,7 +520,7 @@ class TrainingArguments:
                       gradient
                         computation.
                     - `"backward_post"` : This prefetches the next set of parameters after the current set of
-                      parameter’s
+                      parameter's
                         gradient computation.
                 - forward_prefetch (`bool`, *optional*, defaults to `False`)
                     FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
@@ -639,6 +639,10 @@ class TrainingArguments:
         ddp_broadcast_buffers (`bool`, *optional*):
             When using distributed training, the value of the flag `broadcast_buffers` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
+        ddp_param_to_hook_all_reduce (`bool`, *optional*, defaults to `False`):
+            When using distributed training, the value of the flag `param_to_hook_all_reduce` passed to
+            `torch.nn.parallel.DistributedDataParallel`. Setting this to `True` may potentially improve performance by overlapping
+            backward pass with gradient synchronization. Defaults to `False`.
         dataloader_pin_memory (`bool`, *optional*, defaults to `True`):
             Whether you want to pin memory in data loaders or not. Will default to `True`.
         dataloader_persistent_workers (`bool`, *optional*, defaults to `False`):
@@ -1329,6 +1333,12 @@ class TrainingArguments:
                 "When using distributed training, the value of the flag `broadcast_buffers` passed to "
                 "`DistributedDataParallel`."
             )
+        },
+    )
+    ddp_param_to_hook_all_reduce: bool = field(
+        default=False,
+        metadata={
+            "help": "When using distributed training, the value of the flag `param_to_hook_all_reduce` passed to `torch.nn.parallel.DistributedDataParallel`. Setting this to `True` may potentially improve performance by overlapping backward pass with gradient synchronization. Defaults to `False`."
         },
     )
     dataloader_pin_memory: bool = field(
@@ -2589,7 +2599,7 @@ class TrainingArguments:
 
     def to_sanitized_dict(self) -> dict[str, Any]:
         """
-        Sanitized serialization to use with TensorBoard’s hparams
+        Sanitized serialization to use with TensorBoard's hparams
         """
         d = self.to_dict()
         d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}

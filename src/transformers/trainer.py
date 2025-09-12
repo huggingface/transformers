@@ -2207,6 +2207,10 @@ class Trainer:
             if self.args.ddp_broadcast_buffers is not None:
                 kwargs["broadcast_buffers"] = self.args.ddp_broadcast_buffers
 
+            # Add the new DDP option
+            if self.args.ddp_param_to_hook_all_reduce is not None: # Field has a default, check not needed, but keep pattern
+                 kwargs["param_to_hook_all_reduce"] = self.args.ddp_param_to_hook_all_reduce
+
             self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
         return model
