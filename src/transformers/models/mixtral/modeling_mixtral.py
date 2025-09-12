@@ -72,75 +72,79 @@ class MixtralBlockSparseTop2MLP(nn.Module):
         return current_hidden_states
 
 
-class MixtralNaiveMoe(nn.ModuleList):
-    def __init__(self, config):
+class MixtralRouter(nn.Module):
+    """
+    Gate module which determines which experts to use for each token.
+    It uses a separate set of parameters for each expert.
+    """
+
+    def __init__(self, config: MixtralConfig):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
+        self.jitter_noise = config.router_jitter_noise
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            hidden_states: (batch_size, sequence_length, hidden_dim)
+        Returns:
+            router_logits: (batch_size * sequence_length, num_experts)
+            selected_experts: (batch_size * sequence_length, top_k)
+            routing_weights: (batch_size * sequence_length, top_k)
+        """
+        if self.training and self.jitter_noise > 0:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        router_logits = self.gate(hidden_states)
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return router_logits, selected_experts, routing_weights
+
+
+class MixtralExperts(nn.ModuleList):
+    """
+    ModuleList of experts.
+    """
+
+    def __init__(self, config: MixtralConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
-            self += [MixtralBlockSparseTop2MLP(config)]
+            self.append(MixtralBlockSparseTop2MLP(config))
 
-    def forward(self, hidden_states, routing_weights):
-        routing_weights = F.softmax(routing_weights, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        # we cast back to the input dtype
-        routing_weights = routing_weights.to(hidden_states.dtype)
-        final_hidden_states = torch.zeros_like(hidden_states, device=hidden_states.device)
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
+    def forward(
+        self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
-            expert_layer = self[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
+            current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
 
 class MixtralSparseMoeBlock(nn.Module):
-    """
-    This implementation is
-    strictly equivalent to standard MoE with full capacity (no
-    dropped tokens). It's faster since it formulates MoE operations
-    in terms of block-sparse operations to accommodate imbalanced
-    assignments of tokens to experts, whereas standard MoE either
-    (1) drop tokens at the cost of reduced performance or (2) set
-    capacity factor to number of experts and thus waste computation
-    and memory on padding.
-    """
-
     def __init__(self, config):
         super().__init__()
-        self.hidden_dim = config.hidden_size
-        self.ffn_dim = config.intermediate_size
-        self.num_experts = config.num_local_experts
-        self.top_k = config.num_experts_per_tok
-
-        self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
-        self.experts = MixtralNaiveMoe(config)
-
-        # Jitter parameters
-        self.jitter_noise = config.router_jitter_noise
+        self.gate = MixtralRouter(config)
+        self.experts = MixtralExperts(config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.training and self.jitter_noise > 0:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
-        batch_size, sequence_length, _ = hidden_states.shape
-        hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states, router_logits)
-        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, self.hidden_dim)
-        return final_hidden_states, router_logits
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        router_logits, selected_experts, routing_weights = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states, router_logits
 
 
 @use_kernel_forward_from_hub("RMSNorm")

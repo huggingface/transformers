@@ -261,39 +261,13 @@ class Dots1MLP(nn.Module):
         return down_proj
 
 
-class Dots1NaiveMoe(nn.ModuleList):
+class Dots1NaiveMoe(MixtralExperts):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
             self += [Dots1MLP(config, intermediate_size=config.moe_intermediate_size)]
-
-    def forward(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        r"""
-        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
-        to not have to do a loop here (deepseek has 256 experts soooo yeah).
-        """
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self))
-        expert_mask = expert_mask.permute(2, 0, 1)
-
-        for expert_idx in range(len(self)):
-            expert = self[expert_idx]
-            mask = expert_mask[expert_idx]
-            token_indices, weight_indices = torch.where(mask)
-
-            if token_indices.numel() > 0:
-                expert_weights = topk_weights[token_indices, weight_indices]
-                expert_input = hidden_states[token_indices]
-                expert_output = expert(expert_input)
-                weighted_output = expert_output * expert_weights.unsqueeze(-1)
-                final_hidden_states.index_add_(0, token_indices, weighted_output)
-
-        # in original deepseek, the output of the experts are gathered once we leave this module
-        # thus the moe module is itelsf an IsolatedParallel module
-        # and all expert are "local" meaning we shard but we don't gather
-        return final_hidden_states.type(hidden_states.dtype)
 
 
 class Dots1MoE(nn.Module):

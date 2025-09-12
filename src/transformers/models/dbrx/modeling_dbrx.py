@@ -242,6 +242,8 @@ class DbrxRouter(nn.Module):
         self.hidden_size = config.hidden_size
         self.moe_jitter_eps = config.moe_jitter_eps
         self.layer = nn.Linear(self.hidden_size, config.moe_num_experts, bias=False)
+        self.top_k = config.moe_top_k
+        self.moe_normalize_expert_weights = config.moe_normalize_expert_weights
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
         if self.training and self.moe_jitter_eps is not None:
@@ -249,8 +251,14 @@ class DbrxRouter(nn.Module):
                 1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps
             )
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        weights = self.layer(hidden_states)
-        return weights
+        router_logits = self.layer(hidden_states)
+        router_logits = torch.nn.functional.softmax(router_logits, dim=1, dtype=router_logits.dtype)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
+        if self.moe_normalize_expert_weights is not None:
+            router_top_value = router_top_value / torch.norm(
+                router_top_value, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True
+            )
+        return router_logits, router_top_value, router_indices
 
 
 class DbrxExpertGLU(nn.Module):
@@ -278,26 +286,22 @@ class DbrxExpertGLU(nn.Module):
         return down_proj
 
 
-class DbrxExperts(nn.Module):  # self.experts.mlp.w1 / v1 / w2
+class DbrxExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.mlp = DbrxExpertGLU(config)
         self.hidden_size = config.hidden_size
         self.ffn_hidden_size = config.ffn_hidden_size
-        self.top_k = config.moe_top_k
-        self.moe_normalize_expert_weights = config.moe_normalize_expert_weights
 
-    def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        router_logits: torch.Tensor,
+        router_top_value: torch.Tensor,
+        router_indices: torch.Tensor,
+    ) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(-1, self.hidden_size)  # (num_tokens, hidden_size)
-        router_logits = torch.nn.functional.softmax(
-            router_logits, dim=1, dtype=router_logits.dtype
-        )  # main diff softmax applied first!
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
-        if self.moe_normalize_expert_weights is not None:  # TODO RFEMOVE BASED ON MODELS ON THE HUB
-            router_top_value = router_top_value / torch.norm(
-                router_top_value, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True
-            )
+        hidden_states = hidden_states.reshape(-1, self.hidden_size)
 
         router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
         num_experts = router_scores.shape[1]
@@ -333,9 +337,9 @@ class DbrxFFN(nn.Module):
         self.experts = DbrxExperts(config.ffn_config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        top_weights = self.router(hidden_states)
-        output = self.experts(hidden_states, top_weights)
-        return output, top_weights
+        router_logits, router_top_value, router_indices = self.router(hidden_states)
+        output = self.experts(hidden_states, router_logits, router_top_value, router_indices)
+        return output, router_logits
 
 
 class DbrxNormAttentionNorm(nn.Module):
@@ -565,11 +569,6 @@ class DbrxModel(DbrxPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
-
-        inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.emb_pdrop, training=self.training)
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
