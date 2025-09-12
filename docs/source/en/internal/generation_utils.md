@@ -156,6 +156,9 @@ generation.
 [[autodoc]] TemperatureLogitsWarper
     - __call__
 
+[[autodoc]] TopHLogitsWarper
+    - __call__
+
 [[autodoc]] TopKLogitsWarper
     - __call__
 
