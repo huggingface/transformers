@@ -231,6 +231,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
         return expert_index, router_probs, router_logits
 
 
+# FIXME: update moduledict
 class GPTSanJapaneseSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module.
