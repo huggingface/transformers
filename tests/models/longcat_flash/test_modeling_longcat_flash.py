@@ -19,7 +19,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import LongcatFlashConfig, is_torch_available, set_seed
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_large_cpu_ram, require_torch, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
@@ -383,8 +383,9 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
         self.assertEqual(response, expected_output)
 
     @slow
+    @require_large_cpu_ram
     def test_longcat_generation_cpu(self):
-        # takes absolutely forever and 1.2TB RAM, but allows to test the output!
+        # takes absolutely forever and a lot RAM, but allows to test the output in the CI
         model = LongcatFlashForCausalLM.from_pretrained(
             "meituan-longcat/LongCat-Flash-Chat", device_map="cpu", dtype=torch.bfloat16
         )
