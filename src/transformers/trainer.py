@@ -4157,6 +4157,9 @@ class Trainer:
             and num_items_in_batch is not None
         ):
             loss *= self.accelerator.num_processes
+        self.control = self.callback_handler.on_compute_loss(
+            self.args, self.state, self.control, inputs=inputs, loss=loss.detach()
+        )
 
         return (loss, outputs) if return_outputs else loss
 
