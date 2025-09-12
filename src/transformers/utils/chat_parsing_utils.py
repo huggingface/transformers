@@ -27,9 +27,10 @@ def _parse_re_match(node_match, offset, require_groups: list[str] | None = None)
             return {
                 group: offset_content(content, node_match.start(group) + offset)
                 for group, content in node_match.groupdict().items()
+                if content is not None
             }
         else:
-            return node_match.groupdict()
+            return {key: val for key, val in node_match.groupdict().items() if val is not None}
     # If the regex has unnamed groups, it MUST only have one, and we return that group
     elif groups := list(node_match.groups()):
         if len(groups) > 1:
@@ -295,6 +296,8 @@ def recursive_parse(
                 return location_content(node_content, offset, offset + len(node_content))
             else:
                 return node_content
+    elif node_type == "any":
+        return node_content
     else:
         # TODO Should we handle null types?
         raise TypeError(f"Unsupported schema type {node_type} for node: {node_content}")
