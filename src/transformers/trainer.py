@@ -4156,7 +4156,8 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            loss *= self.accelerator.num_processes
+            dp_size = self.accelerator.state.num_data_parallel_processes
+            loss *= dp_size
 
         return (loss, outputs) if return_outputs else loss
 
