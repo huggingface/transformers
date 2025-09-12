@@ -191,7 +191,9 @@ _import_structure = {
     "processing_utils": ["ProcessorMixin"],
     "quantizers": [],
     "testing_utils": [],
-    "tokenization_utils": ["PreTrainedTokenizer"],
+    "tokenization_utils": [
+        "PreTrainedTokenizer",
+        "ByteTokenizer"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
