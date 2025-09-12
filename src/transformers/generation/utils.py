@@ -1867,7 +1867,7 @@ class GenerationMixin(ContinuousMixin):
             self._cache = StaticCache(**self_attention_cache_kwargs)
             if requires_cross_attention_cache:
                 cross_attention_cache_kwargs = {
-                    "config": self.config.get_text_config(encoder=True),
+                    "config": self.config.get_text_config(decoder=True),
                     "max_cache_len": model_kwargs["encoder_outputs"][0].shape[1],
                     "offloading": offload_cache,
                 }
@@ -1972,7 +1972,7 @@ class GenerationMixin(ContinuousMixin):
         ):
             dynamic_cache_kwargs = {}
         else:
-            dynamic_cache_kwargs = {"config": self.config}
+            dynamic_cache_kwargs = {"config": self.config.get_text_config(decoder=True)}
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
                 if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:

@@ -596,12 +596,12 @@ def require_flash_attn(test_case):
 
 def require_kernels(test_case):
     """
-    Decorator marking a test that requires Flash Attention.
+    Decorator marking a test that requires the kernels library.
 
-    These tests are skipped when Flash Attention isn't installed.
+    These tests are skipped when the kernels library isn't installed.
 
     """
-    return unittest.skipUnless(is_kernels_available(), "test requires Flash Attention")(test_case)
+    return unittest.skipUnless(is_kernels_available(), "test requires the kernels library")(test_case)
 
 
 def require_flash_attn_3(test_case):
@@ -1637,7 +1637,6 @@ def assert_screenout(out, what):
 
 
 def set_model_tester_for_less_flaky_test(test_case):
-    target_num_hidden_layers = 1
     # TODO (if possible): Avoid exceptional cases
     exceptional_classes = [
         "ZambaModelTester",
@@ -1646,9 +1645,12 @@ def set_model_tester_for_less_flaky_test(test_case):
         "AriaVisionText2TextModelTester",
         "GPTNeoModelTester",
         "DPTModelTester",
+        "Qwen3NextModelTester",
     ]
     if test_case.model_tester.__class__.__name__ in exceptional_classes:
-        target_num_hidden_layers = None
+        return
+
+    target_num_hidden_layers = 1
     if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
         target_num_hidden_layers = None
 

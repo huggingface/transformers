@@ -38,6 +38,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class.from_pretrained(
             "deepseek-community/Janus-Pro-1B",
             extra_special_tokens=special_image_tokens,
+            **self.prepare_processor_dict(),
         )
         # Set the processor to use the default system prompt to False as it's used based on input modality.
         # Hence set to False to avoid any issues in the test irrespective of inputs.
