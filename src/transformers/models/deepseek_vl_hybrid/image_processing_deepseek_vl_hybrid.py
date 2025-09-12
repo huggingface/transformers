@@ -117,6 +117,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
+        do_pad: bool = True,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         high_res_image_mean: Optional[Union[float, list[float]]] = None,
@@ -147,6 +148,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
 
+        self.do_pad = do_pad
         self.min_size = min_size
         if image_mean is None:
             self.background_color = (127, 127, 127)
@@ -162,7 +164,6 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Union[dict[str, int], int],
-        background_color: Optional[tuple[int, int, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -176,8 +177,6 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`dict[str, int]` or `int`):
                 The size to resize the image to. If a dictionary, it should have the keys `"height"` and `"width"`.
-            background_color (`tuple[int, int, int]`):
-                The background color to use for the padding.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
@@ -196,7 +195,6 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        background_color = background_color if background_color is not None else self.background_color
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -225,12 +223,6 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
             **kwargs,
         )
-        # Expand and pad the images to obtain a square image of dimensions `size x size`
-        image = self.pad_to_square(
-            image=image,
-            background_color=background_color,
-            input_data_format=input_data_format,
-        )
         return image
 
     @filter_out_non_signature_kwargs()
@@ -253,6 +245,8 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_convert_rgb: Optional[bool] = None,
+        do_pad: Optional[bool] = None,
+        background_color: Optional[tuple[int, int, int]] = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -309,6 +303,10 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the image to square or not.
+            background_color (`tuple[int, int, int]`):
+                The background color to use for the padding.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -321,6 +319,8 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         high_res_image_mean = high_res_image_mean if high_res_image_mean is not None else self.high_res_image_mean
         high_res_image_std = high_res_image_std if high_res_image_std is not None else self.high_res_image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_pad = do_pad if do_pad is not None else self.do_pad
+        background_color = background_color if background_color is not None else self.background_color
 
         size = size if size is not None else self.size
         size_dict = get_size_dict(size)
@@ -372,17 +372,28 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
                 high_res_image = self.resize(
                     image=high_res_image,
                     size=high_res_size_dict,
-                    background_color=self.high_res_background_color,
                     resample=high_res_resample,
                     input_data_format=input_data_format,
                 )
+                if do_pad:
+                    # Expand and pad the images to obtain a square image of dimensions `size x size`
+                    high_res_image = self.pad_to_square(
+                        image=high_res_image,
+                        background_color=background_color,
+                        input_data_format=input_data_format,
+                    )
                 image = self.resize(
                     image=high_res_image,
                     size=size_dict,
-                    background_color=self.background_color,
                     resample=resample,
                     input_data_format=input_data_format,
                 )
+                if do_pad:
+                    image = self.pad_to_square(
+                        image=image,
+                        background_color=background_color,
+                        input_data_format=input_data_format,
+                    )
 
             if do_rescale:
                 image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)

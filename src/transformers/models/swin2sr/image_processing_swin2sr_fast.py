@@ -14,7 +14,6 @@
 # limitations under the License.
 """Fast Image processor class for Swin2SR."""
 
-import warnings
 from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
@@ -32,9 +31,12 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
+    logging,
 )
 from ...utils.deprecation import deprecate_kwarg
 
+
+logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
@@ -71,7 +73,7 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
 
     @property
     def pad_size(self):
-        warnings.warn(
+        logger.warning(
             "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
             FutureWarning,
         )
@@ -79,7 +81,7 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
 
     @pad_size.setter
     def pad_size(self, value):
-        warnings.warn(
+        logger.warning(
             "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
             FutureWarning,
         )

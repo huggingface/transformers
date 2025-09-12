@@ -293,12 +293,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
                     f"image size. Got pad_size={pad_size}, image_size={image_size}."
                 )
             if image_size != pad_size:
-                padding = (0, padding_width, 0, padding_height)
+                padding = (0, 0, padding_width, padding_height)
                 stacked_images = F.pad(stacked_images, padding, fill=fill_value, padding_mode=padding_mode)
             processed_images_grouped[shape] = stacked_images
 
             if return_mask:
-                stacked_masks = torch.zeros_like(stacked_images, dtype=torch.int64)
+                # keep only one from the channel dimension in pixel mask
+                stacked_masks = torch.zeros_like(stacked_images, dtype=torch.int64)[..., 0, :, :]
                 stacked_masks[..., : image_size[0], : image_size[1]] = 1
                 processed_masks_grouped[shape] = stacked_masks
 

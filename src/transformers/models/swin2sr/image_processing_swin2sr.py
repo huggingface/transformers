@@ -68,6 +68,20 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         pad_size = kwargs.get("pad_size")
         self.size_divisor = size_divisor if size_divisor is not None else pad_size
 
+    @property
+    def pad_size(self):
+        logger.warning(
+            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
+        )
+        return self.size_divisor
+
+    @pad_size.setter
+    def pad_size(self, value):
+        logger.warning(
+            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
+        )
+        self.size_divisor = value
+
     def pad(
         self,
         image: np.ndarray,

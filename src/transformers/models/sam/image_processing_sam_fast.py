@@ -211,7 +211,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         )
         original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
-        pixel_values = self._preprocess(images, **images_kwargs)
+        pixel_values = self._preprocess(images, **images_kwargs)["pixel_values"]
         reshaped_input_sizes = [image.shape[-2:] for image in images]
         data = {
             "pixel_values": pixel_values,
@@ -242,7 +242,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
             )
-            data["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
+            data["labels"] = processed_segmentation_maps["pixel_values"].squeeze(1).to(torch.int64)
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
 
