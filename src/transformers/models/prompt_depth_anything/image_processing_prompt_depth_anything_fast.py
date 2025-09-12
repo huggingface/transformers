@@ -237,8 +237,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         )  # always use do_convert_rgb=False rather than defining it as a param to match slow processor
 
         # Process images with the standard pipeline
-        images_kwargs = kwargs.copy()
-        pixel_values = self._preprocess(images, return_tensors=return_tensors, **images_kwargs)
+        pixel_values = self._preprocess(images, return_tensors=return_tensors, **kwargs)
 
         data = {"pixel_values": pixel_values}
 
