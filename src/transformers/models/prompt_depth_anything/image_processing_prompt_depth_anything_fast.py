@@ -212,15 +212,15 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         height, width = image.shape[-2:]
 
-        # Match slow processor: height->left/right, width->top/bottom
-        pad_size_left, pad_size_right = _get_pad(height, size_divisor)
-        pad_size_top, pad_size_bottom = _get_pad(width, size_divisor)
+        # Match slow processor and PyTorch convention: width->left/right, height->top/bottom
+        pad_size_left, pad_size_right = _get_pad(width, size_divisor)
+        pad_size_top, pad_size_bottom = _get_pad(height, size_divisor)
 
         # Use torchvision padding for fast processing
         # /!\ NB: torchvision F.pad expects (left, top, right, bottom) for the last two dims (W then H)
         # Source: https://docs.pytorch.org/vision/main/generated/torchvision.transforms.Pad.html
         # So: (left=width_pad, top=height_pad, right=width_pad, bottom=height_pad)
-        padding = [pad_size_top, pad_size_left, pad_size_bottom, pad_size_right]
+        padding = [pad_size_left, pad_size_top, pad_size_right, pad_size_bottom]
         padded_image = F.pad(image, padding=padding)
 
         return padded_image
