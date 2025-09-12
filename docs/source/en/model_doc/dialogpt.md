@@ -15,29 +15,45 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2019-11-01 and added to Hugging Face Transformers on 2020-11-16.*
 
-# DialoGPT
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
+    </div>
 </div>
 
-## Overview
+# DialoGPT
 
-DialoGPT was proposed in [DialoGPT: Large-Scale Generative Pre-training for Conversational Response Generation](https://huggingface.co/papers/1911.00536) by Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao,
-Jianfeng Gao, Jingjing Liu, Bill Dolan. It's a GPT2 Model trained on 147M conversation-like exchanges extracted from
-Reddit.
+[DialoGPT](https://huggingface.co/papers/1911.00536) is a conversational AI model fine-tuned from GPT-2 on more than 
+147 million multi-turn dialogues collected from Reddit. It is designed to generate natural, engaging, and context-aware 
+responses for chat applications, making it more suitable for dialogue than standard text-generation models.
 
-The abstract from the paper is the following:
+You can find all the original DialoGPT checkpoints under the 
+[microsoft](https://huggingface.co/microsoft?search_models=dialogpt) organization.
 
-*We present a large, tunable neural conversational response generation model, DialoGPT (dialogue generative pre-trained
-transformer). Trained on 147M conversation-like exchanges extracted from Reddit comment chains over a period spanning
-from 2005 through 2017, DialoGPT extends the Hugging Face PyTorch transformer to attain a performance close to human
-both in terms of automatic and human evaluation in single-turn dialogue settings. We show that conversational systems
-that leverage DialoGPT generate more relevant, contentful and context-consistent responses than strong baseline
-systems. The pre-trained model and training pipeline are publicly released to facilitate research into neural response
-generation and the development of more intelligent open-domain dialogue systems.*
+> [!TIP]
+> Click on the DialoGPT models in the right sidebar for more examples of how to apply DialoGPT to different 
+> conversational tasks.
 
-The original code can be found [here](https://github.com/microsoft/DialoGPT).
+The example below demonstrates how to generate dialogue responses with 
+[Pipeline](https://huggingface.co/docs/transformers/main_classes/pipelines), 
+[AutoModel](https://huggingface.co/docs/transformers/model_doc/auto), and from the command line.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="text-generation",
+    model="microsoft/DialoGPT-medium",
+    torch_dtype=torch.float16,
+    device=0
+)
+response = pipeline("User: Hello, how are you? DialoGPT:", max_new_tokens=50)
+print(response[0]["generated_text"])
+```
 
 ## Usage tips
 
