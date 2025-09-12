@@ -1050,7 +1050,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens
                 )
                 self.conversation_cache.acquire_lease(
-                    request_id, self.running_continuous_batching_manager.evict_request_from_cache
+                    request_id, self.running_continuous_batching_manager.cancel_request
                 )
                 for chunk in stream_chat_completion(request_id, decode_stream):
                     yield chunk
