@@ -40,7 +40,7 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
 class ParakeetProcessor(ProcessorMixin):
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "ParakeetFeatureExtractor"
-    tokenizer_class = "PreTrainedTokenizerFast"
+    tokenizer_class = "ParakeetTokenizerFast"
 
     def __call__(
         self,
