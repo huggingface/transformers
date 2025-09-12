@@ -17,7 +17,6 @@ see tokenization_utils.py
 """
 
 import copy
-import itertools
 import json
 import os
 from collections import defaultdict
@@ -94,7 +93,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class: PreTrainedTokenizer = None
+    slow_tokenizer_class: Optional[type[PreTrainedTokenizer]] = None
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
@@ -678,13 +677,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
-        # for CTC-style duplicate token removal
-        group_tokens = kwargs.pop("group_tokens", False)
-
         if isinstance(token_ids, int):
             token_ids = [token_ids]
-        if group_tokens:
-            token_ids = [token_group[0] for token_group in itertools.groupby(token_ids)]
         text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
         clean_up_tokenization_spaces = (
