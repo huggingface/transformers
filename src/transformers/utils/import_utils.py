@@ -2470,6 +2470,7 @@ BASE_FILE_REQUIREMENTS = {
     lambda e: e.startswith("tokenization_") and e.endswith("_fast"): ("tokenizers",),
     lambda e: e.startswith("image_processing_") and e.endswith("_fast"): ("vision", "torch", "torchvision"),
     lambda e: e.startswith("image_processing_"): ("vision",),
+    lambda e: e.startswith("video_processing_"): ("vision", "torch", "torchvision"),
 }
 
 
