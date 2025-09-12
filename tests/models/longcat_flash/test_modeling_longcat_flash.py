@@ -299,17 +299,17 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
         # there's specific head dims due to lora compressions in longcat
         config = copy.deepcopy(config)
         config.attention_dropout = 0
-        
+
         if requested_dim > config.qk_rope_head_dim:
             config.qk_rope_head_dim = requested_dim
-            config.qk_nope_head_dim = max(config.qk_nope_head_dim, requested_dim) 
+            config.qk_nope_head_dim = max(config.qk_nope_head_dim, requested_dim)
             config.v_head_dim = max(config.v_head_dim, requested_dim)
             config.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
             config.head_dim = requested_dim
             config.q_lora_rank = max(config.q_lora_rank, requested_dim * 4)
             config.kv_lora_rank = max(config.kv_lora_rank, requested_dim * 2)
             config.hidden_size = max(config.hidden_size, config.num_attention_heads * requested_dim)
-            
+
         return config
 
 
