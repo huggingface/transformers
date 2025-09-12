@@ -53,7 +53,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoModel,
     Sam2VideoPositionEmbeddingSine,
     Sam2VideoPreTrainedModel,
-    Sam2VideoRoPEAttention,
     Sam2VideoTwoWayAttentionBlock,
     Sam2VideoVisionEncoderOutput,
     Sam2VideoVisionRotaryEmbedding,
@@ -397,10 +396,137 @@ class EdgeTamVideoAttention(Sam2VideoAttention):
     pass
 
 
-class EdgeTamVideoRoPEAttention(Sam2VideoRoPEAttention):
-    def __init__(self, config: EdgeTamVideoConfig, kv_in_dim: Optional[int] = None):
-        super().__init__(config, kv_in_dim)
-        del self.rope_k_repeat
+def apply_rotary_pos_emb_2d_self_attn(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Apply rotary position embedding to query and key tensors for self-attention.
+
+    Args:
+        q: Query tensor of shape (..., seq_len, head_dim)
+        k: Key tensor of shape (..., seq_len, head_dim)
+        cos: Cosine position embedding of shape (seq_len, head_dim)
+        sin: Sine position embedding of shape (seq_len, head_dim)
+
+    Returns:
+        Rotated (q, k) tensors
+    """
+    # Apply RoPE to queries
+    q_embed = q.float()  # force upscale to float32 as in the original implementation
+    q_embed = (q_embed * cos) + (rotate_pairwise(q_embed) * sin)
+
+    # Apply RoPE to keys (same embeddings as queries for self-attention)
+    k_embed = k.float()  # force upscale to float32 as in the original implementation
+    k_embed = (k_embed * cos) + (rotate_pairwise(k_embed) * sin)
+
+    return q_embed.type_as(q), k_embed.type_as(k)
+
+
+def apply_rotary_pos_emb_2d_cross_attn(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    cos_k: torch.Tensor,
+    sin_k: torch.Tensor,
+    num_k_exclude_rope: int = 0,
+    repeat_freqs_k: int = 1,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Apply rotary position embedding to query and key tensors for cross-attention.
+
+    Args:
+        q: Query tensor of shape (..., seq_len, head_dim)
+        k: Key tensor of shape (..., seq_len, head_dim)
+        cos: Cosine position embedding of shape (seq_len, head_dim)
+        sin: Sine position embedding of shape (seq_len, head_dim)
+        cos_k: Cosine position embedding for keys of shape (seq_len, head_dim)
+        sin_k: Sine position embedding for keys of shape (seq_len, head_dim)
+        num_k_exclude_rope: Number of tokens at end of k to exclude from RoPE (e.g., object pointer tokens)
+        repeat_freqs_k: Frequency repetition for keys in cross-attention (e.g., for spatial memory tokens)
+
+    Returns:
+        Rotated (q, k) tensors
+    """
+    # Apply RoPE to queries (always straightforward)
+    q_embed = q.float()
+    q_embed = (q_embed * cos) + (rotate_pairwise(q_embed) * sin)
+
+    # Split keys: RoPE tokens and excluded tokens (e.g., object pointers)
+    num_total_k_tokens = k.shape[-2]
+    k_for_rope = k[..., : num_total_k_tokens - num_k_exclude_rope, :]
+    k_excluded = k[..., num_total_k_tokens - num_k_exclude_rope :, :]
+
+    # Early return if no keys need RoPE
+    if k_for_rope.shape[-2] == 0:
+        return q_embed.type_as(q), k_excluded
+
+    batch_size, num_heads, k_seq_len, channels_per_head = k_for_rope.shape
+
+    # Handle temporal/spatial token structure for memory
+    if k_seq_len != cos_k.shape[-2]:
+        # Keys have temporal + spatial structure, only spatial tokens get RoPE
+        tokens_per_group = k_seq_len // repeat_freqs_k
+        spatial_tokens = cos_k.shape[-2]
+        temporal_tokens = tokens_per_group - spatial_tokens
+
+        # Reshape and separate temporal/spatial tokens
+        k_grouped = k_for_rope.view(batch_size, num_heads, repeat_freqs_k, tokens_per_group, channels_per_head)
+        k_temporal = k_grouped[..., :temporal_tokens, :].reshape(batch_size, num_heads, -1, channels_per_head)
+        k_spatial = k_grouped[..., temporal_tokens:, :].reshape(batch_size, num_heads, -1, channels_per_head)
+
+        # Only apply RoPE to spatial tokens
+        k_rope_input = k_spatial
+
+        # Prepare position embeddings for repeated groups
+        if repeat_freqs_k > 1:
+            cos_k = cos_k.repeat(1, 1, repeat_freqs_k, 1)
+            sin_k = sin_k.repeat(1, 1, repeat_freqs_k, 1)
+
+        # Apply RoPE to spatial tokens
+        k_spatial_embed = k_rope_input.float()
+        k_spatial_embed = (k_spatial_embed * cos_k) + (rotate_pairwise(k_spatial_embed) * sin_k)
+
+        # Reconstruct: temporal + spatial tokens back to original structure
+        k_spatial_reshaped = k_spatial_embed.view(batch_size, num_heads, repeat_freqs_k, -1, channels_per_head)
+        k_temporal_reshaped = k_temporal.view(batch_size, num_heads, repeat_freqs_k, -1, channels_per_head)
+        k_final = torch.cat([k_temporal_reshaped, k_spatial_reshaped], dim=3)
+        k_final = k_final.view(batch_size, num_heads, k_seq_len, channels_per_head)
+    else:
+        # Simple case: all tokens get RoPE with possible repetition
+        if repeat_freqs_k > 1:
+            cos_k = cos_k.repeat(1, 1, repeat_freqs_k, 1)
+            sin_k = sin_k.repeat(1, 1, repeat_freqs_k, 1)
+
+        k_final = k_for_rope.float()
+        k_final = (k_final * cos_k) + (rotate_pairwise(k_final) * sin_k)
+
+    # Combine RoPE-processed keys with excluded tokens
+    k_embed = torch.cat([k_final.type_as(k), k_excluded], dim=-2)
+    return q_embed.type_as(q), k_embed
+
+
+class EdgeTamVideoRoPESelfAttention(nn.Module):
+    """Self-attention with rotary position encoding."""
+
+    def __init__(self, config: EdgeTamVideoConfig):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.memory_attention_hidden_size
+        self.internal_dim = self.hidden_size // config.memory_attention_downsample_rate
+        self.num_attention_heads = config.memory_attention_num_attention_heads
+        self.head_dim = self.internal_dim // config.memory_attention_num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
+        self.dropout_p = config.memory_attention_rope_dropout
 
     def forward(
         self,
@@ -408,7 +534,70 @@ class EdgeTamVideoRoPEAttention(Sam2VideoRoPEAttention):
         key: torch.Tensor,
         value: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        position_embeddings_k: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tensor:
+        # Input projections
+        batch_size, point_batch_size = query.shape[:2]
+        new_shape = (batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+
+        query = self.q_proj(query).view(*new_shape).transpose(1, 2)
+        key = self.k_proj(key).view(*new_shape).transpose(1, 2)
+        value = self.v_proj(value).view(*new_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        # Apply rotary position encoding for self-attention
+        query, key = apply_rotary_pos_emb_2d_self_attn(query, key, cos=cos, sin=sin)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=self.scaling,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(
+            batch_size, point_batch_size, -1, self.num_attention_heads * self.head_dim
+        ).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class EdgeTamVideoRoPECrossAttention(nn.Module):
+    """Cross-attention with rotary position encoding."""
+
+    def __init__(self, config: EdgeTamVideoConfig, kv_in_dim: int):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.memory_attention_hidden_size
+        self.internal_dim = self.hidden_size // config.memory_attention_downsample_rate
+        self.num_attention_heads = config.memory_attention_num_attention_heads
+        self.head_dim = self.internal_dim // config.memory_attention_num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.kv_in_dim = kv_in_dim
+
+        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.k_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
+        self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
+        self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
+        self.dropout_p = config.memory_attention_rope_dropout
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings_k: tuple[torch.Tensor, torch.Tensor],
         num_k_exclude_rope: int = 0,
         rope_k_repeat: int = 0,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -422,9 +611,9 @@ class EdgeTamVideoRoPEAttention(Sam2VideoRoPEAttention):
         value = self.v_proj(value).view(*new_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        cos_k, sin_k = position_embeddings_k if position_embeddings_k is not None else (cos, sin)
-        # Apply rotary position encoding, excluding some keys if specified
-        query, key = apply_rotary_pos_emb_2d(
+        cos_k, sin_k = position_embeddings_k
+        # Apply rotary position encoding for cross-attention
+        query, key = apply_rotary_pos_emb_2d_cross_attn(
             query,
             key,
             cos=cos,
@@ -484,87 +673,12 @@ class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):
     pass
 
 
-# TODO: This leads to ~1e-07 max diff and ~1e-09 avg diff for q_embed and k_embed from the original implementation, most likely due to the use of complex tensors in the original implementation.
-def apply_rotary_pos_emb_2d(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    cos_k: torch.Tensor,
-    sin_k: torch.Tensor,
-    num_k_exclude_rope: int = 0,
-    repeat_freqs_k: int = 1,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Apply rotary position embedding to query and key tensors for vision models.
-    Follows the standard transformers library pattern.
-
-    Args:
-        q: Query tensor of shape (..., seq_len, head_dim)
-        k: Key tensor of shape (..., seq_len, head_dim)
-        cos: Cosine position embedding of shape (seq_len, head_dim)
-        sin: Sine position embedding of shape (seq_len, head_dim)
-        num_k_exclude_rope: Number of tokens at end of k to exclude from RoPE (e.g., object pointer tokens)
-        repeat_freqs_k: Frequency repetition for keys in cross-attention (e.g., for spatial memory tokens)
-
-    Returns:
-        Rotated (q, k) tensors
-    """
-    # Split keys into RoPE-enabled and non-RoPE tokens (e.g., object pointers at the end)
-    k_rot, k_pass = k[..., : k.shape[-2] - num_k_exclude_rope, :], k[..., k.shape[-2] - num_k_exclude_rope :, :]
-    batch_size, num_heads, num_tokens, channels_per_head = k_rot.shape
-
-    # Handle cross-attention case where key sequence length differs from position embedding length
-    if num_tokens != cos_k.shape[-2]:
-        rope_tokens = cos_k.shape[-2]
-        no_rope_tokens = num_tokens // repeat_freqs_k - rope_tokens
-
-        # Reshape to separate repeated frequency groups (spatial memory structure)
-        k_rot = k_rot.view(batch_size, num_heads, repeat_freqs_k, num_tokens // repeat_freqs_k, channels_per_head)
-        # Spatial features that need RoPE
-        k_rot_rope = k_rot[..., no_rope_tokens:, :].reshape(batch_size, num_heads, -1, channels_per_head)
-        # Temporal encoding tokens that skip RoPE
-        k_pass_pre = k_rot[..., :no_rope_tokens, :].reshape(batch_size, num_heads, -1, channels_per_head)
-        k_rot = k_rot_rope
-    else:
-        # Standard self-attention case - all tokens get RoPE
-        k_pass_pre = None
-
-    q_embed = q.float()  # force upscale to float32 as in the original implementation
-    q_embed = (q_embed * cos) + (rotate_pairwise(q_embed) * sin)
-
-    # Early return if no keys to process (can happen due to sequence structure)
-    if k_rot.shape[-2] == 0:
-        return q_embed.type_as(q), torch.cat([k_rot, k_pass], dim=-2)
-
-    # Repeat position embeddings for cross-attention with spatial memory tokens
-    # Each memory frame has the same spatial grid, so we replicate RoPE frequencies N times (N = available memory frames)
-    if repeat_freqs_k > 1:
-        cos_k = cos_k.repeat(1, 1, repeat_freqs_k, 1)
-        sin_k = sin_k.repeat(1, 1, repeat_freqs_k, 1)
-
-    # Apply RoPE to keys
-    k_embed = k_rot.float()  # force upscale to float32 as in the original implementation
-    k_embed = (k_embed * cos_k) + (rotate_pairwise(k_embed) * sin_k)
-
-    # Reconstruct full key tensor by concatenating non-RoPE and RoPE-processed tokens
-    if k_pass_pre is not None:
-        # Reshape back to frequency groups and concatenate temporal (non-RoPE) with spatial (RoPE) tokens
-        k_embed = k_embed.view(batch_size, num_heads, repeat_freqs_k, -1, channels_per_head)
-        k_pass_pre = k_pass_pre.view(batch_size, num_heads, repeat_freqs_k, -1, channels_per_head)
-        k_embed = torch.cat((k_pass_pre, k_embed), dim=3).view(batch_size, num_heads, num_tokens, channels_per_head)
-
-    # Add back the excluded tokens (e.g., object pointers) at the end
-    k_embed = torch.cat([k_embed.type_as(k), k_pass], dim=-2)
-    return q_embed.type_as(q), k_embed
-
-
 class EdgeTamVideoMemoryAttentionLayer(nn.Module):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
         hidden_size = config.memory_attention_hidden_size
-        self.self_attn = EdgeTamVideoRoPEAttention(config)
-        self.cross_attn_image = EdgeTamVideoRoPEAttention(config, kv_in_dim=64)
+        self.self_attn = EdgeTamVideoRoPESelfAttention(config)
+        self.cross_attn_image = EdgeTamVideoRoPECrossAttention(config, kv_in_dim=64)
 
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(hidden_size, config.memory_attention_feed_forward_hidden_size)
