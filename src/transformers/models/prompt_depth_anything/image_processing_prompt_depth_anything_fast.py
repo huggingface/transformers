@@ -106,8 +106,6 @@ class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwarg
     """
     keep_aspect_ratio (`bool`, *optional*):
         If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
-    ensure_multiple_of (`int`, *optional*):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
     do_pad (`bool`, *optional*):
         Whether to apply center padding.
     size_divisor (`int`, *optional*):
@@ -119,7 +117,6 @@ class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwarg
     """
 
     keep_aspect_ratio: Optional[bool]
-    ensure_multiple_of: Optional[int]
     do_pad: Optional[bool]
     size_divisor: Optional[int]
     prompt_depth: Optional[ImageInput]
