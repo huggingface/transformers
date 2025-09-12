@@ -15,6 +15,7 @@
 import copy
 import inspect
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester

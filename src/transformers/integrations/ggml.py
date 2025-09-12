@@ -747,7 +747,7 @@ GGUF_TO_FAST_CONVERTERS = {
 }
 
 
-def convert_gguf_tokenizer(architecture, tokenizer_dict) -> Tokenizer:
+def convert_gguf_tokenizer(architecture: str, tokenizer_dict) -> tuple[Tokenizer, dict]:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 

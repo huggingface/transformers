@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Data2VecVision model."""
 
 import unittest
+from functools import cached_property
 
 import pytest
 
@@ -26,7 +27,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )

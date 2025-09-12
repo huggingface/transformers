@@ -205,7 +205,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -244,7 +244,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         self,
         images: torch.Tensor,
         max_image_size: dict[str, int],
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Split an image into squares of side max_image_size and the original image resized to max_image_size.
@@ -303,7 +303,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         vision_encoder_max_size: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Resize images to be multiples of `vision_encoder_max_size` while preserving the aspect ratio.
