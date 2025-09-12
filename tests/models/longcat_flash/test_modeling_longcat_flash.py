@@ -16,7 +16,9 @@
 import copy
 import unittest
 
-from transformers import LongcatFlashConfig, is_torch_available
+from parameterized import parameterized
+
+from transformers import LongcatFlashConfig, is_torch_available, set_seed
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -31,6 +33,11 @@ if is_torch_available():
 
 
 class LongcatFlashModelTester(CausalLMModelTester):
+    if is_torch_available():
+        config_class = LongcatFlashConfig
+        base_model_class = LongcatFlashModel
+        causal_lm_class = LongcatFlashForCausalLM
+
     def __init__(
         self,
         parent,
@@ -212,6 +219,8 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
 
+    model_tester_class = LongcatFlashModelTester
+
     def setUp(self):
         self.model_tester = LongcatFlashModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongcatFlashConfig, hidden_size=37, num_attention_heads=3)
@@ -312,10 +321,38 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
 
         return config
 
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        short_input = ids_tensor([1, 10], config.vocab_size)
+        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+
+        set_seed(42)
+        original_model = self.model_tester_class.base_model_class(config)
+        original_model.to(torch_device)
+        original_model.eval()
+        original_short_output = original_model(short_input).last_hidden_state
+        original_long_output = original_model(long_input).last_hidden_state
+
+        set_seed(42)
+        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        scaled_model = self.model_tester_class.base_model_class(config)
+        scaled_model.to(torch_device)
+        scaled_model.eval()
+        scaled_short_output = scaled_model(short_input).last_hidden_state
+        scaled_long_output = scaled_model(long_input).last_hidden_state
+
+        if scaling_type == "dynamic":
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+        else:
+            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+
+        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+
 
 @slow
 class LongcatFlashIntegrationTest(unittest.TestCase):
-    model_id = "Molbap/LongCat-ShortCat"
+    model_id = "hf-internal-testing/LongCat-ShortCat"
     # This is a cut-down model that matches part of the early logits of the larger one
     # Only a couple experts + layers
     # But if it fails, it means the larger model might have issues as well
@@ -342,5 +379,24 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
 
         response = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
         expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年车龄juanaheast稍achaotingupebarebones"
+
+        self.assertEqual(response, expected_output)
+
+    @slow
+    def test_longcat_generation_cpu(self):
+        # takes absolutely forever and 1.2TB RAM, but allows to test the output!
+        model = LongcatFlashForCausalLM.from_pretrained(
+            "meituan-longcat/LongCat-Flash-Chat", device_map="cpu", dtype=torch.bfloat16
+        )
+        tokenizer = AutoTokenizer.from_pretrained("meituan-longcat/LongCat-Flash-Chat")
+
+        chat = [{"role": "user", "content": "Paris is..."}]
+        inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt")
+
+        with torch.no_grad():
+            outputs = model.generate(inputs, max_new_tokens=10, do_sample=False)
+
+        response = tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
+        expected_output = "[Round 0] USER:Paris is... ASSISTANT:Paris is... a city of timeless charm, where"
 
         self.assertEqual(response, expected_output)
