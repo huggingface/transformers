@@ -150,6 +150,20 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         """
         This wrapper exposes custom kwargs in the signature for documentation and typing.
         Delegates to BaseImageProcessorFast.preprocess.
+
+        Args:
+            images (`ImageInput`):
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            prompt_depth (`ImageInput`, *optional*):
+                Prompt depth to preprocess, which can be sparse depth obtained from multi-view geometry or
+                low-resolution depth from a depth sensor. Generally has shape (height, width), where height
+                and width can be smaller than those of the images. It's optional and can be None, which means no prompt depth
+                is used. If it is None, the output depth will be a monocular relative depth.
+                It is recommended to provide a prompt_scale_to_meter value, which is the scale factor to convert the prompt depth
+                to meters. This is useful when the prompt depth is not in meters.
+            kwargs:
+                Additional keyword arguments passed along to the preprocessing methods
         """
         return super().preprocess(images, prompt_depth=prompt_depth, **kwargs)
 
