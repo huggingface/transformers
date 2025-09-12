@@ -55,6 +55,21 @@ class TimmWrapperModelOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
+def safe_create_model(architecture, num_classes, **kwargs):
+    try:
+        return timm.create_model(
+            architecture,
+            pretrained=False,
+            num_classes=num_classes,
+            **kwargs,
+        )
+    except RuntimeError as e:
+        raise ImportError(
+            f"You are trying to instantiate `{architecture}`, but it's not supported in timm=={timm.__version__}. "
+            "Please try updating to the latest timm version with `pip install -U timm`."
+        ) from e
+
+
 @auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
@@ -138,7 +153,14 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
-        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0, **extra_init_kwargs)
+        try:
+            self.timm_model = safe_create_model(config.architecture, 0, **extra_init_kwargs)
+
+        except RuntimeError as e:
+            raise ImportError(
+                f"You are trying to instantiate `{config.architecture}`, but it's not supported in timm={timm.__version__}. "
+                "Please try updating to the latest timm version with `pip install -U timm`."
+            ) from e
         self.post_init()
 
     @auto_docstring
@@ -254,9 +276,15 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             )
 
         extra_init_kwargs = config.model_args or {}
-        self.timm_model = timm.create_model(
-            config.architecture, pretrained=False, num_classes=config.num_labels, **extra_init_kwargs
-        )
+        try:
+            self.timm_model = safe_create_model(config.architecture, config.num_labels, **extra_init_kwargs)
+
+        except RuntimeError as e:
+            raise ImportError(
+                f"You are trying to instantiate `{config.architecture}`, but it's not supported in timm=={timm.__version__}. "
+                "Please try updating to the latest timm version with `pip install -U timm`."
+            ) from e
+
         self.num_labels = config.num_labels
         self.post_init()
 
