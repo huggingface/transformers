@@ -19,7 +19,7 @@ from ...modeling_rope_utils import rope_config_validation
 
 class EfficientLoFTRConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EffientLoFTRFromKeypointMatching`].
+    This is the configuration class to store the configuration of a [`EfficientLoFTRFromKeypointMatching`].
     It is used to instantiate a EfficientLoFTR model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     EfficientLoFTR [zju-community/efficientloftr](https://huggingface.co/zju-community/efficientloftr) architecture.

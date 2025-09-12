@@ -3881,8 +3881,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
                 [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
             return_intermediate_token_ids (`bool`, *optional*):
                 If `True`, also returns the intermediate generated text and unit tokens. Set to `True` if you also want
-                to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will be
-                ignored.
+                to get translated text alongside the audio.
+                Note that if `generate_speech=False`, this parameter will be ignored and
+                the text tokens are returned.
             tgt_lang (`str`, *optional*):
                 The language to use as target language for translation.
             spkr_id (`int`, *optional*, defaults to 0):
