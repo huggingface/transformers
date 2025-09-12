@@ -169,11 +169,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         if interpolation is None:
             interpolation = F.InterpolationMode.BICUBIC
 
-        if not keep_aspect_ratio:
-            # Standard resize
-            return self.resize(image=image, size=size, interpolation=interpolation)
-
-        # Custom resize with aspect ratio preservation
+        # Custom resize with aspect ratio preservation and ensure_multiple_of constraint
         output_size = _get_resize_output_image_size(
             image,
             output_size=(size["height"], size["width"]),
