@@ -1120,7 +1120,6 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Qwen3VLModelOutputWithPast]:
@@ -1129,8 +1128,6 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1335,7 +1332,6 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -1349,8 +1345,6 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
 
         Example:
             TODO: Add example
