@@ -30,7 +30,6 @@ from transformers import (
     DataCollatorWithFlattening,
     DataCollatorWithPadding,
     default_data_collator,
-    is_tf_available,
     is_torch_available,
     set_seed,
 )
@@ -557,19 +556,6 @@ class DataCollatorIntegrationTest(unittest.TestCase):
             batch = data_collator(features)
             self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
             self.assertEqual(batch["labels"].shape, torch.Size((2, 10)))
-
-        if is_tf_available():
-            import tensorflow as tf
-
-            # Features can already be tensors
-            features = [
-                tokenizer(" ".join(input_tokens), return_offsets_mapping=True).convert_to_tensors("tf")
-                for _ in range(2)
-            ]
-            data_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="tf")
-            batch = data_collator(features)
-            self.assertEqual(batch["input_ids"].shape, tf.TensorShape((2, 10)))
-            self.assertEqual(batch["labels"].shape, tf.TensorShape((2, 10)))
 
     def test_data_collator_for_whole_word_mask_with_seed(self):
         tokenizer = BertTokenizerFast(self.vocab_file)

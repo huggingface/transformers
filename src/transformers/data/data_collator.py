@@ -910,7 +910,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             word_ids, no_mask_mask = self._calc_word_ids_and_prob_mask(
                 to_numpy(offset_mapping), to_numpy(special_tokens_mask)
             )
-            no_mask_mask = np.array(no_mask_mask, dtype=bool)
         else:
             no_mask_mask = (
                 special_tokens_mask.astype(bool)
@@ -998,7 +997,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         word_ids = np.cumsum(is_new_word, axis=1)
         word_ids[special_tokens_mask] = -1
 
-        prob_mask = (~is_new_word).astype(int)
+        prob_mask = ~is_new_word
 
         return word_ids, prob_mask
 
@@ -1049,8 +1048,6 @@ def tolist(x) -> list[Any]:
 def to_numpy(x) -> np.ndarray[Any]:
     if isinstance(x, np.ndarray):
         return x
-    elif hasattr(x, "numpy"):
-        return x.numpy()
     elif hasattr(x, "detach"):
         return x.detach().cpu().numpy()
     else:
