@@ -1156,7 +1156,6 @@ class Qwen3VLCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     config: Qwen3VLConfig
     _checkpoint_conversion_mapping = {}
-    _no_split_modules = ["Qwen3VLTextDecoderLayer", "Qwen3VLVisionBlock"]
 
     def forward(
         self,
