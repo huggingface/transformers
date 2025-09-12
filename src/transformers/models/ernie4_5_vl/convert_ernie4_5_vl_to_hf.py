@@ -5,7 +5,7 @@ import re
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file, save_file
 
-from transformers import AutoTokenizer, Ernie4_5_VLConfig
+from transformers import AutoTokenizer, Ernie4_5_VLConfig, LlamaTokenizer
 
 
 TIED_MAPPING = {
@@ -56,11 +56,10 @@ TMP_TOKENIZER_DIR = "/tmp/ernie_vl_tokenizer"
 ADDED_TOKENS_FILE = "added_tokens.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
-DEFAULT_CHAT_TEMPLATE = """{
-"chat_template": "
+DEFAULT_CHAT_TEMPLATE = """
 {%- set image_count = namespace(value=0) -%}
 {%- set video_count = namespace(value=0) -%}
-{{- '<|begin_of_sentence |>' }}
+{{- '<|begin_of_sentence|>' }}
 {%- for message in messages -%}
     {%- if message.role in ['system', 'user'] -%}
         {%- if message.role == 'user' -%}
@@ -127,17 +126,18 @@ DEFAULT_CHAT_TEMPLATE = """{
     {%- endif -%}
 {%- endfor -%}
 {%- if add_generation_prompt is not defined or add_generation_prompt is true %}
-    {{- '
-    Assistant: ' -}}
-    {%- if enable_thinking is defined and enable_thinking is false %}
-        {{- '<think>
-        </think>
-        ' }}
+    {{- '\nAssistant: ' -}}
+    {%- if (enable_thinking is defined and enable_thinking is false) or enable_thinking is not defined %}
+        {{- '<think>\n\n</think>\n\n' }}
     {%- endif %}
-    {%- if enable_thinking is not defined or enable_thinking is true %}{{- '<think>' }}{%- endif %}
-{%- endif %}
-"
-}"""
+    {%- if enable_thinking is defined and enable_thinking is true %}{{- '<think>' }}{%- endif %}
+{%- endif %}"""
+DEFAULT_TEXT_ADD_TOKENS = [
+    "<mask:4>",
+    "<mask:5>",
+    "<mask:6>",
+    "<mask:7>",
+]
 
 
 def load_json(save_dir, filename):
@@ -317,11 +317,30 @@ def convert_config(model_path, save_dir):
             break
 
 
-# TODO: chat template whoops
 def convert_tokenizer(original_tokenizer_path, save_dir):
-    # `original_tokenizer_path` can be any tokenizer from the already converted 4.5 series
-    tokenizer = AutoTokenizer.from_pretrained(original_tokenizer_path)
-    tokenizer.save_pretrained(TMP_TOKENIZER_DIR)
+    # same conversion as the moe and base ernie tokenizers
+    hf_tok = LlamaTokenizer.from_pretrained(
+        original_tokenizer_path,
+        pad_token="<unk>",
+        cls_token="<|begin_of_sentence|>",
+        sep_token="<|end_of_sentence|>",
+        mask_token="<mask:1>",
+        add_bos_token=False,
+        add_prefix_space=False,
+        chat_template=DEFAULT_CHAT_TEMPLATE,
+        legacy=True,
+    )
+    hf_tok.model_max_length = 131072
+    hf_tok.init_kwargs.pop("auto_map", None)
+    # special tokens which we need to map as additional special tokens instead
+    hf_tok.init_kwargs.pop("header_start_token", None)
+    hf_tok.init_kwargs.pop("header_end_token", None)
+    hf_tok.init_kwargs.pop("sys_start_token", None)
+    hf_tok.init_kwargs.pop("sys_end_token", None)
+    for token in DEFAULT_TEXT_ADD_TOKENS:
+        hf_tok.add_tokens([token], special_tokens=True)
+    # save slow model
+    hf_tok.save_pretrained(TMP_TOKENIZER_DIR)
 
     # we will exchange the special audio token as we need a dedicated video token
     original_str = "<|AUDIO_PLACEHOLDER|>"
@@ -353,11 +372,11 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
     write_json(tokenizer_config, TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
 
     # reload and save to get correct formatting
-    tokenizer = AutoTokenizer.from_pretrained(TMP_TOKENIZER_DIR, chat_template=DEFAULT_CHAT_TEMPLATE)
+    tokenizer = AutoTokenizer.from_pretrained(TMP_TOKENIZER_DIR, from_slow=True)
     tokenizer.save_pretrained(save_dir)
 
 
-#"""
+"""
 convert_weights(
     model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
     save_dir='AntonV/ErnieVL',
@@ -371,10 +390,9 @@ convert_config(
 )
 #"""
 
-"""
+#"""
 convert_tokenizer(
-    # can use any preconverted tokenizer (as they are the same)
-    original_tokenizer_path='baidu/ERNIE-4.5-0.3B-PT',
+    original_tokenizer_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
     save_dir='AntonV/ErnieVL',
 )
 #"""
