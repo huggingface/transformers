@@ -373,36 +373,45 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         labels = torch.stack(labels_batched, dim=0) if labels_batched else None
         return merged_inputs, labels, attention_mask
 
+    def _out_lens_from_frame_mask(self, feature_mask: torch.Tensor) -> torch.Tensor:
+        """
+        Qwen-style length derivation from mel-frame mask.
+        Input:  feature_mask (N, T_mel) in {0,1}
+        Output: out_len (N,) = number of encoder tokens BEFORE the appended end-token
+        """
+        mel = feature_mask.sum(-1).to(torch.long)  # after FE padding removal
+        l1 = (mel - 1) // 2 + 1  # after conv1 (s=2)
+        out = (l1 - 2) // 2 + 1  # after conv2 (s=2)
+        return torch.clamp(out, min=0)
+
     @torch.inference_mode()
     def generate(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        audio_features: Optional[torch.Tensor] = None,  # (N, M, T_mel)
+        input_features: Optional[torch.Tensor] = None,  # (N, M, T_mel)
         attention_mask: Optional[torch.LongTensor] = None,
-        audio_feature_masks: Optional[torch.Tensor] = None,  # (N, T_mel)
-        audio_embeds_mask: Optional[torch.Tensor] = None,  # (N, S_audio+1)
+        feature_attention_mask: Optional[torch.Tensor] = None,  # (N, T_mel)
         **generation_kwargs,
     ) -> torch.LongTensor:
-        # Back-compat: allow callers passing audio_features_mask via kwargs
-        if audio_embeds_mask is None and "audio_features_mask" in generation_kwargs:
-            import warnings as _warnings
-
-            audio_embeds_mask = generation_kwargs.pop("audio_features_mask")
-            _warnings.warn(
-                "`audio_features_mask` is deprecated; please pass `audio_embeds_mask` " "(token-level mask post-projection).",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-
         # Compute text token embeddings up front (Qwen-style)
         inputs_embeds = self.llm.model.embed_tokens(input_ids)
 
         # Compute audio embeddings upfront
         audio_embeds = None
-        if audio_features is not None:
-            audio_embeds = self._compute_audio_embeds(audio_features, audio_feature_masks)  # (N, S_audio+1, D)
+        if input_features is not None:
+            audio_embeds = self._compute_audio_embeds(input_features, feature_attention_mask)  # (N, S_audio+1, D)
             # match dtype to text embeds for safe concat/scatter
             audio_embeds = audio_embeds.to(dtype=inputs_embeds.dtype)
+
+        # lengths BEFORE the appended end token
+        out_len = self._out_lens_from_frame_mask(feature_attention_mask.to(audio_embeds.device))
+        N, S_plus_1, _ = audio_embeds.shape  # S_plus_1 = S_audio + 1 (end token added)
+        S_audio = S_plus_1 - 1
+        # True for real audio tokens [0..S_audio-1], False elsewhere; end-token stays False
+        seq = torch.arange(S_audio, device=audio_embeds.device).unsqueeze(0).expand(N, S_audio)
+        mask_core = seq < out_len.unsqueeze(1)  # (N, S_audio)
+        audio_embeds_mask = torch.zeros((N, S_plus_1), dtype=torch.bool, device=audio_embeds.device)
+        audio_embeds_mask[:, :S_audio] = mask_core  # last column (end token) remains False
 
         # Merge text and audio embeddings
         merged_embeds, _, attn = self._merge_input_embeds_with_audio_embeds(

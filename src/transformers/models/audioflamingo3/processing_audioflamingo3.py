@@ -17,10 +17,9 @@ Processor class for AudioFlamingo3.
 """
 
 import math
-from typing import Optional, Sequence, Union
+from typing import Union
 
 import numpy as np
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -41,8 +40,6 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_attention_mask": True,
             "padding": "max_length",
             "truncation": True,
-            "sampling_rate": 16_000,
-            "hop_length": 160,
             "max_seconds": 30,
         },
         "common_kwargs": {"return_tensors": "pt"},
@@ -50,13 +47,8 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class AudioFlamingo3Processor(ProcessorMixin):
-    r"""
+    """
     Constructs an AudioFlamingo3 processor which wraps an AudioFlamingo3 feature extractor and an AudioFlamingo3 tokenizer into a single processor.
-
-    [`AudioFlamingo3Processor`] offers all the functionalities of [`WhisperFeatureExtractor`] and [`AutoTokenizer`]. See the
-    [`~AudioFlamingo3Processor.__call__`] and [`~AudioFlamingo3Processor.decode`] for more information.
-
-    Args:
     """
 
     attributes = ["feature_extractor", "tokenizer"]
@@ -69,171 +61,66 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio: Union[np.ndarray, list[np.ndarray]],
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Batched processing:
-        - `text`: str or list[str]
-        - `audio`: np.ndarray or list[np.ndarray] (one audio per text sample)
-
-        Returns a BatchFeature with:
-        - input_ids, attention_mask : (B, L)
-        - audio_features            : (N, M, T_mel)                 or None
-        - audio_feature_masks       : (N, nb_max_frames)            or None   # Feature extractor attention masks (mel-frame)
-        - audio_features_mask       : (N, S_max+1)                  or None   # Encoder mask with reserved end token
-        """
+        # Normalize inputs
         if isinstance(text, str):
             text = [text]
         if isinstance(audio, np.ndarray):
             audio = [audio]
-        if not isinstance(text, list) or not isinstance(audio, list):
+        if not (isinstance(text, list) and isinstance(audio, list)):
             raise ValueError("`text` and `audio` must be str/np.ndarray or lists of them.")
         if len(text) != len(audio):
             raise ValueError(f"Got {len(text)} texts but {len(audio)} audios.")
 
-        output_kwargs = self._merge_kwargs(
-            AudioFlamingo3ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        text_kwargs = output_kwargs["text_kwargs"]
-        audio_kwargs = output_kwargs["audio_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
-
-        # Enforce torch tensors, like Dia
-        return_tensors = common_kwargs.pop("return_tensors", None)
-        if return_tensors != "pt":
+        # Kwargs / defaults
+        cfg = self._merge_kwargs(AudioFlamingo3ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
+        text_kwargs, audio_kwargs, common_kwargs = cfg["text_kwargs"], cfg["audio_kwargs"], cfg["common_kwargs"]
+        if common_kwargs.pop("return_tensors", None) != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        fe = self.feature_extractor
-
-        # Resolve core audio params from audio_kwargs (visible up top)
-        sr = int(audio_kwargs.get("sampling_rate", getattr(fe, "sampling_rate")))
-        hop = int(audio_kwargs.get("hop_length", getattr(fe, "hop_length")))
+        # Window planning (single pass)
         max_seconds = float(audio_kwargs.get("max_seconds"))
+        sr = int(getattr(self.feature_extractor, "sampling_rate"))
         n_samples = int(max_seconds * sr)
-        nb_max_frames = int(getattr(fe, "nb_max_frames", math.ceil(n_samples / hop)))
-
-        # Frontend downsampling (conv k=3,p=1,s=2 → pool k=2,s=2)
-        length_after_conv2_max = (nb_max_frames - 1) // 2 + 1
-        tokens_per_window_max = (length_after_conv2_max - 2) // 2 + 1
-        encoder_mask_len = tokens_per_window_max + 1  # Reserve one additional slot for end token
+        CAP_WINDOWS = 20  # 10 minutes at 30s windows
 
         final_texts: list[str] = []
-        feats_all: list[torch.Tensor] = []
-        feat_masks_all: list[torch.Tensor] = []
-        token_masks_all: list[torch.Tensor] = []
-
-        # Feature extraction call arguments come from audio_kwargs + common_kwargs (like Dia)
-        fe_kwargs = {
-            "return_attention_mask": audio_kwargs.get("return_attention_mask", True),
-            "padding": audio_kwargs.get("padding", "max_length"),
-            "truncation": audio_kwargs.get("truncation", True),
-            "return_tensors": return_tensors,
-            "sampling_rate": sr,
-        }
+        audio_chunks: list[np.ndarray] = []
 
         for t, a in zip(text, audio):
-            if a.ndim != 1:
-                a = np.asarray(a).reshape(-1)
             T = a.shape[0]
+            n_win = max(1, int(math.ceil(T / n_samples)))
+            if n_win > CAP_WINDOWS:
+                logger.warning(f"Audio duration ({T/sr:.1f}s) exceeds maximum supported length (600s). " "Audio will be truncated to first 10 minutes.")
+                n_win = CAP_WINDOWS
+            final_texts.append("<sound>" * n_win + t)
 
-            if T <= n_samples:
-                num_windows = 1
-            elif T >= 20 * n_samples:  # Limit to maximum of 20 windows
-                # Warn user about audio truncation
-                audio_duration_seconds = T / sr
-                logger.warning(f"Audio duration ({audio_duration_seconds:.1f}s) exceeds maximum supported length (600s). " f"Audio will be truncated to first 10 minutes.")
-                num_windows = 20
-            else:
-                num_windows = 1 + int(math.ceil((T - n_samples) / float(n_samples)))
+            T_cap = min(T, n_win * n_samples)
+            for i in range(n_win):
+                s, e = i * n_samples, min((i + 1) * n_samples, T_cap)
+                audio_chunks.append(a[s:e])
 
-            # Construct prompt with appropriate number of <sound> tokens
-            clean_t = t.replace("<sound>", "").strip()
-            final_texts.append(("<sound>" * num_windows) + clean_t)
+        # Single batched FE call
+        audio_inputs = self.feature_extractor(
+            audio_chunks,
+            padding=audio_kwargs.get("padding", "max_length"),
+            truncation=audio_kwargs.get("truncation", True),
+            return_attention_mask=audio_kwargs.get("return_attention_mask", True),
+            return_tensors="pt",
+        )
+        audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
-            for i in range(num_windows):
-                start = i * n_samples
-                chunk = a[start : start + n_samples]
-                # Extract features and mel-frame mask
-                out = fe(chunk.reshape(1, -1), **fe_kwargs)
-                mel = out["input_features"][0]  # (M, T_mel)
-                fm = out["attention_mask"][0].to(torch.int32)  # (nb_max_frames,)
-
-                feats_all.append(mel)
-                feat_masks_all.append(fm)
-
-                # Calculate encoder output length for this window from mel length
-                melspec_frames = int(fm.sum().item())
-                l1 = (melspec_frames - 1) // 2 + 1
-                out_len = max(0, (l1 - 2) // 2 + 1)
-
-                tm = torch.zeros(encoder_mask_len, dtype=torch.bool)
-                tm[: min(out_len, tokens_per_window_max)] = True  # Reserve last slot for end token
-                token_masks_all.append(tm)
-
-        if len(feats_all) > 0:
-            audio_features = torch.stack(feats_all, dim=0)  # (N, M, T_mel)
-            audio_feature_masks = torch.stack(feat_masks_all, 0)  # (N, nb_max_frames)
-            audio_features_mask = torch.stack(token_masks_all, 0)  # (N, S_max+1)
-        else:
-            audio_features = None
-            audio_feature_masks = None
-            audio_features_mask = None
-
-        # Tokenize text prompts (single-turn user message)
+        # Tokenize expanded prompts (single call)
         convs = [[{"role": "user", "content": txt}] for txt in final_texts]
         prompts = [self.tokenizer.apply_chat_template(c, add_generation_prompt=True, tokenize=False) for c in convs]
-        enc = self.tokenizer(
+        inputs = self.tokenizer(
             prompts,
             padding=text_kwargs.get("padding", True),
             truncation=text_kwargs.get("truncation", True),
-            return_tensors=return_tensors,
+            return_tensors="pt",
         )
 
-        return BatchFeature(
-            data={
-                "input_ids": enc["input_ids"],
-                "attention_mask": enc["attention_mask"],
-                "audio_features": audio_features,
-                "audio_feature_masks": audio_feature_masks,  # Feature extractor attention masks (mel-frame)
-                "audio_features_mask": audio_features_mask,  # Encoder mask with end token
-            }
-        )
-
-    def batch_decode(
-        self,
-        token_ids: torch.Tensor,
-        **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
-    ) -> list[str]:
-        """
-        Batch text decoding functionality.
-        Returns a list[str] of decoded strings, one per sequence.
-        """
-        output_kwargs = self._merge_kwargs(
-            AudioFlamingo3ProcessorKwargs,
-            **kwargs,
-        )
-        text_kwargs = dict(output_kwargs.get("text_kwargs", {}))
-        text_kwargs.setdefault("skip_special_tokens", True)
-
-        decoded = self.tokenizer.batch_decode(token_ids, **text_kwargs)
-        return [s.strip() for s in decoded]
-
-    def decode(
-        self,
-        token_ids: torch.Tensor,
-        **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
-    ) -> str:
-        """
-        Single-sample text decoding.
-        Enforces a batch size of 1 and delegates to `batch_decode`.
-        """
-        if token_ids.ndim == 1:
-            token_ids = token_ids.unsqueeze(0)
-        elif token_ids.shape[0] != 1:
-            raise ValueError(f"Expected a single sequence for `decode`, but got batch size {token_ids.shape[0]}. " "Use `batch_decode` for multi-sample outputs.")
-
-        return self.batch_decode(token_ids, **kwargs)[0]
+        inputs.update(audio_inputs)
+        return BatchFeature(data=inputs)
 
 
 __all__ = ["AudioFlamingo3Processor"]
