@@ -374,29 +374,3 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
             results.append({"predicted_depth": depth})
 
         return results
-
-    def to_dict(self):
-        """
-        Return a plain config dict suitable for saving.
-
-        We drop fast-only runtime knobs (e.g. device, return_tensors, grouping/conversion flags,
-        and transient inputs like prompt_depth) so the saved config mirrors the slow processor,
-        stays portable across environments and passes all tests. Necessary to pass tests.
-        """
-        encoder_dict = super().to_dict()
-        for k in (
-            "_valid_processor_keys",
-            "crop_size",
-            "device",
-            "disable_grouping",
-            "do_center_crop",
-            "do_convert_rgb",
-            "input_data_format",
-            "prompt_depth",
-            "return_tensors",
-        ):
-            encoder_dict.pop(k, None)
-        return encoder_dict
-
-
-__all__ = ["PromptDepthAnythingImageProcessorFast"]
