@@ -449,7 +449,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
                     # We can simply select one pixel and set it to a small value.
                     depth[0, 0] = depth[0, 0] + 1e-6
                 depth = depth[..., None].astype(np.float32)
-                depth = to_channel_dimension_format(depth, data_format, input_channel_dim=input_data_format)
+                # Always use LAST as input format since we add channel dim with [..., None]
+                depth = to_channel_dimension_format(depth, data_format, input_channel_dim=ChannelDimension.LAST)
 
                 processed_prompt_depths.append(depth)
             prompt_depths = processed_prompt_depths
