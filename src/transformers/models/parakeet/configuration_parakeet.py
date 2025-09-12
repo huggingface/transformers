@@ -121,6 +121,33 @@ class ParakeetTDTDecoderConfig(PretrainedConfig):
         self.weights_init_scale=weights_init_scale
         self.hidden_hidden_bias_scale=hidden_hidden_bias_scale
 
+class ParakeetTDTJointConfig(PretrainedConfig):
+    model_type = "parakeet_tdt_joint"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        encoder_hidden=1024,
+        pred_hidden=640,
+        joint_hidden=640,
+        vocab_size=1024,
+        durations=[0,1,2,3,4],
+        norm=None,
+        joint_dropout=0.0,
+        joint_activation='relu',
+        **kwargs,
+    ):
+        super().__init__(
+            **kwargs,
+        )
+        self.encoder_hidden = encoder_hidden
+        self.pred_hidden = pred_hidden
+        self.joint_hidden = joint_hidden
+        self.vocab_size = vocab_size
+        self.durations = durations
+        self.joint_dropout=joint_dropout
+        self.joint_activation=joint_activation
+
 
         print("SUCCESS!")
 #        self.pred_hidden = kwargs['pred_hidden']
@@ -250,6 +277,7 @@ class ParakeetTDTConfig(PretrainedConfig):
         tdt_loss_reduction="mean",
         encoder_config: Union[dict, ParakeetEncoderConfig] = None,
         decoder_config: Union[dict, ParakeetTDTDecoderConfig] = None,
+        joint_config: Union[dict, ParakeetTDTJointConfig] = None,
         **kwargs,
     ):
         super().__init__(
@@ -273,18 +301,13 @@ class ParakeetTDTConfig(PretrainedConfig):
                 f"`encoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
             )
 
-#        self.model_type = model_type
-
-#        print("HERE decoder_config", decoder_config)
-#        assert decoder_config is not None and isinstance(decoder_config, ParakeetTDTDecoderConfig)
         self.decoder_config = decoder_config
+        self.joint_config = joint_config
 
         self.vocab_size = vocab_size
 
         self.blank_token_id = blank_token_id
         self.tdt_loss_reduction = tdt_loss_reduction
-
-#        self.durations = durations
 
         self.use_bias = self.encoder_config.use_bias
         self.initializer_range = self.encoder_config.initializer_range
@@ -301,4 +324,4 @@ class ParakeetTDTConfig(PretrainedConfig):
         return cls(encoder_config=encoder_config.to_dict(), **kwargs)
 
 
-__all__ = ["ParakeetConfig", "ParakeetTDTConfig", "ParakeetEncoderConfig", "ParakeetTDTDecoderConfig"]
+__all__ = ["ParakeetConfig", "ParakeetTDTConfig", "ParakeetEncoderConfig", "ParakeetTDTDecoderConfig", "ParakeetTDTJointConfig"]

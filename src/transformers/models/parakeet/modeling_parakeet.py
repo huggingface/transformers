@@ -34,7 +34,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
-from .configuration_parakeet import ParakeetConfig, ParakeetTDTConfig, ParakeetEncoderConfig, ParakeetTDTDecoderConfig
+from .configuration_parakeet import ParakeetConfig, ParakeetTDTConfig, ParakeetEncoderConfig, ParakeetTDTDecoderConfig, ParakeetTDTJointConfig
 
 class LSTMDropout(torch.nn.Module):
     def __init__(
@@ -553,6 +553,39 @@ class ParakeetPreTrainedModel(PreTrainedModel):
         attention_mask = torch.arange(max_length, device=attention_mask.device) < output_lengths[:, None]
         return attention_mask
 
+
+class ParakeetTDTJoint(ParakeetPreTrainedModel):
+    def __init__(self, config: ParakeetTDTJointConfig):
+        super().__init__(config)
+        self.config = config
+        self.gradient_checkpointing = False
+
+        print("HERE config is", config)
+        self.enc = torch.nn.Linear(config.encoder_hidden, config.joint_hidden)
+        self.pred = torch.nn.Linear(config.pred_hidden, config.joint_hidden)
+
+        activation = config.joint_activation
+        dropout = config.joint_dropout
+
+        num_classes = config.vocab_size + 1 + len(config.durations)
+
+        if activation == 'relu':
+            activation = torch.nn.ReLU(inplace=True)
+        elif activation == 'sigmoid':
+            activation = torch.nn.Sigmoid()
+        elif activation == 'tanh':
+            activation = torch.nn.Tanh()
+
+        self.layers = (
+            [activation]
+            + ([torch.nn.Dropout(p=dropout)] if dropout else [])
+            + [torch.nn.Linear(config.joint_hidden, num_classes)]
+        )
+
+
+        self.post_init()
+
+
 class ParakeetTDTPredictor(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetTDTDecoderConfig):
         super().__init__(config)
@@ -740,12 +773,13 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
         self.gradient_checkpointing = False
 
 
-        print("HERE CONFIG IS", config)
-#        vocab_size = config.vocab_size
-#        pred_hidden = config.pred_hidden
         self.prediction = ParakeetTDTPredictor(config)
 
+#        self.joint = ParakeetTDTJoint(config)
+
         self.post_init()
+
+
 
     @auto_docstring
     @check_model_inputs
@@ -945,6 +979,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         super().__init__(config)
         self.encoder = ParakeetEncoder(config.encoder_config)
         self.decoder = ParakeetTDTDecoder(config.decoder_config)
+
+        print("HERE config.joint_config", config.joint_config)
+        self.joint = ParakeetTDTJoint(config.joint_config)
 
         self.post_init()
 

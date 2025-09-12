@@ -54,7 +54,7 @@ from typing import Any, Optional, Union
 import torch
 import yaml
 
-from transformers.models.parakeet.configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig, ParakeetTDTDecoderConfig, ParakeetTDTConfig
+from transformers.models.parakeet.configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig, ParakeetTDTDecoderConfig, ParakeetTDTConfig, ParakeetTDTJointConfig
 from transformers.models.parakeet.feature_extraction_parakeet import ParakeetFeatureExtractor
 from transformers.models.parakeet.modeling_parakeet import ParakeetForCTC, ParakeetForTDT
 from transformers.models.parakeet.processing_parakeet import ParakeetProcessor
@@ -380,13 +380,8 @@ def create_hf_config_from_nemo(
 ) -> Union[ParakeetConfig]:
     """Create HuggingFace ParakeetConfig from NeMo config and weights."""
 
-    print("HERE model_info", model_info)
-
     encoder_cfg = model_info.get("encoder_cfg", {})
     decoder_cfg = model_info.get("decoder_cfg", {})
-
-    print("HERE encoder_cfg", encoder_cfg)
-    print("HERE HA decoder_cfg", decoder_cfg)
 
     preprocessor_cfg = model_info.get("preprocessor_cfg", {})
 
@@ -526,7 +521,7 @@ def create_hf_config_from_nemo(
     elif model_info["is_tdt_model"]:
         # Get vocab_size from state dict if available
         vocab_size = 1024  # default
-        print("HERE state_dict.keys()", state_dict.keys())
+#        print("HERE state_dict.keys()", state_dict.keys())
 #        if any("decoder.ctc_head.weight" in key or "decoder_layers.0.weight" in key for key in state_dict.keys()):
 #            # Find the decoder weight to get vocab_size
 #            decoder_keys = [k for k in state_dict.keys() if "decoder_layers.0.weight" in k]
@@ -543,15 +538,17 @@ def create_hf_config_from_nemo(
         parakeet_encoder_config_params["model_type"] = "parakeet_encoder"
         parakeet_encoder_config_params["architectures"] = ["ParakeetEncoder"]
         parakeet_encoder_config = ParakeetEncoderConfig(**parakeet_encoder_config_params)
-        print("HERE parakeet_encoder_config", parakeet_encoder_config)
 
 
         parakeet_decoder_config_params = config_params.copy()
         parakeet_decoder_config_params["model_type"] = "parakeet_decoder"
         parakeet_decoder_config_params["architectures"] = ["ParakeetDecoder"]
         parakeet_decoder_config = ParakeetTDTDecoderConfig(**parakeet_decoder_config_params)
-#        print("HERE parakeet_decoder_config_params", parakeet_decoder_config_params)
-        print("HERE parakeet_decoder_config", parakeet_decoder_config)
+
+        parakeet_joint_config_params = config_params.copy()
+        parakeet_joint_config_params["model_type"] = "parakeet_joint"
+        parakeet_joint_config_params["architectures"] = ["ParakeetJoint"]
+        parakeet_joint_config = ParakeetTDTJointConfig(**parakeet_joint_config_params)
 
         # Calculate blank token ID: should be len(vocab_dict) if we have vocab, otherwise vocab_size - 1
         if vocab_dict:
@@ -568,6 +565,7 @@ def create_hf_config_from_nemo(
             ctc_zero_infinity=True,
             encoder_config=parakeet_encoder_config,
             decoder_config=parakeet_decoder_config,
+            joint_config=parakeet_joint_config,
         )
 
     # Non CTC models, TODO
