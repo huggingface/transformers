@@ -86,6 +86,8 @@ class JanusImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to square or not.
     """
 
     model_input_names = ["pixel_values"]

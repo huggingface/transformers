@@ -488,6 +488,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
             number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to square or not.
     """
 
     model_input_names = ["pixel_values", "high_res_pixel_values"]
