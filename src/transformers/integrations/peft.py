@@ -96,7 +96,7 @@ class PeftAdapterMixin:
         adapter_name: Optional[str] = None,
         revision: Optional[str] = None,
         token: Optional[str] = None,
-        device_map: Optional[str] = "auto",
+        device_map: str = "auto",
         max_memory: Optional[str] = None,
         offload_folder: Optional[str] = None,
         offload_index: Optional[int] = None,
