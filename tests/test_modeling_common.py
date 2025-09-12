@@ -230,6 +230,20 @@ def _test_eager_matches_sdpa_inference(
 
     set_model_tester_for_less_flaky_test(self)
 
+    def _can_output_attn(model):
+        parameters = inspect.signature(model.forward).parameters
+        if "output_attentions" in parameters:
+            return True
+
+        kwargs_param = parameters.get("kwargs")
+        if kwargs_param is not None:
+            try:
+                annotation = kwargs_param.annotation.__args__
+                return "output_attentions" in annotation[0].__annotations__
+            except AttributeError:
+                return False
+        return False
+
     for model_class in self.all_model_classes:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
@@ -263,7 +277,7 @@ def _test_eager_matches_sdpa_inference(
         set_model_for_less_flaky_test(model_eager)
         set_model_for_less_flaky_test(model_sdpa)
 
-        can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
+        can_output_attn = _can_output_attn(model_sdpa)
         if not (self.has_attentions and can_output_attn) and output_attentions:
             self.skipTest(reason="Model does not support output_attentions")
 
@@ -370,7 +384,7 @@ def _test_eager_matches_sdpa_inference(
                 if "attention_mask" in inspect.signature(model_eager.forward).parameters:
                     processed_inputs["attention_mask"] = dummy_attention_mask
 
-                if self.has_attentions and "output_attentions" in inspect.signature(model_sdpa.forward).parameters:
+                if self.has_attentions and _can_output_attn(model_sdpa):
                     processed_inputs["output_attentions"] = output_attentions
             if "bool_masked_pos" in inspect.signature(model_eager.forward).parameters:
                 dummy_mask = torch.ones((self.model_tester.num_masks,))
