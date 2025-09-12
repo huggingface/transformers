@@ -409,7 +409,7 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
     config: Qwen3VLMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLVisionBlock"]
+    _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLMoeVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1427,7 +1427,6 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen3VLMoeConfig
-    _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLMoeVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)

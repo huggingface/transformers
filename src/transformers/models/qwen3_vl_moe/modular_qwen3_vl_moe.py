@@ -393,7 +393,7 @@ class Qwen3VLMoeTextDecoderLayer(Qwen3MoeDecoderLayer):
 
 class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
     config: Qwen3VLMoeConfig
-    _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLVisionBlock"]
+    _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLMoeVisionBlock"]
 
     def _init_weights(self, module):
         """Initialize the weights."""
