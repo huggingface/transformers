@@ -412,14 +412,21 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
         "attentions": VideoMAESelfAttention,
     }
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv3d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, VideoMAESelfAttention):
+            if self.config.qkv_bias:
+                module.q_bias.data.zero_()
+                module.v_bias.data.zero_()
+        elif isinstance(module, VideoMAEForPreTraining):
+            module.mask_token.data.normal_(mean=0.0, std=std)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)

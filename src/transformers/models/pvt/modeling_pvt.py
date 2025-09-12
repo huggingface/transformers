@@ -452,24 +452,16 @@ class PvtPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            nn.init.trunc_normal_(module.weight.data, mean=0.0, std=std)
+            nn.init.trunc_normal_(module.weight, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, PvtPatchEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data,
-                mean=0.0,
-                std=std,
-            )
+            nn.init.trunc_normal_(module.position_embeddings, std=std)
             if module.cls_token is not None:
-                module.cls_token.data = nn.init.trunc_normal_(
-                    module.cls_token.data,
-                    mean=0.0,
-                    std=std,
-                )
+                nn.init.trunc_normal_(module.cls_token, std=std)
 
 
 @auto_docstring

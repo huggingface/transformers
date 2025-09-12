@@ -250,9 +250,11 @@ class ResNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            if module.bias is not None:
+                module.bias.data.zero_()
         # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
         elif isinstance(module, nn.Linear):
             nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
@@ -260,7 +262,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
                 fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 nn.init.uniform_(module.bias, -bound, bound)
-        elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
+        elif isinstance(module, nn.BatchNorm2d):
             nn.init.constant_(module.weight, 1)
             nn.init.constant_(module.bias, 0)
 

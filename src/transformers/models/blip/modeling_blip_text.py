@@ -579,7 +579,7 @@ class BlipTextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bert"
     _no_split_modules = []
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
@@ -588,7 +588,7 @@ class BlipTextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        if isinstance(module, (nn.Linear, BlipTextLMPredictionHead)) and module.bias is not None:
             module.bias.data.zero_()
 
 

@@ -915,47 +915,58 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
     """
 
     # Subclass `EsMPreTrainedModel` to deal with special init
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, EsmFoldLinear):
-            with torch.no_grad():
-                if module.init_fn is not None:
-                    module.init_fn(module.weight, module.bias)
-                elif module.init == "default":
-                    trunc_normal_init_(module.weight, scale=1.0)
-                elif module.init == "relu":
-                    trunc_normal_init_(module.weight, scale=2.0)
-                elif module.init == "glorot":
-                    nn.init.xavier_uniform_(module.weight, gain=1)
-                elif module.init == "gating":
-                    module.weight.fill_(0.0)
-                    if module.bias:
-                        module.bias.fill_(1.0)
-                elif module.init == "normal":
-                    torch.nn.init.kaiming_normal_(module.weight, nonlinearity="linear")
-                elif module.init == "final":
-                    module.weight.fill_(0.0)
+            if module.init_fn is not None:
+                module.init_fn(module.weight, module.bias)
+            elif module.init == "default":
+                trunc_normal_init_(module.weight, scale=1.0)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            elif module.init == "relu":
+                trunc_normal_init_(module.weight, scale=2.0)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            elif module.init == "glorot":
+                nn.init.xavier_uniform_(module.weight, gain=1)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            elif module.init == "gating":
+                module.weight.fill_(0.0)
+                if module.bias is not None:
+                    module.bias.fill_(1.0)
+            elif module.init == "normal":
+                torch.nn.init.kaiming_normal_(module.weight, nonlinearity="linear")
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            elif module.init == "final":
+                module.weight.fill_(0.0)
+                if module.bias is not None:
+                    module.bias.data.zero_()
         elif isinstance(module, EsmFoldInvariantPointAttention):
             ipa_point_weights_init_(module.head_weights)
         elif isinstance(module, EsmFoldTriangularSelfAttentionBlock):
-            torch.nn.init.zeros_(module.tri_mul_in.linear_z.weight)
-            torch.nn.init.zeros_(module.tri_mul_in.linear_z.bias)
-            torch.nn.init.zeros_(module.tri_mul_out.linear_z.weight)
-            torch.nn.init.zeros_(module.tri_mul_out.linear_z.bias)
-            torch.nn.init.zeros_(module.tri_att_start.mha.linear_o.weight)
-            torch.nn.init.zeros_(module.tri_att_start.mha.linear_o.bias)
-            torch.nn.init.zeros_(module.tri_att_end.mha.linear_o.weight)
-            torch.nn.init.zeros_(module.tri_att_end.mha.linear_o.bias)
+            nn.init.zeros_(module.tri_mul_in.linear_z.weight)
+            nn.init.zeros_(module.tri_mul_in.linear_z.bias)
+            nn.init.zeros_(module.tri_mul_out.linear_z.weight)
+            nn.init.zeros_(module.tri_mul_out.linear_z.bias)
+            nn.init.zeros_(module.tri_att_start.mha.linear_o.weight)
+            nn.init.zeros_(module.tri_att_start.mha.linear_o.bias)
+            nn.init.zeros_(module.tri_att_end.mha.linear_o.weight)
+            nn.init.zeros_(module.tri_att_end.mha.linear_o.bias)
 
-            torch.nn.init.zeros_(module.sequence_to_pair.o_proj.weight)
-            torch.nn.init.zeros_(module.sequence_to_pair.o_proj.bias)
-            torch.nn.init.zeros_(module.pair_to_sequence.linear.weight)
-            torch.nn.init.zeros_(module.seq_attention.o_proj.weight)
-            torch.nn.init.zeros_(module.seq_attention.o_proj.bias)
-            torch.nn.init.zeros_(module.mlp_seq.mlp[-2].weight)
-            torch.nn.init.zeros_(module.mlp_seq.mlp[-2].bias)
-            torch.nn.init.zeros_(module.mlp_pair.mlp[-2].weight)
-            torch.nn.init.zeros_(module.mlp_pair.mlp[-2].bias)
+            nn.init.zeros_(module.sequence_to_pair.o_proj.weight)
+            nn.init.zeros_(module.sequence_to_pair.o_proj.bias)
+            nn.init.zeros_(module.pair_to_sequence.linear.weight)
+            nn.init.zeros_(module.seq_attention.o_proj.weight)
+            nn.init.zeros_(module.seq_attention.o_proj.bias)
+            nn.init.zeros_(module.mlp_seq.mlp[-2].weight)
+            nn.init.zeros_(module.mlp_seq.mlp[-2].bias)
+            nn.init.zeros_(module.mlp_pair.mlp[-2].weight)
+            nn.init.zeros_(module.mlp_pair.mlp[-2].bias)
+        elif isinstance(module, EsmForProteinFolding):
+            module.esm_s_combine.data.zero_()
         else:
             super()._init_weights(module)
 
@@ -1988,7 +1999,7 @@ class EsmFoldingTrunk(nn.Module):
     protein(s).
     """
 )
-class EsmForProteinFolding(EsmPreTrainedModel):
+class EsmForProteinFolding(EsmFoldPreTrainedModel):
     _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -2050,6 +2061,9 @@ class EsmForProteinFolding(EsmPreTrainedModel):
             nn.Linear(self.config.esmfold_config.lddt_head_hid_dim, self.config.esmfold_config.lddt_head_hid_dim),
             nn.Linear(self.config.esmfold_config.lddt_head_hid_dim, 37 * self.lddt_bins),
         )
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @staticmethod
     def _af2_to_esm_from_vocab_list(vocab_list: list[str]) -> torch.Tensor:

@@ -883,7 +883,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             # For now, skip everything older than 2024 and "important models" (too much models to patch otherwise)
             # TODO: relax this as we patch more and more models
-            if addition_year < 2023:
+            if addition_year < 2022:
                 self.skipTest(reason=f"{model_class} is not a priorited model for now.")
 
             # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps

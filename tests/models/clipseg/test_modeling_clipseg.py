@@ -510,9 +510,6 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                             delta=1e-3,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                    elif "film" in name or "transposed_conv" in name or "reduce" in name:
-                        # those parameters use PyTorch' default nn.Linear initialization scheme
-                        pass
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),

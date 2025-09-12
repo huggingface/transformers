@@ -506,7 +506,7 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, Data2VecAudioFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
@@ -516,20 +516,23 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, nn.LayerNorm):
             if module.bias is not None:
                 module.bias.data.zero_()
             if module.weight is not None:
                 module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
-
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
+
+        if hasattr(module, "objective"):
+            nn.init.normal_(module.objective.weight)
+        if hasattr(module, "masked_spec_embed"):
+            nn.init.uniform_(module.masked_spec_embed)
 
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None

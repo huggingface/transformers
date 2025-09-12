@@ -728,12 +728,14 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            torch.nn.init.trunc_normal_(module.weight.data, std=self.config.initializer_range)
+            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, Swin2SRSelfAttention):
+            module.logit_scale.data.fill_(math.log(10))
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)

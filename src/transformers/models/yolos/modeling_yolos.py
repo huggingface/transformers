@@ -469,9 +469,16 @@ class YolosPreTrainedModel(PreTrainedModel):
         "attentions": YolosSelfAttention,
     }
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        std = self.config.initializer_range
+        if isinstance(module, YolosEmbeddings):
+            nn.init.trunc_normal_(module.cls_token, std=std)
+            nn.init.trunc_normal_(module.position_embeddings, std=std)
+            nn.init.trunc_normal_(module.detection_tokens, std=std)
+        elif isinstance(module, YolosEncoder):
+            nn.init.trunc_normal_(module.mid_position_embeddings, std=std)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)

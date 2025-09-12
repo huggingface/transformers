@@ -214,7 +214,7 @@ class ResNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=config)
             for name, module in model.named_modules():
-                if isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
+                if isinstance(module, nn.BatchNorm2d):
                     self.assertTrue(
                         torch.all(module.weight == 1),
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",

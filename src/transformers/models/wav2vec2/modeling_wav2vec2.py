@@ -1036,7 +1036,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
         if isinstance(module, Wav2Vec2ForPreTraining):
@@ -1074,6 +1074,11 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, AMSoftmaxLoss):
+            nn.init.normal_(module.weight)
+
+        if hasattr(module, "masked_spec_embed"):
+            nn.init.uniform_(module.masked_spec_embed)
 
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
