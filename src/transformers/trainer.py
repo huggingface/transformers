@@ -682,7 +682,7 @@ class Trainer:
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
-        callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
+        callbacks = default_callbacks if callbacks is None else callbacks + default_callbacks
         self.callback_handler = CallbackHandler(
             callbacks, self.model, self.processing_class, self.optimizer, self.lr_scheduler
         )
