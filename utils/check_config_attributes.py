@@ -305,6 +305,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
+    "VaultGemmaConfig": ["tie_word_embeddings"],
 }
 
 
