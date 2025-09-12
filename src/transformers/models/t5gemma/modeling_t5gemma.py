@@ -611,6 +611,13 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
             if not self.config.tie_word_embeddings:
                 scale = module.out_proj.weight.shape[0] ** -0.5
                 module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        elif "RMSNorm" in module.__class__.__name__:
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(0.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
 
     def _shift_right(self, input_ids):
         """
