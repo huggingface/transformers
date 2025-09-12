@@ -714,7 +714,6 @@ def load_video(
 
 def convert_to_rgb(
     video: np.ndarray,
-    data_format: Optional[ChannelDimension] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
     """
@@ -723,15 +722,13 @@ def convert_to_rgb(
     Args:
         video (`np.array`):
             The video to convert.
-        data_format (`ChannelDimension`, *optional*):
-            The channel dimension format of the output video. If unset, will use the inferred format from the input.
         input_data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the input video. If unset, will use the inferred format from the input.
     """
     if not isinstance(video, np.ndarray):
         raise TypeError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
 
-    # np.array usually comes with ChannelDimension.LAST so leet's convert it
+    # np.array usually comes with ChannelDimension.LAST so let's convert it
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(video)
     video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_channel_dim=input_data_format)
