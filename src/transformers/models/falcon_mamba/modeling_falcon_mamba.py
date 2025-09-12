@@ -30,7 +30,6 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import _lazy_loading_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -167,7 +166,10 @@ def _lazy_load_causal_conv1d():
         return _causal_conv1d_cache
 
     if is_kernels_available():
-        _lazy_loading_kernel("kernels-community/causal-conv1d")
+        from kernels import get_kernel
+
+        _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
+        _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
     elif is_causal_conv1d_available():
         from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 

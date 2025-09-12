@@ -169,15 +169,9 @@ def load_and_register_kernel(attn_implementation: str) -> None:
     ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
 
 
-def _lazy_loading_kernel(kernel_name: str) -> None:
-    kernel = get_kernel(kernel_name)
-    return kernel
-
-
 __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
     "register_kernel_mapping",
     "replace_kernel_forward_from_hub",
-    "_lazy_loading_kernel",
 ]
