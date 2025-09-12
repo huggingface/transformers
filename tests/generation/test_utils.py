@@ -2131,12 +2131,12 @@ class GenerationTesterMixin:
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
         self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
 
-        # (batch, head, seq_length, head_features)
+        # (batch, # kv heads, seq_length, head_features)
         expected_shape = (
             batch_size,
             config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
             cache_length,
-            config.hidden_size // config.num_attention_heads,
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads,
         )
 
         if isinstance(decoder_past_key_values, Cache):
