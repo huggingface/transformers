@@ -185,7 +185,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        batch_size = 4
+        batch_size = self.image_processor_tester.batch_size
         images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         prompt_depths = [np.random.random((192, 256)) for _ in range(batch_size)]
 
