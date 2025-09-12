@@ -14,24 +14,14 @@
 # limitations under the License.
 """Fast Video processor class for VJEPA2."""
 
-from ...image_utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-)
+from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import is_vision_available
-from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
-
-
-if is_vision_available():
-    from ...image_utils import PILImageResampling
 
 
 class VJEPA2VideoProcessorInitKwargs(VideosKwargs): ...
 
 
-@requires(backends=("torchvision",))
 class VJEPA2VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
