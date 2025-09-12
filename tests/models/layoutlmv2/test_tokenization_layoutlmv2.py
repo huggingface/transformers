@@ -25,6 +25,8 @@ from transformers import (
     AddedToken,
     LayoutLMv2TokenizerFast,
     SpecialTokensMixin,
+    is_flax_available,
+    is_mlx_available,
     is_tf_available,
     is_torch_available,
     logging,
@@ -96,6 +98,38 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         boxes = [
             [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
             [[256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69]],
+        ]
+
+        return questions, words, boxes
+
+    def get_empty_words_and_boxes(self):
+        words = ["test", "empty", ""]
+        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
+
+        return words, boxes
+
+    def get_empty_words_and_boxes_batch(self):
+        words = [["test", "empty", ""], ["one", "more", "empty", ""]]
+        boxes = [
+            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
+            [[961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57]],
+        ]
+
+        return words, boxes
+
+    def get_empty_question_words_and_boxes(self):
+        question = ""
+        words = ["test", "empty", ""]
+        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
+
+        return question, words, boxes
+
+    def get_empty_question_words_and_boxes_batch(self):
+        questions = ["what's his name?", ""]
+        words = [["test", "empty", ""], ["one", "more", "empty", ""]]
+        boxes = [
+            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
+            [[961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57]],
         ]
 
         return questions, words, boxes
@@ -1337,7 +1371,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key][0])
 
-    def test_embeded_special_tokens(self):
+    def test_embedded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             self.skipTest(reason="test_slow_tokenizer is set to False")
@@ -1733,7 +1767,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(tokens[key].shape[-1], 4)
 
     @unittest.skip(reason="TO DO: overwrite this very extensive test.")
-    def test_alignement_methods(self):
+    def test_alignment_methods(self):
         pass
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):
@@ -2386,3 +2420,60 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Chat is not supported")
     def test_chat_template_return_assistant_tokens_mask_truncated(self):
         pass
+
+    def test_empty_input_string(self):
+        tokenizer_return_type = []
+        output_tensor_type = []
+
+        if is_torch_available():
+            import numpy as np
+            import torch
+
+            tokenizer_return_type.append("pt")
+            output_tensor_type.append(torch.int64)
+            tokenizer_return_type.append("np")
+            output_tensor_type.append(np.int64)
+
+        if is_tf_available():
+            import tensorflow as tf
+
+            tokenizer_return_type.append("tf")
+            output_tensor_type.append(tf.int32)
+
+        if is_flax_available():
+            import jax.numpy as jnp
+
+            tokenizer_return_type.append("jax")
+            output_tensor_type.append(jnp.int32)
+
+        if is_mlx_available():
+            import mlx.core as mx
+
+            tokenizer_return_type.append("mlx")
+            output_tensor_type.append(mx.int32)
+
+        if len(tokenizer_return_type) == 0:
+            self.skipTest(reason="No expected framework from PT, TF, JAX or MLX found")
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                words, boxes = self.get_empty_words_and_boxes()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                question, words, boxes = self.get_empty_question_words_and_boxes()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                words, boxes = self.get_empty_words_and_boxes_batch()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, padding=True, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                question, words, boxes = self.get_empty_question_words_and_boxes_batch()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, padding=True, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)

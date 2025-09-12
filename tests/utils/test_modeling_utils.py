@@ -714,9 +714,9 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_model_from_config_attn_implementation(self):
         # test that the model can be instantiated with attn_implementation of either
-        # 1. config created with explicit attn_implementatation and from_config
+        # 1. config created with explicit attn_implementation and from_config
         # 2. explicit from_config's attn_implementation argument with a config argument
-        # 3. config created with explicit attn_implementatation and from_config overriding with explicit attn_implementation argument
+        # 3. config created with explicit attn_implementation and from_config overriding with explicit attn_implementation argument
         attn_implementation_available = ["eager", "sdpa"]
 
         if is_flash_attn_available():
@@ -1588,7 +1588,7 @@ class ModelUtilsTest(TestCasePlus):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.save_pretrained(tmp_dir)
                 # 1 - That parameter will be removed from `model.config`. We don't want to use `model.config` to store
-                # generative parameters, and the old default (1.0) would no longer relect the user's wishes.
+                # generative parameters, and the old default (1.0) would no longer reflect the user's wishes.
                 self.assertTrue(model.config.repetition_penalty is None)
                 # 2 - That parameter will be set in `model.generation_config` instead.
                 self.assertTrue(model.generation_config.repetition_penalty == 3.0)
