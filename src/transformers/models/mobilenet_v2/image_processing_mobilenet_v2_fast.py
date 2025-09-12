@@ -77,6 +77,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_reduce_labels = False
     valid_kwargs = MobileNetV2FastImageProcessorKwargs
+    call_only_args = ["images", "segmentation_maps"]
 
     def __init__(self, **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
