@@ -168,6 +168,7 @@ class ParakeetEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ParakeetEncoderModelTester(self)
@@ -182,10 +183,6 @@ class ParakeetEncoderModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ParakeetEncoder does not use inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Flash not yet supported in Parakeet models")
-    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
 
@@ -256,6 +253,7 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     _is_composite = True
 
@@ -272,10 +270,6 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ParakeetEncoder does not use inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Flash not yet supported in Parakeet models")
-    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     # Original function assumes vision+text model, so overwrite since Parakeet is audio+text
@@ -314,7 +308,7 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
     def setUp(cls):
         cls.checkpoint_name = "bezzam/parakeet-ctc-1.1b-hf"
         cls.dtype = torch.bfloat16
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        cls.processor = AutoProcessor.from_pretrained("/home/eustache_lebihan/add-parakeet/tmp2")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -358,8 +352,8 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
-        predicted_transcripts = self.processor.decode(predicted_ids)
-        self.assertListEqual([predicted_transcripts], EXPECTED_TRANSCRIPTIONS)
+        predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
     def test_1b_model_integration_batched(self):
@@ -386,5 +380,5 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
-        predicted_transcripts = self.processor.batch_decode(predicted_ids)
+        predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
