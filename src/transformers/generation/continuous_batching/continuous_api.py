@@ -561,7 +561,7 @@ class ContinuousBatchingManager:
         self._request_counter = 0
         self._request_lock = threading.Lock()
         self.model.generation_config.top_p = None
-        self.do_sample = getattr(generation_config, "do_sample", False)  # TODO: restore default to True when suported
+        self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
         self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", False)  # TODO: same as do_sample
         self.profile = getattr(generation_config, "profile", False)
@@ -571,8 +571,6 @@ class ContinuousBatchingManager:
 
         if self.use_cuda_graph:
             raise NotImplementedError("Cuda graphs are not supported yet")
-        if self.do_sample:
-            raise NotImplementedError("Sampling is not supported yet")
 
     @traced
     def start(self):
