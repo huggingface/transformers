@@ -247,14 +247,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         """
         Override the base _preprocess method to handle custom PromptDepthAnything parameters.
         """
-        # Set defaults for custom parameters
-        keep_aspect_ratio = keep_aspect_ratio if keep_aspect_ratio is not None else self.keep_aspect_ratio
-        ensure_multiple_of = ensure_multiple_of if ensure_multiple_of is not None else self.ensure_multiple_of
-        do_pad = do_pad if do_pad is not None else self.do_pad
-        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
-        prompt_scale_to_meter = (
-            prompt_scale_to_meter if prompt_scale_to_meter is not None else self.prompt_scale_to_meter
-        )
 
         # Process prompt depth
         processed_prompt_depths = None
