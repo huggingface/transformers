@@ -21,20 +21,17 @@ from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 from typing import Optional
 
-from .utils.import_utils import is_torch_available, requires
+import torch
+from safetensors.torch import save_file
+
+from .utils.import_utils import requires
 
 
-if is_torch_available():
-    import torch
-    from safetensors.torch import save_file
+# Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
+if torch.distributed.is_available():
+    import torch.distributed.tensor
 
-    # Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
-    if torch.distributed.is_available():
-        import torch.distributed.tensor
-
-        _torch_distributed_available = True
-else:
-    _torch_distributed_available = False
+    _torch_distributed_available = True
 from .utils import logging
 
 

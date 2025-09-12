@@ -42,7 +42,6 @@ from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
 from .utils import (
     is_sagemaker_mp_enabled,
-    is_torch_available,
     is_torch_xla_available,
     is_training_run_on_sagemaker,
     logging,
@@ -55,8 +54,7 @@ if is_training_run_on_sagemaker():
 if is_torch_xla_available():
     import torch_xla.runtime as xr
 
-if is_torch_available():
-    from torch.optim.lr_scheduler import LRScheduler
+from torch.optim.lr_scheduler import LRScheduler
 
 
 logger = logging.get_logger(__name__)

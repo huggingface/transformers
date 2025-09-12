@@ -21,6 +21,7 @@ from functools import partial
 from typing import Any, Callable, Optional, Union
 
 import numpy as np
+import torch
 
 from .dynamic_module_utils import custom_object_save
 from .image_processing_utils import (
@@ -44,7 +45,6 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
-    is_torch_available,
     is_torchcodec_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -64,9 +64,6 @@ from .video_utils import (
     to_channel_dimension_format,
 )
 
-
-if is_torch_available():
-    import torch
 
 if is_torchvision_available():
     if is_torchvision_v2_available():

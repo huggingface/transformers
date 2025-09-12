@@ -18,6 +18,7 @@ from functools import lru_cache, partial
 from typing import Any, Optional, TypedDict, Union
 
 import numpy as np
+import torch
 
 from .image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from .image_transforms import (
@@ -44,7 +45,6 @@ from .processing_utils import Unpack
 from .utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
@@ -56,8 +56,6 @@ from .utils.import_utils import is_rocm_platform
 if is_vision_available():
     from .image_utils import PILImageResampling
 
-if is_torch_available():
-    import torch
 
 if is_torchvision_available():
     from .image_utils import pil_torch_interpolation_mapping
@@ -115,7 +113,7 @@ def validate_fast_preprocess_arguments(
         raise ValueError("Only channel first data format is currently supported.")
 
 
-def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
+def safe_squeeze(tensor: torch.Tensor, axis: Optional[int] = None) -> torch.Tensor:
     """
     Squeezes a tensor, but only if the axis specified has dim 1.
     """
@@ -135,7 +133,7 @@ def max_across_indices(values: Iterable[Any]) -> list[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int]:
+def get_max_height_width(images: list[torch.Tensor]) -> tuple[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -145,19 +143,17 @@ def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int]:
     return (max_height, max_width)
 
 
-def divide_to_patches(
-    image: Union[np.array, "torch.Tensor"], patch_size: int
-) -> list[Union[np.array, "torch.Tensor"]]:
+def divide_to_patches(image: Union[np.array, torch.Tensor], patch_size: int) -> list[Union[np.array, torch.Tensor]]:
     """
     Divides an image into patches of a specified size.
 
     Args:
-        image (`Union[np.array, "torch.Tensor"]`):
+        image (`Union[np.array, torch.Tensor]`):
             The input image.
         patch_size (`int`):
             The size of each patch.
     Returns:
-        list: A list of Union[np.array, "torch.Tensor"] representing the patches.
+        list: A list of Union[np.array, torch.Tensor] representing the patches.
     """
     patches = []
     height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
@@ -241,12 +237,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def resize(
         self,
-        image: "torch.Tensor",
+        image: torch.Tensor,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """
         Resize an image to `(size["height"], size["width"])`.
 
@@ -295,11 +291,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     @staticmethod
     def compile_friendly_resize(
-        image: "torch.Tensor",
+        image: torch.Tensor,
         new_size: tuple[int, int],
         interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """
         A wrapper around `F.resize` so that it is compatible with torch.compile when the image is a uint8 tensor.
         """
@@ -316,10 +312,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def rescale(
         self,
-        image: "torch.Tensor",
+        image: torch.Tensor,
         scale: float,
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """
         Rescale an image by a scale factor. image = image * scale.
 
@@ -336,11 +332,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def normalize(
         self,
-        image: "torch.Tensor",
+        image: torch.Tensor,
         mean: Union[float, Iterable[float]],
         std: Union[float, Iterable[float]],
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """
         Normalize an image. image = (image - image_mean) / image_std.
 
@@ -376,13 +372,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def rescale_and_normalize(
         self,
-        images: "torch.Tensor",
+        images: torch.Tensor,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: Union[float, list[float]],
         image_std: Union[float, list[float]],
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """
         Rescale and normalize images.
         """
@@ -404,16 +400,16 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def center_crop(
         self,
-        image: "torch.Tensor",
+        image: torch.Tensor,
         size: dict[str, int],
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """
         Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
         any edge, the image is padded with 0's and then center cropped.
 
         Args:
-            image (`"torch.Tensor"`):
+            image (`torch.Tensor`):
                 Image to center crop.
             size (`dict[str, int]`):
                 Size of the output image.
@@ -479,7 +475,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_convert_rgb: Optional[bool] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         image_type = get_image_type(image)
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
@@ -518,7 +514,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
         expected_ndims: int = 3,
-    ) -> list["torch.Tensor"]:
+    ) -> list[torch.Tensor]:
         """
         Prepare image-like inputs for processing.
 
@@ -685,7 +681,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[torch.Tensor],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
