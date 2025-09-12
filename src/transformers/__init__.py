@@ -436,7 +436,6 @@ else:
             "MinLengthLogitsProcessor",
             "MinNewTokensLengthLogitsProcessor",
             "MinPLogitsWarper",
-            "TopHLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PhrasalConstraint",
@@ -452,6 +451,7 @@ else:
             "SynthIDTextWatermarkingConfig",
             "SynthIDTextWatermarkLogitsProcessor",
             "TemperatureLogitsWarper",
+            "TopHLogitsWarper",
             "TopKLogitsWarper",
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
@@ -698,7 +698,6 @@ if TYPE_CHECKING:
     from .generation import MinLengthLogitsProcessor as MinLengthLogitsProcessor
     from .generation import MinNewTokensLengthLogitsProcessor as MinNewTokensLengthLogitsProcessor
     from .generation import MinPLogitsWarper as MinPLogitsWarper
-    from .generation import TopHLogitsWarper as TopHLogitsWarper
     from .generation import NoBadWordsLogitsProcessor as NoBadWordsLogitsProcessor
     from .generation import NoRepeatNGramLogitsProcessor as NoRepeatNGramLogitsProcessor
     from .generation import PhrasalConstraint as PhrasalConstraint
@@ -732,6 +731,7 @@ if TYPE_CHECKING:
     from .generation import TFTemperatureLogitsWarper as TFTemperatureLogitsWarper
     from .generation import TFTopKLogitsWarper as TFTopKLogitsWarper
     from .generation import TFTopPLogitsWarper as TFTopPLogitsWarper
+    from .generation import TopHLogitsWarper as TopHLogitsWarper
     from .generation import TopKLogitsWarper as TopKLogitsWarper
     from .generation import TopPLogitsWarper as TopPLogitsWarper
     from .generation import TypicalLogitsWarper as TypicalLogitsWarper
