@@ -149,13 +149,14 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
+        prompt_depth: Optional[ImageInput] = None,
         **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs],
     ) -> BatchFeature:
         """
         This wrapper exposes custom kwargs in the signature for documentation and typing.
         Delegates to BaseImageProcessorFast.preprocess.
         """
-        return super().preprocess(images, **kwargs)
+        return super().preprocess(images, prompt_depth=prompt_depth, **kwargs)
 
     def resize_with_aspect_ratio(
         self,
@@ -209,16 +210,89 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         height, width = image.shape[-2:]
 
-        pad_w_left, pad_w_right = _get_pad(width, size_divisor)
-        pad_h_top, pad_h_bottom = _get_pad(height, size_divisor)
+        # Match slow processor: height->left/right, width->top/bottom
+        pad_size_left, pad_size_right = _get_pad(height, size_divisor)
+        pad_size_top, pad_size_bottom = _get_pad(width, size_divisor)
 
         # Use torchvision padding for fast processing
         # /!\ NB: torchvision F.pad expects (left, top, right, bottom) for the last two dims (W then H)
         # Source: https://docs.pytorch.org/vision/main/generated/torchvision.transforms.Pad.html
-        padding = [pad_w_left, pad_h_top, pad_w_right, pad_h_bottom]
+        # So: (left=width_pad, top=height_pad, right=width_pad, bottom=height_pad)
+        padding = [pad_size_top, pad_size_left, pad_size_bottom, pad_size_right]
         padded_image = F.pad(image, padding=padding)
 
         return padded_image
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        prompt_depth: Optional[ImageInput],
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        prompt_scale_to_meter: Optional[float] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs, including the main images and optional prompt depth.
+        """
+        # Process main images
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+
+        # Process images with the standard pipeline
+        images_kwargs = kwargs.copy()
+        pixel_values = self._preprocess(images, **images_kwargs)
+
+        # Prepare result data
+        data = {"pixel_values": pixel_values}
+
+        # Process prompt depth if provided
+        if prompt_depth is not None:
+            # Convert prompt depth to tensor format similar to images
+            processed_prompt_depths = self._prepare_image_like_inputs(
+                images=prompt_depth,
+                do_convert_rgb=False,  # Depth maps should not be converted to RGB
+                input_data_format=input_data_format,
+                device=images[0].device if images else device,
+                expected_ndims=2,  # Depth maps are typically 2D
+            )
+
+            # Validate prompt_depths has same length as images
+            if len(processed_prompt_depths) != len(images):
+                raise ValueError(
+                    f"Number of prompt depth images ({len(processed_prompt_depths)}) does not match number of input images ({len(images)})"
+                )
+
+            # Use prompt_scale_to_meter from kwargs or instance attribute
+            if prompt_scale_to_meter is None:
+                prompt_scale_to_meter = self.prompt_scale_to_meter
+
+            final_prompt_depths = []
+            for depth in processed_prompt_depths:
+                # Scale to meters
+                depth = depth * prompt_scale_to_meter
+
+                # Handle case where depth is constant (min == max)
+                if depth.min() == depth.max():
+                    # Add small variation to avoid numerical issues
+                    depth[0, 0] = depth[0, 0] + 1e-6
+
+                # Add channel dimension if needed (depth maps are typically 2D)
+                if depth.ndim == 2:
+                    depth = depth.unsqueeze(0)
+
+                final_prompt_depths.append(depth)
+
+            # Stack processed depths if return_tensors is set
+            if return_tensors:
+                final_prompt_depths = torch.stack(final_prompt_depths, dim=0)
+
+            data["prompt_depth"] = final_prompt_depths
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def _preprocess(
         self,
@@ -234,44 +308,14 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: Optional[bool],
-        prompt_scale_to_meter: Optional[float],
         return_tensors: Optional[Union[str, TensorType]],
         disable_grouping: Optional[bool],
-        prompt_depth: Optional[ImageInput] = None,
         size_divisor: Optional[int] = None,
         **kwargs,
-    ) -> BatchFeature:
+    ) -> "torch.Tensor":
         """
         Override the base _preprocess method to handle custom PromptDepthAnything parameters.
         """
-
-        # Process prompt depth
-        processed_prompt_depths = None
-        if prompt_depth is not None:
-            # Convert prompt depth to tensor format similar to images
-            prompt_depths = self._prepare_image_like_inputs(
-                images=prompt_depth,
-                do_convert_rgb=False,  # Depth maps should not be converted to RGB
-                input_data_format=None,
-                device=images[0].device if images else None,
-                expected_ndims=2,
-            )
-
-            processed_prompt_depths = []
-            for depth in prompt_depths:
-                # Scale
-                depth = depth * prompt_scale_to_meter
-
-                # When depth is constant, we need to add a small variation to avoid numerical issues
-                if depth.min() == depth.max():
-                    depth[0, 0] = depth[0, 0] + 1e-6
-
-                # Add channel dimension if needed
-                if depth.ndim == 2:
-                    depth = depth.unsqueeze(0)
-
-                processed_prompt_depths.append(depth)
-
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
 
@@ -288,33 +332,23 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        # Group images by size for further processing
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
-            if do_pad:
-                stacked_images = self.pad_image(stacked_images, size_divisor)  # Apply padding if requested
-
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
+
+            if do_pad and size_divisor is not None:
+                stacked_images = self.pad_image(stacked_images, size_divisor)
+
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
-        # Prepare result data
-        result_data = {"pixel_values": processed_images}
-
-        # Add prompt depth to the result if it was processed
-        if processed_prompt_depths is not None:
-            # Stack processed depths if return_tensors is set
-            if return_tensors:
-                processed_prompt_depths = torch.stack(processed_prompt_depths, dim=0)
-            result_data["prompt_depth"] = processed_prompt_depths
-
-        return BatchFeature(data=result_data, tensor_type=return_tensors)
+        return processed_images
 
     # Copied from transformers.models.dpt.image_processing_dpt.DPTImageProcessor.post_process_depth_estimation with DPT->PromptDepthAnything
     def post_process_depth_estimation(
