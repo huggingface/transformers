@@ -37,7 +37,7 @@ if is_torch_available():
 @require_vision
 @require_torch
 @require_torchvision
-@unittest.SkipTest("The checkpoint is not yet released")
+@unittest.skip("The checkpoint is not yet released")
 class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3VLProcessor
 
