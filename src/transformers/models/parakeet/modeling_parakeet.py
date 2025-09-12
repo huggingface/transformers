@@ -92,10 +92,10 @@ class ParakeetEncoderFeedForward(nn.Module):
 
 
 class ParakeetEncoderConvolutionModule(nn.Module):
-    def __init__(self, config: ParakeetCTCConfig, module_config=None):
+    def __init__(self, config: ParakeetEncoderConfig, module_config=None):
         """
         Args:
-            config (ParakeetEncoderCTCConfig): Configuration for the model.
+            config (ParakeetEncoderConfig): Configuration for the model.
             module_config (dict): Configuration for the module (e.g., encoder or decoder).
         """
         super().__init__()
@@ -224,8 +224,8 @@ class ParakeetEncoderAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor],
+        position_embeddings: Optional[torch.Tensor],
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -240,25 +240,23 @@ class ParakeetEncoderAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if position_embeddings is not None:
-            query_states_with_bias_u = query_states + self.bias_u.view(
-                1, self.config.num_attention_heads, 1, self.head_dim
-            )
-            query_states_with_bias_v = query_states + self.bias_v.view(
-                1, self.config.num_attention_heads, 1, self.head_dim
-            )
+        query_states_with_bias_u = query_states + self.bias_u.view(
+            1, self.config.num_attention_heads, 1, self.head_dim
+        )
+        query_states_with_bias_v = query_states + self.bias_v.view(
+            1, self.config.num_attention_heads, 1, self.head_dim
+        )
 
-            relative_key_states = self.relative_k_proj(position_embeddings)
-            relative_key_states = relative_key_states.view(1, -1, self.config.num_attention_heads, self.head_dim)
+        relative_key_states = self.relative_k_proj(position_embeddings)
+        relative_key_states = relative_key_states.view(1, -1, self.config.num_attention_heads, self.head_dim)
 
-            # terms (b) and (d)
-            matrix_bd = query_states_with_bias_v @ relative_key_states.permute(0, 2, 3, 1)
-            matrix_bd = self.rel_shift(matrix_bd)
-            matrix_bd = matrix_bd[..., :seq_length]
-            matrix_bd = matrix_bd * self.scaling
+        # terms (b) and (d)
+        matrix_bd = query_states_with_bias_v @ relative_key_states.permute(0, 2, 3, 1)
+        matrix_bd = self._rel_shift(matrix_bd)
+        matrix_bd = matrix_bd[..., :seq_length]
+        matrix_bd = matrix_bd * self.scaling
 
-            if attention_mask is not None:
-                matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), -10000.0)
+        matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), -10000.0)
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
@@ -274,17 +272,15 @@ class ParakeetEncoderAttention(nn.Module):
 
         # to match the original implementation
         # cf https://github.com/NVIDIA/NeMo/blob/620d2ba07835c230b2e1ee25fe1322504ce01d79/nemo/collections/asr/parts/submodules/multi_head_attention.py#L336-L340
-        # Only apply padding mask for eager and sdpa implementations, not for flash as pads are ignored
-        if attention_mask is not None and "flash" not in self.config._attn_implementation:
-            all_masked_rows = torch.all(~attention_mask, dim=-1).transpose(1, 2)
-            all_masked_rows = all_masked_rows.unsqueeze_(-1)
-            attn_output = attn_output.masked_fill(all_masked_rows, 0.0)
+        all_masked_rows = torch.all(~attention_mask, dim=-1).transpose(1, 2)
+        all_masked_rows = all_masked_rows.unsqueeze_(-1)
+        attn_output = attn_output.masked_fill(all_masked_rows, 0.0)
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
-    def rel_shift(self, attention_scores):
+    def _rel_shift(self, attention_scores):
         """Relative position shift for Shaw et al. style attention."""
         batch_size, num_heads, query_length, position_length = attention_scores.shape
         attention_scores = nn.functional.pad(attention_scores, pad=(1, 0))
