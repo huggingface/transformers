@@ -220,7 +220,11 @@ class InternVLProcessor(ProcessorMixin):
             images = make_flat_list_of_images(images)
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_num_patches = image_inputs.pop("num_patches")
-            image_pixel_values = image_inputs.pop("pixel_values")
+            if hasattr(image_inputs, "pixel_values"):
+                image_pixel_values = image_inputs.pop("pixel_values")
+            elif hasattr(image_inputs, "image_pixel_values"):  # InternVL3.5 typically
+                # we flatten because internvl expects total patches
+                image_pixel_values = image_inputs.pop("image_pixel_values").flatten(0, 1)
             image_num_patches_indices = np.cumsum(image_num_patches)
         if videos is not None:
             video_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])

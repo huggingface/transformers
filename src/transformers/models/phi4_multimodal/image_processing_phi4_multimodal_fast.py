@@ -194,6 +194,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         masks_transformed = []
         images_tokens = []
         image_sizes = []
+        num_patches_per_image = []
         for image in images:
             resized_image, attention_mask = self.dynamic_preprocess(
                 image, size.height, patch_size, mask_size, max_num=dynamic_hd
@@ -246,6 +247,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             masks_transformed.append(hd_attention_mask_reshape)
             images_tokens.append(num_img_tokens)
             image_sizes.append([height, width])
+            num_patches_per_image.append(hd_image_reshape.size(0))
             max_crops = hd_image_reshape.size(0)
         max_crops = max([img.size(0) for img in images_transformed])
         images_transformed = [self.pad_to_max_num_crops(im, max_crops) for im in images_transformed]
@@ -259,6 +261,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             "image_sizes": image_sizes,
             "image_attention_mask": masks_transformed,
             "num_img_tokens": images_tokens,
+            "num_patches": num_patches_per_image,
         }
 
         return BatchFeature(data=data, tensor_type=return_tensors)
