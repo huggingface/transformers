@@ -16,20 +16,20 @@
 import unittest
 
 from transformers import LongcatFlashConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
     import torch
 
-    from transformers import LongcatFlashForCausalLM, LongcatFlashModel
+    from transformers import AutoTokenizer, LongcatFlashForCausalLM, LongcatFlashModel
 
 
-class LongcatFlashModelTester:
+class LongcatFlashModelTester(CausalLMModelTester):
     def __init__(
         self,
         parent,
@@ -189,7 +189,7 @@ class LongcatFlashModelTester:
 
 
 @require_torch
-class LongcatFlashModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (LongcatFlashModel, LongcatFlashForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (LongcatFlashForCausalLM,) if is_torch_available() else ()
 
@@ -265,3 +265,28 @@ class LongcatFlashModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     @unittest.skip("MoE experts may not receive gradients with small test data")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+
+@require_torch
+class LongcatFlashIntegrationTest(unittest.TestCase):
+    model_id = "Molbap/LongCat-ShortCat"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = LongcatFlashForCausalLM.from_pretrained(cls.model_id, trust_remote_code=True)
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id, trust_remote_code=True)
+
+    @slow
+    def test_shortcat_generation(self):
+        chat = [{"role": "user", "content": "Paris is..."}]
+        inputs = self.tokenizer.apply_chat_template(
+            chat, tokenize=True, add_generation_prompt=True, return_tensors="pt"
+        )
+
+        with torch.no_grad():
+            outputs = self.model.generate(inputs, max_new_tokens=10, do_sample=False)
+
+        response = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
+        expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年冬季奥林匹克运动会菁四方级以上揽胜可视lexible"
+
+        self.assertEqual(response, expected_output)
