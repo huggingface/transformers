@@ -469,7 +469,7 @@ class LogitsProcessorTest(unittest.TestCase):
             )
         )
         top_h_warp = TopHLogitsWarper(top_h=0.4)
-        filtered_logits = top_h_warp(input_ids, dist3.clone())
+        filtered_logits = top_h_warp(input_ids, dist4.clone())
         filtered_dist = torch.exp(filtered_logits)
 
         EXPECTED4 = torch.tensor(
