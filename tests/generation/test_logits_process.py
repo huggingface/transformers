@@ -42,7 +42,6 @@ if is_torch_available():
         MinLengthLogitsProcessor,
         MinNewTokensLengthLogitsProcessor,
         MinPLogitsWarper,
-        TopHLogitsWarper,
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
         PrefixConstrainedLogitsProcessor,
@@ -50,6 +49,7 @@ if is_torch_available():
         SequenceBiasLogitsProcessor,
         SynthIDTextWatermarkLogitsProcessor,
         TemperatureLogitsWarper,
+        TopHLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
         TypicalLogitsWarper,
@@ -478,7 +478,6 @@ class LogitsProcessorTest(unittest.TestCase):
             dtype=torch.float,
         )
         torch.testing.assert_close(filtered_dist, EXPECTED4, rtol=1e-3, atol=1e-3)
-        
         # Processor should not change logits in-place
         top_h_warp = TopHLogitsWarper(top_h=0.5)
         out_again = top_h_warp(input_ids, dist3)
