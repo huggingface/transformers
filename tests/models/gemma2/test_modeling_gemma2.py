@@ -387,7 +387,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
             self.skipTest("FlashAttention2 is required for this test.")
 
         if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "google/gemma-2-2b"
         EXPECTED_COMPLETIONS = [
@@ -433,7 +433,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
             self.skipTest("FlashAttention2 is required for this test.")
 
         if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "google/gemma-2-2b"
         EXPECTED_COMPLETIONS = [

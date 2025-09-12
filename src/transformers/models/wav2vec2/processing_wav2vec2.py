@@ -74,7 +74,7 @@ class Wav2Vec2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        audio: AudioInput = None,
+        audio: Optional[AudioInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         images=None,
         videos=None,

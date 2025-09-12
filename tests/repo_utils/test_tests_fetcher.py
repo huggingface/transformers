@@ -177,14 +177,14 @@ def patch_transformer_repo_path(new_folder):
     old_repo_path = tests_fetcher.PATH_TO_REPO
     tests_fetcher.PATH_TO_REPO = Path(new_folder).resolve()
     tests_fetcher.PATH_TO_EXAMPLES = tests_fetcher.PATH_TO_REPO / "examples"
-    tests_fetcher.PATH_TO_TRANFORMERS = tests_fetcher.PATH_TO_REPO / "src/transformers"
+    tests_fetcher.PATH_TO_TRANSFORMERS = tests_fetcher.PATH_TO_REPO / "src/transformers"
     tests_fetcher.PATH_TO_TESTS = tests_fetcher.PATH_TO_REPO / "tests"
     try:
         yield
     finally:
         tests_fetcher.PATH_TO_REPO = old_repo_path
         tests_fetcher.PATH_TO_EXAMPLES = tests_fetcher.PATH_TO_REPO / "examples"
-        tests_fetcher.PATH_TO_TRANFORMERS = tests_fetcher.PATH_TO_REPO / "src/transformers"
+        tests_fetcher.PATH_TO_TRANSFORMERS = tests_fetcher.PATH_TO_REPO / "src/transformers"
         tests_fetcher.PATH_TO_TESTS = tests_fetcher.PATH_TO_REPO / "tests"
 
 

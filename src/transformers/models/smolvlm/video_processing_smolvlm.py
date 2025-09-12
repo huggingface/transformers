@@ -16,43 +16,20 @@
 from typing import Optional, Union
 
 import numpy as np
+import torch
 
-from ...image_processing_utils import (
-    BatchFeature,
-    get_size_dict,
-)
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    SizeDict,
-)
+from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import (
-    TensorType,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
-)
-from ...utils.import_utils import requires
-from ...video_processing_utils import (
-    BaseVideoProcessor,
-)
+from ...utils import TensorType, is_torchvision_v2_available
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
-if is_vision_available():
-    from ...image_utils import PILImageResampling
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-if is_torch_available():
-    import torch
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 from ...utils import logging
 
@@ -124,7 +101,6 @@ class SmolVLMVideoProcessorInitKwargs(VideosKwargs):
     max_image_size: dict[str, int] = None
 
 
-@requires(backends=("torchvision",))
 class SmolVLMVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.LANCZOS
     size = {"longest_edge": 4 * 364}
@@ -156,7 +132,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         self,
         video: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
