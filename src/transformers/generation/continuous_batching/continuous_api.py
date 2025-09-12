@@ -254,7 +254,7 @@ class ContinuousBatchProcessor:
                 kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: b_size + 1]
                 kwargs["max_seqlen_k"][layer_type] = self.max_seqlen_k[layer_type]
                 if self.attention_mask is not None:
-                    k_len = seqlens_k[b_size]
+                    k_len = seqlens_k[b_size] if self.slice_inputs else self.attention_mask[layer_type].size(-1)
                     kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_len, :k_len]
         else:
             layer_type = layer_types[0]
@@ -262,6 +262,7 @@ class ContinuousBatchProcessor:
             kwargs["max_seqlen_k"] = self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
                 k_len = self.cumulative_seqlens_k[layer_type][b_size]
+                k_len = k_len if self.slice_inputs else self.attention_mask[layer_type].size(-1)
                 kwargs["attention_mask"] = self.attention_mask[layer_type][..., :q_len, :k_len]
 
         if self.attention_mask is None:
