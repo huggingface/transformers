@@ -1366,6 +1366,7 @@ ALLOWED_LAYER_TYPES = (
     "sliding_attention",
     "chunked_attention",
     "linear_attention",  # used in minimax
+    "conv",              # used in lfm2
 )
 
 
