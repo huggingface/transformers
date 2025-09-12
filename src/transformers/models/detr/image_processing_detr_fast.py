@@ -439,9 +439,9 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
                 f" {size.keys()}."
             )
 
-        image = F.resize(
+        image = super().resize(
             image,
-            size=new_size,
+            size=SizeDict(height=new_size[0], width=new_size[1]),
             interpolation=interpolation,
             **kwargs,
         )

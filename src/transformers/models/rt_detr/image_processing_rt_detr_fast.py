@@ -43,7 +43,6 @@ from .image_processing_rt_detr import get_size_with_aspect_ratio
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F_t
 
 
 if is_torchvision_v2_available():
@@ -236,15 +235,14 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
                 f" {size.keys()}."
             )
-        image = F_t.interpolate(
-            image.unsqueeze(0).to(torch.float32),
-            size=new_size,
-            mode="bilinear",
-            antialias=False,
-            align_corners=False,
+
+        image = super().resize(
+            image,
+            size=SizeDict(height=new_size[0], width=new_size[1]),
+            interpolation=interpolation,
             **kwargs,
         )
-        return image.squeeze(0)
+        return image
 
     def resize_annotation(
         self,

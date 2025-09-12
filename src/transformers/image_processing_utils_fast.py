@@ -59,6 +59,7 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F_t
 
 if is_torchvision_available():
     from .image_utils import pil_torch_interpolation_mapping
@@ -292,6 +293,17 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
         if torch.compiler.is_compiling() and is_rocm_platform():
             return self.compile_friendly_resize(image, new_size, interpolation, antialias)
+        elif torch.compiler.is_compiling():
+            do_unsqueeze = image.ndim == 3
+            image = F_t.interpolate(
+                image.unsqueeze(0).to(torch.float32) if do_unsqueeze else image.to(torch.float32),
+                size=new_size,
+                mode="bilinear",
+                antialias=False,
+                align_corners=False,
+                **kwargs,
+            )
+            image = image.squeeze(0) if do_unsqueeze else image
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
     @staticmethod
