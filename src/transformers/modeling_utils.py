@@ -1412,7 +1412,6 @@ def _find_missing_and_unexpected_keys(
     checkpoint_keys: list[str],
     loading_base_model_from_task_state_dict: bool,
     hf_quantizer: Optional[HfQuantizer],
-    device_map: dict,
 ) -> tuple[list[str], list[str]]:
     """Find missing keys (keys that are part of the model parameters but were NOT found in the loaded state dict keys) and unexpected keys
     (keys found in the loaded state dict keys, but that are NOT part of the model parameters)
@@ -2713,7 +2712,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 try:
                     self._sdpa_can_dispatch(is_init_check)
                     applicable_attn_implementation = "sdpa"
-                except (ValueError, ImportError) as e:
+                except (ValueError, ImportError):
                     applicable_attn_implementation = "eager"
         else:
             applicable_attn_implementation = self.get_correct_attn_implementation(
@@ -5318,7 +5317,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             checkpoint_keys,
             loading_base_model_from_task_state_dict,
             hf_quantizer,
-            device_map,
         )
         # Find all the keys with shape mismatch (if we ignore the mismatch, the weights need to be newly initialized the
         # same way as missing keys)
