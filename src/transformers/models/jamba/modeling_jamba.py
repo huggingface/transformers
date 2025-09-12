@@ -615,7 +615,7 @@ class JambaMambaMixer(nn.Module):
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: HybridMambaAttentionDynamicCache = None,
+        cache_params: Optional[HybridMambaAttentionDynamicCache] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         batch_size, seq_len, _ = hidden_states.shape
@@ -719,7 +719,7 @@ class JambaMambaMixer(nn.Module):
         return contextualized_states
 
     # fmt: off
-    def slow_forward(self, input_states, cache_params: HybridMambaAttentionDynamicCache = None, attention_mask: Optional[torch.LongTensor] = None):
+    def slow_forward(self, input_states, cache_params: Optional[HybridMambaAttentionDynamicCache] = None, attention_mask: Optional[torch.LongTensor] = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -807,7 +807,7 @@ class JambaMambaMixer(nn.Module):
     def forward(
         self,
         hidden_states,
-        cache_params: HybridMambaAttentionDynamicCache = None,
+        cache_params: Optional[HybridMambaAttentionDynamicCache] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         if self.use_fast_kernels:

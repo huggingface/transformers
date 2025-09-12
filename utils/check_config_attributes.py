@@ -303,9 +303,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "local_attention",
         "local_rope_theta",
     ],
-    # position_embedding_type not used and deprecated. Should be deleted in v4.55
-    "LayoutLMConfig": ["position_embedding_type"],
-    "MarkupLMConfig": ["position_embedding_type"],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
 }

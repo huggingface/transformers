@@ -103,7 +103,6 @@ from .utils import (
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
     is_ipex_available,
-    is_jieba_available,
     is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
@@ -142,9 +141,6 @@ from .utils import (
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
-    is_tensorflow_probability_available,
-    is_tensorflow_text_available,
-    is_tf2onnx_available,
     is_tf_available,
     is_tiktoken_available,
     is_timm_available,
@@ -508,26 +504,11 @@ def require_rjieba(test_case):
     return unittest.skipUnless(is_rjieba_available(), "test requires rjieba")(test_case)
 
 
-def require_jieba(test_case):
-    """
-    Decorator marking a test that requires jieba. These tests are skipped when jieba isn't installed.
-    """
-    return unittest.skipUnless(is_jieba_available(), "test requires jieba")(test_case)
-
-
 def require_jinja(test_case):
     """
     Decorator marking a test that requires jinja. These tests are skipped when jinja isn't installed.
     """
     return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
-
-
-def require_tf2onnx(test_case):
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tf2onnx`, is deprecated and will be removed in "
-        "Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tf2onnx_available(), "test requires tf2onnx")(test_case)
 
 
 def require_onnx(test_case):
@@ -724,47 +705,11 @@ def require_intel_extension_for_pytorch(test_case):
     )(test_case)
 
 
-def require_tensorflow_probability(test_case):
-    """
-    Decorator marking a test that requires TensorFlow probability.
-
-    These tests are skipped when TensorFlow probability isn't installed.
-
-    """
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tensorflow_probability`, is deprecated and will be "
-        "removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tensorflow_probability_available(), "test requires TensorFlow probability")(
-        test_case
-    )
-
-
 def require_torchaudio(test_case):
     """
     Decorator marking a test that requires torchaudio. These tests are skipped when torchaudio isn't installed.
     """
     return unittest.skipUnless(is_torchaudio_available(), "test requires torchaudio")(test_case)
-
-
-def require_tf(test_case):
-    """
-    Decorator marking a test that requires TensorFlow. These tests are skipped when TensorFlow isn't installed.
-    """
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tf`, is deprecated and will be removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tf_available(), "test requires TensorFlow")(test_case)
-
-
-def require_flax(test_case):
-    """
-    Decorator marking a test that requires JAX & Flax. These tests are skipped when one / both are not installed
-    """
-    logger.warning_once(
-        "JAX test-related code, including `require_flax`, is deprecated and will be removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_flax_available(), "test requires JAX & Flax")(test_case)
 
 
 def require_sentencepiece(test_case):
@@ -800,18 +745,6 @@ def require_tokenizers(test_case):
     Decorator marking a test that requires 🤗 Tokenizers. These tests are skipped when 🤗 Tokenizers isn't installed.
     """
     return unittest.skipUnless(is_tokenizers_available(), "test requires tokenizers")(test_case)
-
-
-def require_tensorflow_text(test_case):
-    """
-    Decorator marking a test that requires tensorflow_text. These tests are skipped when tensroflow_text isn't
-    installed.
-    """
-    logger.warning_once(
-        "TensorFlow test-related code, including `require_tensorflow_text`, is deprecated and will be "
-        "removed in Transformers v4.55"
-    )
-    return unittest.skipUnless(is_tensorflow_text_available(), "test requires tensorflow_text")(test_case)
 
 
 def require_keras_nlp(test_case):
@@ -1704,7 +1637,6 @@ def assert_screenout(out, what):
 
 
 def set_model_tester_for_less_flaky_test(test_case):
-    target_num_hidden_layers = 1
     # TODO (if possible): Avoid exceptional cases
     exceptional_classes = [
         "ZambaModelTester",
@@ -1713,9 +1645,12 @@ def set_model_tester_for_less_flaky_test(test_case):
         "AriaVisionText2TextModelTester",
         "GPTNeoModelTester",
         "DPTModelTester",
+        "Qwen3NextModelTester",
     ]
     if test_case.model_tester.__class__.__name__ in exceptional_classes:
-        target_num_hidden_layers = None
+        return
+
+    target_num_hidden_layers = 1
     if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
         target_num_hidden_layers = None
 
