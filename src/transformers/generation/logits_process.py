@@ -593,7 +593,7 @@ class TopHLogitsWarper(LogitsProcessor):
 
     Args:
         top_n (`int`, *optional*, defaults to 100):
-            The maximum number of tokens to consider for filtering. 
+            The maximum number of tokens to consider for filtering.
             Only the top `top_n` tokens (by probability) are evaluated.
         alpha (`float`, *optional*, defaults to 0.4):
             Scaling coefficient for the entropy-based threshold (`tau`). Must be in the range `(0, 1]`.
@@ -623,7 +623,6 @@ class TopHLogitsWarper(LogitsProcessor):
         # input checks
         if not (0 < top_h <= 1):
             raise ValueError("alpha must be in the range (0, 1].")
-        
         self.top_n = 100
         self.coef = top_h
         self.filter_value = filter_value
@@ -642,11 +641,10 @@ class TopHLogitsWarper(LogitsProcessor):
             `torch.FloatTensor`: Scalar entropy value.
         """
         probs = probs [probs > 0]
-        probs = probs/torch.sum(probs) 
+        probs = probs/torch.sum(probs)
         return -torch.sum(probs * torch.log2(probs))
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-                
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:   
         """
         Filters logits using Top-H sampling.
 
@@ -660,13 +658,12 @@ class TopHLogitsWarper(LogitsProcessor):
             `torch.FloatTensor` of shape `(batch_size, vocab_size)`:
                 Processed logits where invalid tokens are masked with `-inf`.
         """
-                
         batch_size, vocab_size = scores.shape
         device = scores.device
 
         # compute probabilities
         scaled_logits = scores
-        probs = torch.softmax(scaled_logits, dim=-1)  
+        probs = torch.softmax(scaled_logits, dim=-1)
 
         keep_mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
 
@@ -703,7 +700,6 @@ class TopHLogitsWarper(LogitsProcessor):
         # apply filtering
         scores_processed = scores.clone()
         scores_processed[~keep_mask] = self.filter_value
-        
         return scores_processed
 
 class MinPLogitsWarper(LogitsProcessor):
