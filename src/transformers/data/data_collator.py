@@ -935,8 +935,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         inputs: Any,
         vocab_size,
         mask_token_id,
-        special_tokens_mask: Optional[Any] = None,
-        offset_mapping: Optional[Any] = None,
     ) -> tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling.
@@ -945,20 +943,10 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         mask_token_id = tf.cast(mask_token_id, inputs.dtype)
 
-        if self.whole_word_mask:
-            word_ids, no_mask_mask = self._calc_word_ids_and_prob_mask(
-                to_numpy(offset_mapping), to_numpy(special_tokens_mask)
-            )
-            no_mask_mask = tf.cast(tf.constant(no_mask_mask), tf.bool)
-        else:
-            no_mask_mask = special_tokens_mask
-
         input_shape = tf.shape(inputs)
         # 1 for a special token, else 0
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
-        masked_indices = self.tf_bernoulli(input_shape, self.mlm_probability, self.generator) & ~no_mask_mask
-        if self.whole_word_mask:
-            masked_indices = self._whole_word_mask(word_ids, masked_indices)
+        masked_indices = self.tf_bernoulli(input_shape, self.mlm_probability, self.generator)
         # Replace unmasked indices with -100 in the labels since we only compute loss on masked tokens
         labels = tf.where(masked_indices, inputs, -100)
 
@@ -995,6 +983,10 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def tf_call(self, examples: list[Union[list[int], Any, dict[str, Any]]]) -> dict[str, Any]:
         import tensorflow as tf
 
+        if self.whole_word_mask:
+            # Value Error instead of warning since we modify the init if whole_word_mask is True.
+            raise ValueError("Whole word masking is not currently supported in TensorFlow.")
+
         if self.seed and self.generator is None:
             # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
             # If no seed supplied, we will use the global RNG
@@ -1012,7 +1004,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)
-        offset_mapping = batch.pop("offset_mapping", None)
         if self.mlm:
             if special_tokens_mask is None:
                 special_tokens_mask = [
@@ -1028,7 +1019,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
                 special_tokens_mask=special_tokens_mask,
                 mask_token_id=self.tokenizer.mask_token_id,
                 vocab_size=len(self.tokenizer),
-                offset_mapping=offset_mapping,
             )
         else:
             labels = batch["input_ids"]
@@ -1186,7 +1176,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             word_ids, no_mask_mask = self._calc_word_ids_and_prob_mask(
                 to_numpy(offset_mapping), to_numpy(special_tokens_mask)
             )
-            no_mask_mask = np.array(no_mask_mask, dtype=bool)
         else:
             no_mask_mask = (
                 special_tokens_mask.astype(bool)
@@ -1274,7 +1263,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         word_ids = np.cumsum(is_new_word, axis=1)
         word_ids[special_tokens_mask] = -1
 
-        prob_mask = (~is_new_word).astype(int)
+        prob_mask = ~is_new_word
 
         return word_ids, prob_mask
 
@@ -1325,8 +1314,6 @@ def tolist(x) -> list[Any]:
 def to_numpy(x) -> np.ndarray[Any]:
     if isinstance(x, np.ndarray):
         return x
-    elif hasattr(x, "numpy"):
-        return x.numpy()
     elif hasattr(x, "detach"):
         return x.detach().cpu().numpy()
     else:
