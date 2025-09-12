@@ -5332,6 +5332,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # We need to update both the mapping and the list of checkpoint keys to remove the mismatched ones
         key_renaming_mapping = {k: v for k, v in key_renaming_mapping.items() if v not in mismatched_keys}
+
+        # We also remove the eventual unexpected keys
+        if model._keys_to_ignore_on_load_unexpected is not None:
+            for pattern in model._keys_to_ignore_on_load_unexpected:
+                key_renaming_mapping = {k: v for k, v in key_renaming_mapping.items() if re.search(pattern, k) is None}
+
         checkpoint_keys = list(key_renaming_mapping.values())
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
@@ -6078,7 +6084,10 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             ) - torch_accelerator_module.memory_allocated(index)
             byte_count = max(0, byte_count - unused_memory)
         # Allocate memory
-        _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
+        try:
+            _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
+        except RuntimeError as e:
+            raise RuntimeError("Could not allocate sufficient memory; out-of-memory error?") from e
 
 
 def get_disk_only_shard_files(device_map, weight_map):
