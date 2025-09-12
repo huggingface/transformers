@@ -170,7 +170,7 @@ class Qwen3Attention(nn.Module):
             self.num_heads = config.layer_head_num[layer_idx]
         else:
             self.num_heads = config.num_attention_heads
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
