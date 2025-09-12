@@ -238,7 +238,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         # Process images with the standard pipeline
         images_kwargs = kwargs.copy()
-        pixel_values = self._preprocess(images, **images_kwargs)
+        pixel_values = self._preprocess(images, return_tensors=return_tensors, **images_kwargs)
 
         data = {"pixel_values": pixel_values}
 
