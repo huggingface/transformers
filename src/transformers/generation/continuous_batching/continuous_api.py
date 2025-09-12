@@ -161,28 +161,23 @@ class ContinuousBatchProcessor:
         self.logits_indices = torch.empty((T,), **self.tensor_metadata)
         self.output_ids = torch.empty((1, T), **self.tensor_metadata)
 
-        # For some kwargs, if the model has more than one attention type, instead of a tensor we have a dict of tensors
+        # For some kwargs, we have a dict of tensors with as many items as there are attention types
         layer_types = getattr(self.config, "layer_types", None)
-        num_attention_types = len(set(layer_types)) if layer_types is not None else 1
+        if layer_types is None:
+            sliding_window = getattr(self.config, "sliding_window", 1)
+            layer_types = ["full_attention"] if sliding_window in [1, None] else ["sliding_attention"]
+        layer_types = list(set(layer_types))
+
+        self.cumulative_seqlens_k = {
+            layer_type: torch.empty((T + 1), **self.tensor_metadata) for layer_type in layer_types
+        }
+        self.max_seqlen_k = dict.fromkeys(layer_types, 0)
 
         if self.return_attention_mask():
             attn_mask_kwargs = {"size": (1, 1, T, num_pages), "dtype": self.model_dtype, "device": self.model_device}
+            self.attention_mask = {layer_type: torch.empty(**attn_mask_kwargs) for layer_type in layer_types}
         else:
             self.attention_mask = None
-            attn_mask_kwargs = {}
-
-        if num_attention_types >= 2:
-            self.cumulative_seqlens_k = {
-                layer_type: torch.empty((T + 1), **self.tensor_metadata) for layer_type in layer_types
-            }
-            self.max_seqlen_k = dict.fromkeys(layer_types, 0)
-            if attn_mask_kwargs:
-                self.attention_mask = {layer_type: torch.empty(**attn_mask_kwargs) for layer_type in layer_types}
-        else:
-            self.cumulative_seqlens_k = torch.empty((T + 1), **self.tensor_metadata)
-            self.max_seqlen_k = 0
-            if attn_mask_kwargs:
-                self.attention_mask = torch.empty(**attn_mask_kwargs)
 
         # For other kwargs, we need a list of tensors with as many tensors as there are groups
         self.write_index_storage = [torch.empty((T,), **self.tensor_metadata) for _ in range(num_groups)]
@@ -219,17 +214,11 @@ class ContinuousBatchProcessor:
         self.output_ids[:, :q_len].fill_(-1)
 
         # Reset the attributes that are either tensors or dict of tensors
-        if isinstance(self.cumulative_seqlens_k, dict):
-            for layer_type in self.cumulative_seqlens_k:
-                self.cumulative_seqlens_k[layer_type][: b_size + 1].zero_()
-                self.max_seqlen_k[layer_type] = 0
-                if self.attention_mask is not None:
-                    self.attention_mask[layer_type][:, :, :q_len, :k_len].fill_(torch.finfo(self.model_dtype).min)
-        else:
-            self.cumulative_seqlens_k[: b_size + 1].zero_()
-            self.max_seqlen_k = 0
+        for layer_type in self.cumulative_seqlens_k:
+            self.cumulative_seqlens_k[layer_type][: b_size + 1].zero_()
+            self.max_seqlen_k[layer_type] = 0
             if self.attention_mask is not None:
-                self.attention_mask[:, :, :q_len, :k_len].fill_(torch.finfo(self.model_dtype).min)
+                self.attention_mask[layer_type][:, :, :q_len, :k_len].fill_(torch.finfo(self.model_dtype).min)
 
         # Reset the attributes that are lists of tensors
         for i in range(self.cache.num_groups):
@@ -258,20 +247,22 @@ class ContinuousBatchProcessor:
             "use_cache": False,
         }
 
-        # For the attributes that are tensors or dict of tensors, we populate the dict or replace it with the tensor
-        if isinstance(self.cumulative_seqlens_k, dict):
+        # For the attributes that are dict of tensors, we replace the dict with a tensor if there is only one entry
+        layer_types = list(self.cumulative_seqlens_k.keys())
+        if len(layer_types) > 1:
             for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
                 kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: b_size + 1]
                 kwargs["max_seqlen_k"][layer_type] = self.max_seqlen_k[layer_type]
                 if self.attention_mask is not None:
                     k_len = seqlens_k[b_size]
                     kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_len, :k_len]
-
         else:
-            kwargs["cu_seq_lens_k"] = self.cumulative_seqlens_k[: b_size + 1]
-            kwargs["max_seqlen_k"] = self.max_seqlen_k
+            layer_type = layer_types[0]
+            kwargs["cu_seq_lens_k"] = self.cumulative_seqlens_k[layer_type][: b_size + 1]
+            kwargs["max_seqlen_k"] = self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
-                kwargs["attention_mask"] = self.attention_mask[..., :q_len, : self.cumulative_seqlens_k[b_size]]
+                k_len = self.cumulative_seqlens_k[layer_type][b_size]
+                kwargs["attention_mask"] = self.attention_mask[layer_type][..., :q_len, :k_len]
 
         if self.attention_mask is None:
             kwargs["attention_mask"] = None
@@ -365,7 +356,8 @@ class ContinuousBatchProcessor:
 
             # Then we update the total lengths that are used for slicing
             self.total_query_length += query_length
-            self.total_key_length += max(seqlens_k.values())  # this is used to slice the keys, so we need take the max
+            # total_key_length is used to slice the keys so we need to take the max of all the key lengths
+            self.total_key_length += max(seqlens_k.values())
             self.total_batch_size += 1
             # And the attribute tracking the position in the request object
             state.position_offset += query_length
@@ -379,14 +371,9 @@ class ContinuousBatchProcessor:
             if not state.remaining_prompt_ids:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
 
-            if isinstance(self.cumulative_seqlens_k, dict):
-                for layer_type, layer_type_seqlen_k in seqlens_k.items():
-                    cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + layer_type_seqlen_k)
-                    self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], layer_type_seqlen_k)
-            else:
-                _, seqlens_k = seqlens_k.popitem()
-                cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seqlens_k)
-                self.max_seqlen_k = max(self.max_seqlen_k, seqlens_k)
+            for layer_type, layer_type_seqlen_k in seqlens_k.items():
+                cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + layer_type_seqlen_k)
+                self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], layer_type_seqlen_k)
 
             self.cache.extend_read_indices(state.request_id, past_length, query_length, read_index)
             self.cache.extend_write_indices(state.request_id, past_length, query_length, write_index)
@@ -436,24 +423,14 @@ class ContinuousBatchProcessor:
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
 
         # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
-        if isinstance(self.cumulative_seqlens_k, dict):
-            for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
-                self.cumulative_seqlens_k[layer_type][: len(layer_type_seqlens_k)] = to_tensor(layer_type_seqlens_k)
-                if self.attention_mask is not None:
-                    build_attention_mask(
-                        attention_mask=self.attention_mask[layer_type],
-                        cumulative_seqlens_q=cumulative_seqlens_q,
-                        cumulative_seqlens_k=layer_type_seqlens_k,
-                        sliding_window=self.sliding_window if layer_type == "sliding_attention" else 1,
-                    )
-        else:
-            self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
+        for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
+            self.cumulative_seqlens_k[layer_type][: len(layer_type_seqlens_k)] = to_tensor(layer_type_seqlens_k)
             if self.attention_mask is not None:
                 build_attention_mask(
-                    attention_mask=self.attention_mask,
+                    attention_mask=self.attention_mask[layer_type],
                     cumulative_seqlens_q=cumulative_seqlens_q,
-                    cumulative_seqlens_k=cumulative_seqlens_k,
-                    sliding_window=self.sliding_window,
+                    cumulative_seqlens_k=layer_type_seqlens_k,
+                    sliding_window=self.sliding_window if layer_type == "sliding_attention" else 1,
                 )
 
         # The index only contain references to the storage tensors, so we update the storage and their references
