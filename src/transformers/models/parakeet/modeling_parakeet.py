@@ -559,7 +559,8 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
         self.config = config
         self.gradient_checkpointing = False
 
-        self.predictor = self.rnn(
+        self.embed = torch.nn.Embedding(config.vocab_size + 1, config.pred_hidden) # +1 for blank
+        self.dec_rnn = self.rnn(
                            config.pred_hidden,
                            config.pred_hidden,
                            config.pred_n_layers,
@@ -740,10 +741,9 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
 
 
         print("HERE CONFIG IS", config)
-        vocab_size = config.vocab_size
-        pred_hidden = config.pred_hidden
-        self.emb = torch.nn.Embedding(vocab_size, pred_hidden)
-        self.pred = ParakeetTDTPredictor(config)
+#        vocab_size = config.vocab_size
+#        pred_hidden = config.pred_hidden
+        self.prediction = ParakeetTDTPredictor(config)
 
         self.post_init()
 
@@ -943,8 +943,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
 class ParakeetForTDT(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__(config)
-        #self.encoder = ParakeetEncoder(config.encoder_config)
-        # Conv rather than linear to be consistent with NeMO decolying layer
+        self.encoder = ParakeetEncoder(config.encoder_config)
         self.decoder = ParakeetTDTDecoder(config.decoder_config)
 
         self.post_init()

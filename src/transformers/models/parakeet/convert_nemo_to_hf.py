@@ -682,6 +682,8 @@ def create_hf_model(
 
     print("HERE hf_config", hf_config)
 
+    assert model_info["is_tdt_model"]
+
     if model_info["is_ctc_model"]:
         # Check if we already have a ParakeetCTCConfig or need to create one
         if isinstance(hf_config, ParakeetConfig):
@@ -728,7 +730,7 @@ def create_hf_model(
             )
             model = ParakeetForTDT(tdt_config)
 
-            print("HERE MODEL", model)
+        print("TDT HERE MODEL", model)
 
     else:
         raise ValueError("Unsupported model type. Only CTC models are supported in this converter.")
@@ -745,6 +747,10 @@ def create_hf_model(
 
     # Load weights
     model_state_dict = model.state_dict()
+
+    print("HEREHERE", model_state_dict.keys())
+    print("HEREHERE hf_state_dict", hf_state_dict.keys())
+
     updated_state_dict = model_state_dict.copy()
 
     matched_params = 0
@@ -755,6 +761,7 @@ def create_hf_model(
                 updated_state_dict[param_name] = hf_state_dict[param_name]
                 matched_params += 1
             else:
+                print("FAILING", param_name)
                 logger.warning(
                     f"Shape mismatch for {param_name}: "
                     f"HF {model_state_dict[param_name].shape} vs "
