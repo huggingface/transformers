@@ -807,6 +807,7 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MiniCPM_o_2_6Model`]. It is used to instantiate a
     MiniCPM-o-2.6 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the MiniCPM-o-2.6
+    with the defaults will yield a similar configuration to that of the MiniCPM-o-2.6
     [openbmb/MiniCPM-o-2_6](https://huggingface.co/openbmb/MiniCPM-o-2_6) architecture.
 
     The MiniCPM-o-2.6 model is a multimodal large language model that supports text, image, and audio inputs. It consists of
@@ -832,8 +833,6 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
             Number of query tokens used in the vision-language cross-attention mechanism.
         drop_vision_last_layer (`bool`, *optional*, defaults to `True`):
             Whether to drop the last layer of the vision encoder to reduce computational overhead.
-        vision_batch_size (`int`, *optional*, defaults to 16):
-            Batch size for processing vision inputs, used for memory optimization during image processing.
         audio_pool_step (`int`, *optional*, defaults to 2):
             Pooling step size for audio feature extraction, controls the temporal resolution of audio features.
         audio_chunk_length (`float`, *optional*, defaults to 1.0):
@@ -890,7 +889,6 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
         use_cache=True,
         query_num=64,
         drop_vision_last_layer=True,
-        vision_batch_size=16,
         audio_pool_step=2,
         audio_chunk_length=1.0,
         **kwargs,
@@ -898,7 +896,6 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
         self.use_cache = use_cache
         self.query_num = query_num
         self.drop_vision_last_layer = drop_vision_last_layer
-        self.vision_batch_size = vision_batch_size
         self.audio_pool_step = audio_pool_step
         self.audio_chunk_length = audio_chunk_length
 
@@ -910,6 +907,7 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
             self.text_config = text_config
 
         if vision_config is None:
+            self.vision_config = MiniCPMVisionConfig(**self.default_vision_config)
             self.vision_config = MiniCPMVisionConfig(**self.default_vision_config)
             logger.info("vision_config is None, using default vision config")
         elif isinstance(vision_config, dict):

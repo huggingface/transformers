@@ -657,6 +657,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         else:
             self.omni_config.vision_config._attn_implementation = "eager"
         model = MiniCPMVisionModel(self.omni_config.vision_config)
+        model = MiniCPMVisionModel(self.omni_config.vision_config)
         if self.omni_config.drop_vision_last_layer:
             model.encoder.layers = model.encoder.layers[:-1]
 
@@ -679,6 +680,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         return model
 
     def init_tts_module(self):
+        model = MiniCPMConditionalChatTTSModel(self.omni_config.tts_config)
         model = MiniCPMConditionalChatTTSModel(self.omni_config.tts_config)
         return model
 
@@ -1011,7 +1013,9 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         """
         if stream_input:
             audio_embeddings = self.get_audio_embedding_streaming(audio_features, audio_feature_lens)
+            audio_embeddings = self.get_audio_embedding_streaming(audio_features, audio_feature_lens)
         else:
+            audio_embeddings = self.get_audio_embedding(audio_features, audio_feature_lens, chunk_length)
             audio_embeddings = self.get_audio_embedding(audio_features, audio_feature_lens, chunk_length)
 
         bs = len(input_embeddings)
@@ -1169,6 +1173,9 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         if input_ids is None:
             raise ValueError("input_ids cannot be None")
         if len(input_ids) != len(pixel_values):
+            raise ValueError(
+                f"Length mismatch: input_ids length {len(input_ids)} != pixel_values length {len(pixel_values)}"
+            )
             raise ValueError(
                 f"Length mismatch: input_ids length {len(input_ids)} != pixel_values length {len(pixel_values)}"
             )
@@ -1411,11 +1418,11 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
     ):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
+                # cache_length = past_key_values.get_seq_length()
                 # past_length = past_key_values.seen_tokens
                 past_length = past_key_values.get_seq_length()
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
+            # else:
+            #     cache_length = past_length = past_key_values[0][0].shape[2]
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1530,7 +1537,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             torch.hstack([(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
         ]  # List[Tensor], (1,2)
 
-        cache_length = past_length = self.llm_past_key_values[0][0].shape[2]
+        cache_length = self.llm_past_key_values[0][0].shape[2]
         attention_mask = torch.ones((1, cache_length + input_ids.shape[1]), dtype=torch.bool, device=self.device)
 
         generation_config["max_new_tokens"] = max_new_tokens
@@ -1578,7 +1585,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
                 use_cache=True,
                 max_new_tokens=3,  # reduce first token delay
                 pad_token_id=0,
-                output_hidden_states=True if first_chunk else False,
+                output_hidden_states=bool(first_chunk),
                 return_dict_in_generate=True,
                 eos_token_id=terminators,
                 **generation_config,
@@ -1598,7 +1605,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
 
             self.llm_past_key_values = outputs.past_key_values
             input_ids = outputs.sequences[:, -1:]
-            cache_length = past_length = self.llm_past_key_values[0][0].shape[2]
+            cache_length = self.llm_past_key_values[0][0].shape[2]
             attention_mask = torch.ones((1, cache_length + input_ids.shape[1]), dtype=torch.bool, device=self.device)
 
             res = {"text": text}
@@ -2390,7 +2397,7 @@ class MiniCPMWhisperAttention(nn.Module):
 
 
 class MiniCPMWhisperEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MiniCPMWhisperConfig, layer_idx: int = None):
+    def __init__(self, config: MiniCPMWhisperConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = MiniCPMWhisperAttention(
@@ -2823,7 +2830,7 @@ class GFSQ(nn.Module):
         eps=1e-5,
         transpose=True,
     ):
-        super(GFSQ, self).__init__()
+        super().__init__()
         self.quantizer = GroupedResidualFSQ(
             dim=dim,
             levels=list(levels),
@@ -3006,6 +3013,7 @@ class CustomRepetitionPenaltyLogitsProcessorRepeat:
 @dataclass
 class MiniCPMConditionalChatTTSModelGenerationOutput(ModelOutput):
     """
+    Output class for MiniCPMConditionalChatTTSModel generation.
     Output class for MiniCPMConditionalChatTTSModel generation.
 
     Args:
@@ -3473,6 +3481,9 @@ def apply_spk_emb(
         mask_ = input_ids_ == spk_emb_token_id  # [batch_size, seq_len_max]
         nonzero_position_idx = mask_.nonzero(as_tuple=False)  # [num_spk_emb, 1]
         if nonzero_position_idx.shape[0] != num_spk_embs:
+            raise ValueError(
+                f"Expected {num_spk_embs} speaker embedding tokens, but found {nonzero_position_idx.shape[0]}"
+            )
             raise ValueError(
                 f"Expected {num_spk_embs} speaker embedding tokens, but found {nonzero_position_idx.shape[0]}"
             )
@@ -3959,6 +3970,9 @@ class MiniCPMConditionalChatTTSModel(PreTrainedModel):
                 raise ValueError(
                     f"Progress {progress} does not match expected value {past_key_values[0][0].shape[2] + 1}"
                 )
+                raise ValueError(
+                    f"Progress {progress} does not match expected value {past_key_values[0][0].shape[2] + 1}"
+                )
 
             if audio_bos:
                 # Generate the first token, activate the model with `self.audio_bos_token_id`, the model will predict a new audio token. This is a special case because without the `audio bos token`, it is impossible to generate the first audio token in our streaming setting.
@@ -4256,6 +4270,9 @@ class Resampler(nn.Module):
 
     def forward(self, x, tgt_sizes=None):
         if x.shape[0] != tgt_sizes.shape[0]:
+            raise ValueError(
+                f"Batch size mismatch: x.shape[0]={x.shape[0]} != tgt_sizes.shape[0]={tgt_sizes.shape[0]}"
+            )
             raise ValueError(
                 f"Batch size mismatch: x.shape[0]={x.shape[0]} != tgt_sizes.shape[0]={tgt_sizes.shape[0]}"
             )
@@ -4810,7 +4827,7 @@ class MiniCPMVisionEncoderLayer(GradientCheckpointingLayer):
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.self_attn = (
             MiniCPMVisionAttention(config)
-            if not config._attn_implementation == "flash_attention_2"
+            if config._attn_implementation != "flash_attention_2"
             else MiniCPMVisionFlashAttention2(config)
         )
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)

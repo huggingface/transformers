@@ -20,62 +20,59 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from threading import Thread
-from typing import Optional, Union, Callable
+from typing import Callable, Optional, Union
 
 import numpy as np
-from PIL import Image
 import soundfile as sf
-from tqdm import tqdm
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.utils.parametrize as P
+from huggingface_hub import hf_hub_download
+from PIL import Image
 from torch.nn.init import _calculate_fan_in_and_fan_out
 from torch.nn.utils.parametrizations import weight_norm
-from huggingface_hub import hf_hub_download
+from tqdm import tqdm
 
-from ...modeling_utils import PreTrainedModel
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...configuration_utils import PretrainedConfig
+from ...generation import GenerationMixin
+from ...generation.logits_process import LogitsProcessor, TopKLogitsWarper, TopPLogitsWarper
+from ...generation.streamers import TextIteratorStreamer
+from ...generation.utils import GenerateOutput
+from ...integrations import is_deepspeed_zero3_enabled
+from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_attention_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs, _get_unpad_data
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
-    logging,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-    can_return_tuple,
-    auto_docstring,
     ModelOutput,
     TransformersKwargs,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+    replace_return_docstrings,
 )
 from ...utils.import_utils import _is_package_available, is_flash_attn_2_available
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
-from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationMixin
-from ...generation.streamers import TextIteratorStreamer
-from ...generation.utils import GenerateOutput
-from ...generation.logits_process import LogitsProcessor, TopKLogitsWarper, TopPLogitsWarper
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, AttentionMaskConverter
-from ...integrations import is_deepspeed_zero3_enabled
-from ...modeling_flash_attention_utils import FlashAttentionKwargs, _get_unpad_data
-from ...processing_utils import Unpack
-
-from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipEncoderLayer, SiglipEncoder, SiglipMLP, SiglipVisionModelOutput
-from ..whisper.configuration_whisper import WhisperConfig
-from ..whisper.modeling_whisper import WhisperEncoder, WhisperAttention, WhisperEncoderLayer
+from ..llama.configuration_llama import LlamaConfig
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, LlamaPreTrainedModel
 from ..qwen2.configuration_qwen2 import Qwen2Config
 from ..qwen2.modeling_qwen2 import Qwen2Model, Qwen2PreTrainedModel
-from ..llama.configuration_llama import LlamaConfig
-from ..llama.modeling_llama import LlamaModel, LlamaDecoderLayer, LlamaPreTrainedModel
+from ..siglip.configuration_siglip import SiglipVisionConfig
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipMLP, SiglipVisionModelOutput
+from ..whisper.configuration_whisper import WhisperConfig
+from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoder, WhisperEncoderLayer
+from .tts_processing_minicpm_o_2_6 import ChatTTSProcessor, NumberToTextConverter, VoiceChecker, sentence_end
 
-from .tts_processing_minicpm_o_2_6 import NumberToTextConverter, sentence_end, VoiceChecker, ChatTTSProcessor
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -184,6 +181,7 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MiniCPM_o_2_6Model`]. It is used to instantiate a
     MiniCPM-o-2.6 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the MiniCPM-o-2.6
+    with the defaults will yield a similar configuration to that of the MiniCPM-o-2.6
     [openbmb/MiniCPM-o-2_6](https://huggingface.co/openbmb/MiniCPM-o-2_6) architecture.
 
     The MiniCPM-o-2.6 model is a multimodal large language model that supports text, image, and audio inputs. It consists of
@@ -209,8 +207,6 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
             Number of query tokens used in the vision-language cross-attention mechanism.
         drop_vision_last_layer (`bool`, *optional*, defaults to `True`):
             Whether to drop the last layer of the vision encoder to reduce computational overhead.
-        vision_batch_size (`int`, *optional*, defaults to 16):
-            Batch size for processing vision inputs, used for memory optimization during image processing.
         audio_pool_step (`int`, *optional*, defaults to 2):
             Pooling step size for audio feature extraction, controls the temporal resolution of audio features.
         audio_chunk_length (`float`, *optional*, defaults to 1.0):
@@ -267,7 +263,6 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
         use_cache=True,
         query_num=64,
         drop_vision_last_layer=True,
-        vision_batch_size=16,
         audio_pool_step=2,
         audio_chunk_length=1.0,
         **kwargs,
@@ -275,7 +270,6 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
         self.use_cache = use_cache
         self.query_num = query_num
         self.drop_vision_last_layer = drop_vision_last_layer
-        self.vision_batch_size = vision_batch_size
         self.audio_pool_step = audio_pool_step
         self.audio_chunk_length = audio_chunk_length
 
@@ -287,6 +281,7 @@ class MiniCPM_o_2_6Config(PretrainedConfig):
             self.text_config = text_config
 
         if vision_config is None:
+            self.vision_config = MiniCPMVisionConfig(**self.default_vision_config)
             self.vision_config = MiniCPMVisionConfig(**self.default_vision_config)
             logger.info("vision_config is None, using default vision config")
         elif isinstance(vision_config, dict):
@@ -440,6 +435,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         else:
             self.omni_config.vision_config._attn_implementation = "eager"
         model = MiniCPMVisionModel(self.omni_config.vision_config)
+        model = MiniCPMVisionModel(self.omni_config.vision_config)
         if self.omni_config.drop_vision_last_layer:
             model.encoder.layers = model.encoder.layers[:-1]
 
@@ -462,6 +458,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         return model
 
     def init_tts_module(self):
+        model = MiniCPMConditionalChatTTSModel(self.omni_config.tts_config)
         model = MiniCPMConditionalChatTTSModel(self.omni_config.tts_config)
         return model
 
@@ -794,7 +791,9 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
         """
         if stream_input:
             audio_embeddings = self.get_audio_embedding_streaming(audio_features, audio_feature_lens)
+            audio_embeddings = self.get_audio_embedding_streaming(audio_features, audio_feature_lens)
         else:
+            audio_embeddings = self.get_audio_embedding(audio_features, audio_feature_lens, chunk_length)
             audio_embeddings = self.get_audio_embedding(audio_features, audio_feature_lens, chunk_length)
 
         bs = len(input_embeddings)
@@ -955,6 +954,9 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             raise ValueError(
                 f"Length mismatch: input_ids length {len(input_ids)} != pixel_values length {len(pixel_values)}"
             )
+            raise ValueError(
+                f"Length mismatch: input_ids length {len(input_ids)} != pixel_values length {len(pixel_values)}"
+            )
         if not sampling and stream:
             raise ValueError("if use stream mode, make sure sampling=True")
 
@@ -1040,7 +1042,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
                     tts_config={"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0},
                     force_no_stop=force_no_stop,
                 )
-                wav_numpy, sr = self.decode_mel_to_audio(mel_spec, kwargs.get("output_audio_path", None))
+                wav_numpy, sr = self.decode_mel_to_audio(mel_spec, kwargs.get("output_audio_path"))
 
             if return_spk_embed:
                 spk_embeds = self._get_last_spk_embeds(model_inputs, outputs)
@@ -1194,11 +1196,11 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
     ):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
+                # cache_length = past_key_values.get_seq_length()
                 # past_length = past_key_values.seen_tokens
                 past_length = past_key_values.get_seq_length()
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
+            # else:
+            #     cache_length = past_length = past_key_values[0][0].shape[2]
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1313,7 +1315,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
             torch.hstack([(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
         ]  # List[Tensor], (1,2)
 
-        cache_length = past_length = self.llm_past_key_values[0][0].shape[2]
+        cache_length = self.llm_past_key_values[0][0].shape[2]
         attention_mask = torch.ones((1, cache_length + input_ids.shape[1]), dtype=torch.bool, device=self.device)
 
         generation_config["max_new_tokens"] = max_new_tokens
@@ -1361,7 +1363,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
                 use_cache=True,
                 max_new_tokens=3,  # reduce first token delay
                 pad_token_id=0,
-                output_hidden_states=True if first_chunk else False,
+                output_hidden_states=bool(first_chunk),
                 return_dict_in_generate=True,
                 eos_token_id=terminators,
                 **generation_config,
@@ -1381,7 +1383,7 @@ class MiniCPM_o_2_6ForConditionalGeneration(MiniCPM_o_2_6PreTrainedModel, Genera
 
             self.llm_past_key_values = outputs.past_key_values
             input_ids = outputs.sequences[:, -1:]
-            cache_length = past_length = self.llm_past_key_values[0][0].shape[2]
+            cache_length = self.llm_past_key_values[0][0].shape[2]
             attention_mask = torch.ones((1, cache_length + input_ids.shape[1]), dtype=torch.bool, device=self.device)
 
             res = {"text": text}
@@ -2146,7 +2148,7 @@ class MiniCPMWhisperAttention(WhisperAttention):
 
 # Borrowed from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer and add use_cache for streaming inference
 class MiniCPMWhisperEncoderLayer(WhisperEncoderLayer):
-    def __init__(self, config: MiniCPMWhisperConfig, layer_idx: int = None):
+    def __init__(self, config: MiniCPMWhisperConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = MiniCPMWhisperAttention(
@@ -2530,7 +2532,7 @@ class GFSQ(nn.Module):
         eps=1e-5,
         transpose=True,
     ):
-        super(GFSQ, self).__init__()
+        super().__init__()
         self.quantizer = GroupedResidualFSQ(
             dim=dim,
             levels=list(levels),
@@ -2716,6 +2718,9 @@ def apply_spk_emb(
             raise ValueError(
                 f"Expected {num_spk_embs} speaker embedding tokens, but found {nonzero_position_idx.shape[0]}"
             )
+            raise ValueError(
+                f"Expected {num_spk_embs} speaker embedding tokens, but found {nonzero_position_idx.shape[0]}"
+            )
         begin_idx = nonzero_position_idx.min()
         end_idx = nonzero_position_idx.max()
         input_embeds[idx, begin_idx : end_idx + 1, :] = spk_emb_
@@ -2821,6 +2826,7 @@ class CustomRepetitionPenaltyLogitsProcessorRepeat:
 @dataclass
 class MiniCPMConditionalChatTTSModelGenerationOutput(ModelOutput):
     """
+    Output class for MiniCPMConditionalChatTTSModel generation.
     Output class for MiniCPMConditionalChatTTSModel generation.
 
     Args:
@@ -3533,6 +3539,9 @@ class MiniCPMConditionalChatTTSModel(PreTrainedModel):
                 raise ValueError(
                     f"Progress {progress} does not match expected value {past_key_values[0][0].shape[2] + 1}"
                 )
+                raise ValueError(
+                    f"Progress {progress} does not match expected value {past_key_values[0][0].shape[2] + 1}"
+                )
 
             if audio_bos:
                 # Generate the first token, activate the model with `self.audio_bos_token_id`, the model will predict a new audio token. This is a special case because without the `audio bos token`, it is impossible to generate the first audio token in our streaming setting.
@@ -3850,6 +3859,9 @@ class Resampler(nn.Module):
 
     def forward(self, x, tgt_sizes=None):
         if x.shape[0] != tgt_sizes.shape[0]:
+            raise ValueError(
+                f"Batch size mismatch: x.shape[0]={x.shape[0]} != tgt_sizes.shape[0]={tgt_sizes.shape[0]}"
+            )
             raise ValueError(
                 f"Batch size mismatch: x.shape[0]={x.shape[0]} != tgt_sizes.shape[0]={tgt_sizes.shape[0]}"
             )
@@ -4504,7 +4516,7 @@ class MiniCPMVisionEncoderLayer(SiglipEncoderLayer):
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.self_attn = (
             MiniCPMVisionAttention(config)
-            if not config._attn_implementation == "flash_attention_2"
+            if config._attn_implementation != "flash_attention_2"
             else MiniCPMVisionFlashAttention2(config)
         )
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -4764,6 +4776,17 @@ class MiniCPMVisionModel(MiniCPMVisionPreTrainedModel):
         )
 
 
+__all__ = [
+    "MiniCPM_o_2_6Config",
+    "MiniCPM_o_2_6ForConditionalGeneration",
+    "MiniCPM_o_2_6PreTrainedModel",
+    "MiniCPMConditionalChatTTSModel",
+    "MiniCPMConditionalTTSTextModel",
+    "MiniCPMConditionalTTSTextPreTrainedModel",
+    "MiniCPMVisionModel",
+    "MiniCPMVisionPreTrainedModel",
+    "MiniCPM_o_2_6TextModel",
+]
 __all__ = [
     "MiniCPM_o_2_6Config",
     "MiniCPM_o_2_6ForConditionalGeneration",

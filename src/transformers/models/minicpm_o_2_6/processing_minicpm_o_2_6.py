@@ -16,23 +16,22 @@
 Processor class for MiniCPMO.
 """
 
+import json
 import math
 import re
-
-from typing import Any, Dict, Optional, Union
-
-import numpy as np
-import json
 from copy import deepcopy
 from functools import lru_cache
+from typing import Any, Optional, Union
 
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack, ImagesKwargs, AudioKwargs
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...utils import is_torch_device, is_torch_dtype, requires_backends, TensorType, logging
+from ...image_utils import ImageInput
+from ...processing_utils import AudioKwargs, ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import TensorType, is_torch_device, is_torch_dtype, logging, requires_backends
 from ...utils.import_utils import is_jinja_available, is_torch_available, is_vision_available
+
 
 if is_vision_available():
     from PIL import Image
@@ -61,7 +60,7 @@ class MiniCPMOBatchFeature(BatchFeature):
     Extend from BatchFeature for supporting various image size
     """
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
+    def __init__(self, data: Optional[dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
         super().__init__(data)
         self.convert_to_tensors(tensor_type=tensor_type)
 
@@ -216,9 +215,9 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         self.parse_template = parse_template
 
         self.image_tag = getattr(tokenizer, "image_tag", "(<image>./</image>)")
-        self.image_pattern = getattr(tokenizer, "image_pattern", "\(<image>./</image>\)")
+        self.image_pattern = getattr(tokenizer, "image_pattern", r"\(<image>./</image>\)")
         self.audio_tag = getattr(tokenizer, "audio_tag", "(<audio>./</audio>)")
-        self.audio_pattern = getattr(tokenizer, "audio_pattern", "\(<audio>./</audio>\)")
+        self.audio_pattern = getattr(tokenizer, "audio_pattern", r"\(<audio>./</audio>\)")
         self.split_pattern = f"({self.image_pattern}|{self.audio_pattern})"
 
         self.terminators = [tokenizer.eos_token, tokenizer.pad_token, tokenizer.tts_end]

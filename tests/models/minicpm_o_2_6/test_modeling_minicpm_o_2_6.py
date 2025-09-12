@@ -14,29 +14,31 @@
 # limitations under the License.
 """Testing suite for the PyTorch MiniCPM-o-2.6 model."""
 
-import unittest
-import os
 import math
+import os
 import tempfile
-import numpy as np
+import unittest
+from io import BytesIO
+
 import librosa
+import numpy as np
+import requests
 import soundfile as sf
 from PIL import Image
-import requests
-from io import BytesIO
 
 from transformers import (
     AutoModel,
     AutoProcessor,
 )
-from transformers.utils.import_utils import is_torch_available, is_soundfile_available, _is_package_available
 from transformers.testing_utils import (
+    require_sentencepiece,
     require_torch,
+    require_vision,
     slow,
     torch_device,
-    require_vision,
-    require_sentencepiece,
 )
+from transformers.utils.import_utils import _is_package_available, is_soundfile_available, is_torch_available
+
 
 if is_torch_available():
     import torch

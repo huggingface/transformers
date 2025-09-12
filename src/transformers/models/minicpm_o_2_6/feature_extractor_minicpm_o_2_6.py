@@ -21,6 +21,7 @@ import numpy as np
 from ...utils.import_utils import is_torch_available
 from ..whisper.feature_extraction_whisper import WhisperFeatureExtractor
 
+
 if is_torch_available():
     import torch
 

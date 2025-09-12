@@ -307,7 +307,29 @@ SPECIAL_CASES_TO_ALLOW = {
     "LayoutLMConfig": ["position_embedding_type"],
     "MarkupLMConfig": ["position_embedding_type"],
     "SmolLM3Config": ["no_rope_layer_interval"],
-    "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
+    "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`,
+    "MiniCPMConditionalTTSConfig": ["attn_implementation", "aug_loss_weight"],
+    "MiniCPMWhisperConfig": [
+        "apply_spec_augment",
+        "begin_suppress_tokens",
+        "classifier_proj_size",
+        "decoder_attention_heads",
+        "decoder_ffn_dim",
+        "decoder_layerdrop",
+        "decoder_layers",
+        "init_std",
+        "mask_feature_length",
+        "mask_feature_min_masks",
+        "mask_feature_prob",
+        "mask_time_length",
+        "mask_time_min_masks",
+        "mask_time_prob",
+        "max_target_positions",
+        "median_filter_width",
+        "suppress_tokens",
+        "use_weighted_layer_sum",
+    ],
+    "MiniCPM_o_2_6TextConfig": ["max_window_layers", "use_sliding_window"],
 }
 
 

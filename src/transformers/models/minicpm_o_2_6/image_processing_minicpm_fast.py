@@ -18,17 +18,19 @@ from typing import Optional, Union
 
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
+
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import to_pil_image
-from ...image_utils import valid_images, make_nested_list_of_images
-from ...utils import TensorType, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from ...image_utils import valid_images
+from ...utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, TensorType
 from ...utils.import_utils import (
+    is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
-    is_torch_available,
 )
 from .processing_minicpm_o_2_6 import MiniCPMOBatchFeature
+
 
 if is_torch_available():
     import torch
@@ -68,8 +70,8 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
         max_slice_nums=9,
         scale_resolution=448,
         patch_size=14,
-        image_mean: list[float] = None,
-        image_std: list[float] = None,
+        image_mean: Optional[list[float]] = None,
+        image_std: Optional[list[float]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -227,7 +229,7 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: Union[Image.Image, list[Image.Image], list[list[Image.Image]]],
-        max_slice_nums: int = None,
+        max_slice_nums: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         do_normalize: bool = True,
         **kwargs,
