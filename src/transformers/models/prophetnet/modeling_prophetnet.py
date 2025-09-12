@@ -25,6 +25,8 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.nn import LayerNorm
 
+from transformers.utils.generic import check_model_inputs
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -1048,6 +1050,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
     def set_input_embeddings(self, value):
         self.word_embeddings = value
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1057,7 +1060,6 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Example:
@@ -1078,7 +1080,6 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is None and inputs_embeds is None:
             raise ValueError("Either input_ids or inputs_embeds has to be passed.")
@@ -1129,8 +1130,6 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         if output_hidden_states:
             encoder_hidden_states = encoder_hidden_states + (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_hidden_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_hidden_states, attentions=all_attentions
         )
@@ -1521,7 +1520,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[tuple] = None,
+        encoder_outputs: Optional[BaseModelOutput] = None,
         past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
@@ -1584,7 +1583,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
 
         # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
@@ -1606,6 +1604,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
+
         return ProphetNetSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             last_hidden_state_ngram=decoder_outputs.last_hidden_state_ngram,
