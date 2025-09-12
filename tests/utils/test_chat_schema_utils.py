@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import AutoTokenizer
-from transformers.utils.chat_parsing_utils import location_content, recursive_parse
+from transformers.utils.chat_parsing_utils import recursive_parse
 from transformers.utils.chat_template_utils import get_json_schema
 
 
@@ -286,31 +286,6 @@ gpt_oss_schema = {
     },
 }
 
-
-def remove_offsets(obj):
-    if isinstance(obj, dict):
-        return {k: remove_offsets(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [remove_offsets(v) for v in obj]
-    elif isinstance(obj, location_content):
-        return obj.content
-    else:
-        return obj
-
-
-def validate_offsets(obj, formatted_chat):
-    if isinstance(obj, dict):
-        for v in obj.values():
-            validate_offsets(v, formatted_chat)
-    elif isinstance(obj, list):
-        for v in obj:
-            validate_offsets(v, formatted_chat)
-    elif isinstance(obj, location_content):
-        # TODO Might need int/float/bool comparison here, may not get a perfect string match
-        if obj.content != formatted_chat[obj.start : obj.end]:
-            raise ValueError(f"Offsets for content '{obj.content}' are incorrect: {obj.start}, {obj.end}")
-
-
 class ChatSchemaParserTest(unittest.TestCase):
     def setUp(self):
         # This tokenizer has no chat template by default
@@ -326,19 +301,6 @@ class ChatSchemaParserTest(unittest.TestCase):
         formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False)
         parsed_chat = recursive_parse(formatted_chat, basic_schema)
         self.assertEqual(parsed_chat, chat)
-
-    def test_basic_chat_with_offsets(self):
-        chat = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello!"},
-            {"role": "assistant", "content": "Hi there! How can I help you today?"},
-        ]
-        self.tokenizer.chat_template = basic_template
-        formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False)
-        parsed_chat_without_offsets = recursive_parse(formatted_chat, basic_schema)
-        parsed_chat_with_offsets = recursive_parse(formatted_chat, basic_schema, offset=0)
-        self.assertEqual(remove_offsets(parsed_chat_with_offsets), parsed_chat_without_offsets)
-        validate_offsets(parsed_chat_with_offsets, formatted_chat)
 
     def test_named_groups(self):
         chat = [
@@ -425,10 +387,6 @@ class ChatSchemaParserTest(unittest.TestCase):
         self.assertEqual(
             parsed_chat["tools"], [get_json_schema(simple_tool), get_json_schema(tool_with_everything_all_at_once)]
         )
-        # TODO Remove offset code since we can't rely on it
-        parsed_chat_with_offsets = recursive_parse(formatted_chat, cohere_schema, offset=0)
-        self.assertEqual(remove_offsets(parsed_chat_with_offsets), parsed_chat)
-        validate_offsets(parsed_chat_with_offsets, formatted_chat)
 
     def test_cohere_template_with_tool_calls(self):
         def get_current_temperature(location: str):
