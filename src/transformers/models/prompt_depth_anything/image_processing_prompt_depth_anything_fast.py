@@ -57,7 +57,6 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-# Copied from transformers.models.prompt_depth_anything.image_processing_prompt_depth_anything (i.e. the slow processor)
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
     """Constrain a value to be a multiple of another value."""
     x = round(val / multiple) * multiple
@@ -71,7 +70,6 @@ def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
     return x
 
 
-# Copied from transformers.models.prompt_depth_anything.image_processing_prompt_depth_anything (i.e. the slow processor)
 def _get_resize_output_image_size(
     input_image: "torch.Tensor",
     output_size: Union[int, tuple[int, int]],
@@ -344,7 +342,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         return processed_images
 
-    # Copied from transformers.models.dpt.image_processing_dpt.DPTImageProcessor.post_process_depth_estimation with DPT->PromptDepthAnything
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
