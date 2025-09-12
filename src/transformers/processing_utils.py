@@ -14,6 +14,7 @@
 """
 Processing saving/loading class for common processors.
 """
+# from __future__ import annotations
 
 import bisect
 import copy
@@ -25,7 +26,7 @@ import typing
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TypedDict, TypeVar, Union
+from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
@@ -36,12 +37,23 @@ from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available
 from .utils.chat_template_utils import render_jinja_template
-from .video_utils import VideoInput, VideoMetadata
+from .utils.type_validators import (
+    TypedDictAdapter,
+    device_validator,
+    image_size_validator,
+    padding_validator,
+    positive_any_number,
+    positive_int,
+    resampling_validator,
+    tensor_type_validator,
+    truncation_validator,
+    video_metadata_validator,
+)
+from .video_utils import VideoInput, VideoMetadataType
 
 
 if is_vision_available():
     from .image_utils import PILImageResampling
-
 
 from .tokenization_utils_base import (
     PaddingStrategy,
@@ -138,15 +150,15 @@ class TextKwargs(TypedDict, total=False):
     """
 
     text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
-    text_target: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
+    text_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
     text_pair_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
     add_special_tokens: Optional[bool]
-    padding: Union[bool, str, PaddingStrategy]
-    truncation: Union[bool, str, TruncationStrategy]
-    max_length: Optional[int]
-    stride: Optional[int]
+    padding: Annotated[Optional[Union[bool, str, PaddingStrategy]], padding_validator()]
+    truncation: Annotated[Optional[Union[bool, str, TruncationStrategy]], truncation_validator()]
+    max_length: Annotated[Optional[int], positive_int()]
+    stride: Annotated[Optional[int], positive_int()]
     is_split_into_words: Optional[bool]
-    pad_to_multiple_of: Optional[int]
+    pad_to_multiple_of: Annotated[Optional[int], positive_int()]
     return_token_type_ids: Optional[bool]
     return_attention_mask: Optional[bool]
     return_overflowing_tokens: Optional[bool]
@@ -154,8 +166,9 @@ class TextKwargs(TypedDict, total=False):
     return_offsets_mapping: Optional[bool]
     return_length: Optional[bool]
     verbose: Optional[bool]
-    padding_side: Optional[str]
+    padding_side: Optional[Literal["left", "right"]]
     return_mm_token_type_ids: Optional[bool]
+    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -172,6 +185,8 @@ class ImagesKwargs(TypedDict, total=False):
             The size by which to make sure both the height and width can be divided.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
+        do_convert_rgb (`bool`):
+            Whether to convert the video to RGB format.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*):
@@ -198,22 +213,24 @@ class ImagesKwargs(TypedDict, total=False):
             The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
     """
 
+    do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
-    size: Optional[dict[str, int]]
-    size_divisor: Optional[int]
-    crop_size: Optional[dict[str, int]]
-    resample: Optional[Union["PILImageResampling", int]]
+    size: Annotated[Optional[dict[str, int]], image_size_validator()]
+    size_divisor: Annotated[Optional[int], positive_int()]
+    crop_size: Annotated[Optional[dict[str, int]], image_size_validator()]
+    resample: Annotated[Optional[Union["PILImageResampling", int]], resampling_validator()]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
     do_normalize: Optional[bool]
     image_mean: Optional[Union[float, list[float]]]
     image_std: Optional[Union[float, list[float]]]
     do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
+    pad_size: Annotated[Optional[dict[str, int]], image_size_validator()]
     do_center_crop: Optional[bool]
-    data_format: Optional[ChannelDimension]
+    data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[str]
+    device: Annotated[Optional[str], device_validator()]
+    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
 
 
 class VideosKwargs(TypedDict, total=False):
@@ -267,10 +284,10 @@ class VideosKwargs(TypedDict, total=False):
 
     do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
-    size: Optional[dict[str, int]]
-    size_divisor: Optional[int]
+    size: Annotated[Optional[dict[str, int]], image_size_validator()]
+    size_divisor: Annotated[Optional[int], positive_int()]
     default_to_square: Optional[bool]
-    resample: Optional["PILImageResampling"]
+    resample: Annotated[Optional[Union["PILImageResampling", int]], resampling_validator()]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
     do_normalize: Optional[bool]
@@ -278,15 +295,16 @@ class VideosKwargs(TypedDict, total=False):
     image_std: Optional[Union[float, list[float]]]
     do_pad: Optional[bool]
     do_center_crop: Optional[bool]
-    crop_size: Optional[dict[str, int]]
+    crop_size: Annotated[Optional[dict[str, int]], image_size_validator()]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[str]
+    device: Annotated[Optional[str], device_validator()]
     do_sample_frames: Optional[bool]
-    video_metadata: Optional[Union[VideoMetadata, dict]]
-    fps: Optional[Union[int, float]]
-    num_frames: Optional[int]
+    video_metadata: Annotated[Optional[VideoMetadataType], video_metadata_validator()]
+    fps: Annotated[Optional[Union[int, float]], positive_any_number()]
+    num_frames: Annotated[Optional[int], positive_int()]
     return_metadata: Optional[bool]
+    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -319,17 +337,14 @@ class AudioKwargs(TypedDict, total=False):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
-    sampling_rate: Optional[int]
+    sampling_rate: Annotated[Optional[int], positive_int()]
     raw_speech: Optional[Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]]]
-    padding: Optional[Union[bool, str, PaddingStrategy]]
-    max_length: Optional[int]
-    truncation: Optional[bool]
-    pad_to_multiple_of: Optional[int]
+    padding: Annotated[Optional[Union[bool, str, PaddingStrategy]], padding_validator()]
+    max_length: Annotated[Optional[int], positive_int()]
+    truncation: Annotated[Optional[Union[bool, str, TruncationStrategy]], truncation_validator()]
+    pad_to_multiple_of: Annotated[Optional[int], positive_int()]
     return_attention_mask: Optional[bool]
-
-
-class CommonKwargs(TypedDict, total=False):
-    return_tensors: Optional[Union[str, TensorType]]
+    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
 
 
 class ProcessingKwargs(TypedDict, total=False):
@@ -373,9 +388,6 @@ class ProcessingKwargs(TypedDict, total=False):
 
     _defaults = {}
 
-    common_kwargs: CommonKwargs = {
-        **CommonKwargs.__annotations__,
-    }
     text_kwargs: TextKwargs = {
         **TextKwargs.__annotations__,
     }
@@ -1248,7 +1260,6 @@ class ProcessorMixin(PushToHubMixin):
             "images_kwargs": {},
             "audio_kwargs": {},
             "videos_kwargs": {},
-            "common_kwargs": {},
         }
 
         default_kwargs = {
@@ -1256,7 +1267,6 @@ class ProcessorMixin(PushToHubMixin):
             "images_kwargs": {},
             "audio_kwargs": {},
             "videos_kwargs": {},
-            "common_kwargs": {},
         }
 
         possible_modality_keywords = {"text", "audio", "videos", "images"}
@@ -1314,17 +1324,22 @@ class ProcessorMixin(PushToHubMixin):
         else:
             # kwargs is a flat dictionary
             for key, kwarg in kwargs.items():
-                if key not in used_keys:
-                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__:
-                        output_kwargs["common_kwargs"][key] = kwarg
-                    elif key not in possible_modality_keywords:
-                        logger.warning_once(
-                            f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
-                        )
+                if key not in used_keys and key not in possible_modality_keywords:
+                    logger.warning_once(
+                        f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                    )
 
-        # all modality-specific kwargs are updated with common kwargs
-        for kwarg in output_kwargs.values():
-            kwarg.update(output_kwargs["common_kwargs"])
+        # For `common_kwargs` just update all modality-specific kwargs with same key/values
+        common_kwargs = kwargs.get("common_kwargs", {})
+        common_kwargs.update(ModelProcessorKwargs._defaults.get("common_kwargs", {}))
+        if common_kwargs:
+            for kwarg in output_kwargs.values():
+                kwarg.update(common_kwargs)
+
+        # Finally perform type validation on collected kwargs
+        for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
+            type_validator = TypedDictAdapter(typed_dict_obj)
+            type_validator.validate_fields(**output_kwargs[key])
         return output_kwargs
 
     @classmethod

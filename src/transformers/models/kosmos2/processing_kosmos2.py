@@ -33,9 +33,11 @@ BboxInput = Union[
     list[list[tuple[float, float, float]]],
 ]
 
+NestedList = list[Union[Optional[int], "NestedList"]]
+
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
-    bboxes: Optional[list[float]]
+    bboxes: Optional[NestedList]
     num_image_tokens: Optional[int]
     first_image_token_id: Optional[int]
 

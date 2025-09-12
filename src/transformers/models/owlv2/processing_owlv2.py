@@ -125,7 +125,7 @@ class Owlv2Processor(ProcessorMixin):
             **kwargs,
         )
         query_images = output_kwargs["images_kwargs"].pop("query_images", None)
-        return_tensors = output_kwargs["common_kwargs"]["return_tensors"]
+        return_tensors = output_kwargs["text_kwargs"]["return_tensors"]
 
         if text is None and query_images is None and images is None:
             raise ValueError(
