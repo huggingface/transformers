@@ -43,11 +43,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "XYTokenizerConfig"
 
 
-# ----------------------------------------------- #
-#    Model Output Dataclasses                     #
-# ----------------------------------------------- #
 @dataclass
-class XYTokenizerEncodeOutput(ModelOutput):
+class XYTokenizerEncoderOutput(ModelOutput):
     """
     Output type of [`XYTokenizer.encode`].
 
@@ -72,7 +69,7 @@ class XYTokenizerEncodeOutput(ModelOutput):
 
 
 @dataclass
-class XYTokenizerDecodeOutput(ModelOutput):
+class XYTokenizerDecoderOutput(ModelOutput):
     """
     Output type of [`XYTokenizer.decode`].
 
@@ -127,11 +124,9 @@ class VectorQuantizerConfig:
     kmeans_iters: int = 10
 
 
-# ----------------------------------------------- #
-#    All Helper Modules (Copied from source)      #
-# ----------------------------------------------- #
 def sinusoids(length, channels, max_timescale=10000, device=None):
-    assert channels % 2 == 0
+    if channels % 2 != 0:
+        raise ValueError("channels must be an even number for sinusoidal embeddings")
     log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
     inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
     scaled_time = torch.arange(length, device=device)[:, np.newaxis] * inv_timescales[np.newaxis, :]
@@ -383,7 +378,7 @@ class XYTokenizerTransformerLayer(nn.Module):
         return outputs
 
 
-class OmniAudioEncoder(nn.Module):
+class XYTokenizerEncoder(nn.Module):
     def __init__(
         self,
         num_mel_bins=128,
@@ -457,7 +452,7 @@ class OmniAudioEncoder(nn.Module):
         return hidden_states, output_length, all_hidden
 
 
-class OmniAudioDecoder(nn.Module):
+class XYTokenizerDecoder(nn.Module):
     def __init__(
         self,
         num_mel_bins=128,
@@ -677,16 +672,12 @@ class ISTFT(nn.Module):
             kernel_size=(1, self.win_length),
             stride=(1, self.hop_length),
         ).squeeze()[pad:-pad]
-        assert (window_envelope > 1e-11).all()
+        if not (window_envelope > 1e-11).all():
+            raise ValueError("Window envelope contains near-zero values leading to instability")
         return y / window_envelope
 
 
-class FourierHead(nn.Module):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError("Subclasses must implement the forward method.")
-
-
-class ISTFTHead(FourierHead):
+class ISTFTHead(nn.Module):
     def __init__(self, dim: int, n_fft: int, hop_length: int, padding: str = "same"):
         super().__init__()
         self.out = nn.Linear(dim, n_fft + 2)
@@ -700,27 +691,11 @@ class ISTFTHead(FourierHead):
         return self.istft(s).to(x.dtype)
 
 
-class AdaLayerNorm(nn.Module):
-    def __init__(self, num_embeddings: int, embedding_dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps, self.dim = eps, embedding_dim
-        self.scale = nn.Embedding(num_embeddings, embedding_dim)
-        self.shift = nn.Embedding(num_embeddings, embedding_dim)
-        torch.nn.init.ones_(self.scale.weight)
-        torch.nn.init.zeros_(self.shift.weight)
-
-    def forward(self, x: torch.Tensor, cond_embedding_id: torch.Tensor) -> torch.Tensor:
-        scale, shift = self.scale(cond_embedding_id), self.shift(cond_embedding_id)
-        x = F.layer_norm(x, (self.dim,), eps=self.eps)
-        return x * scale + shift
-
-
 class ConvNeXtBlock(nn.Module):
-    def __init__(self, dim, intermediate_dim, layer_scale_init_value, adanorm_num_embeddings=None):
+    def __init__(self, dim, intermediate_dim, layer_scale_init_value):
         super().__init__()
         self.dwconv = nn.Conv1d(dim, dim, 7, 1, 3, groups=dim)
-        self.adanorm = adanorm_num_embeddings is not None
-        self.norm = AdaLayerNorm(adanorm_num_embeddings, dim) if self.adanorm else nn.LayerNorm(dim, eps=1e-6)
+        self.norm = nn.LayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, intermediate_dim)
         self.act = nn.GELU()
         self.pwconv2 = nn.Linear(intermediate_dim, dim)
@@ -733,7 +708,7 @@ class ConvNeXtBlock(nn.Module):
     def forward(self, x, cond_embedding_id=None):
         res = x
         x = self.dwconv(x).transpose(1, 2)
-        x = self.norm(x, cond_embedding_id) if self.adanorm else self.norm(x)
+        x = self.norm(x)
         x = self.pwconv2(self.act(self.pwconv1(x)))
         if self.gamma is not None:
             x = self.gamma * x
@@ -741,12 +716,7 @@ class ConvNeXtBlock(nn.Module):
         return x
 
 
-class Backbone(nn.Module):
-    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
-        raise NotImplementedError("Subclasses must implement the forward method.")
-
-
-class VocosBackbone(Backbone):
+class VocosBackbone(nn.Module):
     def __init__(
         self,
         input_channels,
@@ -754,19 +724,16 @@ class VocosBackbone(Backbone):
         intermediate_dim,
         num_layers,
         layer_scale_init_value=None,
-        adanorm_num_embeddings=None,
     ):
         super().__init__()
         self.input_channels, self.embed = input_channels, nn.Conv1d(input_channels, dim, 7, 1, 3)
-        self.adanorm = adanorm_num_embeddings is not None
-        self.norm = AdaLayerNorm(adanorm_num_embeddings, dim) if self.adanorm else nn.LayerNorm(dim, eps=1e-6)
+        self.norm = nn.LayerNorm(dim, eps=1e-6)
         self.convnext = nn.ModuleList(
             [
                 ConvNeXtBlock(
                     dim,
                     intermediate_dim,
                     layer_scale_init_value or 1 / num_layers,
-                    adanorm_num_embeddings,
                 )
                 for _ in range(num_layers)
             ]
@@ -782,7 +749,7 @@ class VocosBackbone(Backbone):
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         x = self.embed(x).transpose(1, 2)
-        x = self.norm(x, kwargs.get("bandwidth_id")) if self.adanorm else self.norm(x)
+        x = self.norm(x)
         x = x.transpose(1, 2)
         for block in self.convnext:
             x = block(x, kwargs.get("bandwidth_id"))
@@ -799,7 +766,6 @@ class Vocos(nn.Module):
         n_fft=640,
         hop_size=160,
         padding="same",
-        adanorm_num_embeddings=None,
     ):
         super().__init__()
         self.backbone = VocosBackbone(
@@ -807,7 +773,6 @@ class Vocos(nn.Module):
             dim,
             intermediate_dim,
             num_layers,
-            adanorm_num_embeddings=adanorm_num_embeddings,
         )
         self.head = ISTFTHead(dim, n_fft, hop_size, padding)
         self.hop_size = hop_size
@@ -892,8 +857,6 @@ class VectorQuantize(nn.Module):
             threshold_ema_dead,
         )
         self.kmeans_init, self.kmeans_iters = kmeans_init, kmeans_iters
-        self.in_project = WNConv1d(input_dim, codebook_dim, 1) if input_dim != codebook_dim else nn.Identity()
-        self.out_project = WNConv1d(codebook_dim, input_dim, 1) if codebook_dim != input_dim else nn.Identity()
         self.register_buffer(
             "codebook",
             (torch.zeros(codebook_size, codebook_dim) if kmeans_init else torch.randn(codebook_size, codebook_dim)),
@@ -950,7 +913,7 @@ class VectorQuantize(nn.Module):
         self.inited.fill_(True)
 
     def forward(self, z):
-        z_e = self.in_project(z.float())
+        z_e = z.float()
         encodings = z_e.permute(0, 2, 1).reshape(-1, z_e.size(1))  # b d t -> (b t) d
         if self.kmeans_init and not self.inited.item():
             self.init_codebook(encodings)
@@ -965,12 +928,11 @@ class VectorQuantize(nn.Module):
         if self.training and torch.is_grad_enabled():
             self.ema_update(encodings, F.one_hot(indices.view(-1), self.codebook_size))
             self.replace_dead_codes(encodings)
-        z_q = self.out_project(z_e + (z_q_emb - z_e).detach())
+        z_q = z_e + (z_q_emb - z_e).detach()
         return z_q, commit_loss, torch.tensor(0.0, device=z.device), indices, z_e
 
     def decode_code(self, embed_id):
-        embeddings = F.embedding(embed_id, self.codebook.float()).transpose(1, 2)
-        return self.out_project(embeddings)
+        return F.embedding(embed_id, self.codebook.float()).transpose(1, 2)
 
 
 class ResidualVQ(nn.Module):
@@ -1221,7 +1183,7 @@ class XYTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (OmniAudioEncoder, OmniAudioDecoder, XYTokenizerTransformer)):
+        if isinstance(module, (XYTokenizerEncoder, XYTokenizerDecoder, XYTokenizerTransformer)):
             module.gradient_checkpointing = value
 
 
@@ -1243,38 +1205,28 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
         self.config = config
 
         params = config.params
-        self.semantic_encoder = OmniAudioEncoder(**params["semantic_encoder_kwargs"])
+        self.semantic_encoder = XYTokenizerEncoder(**params["semantic_encoder_kwargs"])
         self.semantic_encoder_adapter = XYTokenizerTransformer(**params["semantic_encoder_adapter_kwargs"])
-        self.acoustic_encoder = OmniAudioEncoder(**params["acoustic_encoder_kwargs"])
+        self.acoustic_encoder = XYTokenizerEncoder(**params["acoustic_encoder_kwargs"])
         self.pre_rvq_adapter = XYTokenizerTransformer(**params["pre_rvq_adapter_kwargs"])
         self.downsample = ResidualDownConv(**params["downsample_kwargs"])
         self.quantizer = ResidualVQ(**params["quantizer_kwargs"])
         self.post_rvq_adapter = XYTokenizerTransformer(**params["post_rvq_adapter_kwargs"])
         self.upsample = UpConv(**params["upsample_kwargs"])
-        self.acoustic_decoder = OmniAudioDecoder(**params["acoustic_decoder_kwargs"])
+        self.acoustic_decoder = XYTokenizerDecoder(**params["acoustic_decoder_kwargs"])
         self.enhanced_vocos = Vocos(**params["vocos_kwargs"])
         self.feature_extractor = XYTokenizerFeatureExtractor(**params["feature_extractor_kwargs"])
         # Store some config values for easier access
         self.encoder_downsample_rate = config.encoder_downsample_rate
         self.nq = params["quantizer_kwargs"]["num_quantizers"]
-        self.input_sample_rate = config.input_sample_rate
-        self.output_sample_rate = config.output_sample_rate
+        # Prefer new canonical names but expose deprecated ones for compatibility
+        self.input_sampling_rate = getattr(config, "input_sampling_rate", getattr(config, "input_sample_rate", 16000))
+        self.sampling_rate = getattr(config, "sampling_rate", getattr(config, "output_sample_rate", 16000))
+        self.input_sample_rate = self.input_sampling_rate
+        self.output_sample_rate = self.sampling_rate
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _get_feat_extract_output_lengths(self, input_lengths: Optional[torch.Tensor]):
-        """
-        Computes the output lengths of the feature extractor.
-        """
-
-        def _get_out_len(in_len):
-            return (in_len - self.feature_extractor.n_fft) // self.feature_extractor.hop_length + 1
-
-        if input_lengths is None:
-            return None
-
-        return torch.tensor([_get_out_len(l) for l in input_lengths], device=self.device)
 
     def scale_window_size(self, boundaries, scaling_factor):
         scaling_range = []
@@ -1293,7 +1245,7 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
         features: Union[BatchFeature, ExtractorIterator],
         n_quantizers: Optional[int] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[XYTokenizerEncodeOutput, tuple]:
+    ) -> Union[XYTokenizerEncoderOutput, tuple]:
         r"""
         Encodes the input audio waveform into discrete codes.
 
@@ -1307,9 +1259,10 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         Returns:
-            [`XYTokenizerEncodeOutput`] or `tuple(torch.FloatTensor)`
+            [`XYTokenizerEncoderOutput`] or `tuple(torch.FloatTensor)`
         """
-        assert isinstance(features, (BatchFeature, ExtractorIterator))
+        if not isinstance(features, (BatchFeature, ExtractorIterator)):
+            raise TypeError("features must be a BatchFeature or ExtractorIterator")
         # Handle single batch case
         if isinstance(features, BatchFeature):
             return self._encode(features, n_quantizers, return_dict)
@@ -1396,7 +1349,7 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
                     commit_loss,
                 )
 
-            return XYTokenizerEncodeOutput(
+            return XYTokenizerEncoderOutput(
                 quantized_representation=quantized_representation,
                 audio_codes=audio_codes,
                 codes_lengths=codes_lengths,
@@ -1409,7 +1362,7 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
         features: BatchFeature,
         n_quantizers: Optional[int] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[XYTokenizerEncodeOutput, tuple]:
+    ) -> Union[XYTokenizerEncoderOutput, tuple]:
         input_mel = features["input_features"].to(self.device, dtype=self.dtype)
         mel_attention_mask = features["attention_mask"].to(self.device)
         mel_output_length = mel_attention_mask.sum(dim=-1).long()
@@ -1438,7 +1391,7 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
         if not return_dict:
             return (zq, codes, quantizer_output_length, vq_loss)
 
-        return XYTokenizerEncodeOutput(
+        return XYTokenizerEncoderOutput(
             quantized_representation=zq,
             audio_codes=codes,
             codes_lengths=quantizer_output_length,
@@ -1448,10 +1401,10 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
     @torch.no_grad()
     def decode(
         self,
-        audio_codes: Union[torch.Tensor, XYTokenizerEncodeOutput],
+        audio_codes: Union[torch.Tensor, XYTokenizerEncoderOutput],
         overlap_seconds: int = 10,
         return_dict: Optional[bool] = True,
-    ) -> Union[XYTokenizerDecodeOutput, tuple]:
+    ) -> Union[XYTokenizerDecoderOutput, tuple]:
         r"""
         Decodes discrete codes back into an audio waveform.
 
@@ -1463,13 +1416,13 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         Returns:
-            [`XYTokenizerDecodeOutput`] or `tuple(torch.FloatTensor)`
+            [`XYTokenizerDecoderOutput`] or `tuple(torch.FloatTensor)`
         """
-        assert not isinstance(audio_codes, tuple), "try to set param `return_dict=True` for `codec.encode()` function"
-        assert isinstance(audio_codes, (torch.Tensor, XYTokenizerEncodeOutput)), (
-            "only accept `torch.Tensor` or `XYTokenizerEncodeOutput` for `codec.decode()` function"
-        )
-        if isinstance(audio_codes, XYTokenizerEncodeOutput):
+        if isinstance(audio_codes, tuple):
+            raise ValueError("try to set param `return_dict=True` for `codec.encode()` function")
+        if not isinstance(audio_codes, (torch.Tensor, XYTokenizerEncoderOutput)):
+            raise TypeError("only accept `torch.Tensor` or `XYTokenizerEncoderOutput` for `codec.decode()` function")
+        if isinstance(audio_codes, XYTokenizerEncoderOutput):
             audio_codes = audio_codes.audio_codes
             if hasattr(audio_codes, "overlap_seconds"):
                 overlap_seconds = audio_codes.overlap_seconds
@@ -1541,14 +1494,14 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
         if not return_dict:
             return (syn_wav_list,)
 
-        return XYTokenizerDecodeOutput(audio_values=syn_wav_list)
+        return XYTokenizerDecoderOutput(audio_values=syn_wav_list)
 
     def _decode(
         self,
         audio_codes: torch.Tensor,
         codes_lengths: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[XYTokenizerDecodeOutput, tuple]:
+    ) -> Union[XYTokenizerDecoderOutput, tuple]:
         r"""
         Decodes discrete codes back into an audio waveform.
 
@@ -1560,7 +1513,7 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         Returns:
-            [`XYTokenizerDecodeOutput`] or `tuple(torch.FloatTensor)`
+            [`XYTokenizerDecoderOutput`] or `tuple(torch.FloatTensor)`
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1582,7 +1535,7 @@ class XYTokenizer(XYTokenizerPreTrainedModel):
         if not return_dict:
             return (y, vocos_output_length)
 
-        return XYTokenizerDecodeOutput(audio_values=y, output_length=vocos_output_length)
+        return XYTokenizerDecoderOutput(audio_values=y, output_length=vocos_output_length)
 
     @add_start_docstrings_to_model_forward(XY_TOKENIZER_INPUTS_DOCSTRING)
     def forward(

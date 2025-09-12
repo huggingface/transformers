@@ -31,10 +31,10 @@ class XYTokenizerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        input_sample_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate of the input audio.
-        output_sample_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate of the output audio.
+        input_sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate of the input audio. Alias: `input_sample_rate` (deprecated).
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate of the output audio. Alias: `output_sample_rate` (deprecated).
         encoder_downsample_rate (`int`, *optional*, defaults to 1280):
             The total downsampling factor of the encoder part.
         decoder_upsample_rate (`int`, *optional*, defaults to 1920):
@@ -49,22 +49,32 @@ class XYTokenizerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        input_sample_rate: int = 16000,
-        output_sample_rate: int = 16000,
+        input_sampling_rate: int = 16000,
+        sampling_rate: int = 16000,
         encoder_downsample_rate: int = 1280,
         decoder_upsample_rate: int = 1920,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         **kwargs,
     ):
-        self.input_sample_rate = input_sample_rate
-        self.output_sample_rate = output_sample_rate
+        # Backward-compatible alias handling
+        if "input_sample_rate" in kwargs and input_sampling_rate == 16000:
+            input_sampling_rate = kwargs.pop("input_sample_rate")
+        if "output_sample_rate" in kwargs and sampling_rate == 16000:
+            sampling_rate = kwargs.pop("output_sample_rate")
+
+        # New canonical names
+        self.input_sampling_rate = input_sampling_rate
+        self.sampling_rate = sampling_rate
+
+        # Keep deprecated names for backward compatibility in code that accesses them
+        self.input_sample_rate = input_sampling_rate
+        self.output_sample_rate = sampling_rate
         self.encoder_downsample_rate = encoder_downsample_rate
         self.decoder_upsample_rate = decoder_upsample_rate
         self.initializer_range = initializer_range
         self.use_cache = use_cache
 
-        # Store complex nested parameters dynamically for backward compatibility
         self.params = kwargs
 
         super().__init__(**kwargs)
