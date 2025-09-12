@@ -173,25 +173,44 @@ class DeepseekV3MoE(nn.Module):
         )
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        r"""
-        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
-        to not have to do a loop here (deepseek has 256 experts soooo yeah).
         """
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
-        expert_mask = expert_mask.permute(2, 0, 1)
+        Fully vectorized MoE (no Python loop).
+        Assumes all experts are the same class and can be stacked.
+        """
+        num_tokens, hidden_dim = hidden_states.shape
+        top_k = topk_indices.shape[1]
+        num_experts = len(self.experts)
 
-        for expert_idx in range(len(self.experts)):
-            expert = self.experts[expert_idx]
-            mask = expert_mask[expert_idx]
-            token_indices, weight_indices = torch.where(mask)
+        # Stack expert parameters
+        # (num_experts, hidden_dim, intermediate_dim)
+        w1 = torch.stack([e.gate_proj.weight for e in self.experts], dim=0)
+        w2 = torch.stack([e.down_proj.weight for e in self.experts], dim=0)
+        w3 = torch.stack([e.up_proj.weight for e in self.experts], dim=0)
 
-            if token_indices.numel() > 0:
-                expert_weights = topk_weights[token_indices, weight_indices]
-                expert_input = hidden_states[token_indices]
-                expert_output = expert(expert_input)
-                weighted_output = expert_output * expert_weights.unsqueeze(-1)
-                final_hidden_states.index_add_(0, token_indices, weighted_output)
+        # Prepare inputs
+        flat_inputs = hidden_states.repeat_interleave(top_k, dim=0)  # (num_tokens * top_k, hidden_dim)
+        flat_indices = topk_indices.reshape(-1)  # (num_tokens * top_k,)
+        flat_weights = topk_weights.reshape(-1)  # (num_tokens * top_k,)
+
+        # Gather expert weights for each token
+        w1_sel = w1[flat_indices]  # (num_tokens * top_k, hidden_dim, intermediate_dim)
+        w2_sel = w2[flat_indices]
+        w3_sel = w3[flat_indices]
+
+        # Forward pass for all tokens/expert pairs
+        h1 = torch.matmul(flat_inputs, w1_sel)  # (num_tokens * top_k, intermediate_dim)
+        h2 = torch.matmul(flat_inputs, w3_sel)
+        act = self.experts[0].act_fn(h1) * h2
+        out = torch.matmul(act, w2_sel.transpose(1, 2))  # (num_tokens * top_k, hidden_dim)
+
+        # Apply weights
+        out = out * flat_weights.unsqueeze(-1)
+
+        # Aggregate back to (num_tokens, hidden_dim)
+        final_hidden_states = torch.zeros_like(hidden_states)
+        for i in range(num_tokens * top_k):
+            token_idx = i // top_k
+            final_hidden_states[token_idx] += out[i]
 
         # in original deepseek, the output of the experts are gathered once we leave this module
         # thus the moe module is itelsf an IsolatedParallel module

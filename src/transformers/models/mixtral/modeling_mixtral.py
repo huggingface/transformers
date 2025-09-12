@@ -108,8 +108,41 @@ class MixtralSparseMoeBlock(nn.Module):
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
 
+        # --- Bias expert 1 ---
+        bias_strength = 2.0  # Increase for stronger bias, decrease for weaker
+        router_logits[:, 1] += bias_strength
+        # --- Strongly discourage experts 6 and 7 ---
+        very_negative = -5.0
+        router_logits[:, 6] += very_negative
+        router_logits[:, 7] += very_negative
+        # --- End bias ---
+
+        # --- Force routing to expert 1 and 6 for all tokens ---
+        # num_tokens = hidden_states.shape[0]
+        # selected_experts = torch.full((num_tokens, self.top_k), 1, dtype=torch.long, device=hidden_states.device)
+        # if self.top_k > 1:
+        #     selected_experts[:, 1] = 6
+        # routing_weights = torch.ones_like(selected_experts, dtype=router_logits.dtype) / self.top_k
+
+        # Keep important
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+
+        #    # Detailed logging for each token
+        #     for idx in range(hidden_states.shape[0]):
+        #         token_info = {
+        #             "token_index": idx,
+        #             "selected_experts": selected_experts[idx].tolist(),
+        #             "routing_weights": routing_weights[idx].tolist(),
+        #             "router_logits": router_logits[idx].tolist(),
+        #         }
+        #         logger.info(f"[Mixtral] Token {idx}: {token_info}")
+
+        #     # or append to a list for later inspection:
+        #     if not hasattr(self, 'expert_log'):
+        #         self.expert_log = []
+        #     self.expert_log.append(selected_experts.detach().cpu())
+
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
@@ -483,7 +516,7 @@ class MixtralModel(MixtralPreTrainedModel):
 def load_balancing_loss_func(
     gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
     num_experts: Optional[int] = None,
-    top_k=2,
+    top_k=1,
     attention_mask: Optional[torch.Tensor] = None,
 ) -> Union[torch.Tensor, int]:
     r"""
