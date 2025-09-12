@@ -626,11 +626,7 @@ class TopHLogitsWarper(LogitsProcessor):
 
         # input checks
         if not (0 < top_h <= 1):
-<<<<<<< HEAD
             raise ValueError("`top_h` must be in the range (0, 1].")
-=======
-            raise ValueError("alpha must be in the range (0, 1].")
->>>>>>> a481999de7 (Resolving logits_process.py Issues)
         self.top_n = 100
         self.top_h = top_h
         self.filter_value = filter_value
