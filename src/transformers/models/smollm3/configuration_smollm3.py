@@ -235,7 +235,7 @@ class SmolLM3Config(PretrainedConfig):
                     layer_types.append("full_attention")
 
         self.layer_types = layer_types
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
