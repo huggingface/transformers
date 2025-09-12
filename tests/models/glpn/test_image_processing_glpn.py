@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -30,6 +30,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import GLPNImageProcessor
+
+    if is_torchvision_available():
+        from transformers import GLPNImageProcessorFast
 
 
 class GLPNImageProcessingTester:
@@ -92,6 +95,7 @@ class GLPNImageProcessingTester:
 @require_vision
 class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = GLPNImageProcessor if is_vision_available() else None
+    fast_image_processing_class = GLPNImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -102,62 +106,70 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size_divisor"))
-        self.assertTrue(hasattr(image_processing, "resample"))
-        self.assertTrue(hasattr(image_processing, "do_rescale"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size_divisor"))
+            self.assertTrue(hasattr(image_processing, "resample"))
+            self.assertTrue(hasattr(image_processing, "do_rescale"))
 
     def test_call_pil(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
-        for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PIL images
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            for image in image_inputs:
+                self.assertIsInstance(image, Image.Image)
 
-        # Test not batched input (GLPNImageProcessor doesn't support batching)
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-        self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
+            # Test not batched input (GLPNImageProcessor doesn't support batching)
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
 
     def test_call_numpy(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
 
-        # Test not batched input (GLPNImageProcessor doesn't support batching)
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-        self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
+            # Test not batched input (GLPNImageProcessor doesn't support batching)
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
 
     def test_call_pytorch(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PyTorch tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, torch.Tensor)
 
-        # Test not batched input (GLPNImageProcessor doesn't support batching)
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-        self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
+            # Test not batched input (GLPNImageProcessor doesn't support batching)
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
 
     def test_call_numpy_4_channels(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random numpy tensors
-        self.image_processing_class.num_channels = 4
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random numpy tensors
+            self.image_processor_tester.num_channels = 4
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
 
-        # Test not batched input (GLPNImageProcessor doesn't support batching)
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-        self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
-        self.image_processing_class.num_channels = 3
+            # Test not batched input (GLPNImageProcessor doesn't support batching)
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
+            self.image_processor_tester.num_channels = 3
+
+    def test_slow_fast_equivalence_batched(self):
+        self.skipTest(reason="GLPN processors do not support batched processing with variable image sizes")
