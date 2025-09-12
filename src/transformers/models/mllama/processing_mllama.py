@@ -290,6 +290,7 @@ class MllamaProcessor(ProcessorMixin):
 
         n_images_in_images = [0]
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
             n_images_in_images = [len(sample) for sample in images]
 
@@ -340,20 +341,6 @@ class MllamaProcessor(ProcessorMixin):
 
         return batch_feature
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     def post_process_image_text_to_text(
         self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
     ):
@@ -386,7 +373,7 @@ class MllamaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
 
-        # Remove `num_tiles`, it is popped and used only when processing. Make a copy of list when remocing
+        # Remove `num_tiles`, it is popped and used only when processing. Make a copy of list when removing
         # otherwise `self.image_processor.model_input_names` is also modified
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_tiles"]
         return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_mask"])

@@ -63,7 +63,7 @@ def _sample_without_replacement(distribution, num_samples):
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2._scatter_values_on_batch_indices
 def _scatter_values_on_batch_indices(values, batch_indices, output_shape):
     """
-    Scatter function as in PyTorch with indices in format (batch_dim, indixes)
+    Scatter function as in PyTorch with indices in format (batch_dim, indices)
     """
     indices_shape = shape_list(batch_indices)
     # broadcast batch dim to indices_shape

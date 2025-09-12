@@ -21,7 +21,7 @@ import torch
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -34,7 +34,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.url_0 = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        cls.url_0 = url_to_local_path(
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+        )
         cls.image_0 = np.random.randint(255, size=(3, 876, 1300), dtype=np.uint8)
         cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
         cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)

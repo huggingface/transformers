@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-09-27 and added to Hugging Face Transformers on 2025-01-10.*
 
 # Emu3
 
@@ -62,7 +63,7 @@ from PIL import Image
 import requests
 
 processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
-model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", torch_dtype=torch.bfloat16, device_map="cuda")
+model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16, device_map="auto")
 
 # prepare image and text prompt
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
@@ -82,7 +83,7 @@ Emu3 can also generate images from textual input. Here is how you can do it:
 
 ```python
 processor = Emu3Processor.from_pretrained("BAAI/Emu3-Gen-hf")
-model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", torch_dtype="bfloat16", device_map="auto", attn_implementation="flash_attention_2")
+model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", dtype="bfloat16", device_map="auto", attn_implementation="flash_attention_2")
 
 
 inputs = processor(
@@ -91,10 +92,10 @@ inputs = processor(
     return_tensors="pt",
     return_for_image_generation=True,
 )
-inputs = inputs.to(device="cuda:0", dtype=torch.bfloat16)
+inputs = inputs.to(device=model.device, dtype=torch.bfloat16)
 
 neg_prompt = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry."
-neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(device="cuda:0")
+neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(device=model.device)
 
 image_sizes = inputs.pop("image_sizes")
 HEIGHT, WIDTH = image_sizes[0]

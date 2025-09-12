@@ -216,7 +216,7 @@ def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> list[in
 
     # Remove all spaces from num_ints
     num_ints = [float(num.strip()) for num in num_int_strs]
-    # scale to transformed image siz
+    # scale to transformed image size
     if len(num_ints) == 2:
         num_ints_translated = scale_point_to_transformed_image(x=num_ints[0], y=num_ints[1], scale_factor=scale_factor)
     elif len(num_ints) == 4:
@@ -485,7 +485,7 @@ class FuyuProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -561,7 +561,7 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
 
-        tensor_batch_images = torch.stack([img[0] for img in batch_images]).unsqueeze(1)
+        tensor_batch_images = torch.stack([img[0] for img in batch_images if img]).unsqueeze(1)
 
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []
@@ -774,19 +774,20 @@ class FuyuProcessor(ProcessorMixin):
 
         return self.batch_decode(padded_output_sequences, skip_special_tokens=skip_special_tokens, **kwargs)
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+        # Make a copy of list when removing otherwise `self.image_processor.model_input_names` is also modified
+        extra_image_inputs = [
+            "image_input_ids",
+            "image_patch_indices_per_subsequence",
+            "images",
+            "image_patch_indices_per_batch",
+        ]
+        image_processor_input_names = [name for name in image_processor_input_names if name not in extra_image_inputs]
+        return list(tokenizer_input_names + image_processor_input_names + ["image_patches_indices"])
 
 
 __all__ = ["FuyuProcessor"]

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-05-31 and added to Hugging Face Transformers on 2024-08-06.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -41,7 +42,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="mistralai/Mamba-Codestral-7B-v0.1",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -55,8 +56,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer  
 
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", torch_dtype=torch.bfloat16, device_map="auto")  
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")  
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", dtype=torch.bfloat16, device_map="auto")  
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)  
 
 output = model.generate(**input_ids)  
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -82,8 +83,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", torch_dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto")
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))

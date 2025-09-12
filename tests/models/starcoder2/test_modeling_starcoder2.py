@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -74,13 +73,6 @@ class Starcoder2ModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Starcoder2 flash attention does not support right padding")
-
 
 @slow
 @require_torch_accelerator
@@ -93,7 +85,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
         model_id = "bigcode/starcoder2-7b"
 
         model = Starcoder2ForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token
@@ -113,7 +105,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
         model_id = "bigcode/starcoder2-7b"
 
         model = Starcoder2ForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="eager"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token
@@ -135,7 +127,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
         model_id = "bigcode/starcoder2-7b"
 
         model = Starcoder2ForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token

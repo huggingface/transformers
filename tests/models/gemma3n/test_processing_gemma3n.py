@@ -29,6 +29,7 @@ if is_speech_available():
     from transformers.models.gemma3n import Gemma3nAudioFeatureExtractor, Gemma3nProcessor
 
 
+# TODO: omni-modal processor can't run tests from `ProcessorTesterMixin`
 @require_torch
 @require_torchaudio
 @require_vision
@@ -169,23 +170,3 @@ class Gemma3nProcessorTest(unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
-        processor = Gemma3nProcessor(
-            tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor
-        )
-
-        for key in feature_extractor.model_input_names:
-            self.assertIn(
-                key,
-                processor.model_input_names,
-            )
-
-        for key in image_processor.model_input_names:
-            self.assertIn(
-                key,
-                processor.model_input_names,
-            )

@@ -25,7 +25,6 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    is_flaky,
     require_torch,
     torch_device,
 )
@@ -274,53 +273,11 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Low memory will be removed soon so no need to fix it")
-    def test_beam_search_low_memory(self):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("Paligemma2 does not seem to be compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
-
-    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Gemma2 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("Gemma2 has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Gemma2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Gemma2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Gemma2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip("Gemma2 has HybridCache and doesn't support StaticCache")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @is_flaky
-    def test_generate_compile_model_forward(self):
-        super().test_generate_compile_model_forward()
 
     @unittest.skip("Paligemma position ids are 1 indexed")
     def test_eager_padding_matches_padding_free_with_position_ids(self):

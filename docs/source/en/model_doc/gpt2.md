@@ -13,11 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-02-14 and added to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
   </div>
@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 # GPT-2
 
-[GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) is a scaled up version of GPT, a causal transformer language model, with 10x more parameters and training data. The model was pretrained on a 40GB dataset to predict the next word in a sequence based on all the previous words. This approach enabled the model to perform many downstream tasks in a zero-shot setting.
+[GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) is a scaled up version of GPT, a causal transformer language model, with 10x more parameters and training data. The model was pretrained on a 40GB dataset to predict the next word in a sequence based on all the previous words. This approach enabled the model to perform many downstream tasks in a zero-shot setting. The blog post released by OpenAI can be found [here](https://openai.com/index/better-language-models/).
 
 The model architecture uses a unidirectional (causal) attention mechanism where each token can only attend to previous tokens, making it particularly effective for text generation tasks.
 
@@ -44,7 +44,7 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="openai-community/gpt2", torch_dtype=torch.float16, device=0)
+pipeline = pipeline(task="text-generation", model="openai-community/gpt2", dtype=torch.float16, device=0)
 pipeline("Hello, I'm a language model")
 ```
 </hfoption>
@@ -54,10 +54,10 @@ pipeline("Hello, I'm a language model")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
-input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to("cuda")
+input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -101,7 +101,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2-xl")
-inputs = tokenizer("Once upon a time, there was a magical forest", return_tensors="pt").to("cuda")
+inputs = tokenizer("Once upon a time, there was a magical forest", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
@@ -128,11 +128,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ## GPT2 specific outputs
 
 [[autodoc]] models.gpt2.modeling_gpt2.GPT2DoubleHeadsModelOutput
-
-[[autodoc]] models.gpt2.modeling_tf_gpt2.TFGPT2DoubleHeadsModelOutput
-
-<frameworkcontent>
-<pt>
 
 ## GPT2Model
 
@@ -163,50 +158,3 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] GPT2ForTokenClassification
     - forward
-
-</pt>
-<tf>
-
-## TFGPT2Model
-
-[[autodoc]] TFGPT2Model
-    - call
-
-## TFGPT2LMHeadModel
-
-[[autodoc]] TFGPT2LMHeadModel
-    - call
-
-## TFGPT2DoubleHeadsModel
-
-[[autodoc]] TFGPT2DoubleHeadsModel
-    - call
-
-## TFGPT2ForSequenceClassification
-
-[[autodoc]] TFGPT2ForSequenceClassification
-    - call
-
-## TFSequenceClassifierOutputWithPast
-
-[[autodoc]] modeling_tf_outputs.TFSequenceClassifierOutputWithPast
-
-## TFGPT2Tokenizer
-
-[[autodoc]] TFGPT2Tokenizer
-
-</tf>
-<jax>
-
-## FlaxGPT2Model
-
-[[autodoc]] FlaxGPT2Model
-    - __call__
-
-## FlaxGPT2LMHeadModel
-
-[[autodoc]] FlaxGPT2LMHeadModel
-    - __call__
-
-</jax>
-</frameworkcontent>

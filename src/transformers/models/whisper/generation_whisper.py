@@ -140,7 +140,7 @@ def _pad_to_max_length(
     timestamp_begin=None,
 ):
     """
-    skip_ending_double_timestamps: when the segement ended with two timestamp tokens, whether to ignore the last timestamp token
+    skip_ending_double_timestamps: when the segment ended with two timestamp tokens, whether to ignore the last timestamp token
     see https://github.com/huggingface/transformers/pull/35750
 
     _pad_to_max_length is used in different contexts:
@@ -372,7 +372,7 @@ class WhisperGenerationMixin(GenerationMixin):
             jump_times = time_indices[jumps] * time_precision
 
             # each predicted token has a corresponding timestamp, expect the eos token (or last predicted token) for which we don't retrieve cross attentions
-            # (indeed contrary to OAI that re-run a full foward to retreive cross attentions for each token and therefore also the last one predicted, we retreive
+            # (indeed contrary to OAI that re-run a full forward to retrieve cross attentions for each token and therefore also the last one predicted, we retrieve
             # cross attentions directly from the auto-regressive generation, so we don't have cross attentiosn for the token at the end of the sequence. Nevertheless,
             # that is not important since we expect this last token to be the eos token)
             # 1. for decoder_input_ids, we set the timestamps to 0.0
@@ -1594,7 +1594,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     # if task is defined it'll overwrite task ids that might have already been defined via the generation_config
                     replace_or_add(init_tokens[i], task_id, generation_config.task_to_id.values())
                 else:
-                    raise ValueError(f"The `{task}`task is not supported. The task should be one of `{TASK_IDS}`")
+                    raise ValueError(f"The `{task}` task is not supported. The task should be one of `{TASK_IDS}`")
             elif language is not None and hasattr(generation_config, "task_to_id"):
                 # if language is defined, but no task id is in `init_tokens`, default to transcribe
                 if not any(ti in init_tokens[i] for ti in generation_config.task_to_id.values()):

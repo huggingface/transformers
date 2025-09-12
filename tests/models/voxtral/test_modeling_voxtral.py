@@ -25,7 +25,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -190,7 +189,6 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Voxtral is audio+text model (not vision+text)
         if not self.has_attentions:
@@ -258,7 +256,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -291,7 +289,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -329,7 +327,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -359,7 +357,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversation)
@@ -414,7 +412,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversations)
@@ -469,7 +467,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(conversations)
@@ -491,7 +489,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         disclaimer: Perfect token matching cannot be achieved due to floating-point arithmetic differences between vLLM and Transformers implementations.
         """
         model = VoxtralForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device
+            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
         )
         inputs = self.processor.apply_transcription_request(
             language="en",

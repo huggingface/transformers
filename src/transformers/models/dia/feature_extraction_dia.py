@@ -150,7 +150,7 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
         input_values = BatchFeature({"input_values": raw_audio})
 
         # temporarily treat it as if we were mono as we also convert stereo to mono
-        origingal_feature_size = self.feature_size
+        original_feature_size = self.feature_size
         self.feature_size = 1
 
         # normal padding on batch
@@ -175,7 +175,7 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         # rewrite back to original feature size
-        self.feature_size = origingal_feature_size
+        self.feature_size = original_feature_size
 
         return padded_inputs
 

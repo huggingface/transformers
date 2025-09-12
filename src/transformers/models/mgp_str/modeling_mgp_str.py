@@ -91,7 +91,7 @@ class MgpstrModelOutput(ModelOutput):
         heads.
     """
 
-    logits: tuple[torch.FloatTensor] = None
+    logits: Optional[tuple[torch.FloatTensor]] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     a3_attentions: Optional[tuple[torch.FloatTensor]] = None

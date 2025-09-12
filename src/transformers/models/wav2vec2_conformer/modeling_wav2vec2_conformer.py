@@ -45,7 +45,7 @@ class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
         Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-        paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+        paper](https://huggingface.co/papers/2006.11477).
     projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
         Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
         projected quantized states.
@@ -55,9 +55,9 @@ class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
     codevector_perplexity (`torch.FloatTensor` of shape `(1,)`):
         The perplexity of the codevector distribution, used to measure the diversity of the codebook.
     contrastive_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-        The contrastive loss (L_m) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+        The contrastive loss (L_m) as stated in the [official paper](https://huggingface.co/papers/2006.11477).
     diversity_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-        The diversity loss (L_d) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+        The diversity loss (L_d) as stated in the [official paper](https://huggingface.co/papers/2006.11477).
     """
 
     loss: Optional[torch.FloatTensor] = None

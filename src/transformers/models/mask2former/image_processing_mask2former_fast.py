@@ -62,6 +62,7 @@ if is_torch_available():
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
+
 elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
@@ -193,7 +194,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         size: SizeDict,
         size_divisor: int = 0,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -311,7 +312,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
-        To be overriden by subclasses when image-like inputs other than images should be processed.
+        To be overridden by subclasses when image-like inputs other than images should be processed.
         It can be used for segmentation maps, depth maps, etc.
         """
         # Prepare input images
@@ -369,7 +370,9 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
                         image=grouped_segmentation_maps[shape],
                         size=size,
                         size_divisor=size_divisor,
-                        interpolation=F.InterpolationMode.NEAREST_EXACT,
+                        interpolation=F.InterpolationMode.NEAREST_EXACT
+                        if is_torchvision_v2_available()
+                        else F.InterpolationMode.NEAREST,
                     )
             resized_images_grouped[shape] = stacked_images
             if segmentation_maps is not None:

@@ -13,12 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-06-18 and added to Hugging Face Transformers on 2025-04-09.*
 
 # Glm4
 
 ## Overview
 
-The GLM family welcomes new members [GLM-4-0414](https://arxiv.org/pdf/2406.12793) series models.
+The GLM family welcomes new members [GLM-4-0414](https://huggingface.co/papers/2406.12793) series models.
 
 The **GLM-4-32B-0414** series models, featuring 32 billion parameters. Its performance is comparable to OpenAI’s GPT
 series and DeepSeek’s V3/R1 series. It also supports very user-friendly local deployment features. GLM-4-32B-Base-0414

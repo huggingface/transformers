@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
-from functools import lru_cache
 
-from tests.test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from tests.test_tokenization_common import TokenizerTesterMixin
 from transformers import SplinterTokenizerFast, is_tf_available, is_torch_available
 from transformers.models.splinter import SplinterTokenizer
 from transformers.testing_utils import get_tests_dir, slow
@@ -51,15 +50,11 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> SplinterTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> SplinterTokenizerFast:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)

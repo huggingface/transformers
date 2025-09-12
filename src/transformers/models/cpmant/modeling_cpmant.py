@@ -636,14 +636,14 @@ class CpmAntModel(CpmAntPreTrainedModel):
         position = torch.arange(seq_length, dtype=dtype, device=device).repeat(batch, 1)
         span = torch.full((batch, seq_length), 0, dtype=dtype, device=device)
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `DynamicCache` instead, e.g. "
                 "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -686,9 +686,6 @@ class CpmAntModel(CpmAntPreTrainedModel):
                 for hidden_state in all_hidden_states:
                     new_hidden_states += (hidden_state[:, self.prompt_length :, :],)
                 all_hidden_states = new_hidden_states
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(

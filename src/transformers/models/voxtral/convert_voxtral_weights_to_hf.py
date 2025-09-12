@@ -205,7 +205,7 @@ def write_model(
     # we need to add embed positions as they are not in the state dict
     with torch.no_grad(), torch.device("cuda"):
         # TODO: @eustlb, we are here creating on GPU
-        # vllm initalizes on device, while we save in state dict
+        # vllm initializes on device, while we save in state dict
         embed_positions_weight = sinusoids(config.audio_config.max_source_positions, config.audio_config.hidden_size)
     converted_state_dict["audio_tower.embed_positions.weight"] = embed_positions_weight.cpu()
 
@@ -230,7 +230,7 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    VoxtralForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+    VoxtralForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
 

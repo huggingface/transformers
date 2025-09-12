@@ -15,10 +15,11 @@
 
 import unittest
 import warnings
+from functools import cached_property
 from math import ceil, floor
 
 from transformers import LevitConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -409,7 +410,7 @@ class LevitModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [1.0448, -0.3745, -1.8317],
-                ("cuda", 8): [1.0453, -0.3739, -1.8314],
+                ("cuda", 8): [1.0448, -0.3745, -1.8317],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

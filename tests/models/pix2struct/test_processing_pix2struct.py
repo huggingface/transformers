@@ -165,27 +165,6 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = Pix2StructProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = self.prepare_text_inputs()
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        # For now the processor supports only ["flattened_patches", "input_ids", "attention_mask", "decoder_attention_mask"]
-        self.assertListEqual(
-            list(inputs.keys()), ["flattened_patches", "attention_mask", "decoder_attention_mask", "decoder_input_ids"]
-        )
-
-        inputs = processor(text=input_str)
-
-        # For now the processor supports only ["flattened_patches", "input_ids", "attention_mask", "decoder_attention_mask"]
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
-
     @require_torch
     @require_vision
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
@@ -330,3 +309,12 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
 
         self.assertEqual(len(inputs["decoder_input_ids"][0]), 76)
+
+    def test_model_input_names(self):
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(modalities="image")
+        image_input = self.prepare_image_inputs()
+        inputs = processor(text=text, images=image_input, return_tensors="pt")
+
+        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))

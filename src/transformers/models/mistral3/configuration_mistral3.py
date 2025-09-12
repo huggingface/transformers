@@ -85,7 +85,6 @@ class Mistral3Config(PretrainedConfig):
         spatial_merge_size=2,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
 
@@ -135,6 +134,8 @@ class Mistral3Config(PretrainedConfig):
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
         self.spatial_merge_size = spatial_merge_size
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Mistral3Config"]

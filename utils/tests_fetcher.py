@@ -61,43 +61,18 @@ from typing import Optional, Union
 
 from git import Repo
 
+# List here the models not to be filtered by `filter_tests`.
+from important_files import IMPORTANT_MODELS
+
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 PATH_TO_EXAMPLES = PATH_TO_REPO / "examples"
-PATH_TO_TRANFORMERS = PATH_TO_REPO / "src/transformers"
+PATH_TO_TRANSFORMERS = PATH_TO_REPO / "src/transformers"
 PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
 # The value is just a heuristic to determine if we `guess` all models are impacted.
 # This variable has effect only if `filter_models=False`.
 NUM_MODELS_TO_TRIGGER_FULL_CI = 30
-
-# List here the models to always test.
-IMPORTANT_MODELS = [
-    "auto",
-    "bert",
-    "gpt2",
-    "t5",
-    "modernbert",
-    "vit,clip",
-    "detr",
-    "table_transformer",
-    "got_ocr2",
-    "whisper",
-    "wav2vec2",
-    "qwen2_audio",
-    "speech_t5",
-    "csm",
-    "llama",
-    "gemma3",
-    "qwen2",
-    "mistral3",
-    "qwen2_5_vl",
-    "llava",
-    "smolvlm",
-    "internvl",
-    "gemma3n",
-    "qwen2_5_omni",
-]
 
 
 @contextmanager
@@ -759,7 +734,7 @@ def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     Create a list of all edges (a, b) which mean that modifying a impacts b with a going over all module and test files.
     """
     cache = {}
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py"))
+    all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
@@ -845,7 +820,7 @@ def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
     for framework in ["flax", "pytorch", "tensorflow"]:
         test_files = list((PATH_TO_EXAMPLES / framework).glob("test_*.py"))
         all_examples.extend(test_files)
-        # Remove the files at the root of examples/framework since they are not proper examples (they are eith utils
+        # Remove the files at the root of examples/framework since they are not proper examples (they are either utils
         # or example test files).
         examples = [
             f for f in (PATH_TO_EXAMPLES / framework).glob("**/*.py") if f.parent != PATH_TO_EXAMPLES / framework
@@ -879,7 +854,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     # Start from the example deps init.
     example_deps, examples = init_test_examples_dependencies()
     # Add all modules and all tests to all examples
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py"))
+    all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py")) + examples
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
@@ -1140,7 +1115,6 @@ JOB_TO_TEST_FILE = {
     # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
     "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_hub": r"tests/.*",
-    "tests_onnx": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",
 }
 

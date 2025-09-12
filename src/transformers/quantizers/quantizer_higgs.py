@@ -70,16 +70,16 @@ class HiggsHfQuantizer(HfQuantizer):
                 " This is not supported. Please remove the CPU or disk device from the device_map."
             )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            logger.info("`torch_dtype` is None. Setting `torch_dtype=torch.float16` for FLUTE compatibility.")
-            torch_dtype = torch.float16
-        elif torch_dtype != torch.float16 and torch_dtype != torch.bfloat16:
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            logger.info("`dtype` is None. Setting `dtype=torch.float16` for FLUTE compatibility.")
+            dtype = torch.float16
+        elif dtype != torch.float16 and dtype != torch.bfloat16:
             raise ValueError(
-                f"Invalid `torch_dtype` {torch_dtype}. HIGGS quantization only supports `torch_dtype=torch.float16` or `torch_dtype=torch.bfloat16`."
+                f"Invalid `dtype` {dtype}. HIGGS quantization only supports `dtype=torch.float16` or `dtype=torch.bfloat16`."
             )
 
-        return torch_dtype
+        return dtype
 
     def create_quantized_param(
         self,
@@ -123,13 +123,19 @@ class HiggsHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import replace_with_higgs_linear
 
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
+
         replace_with_higgs_linear(
             model,
             quantization_config=self.quantization_config,
+            modules_to_not_convert=self.modules_to_not_convert,
         )
         model.config.quantization_config = self.quantization_config
 

@@ -41,6 +41,7 @@ if is_torch_available():
         Ernie4_5_MoeForCausalLM,
         Ernie4_5_MoeModel,
     )
+
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
@@ -91,13 +92,11 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="eager"
-                )
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16, attn_implementation="eager")
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model_class.main_input_name]

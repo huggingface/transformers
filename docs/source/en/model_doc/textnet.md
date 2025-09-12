@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-11-03 and added to Hugging Face Transformers on 2025-01-08.*
 
 # TextNet
 
@@ -45,6 +46,11 @@ TextNet is the backbone for Fast, but can also be used as an efficient text/imag
 ## TextNetImageProcessor
 
 [[autodoc]] TextNetImageProcessor
+    - preprocess
+
+## TextNetImageProcessorFast
+
+[[autodoc]] TextNetImageProcessorFast
     - preprocess
 
 ## TextNetModel

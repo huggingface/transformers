@@ -43,7 +43,7 @@ params = [(1,)]
 
 # test that we can stack our skip decorators with 3rd party decorators
 def check_slow():
-    run_slow = bool(os.getenv("RUN_SLOW", 0))
+    run_slow = bool(os.getenv("RUN_SLOW", "0"))
     if run_slow:
         assert True
     else:
@@ -52,7 +52,7 @@ def check_slow():
 
 # test that we can stack our skip decorators
 def check_slow_torch_cuda():
-    run_slow = bool(os.getenv("RUN_SLOW", 0))
+    run_slow = bool(os.getenv("RUN_SLOW", "0"))
     if run_slow and torch_device == "cuda":
         assert True
     else:
@@ -60,7 +60,7 @@ def check_slow_torch_cuda():
 
 
 def check_slow_torch_accelerator():
-    run_slow = bool(os.getenv("RUN_SLOW", 0))
+    run_slow = bool(os.getenv("RUN_SLOW", "0"))
     assert run_slow and torch_device in ["cuda", "xpu"], "should have been skipped"
 
 

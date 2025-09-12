@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import DepthProConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -221,6 +223,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Inductor error: name 'OpaqueUnaryFn_log2' is not defined")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

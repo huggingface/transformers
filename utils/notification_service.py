@@ -80,7 +80,13 @@ def handle_test_results(test_results):
 
     # When the output is short enough, the output is surrounded by = signs: "== OUTPUT =="
     # When it is too long, those signs are not present.
-    time_spent = expressions[-2] if "=" in expressions[-1] else expressions[-1]
+    # It could be `'71.60s', '(0:01:11)', '====\n'` or `'in', '35.01s', '================\n'`.
+    # Let always select the one with `s`.
+    time_spent = expressions[-1]
+    if "=" in time_spent:
+        time_spent = expressions[-2]
+    if "(" in time_spent:
+        time_spent = expressions[-3]
 
     for i, expression in enumerate(expressions):
         if "failed" in expression:
@@ -193,18 +199,12 @@ class Message:
     @property
     def time(self) -> str:
         all_results = [*self.model_results.values(), *self.additional_results.values()]
-        time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
-        total_secs = 0
 
-        for time in time_spent:
-            time_parts = time.split(":")
-
-            # Time can be formatted as xx:xx:xx, as .xx, or as x.xx if the time spent was less than a minute.
-            if len(time_parts) == 1:
-                time_parts = [0, 0, time_parts[0]]
-
-            hours, minutes, seconds = int(time_parts[0]), int(time_parts[1]), float(time_parts[2])
-            total_secs += hours * 3600 + minutes * 60 + seconds
+        time_spent = []
+        for r in all_results:
+            if len(r["time_spent"]):
+                time_spent.extend(r["time_spent"])
+        total_secs = sum(time_spent)
 
         hours, minutes, seconds = total_secs // 3600, (total_secs % 3600) // 60, total_secs % 60
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
@@ -669,7 +669,7 @@ class Message:
                         "text": {
                             "type": "mrkdwn",
                             # TODO: We should NOT assume it's always Nvidia CI, but it's the case at this moment.
-                            "text": f"*There are {nb_new_failed_tests} failed tests unique to {'this run' if not is_amd_daily_ci_workflow else 'AMD'}*\n\n(compared to Nvidia CI: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                            "text": f"*There are {nb_new_failed_tests} failed tests unique to this run*\n\n(compared to{' Nvidia CI ' if is_scheduled_ci_run else ' '}run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
                         },
                         "accessory": {
                             "type": "button",
@@ -1072,18 +1072,14 @@ if __name__ == "__main__":
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
     # Add Commit/PR title with a link for push CI
-    # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
-    ci_title_push = os.environ.get("CI_TITLE_PUSH")
-    ci_title_workflow_run = os.environ.get("CI_TITLE_WORKFLOW_RUN")
-    ci_title = ci_title_push if ci_title_push else ci_title_workflow_run
-
+    ci_title = os.environ.get("CI_TITLE", "")
     ci_sha = os.environ.get("CI_SHA")
 
     ci_url = None
     if ci_sha:
         ci_url = f"https://github.com/{repository_full_name}/commit/{ci_sha}"
 
-    if ci_title is not None:
+    if ci_title:
         if ci_url is None:
             raise ValueError(
                 "When a title is found (`ci_title`), it means a `push` event or a `workflow_run` even (triggered by "
@@ -1112,9 +1108,9 @@ if __name__ == "__main__":
             merged_by = ci_details["merged_by"]["login"]
 
         if merged_by is None:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author}"
         else:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author} | Merged by: GH_{merged_by}"
 
     elif ci_sha:
         ci_title = f"<{ci_url}|commit: {ci_sha}>"
@@ -1197,7 +1193,7 @@ if __name__ == "__main__":
             "errors": 0,
             "success": 0,
             "skipped": 0,
-            "time_spent": "",
+            "time_spent": [],
             "failures": {},
             "job_link": {},
         }
@@ -1225,7 +1221,7 @@ if __name__ == "__main__":
                 matrix_job_results[matrix_name]["success"] += success
                 matrix_job_results[matrix_name]["errors"] += errors
                 matrix_job_results[matrix_name]["skipped"] += skipped
-                matrix_job_results[matrix_name]["time_spent"] += time_spent[1:-1] + ", "
+                matrix_job_results[matrix_name]["time_spent"].append(float(time_spent[:-1]))
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
@@ -1330,7 +1326,7 @@ if __name__ == "__main__":
             "errors": 0,
             "success": 0,
             "skipped": 0,
-            "time_spent": "",
+            "time_spent": [],
             "error": False,
             "failures": {},
             "job_link": {},
@@ -1360,7 +1356,7 @@ if __name__ == "__main__":
             additional_results[key]["success"] += success
             additional_results[key]["errors"] += errors
             additional_results[key]["skipped"] += skipped
-            additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
+            additional_results[key]["time_spent"].append(float(time_spent[:-1]))
 
             if len(artifact["errors"]):
                 additional_results[key]["error"] = True
@@ -1397,8 +1393,8 @@ if __name__ == "__main__":
 
     nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
     amd_daily_ci_workflows = (
-        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi250-caller.yml",
-        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi300-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi325-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi355-caller.yml",
     )
     is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
     is_amd_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(amd_daily_ci_workflows)
@@ -1406,13 +1402,13 @@ if __name__ == "__main__":
     is_scheduled_ci_run = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
     # For AMD workflow runs: the different AMD CI callers (MI210/MI250/MI300, etc.) are triggered by `workflow_run`
     #  event of `.github/workflows/self-scheduled-amd-caller.yml`.
-    if is_amd_daily_ci_workflow:
+    if os.environ.get("GITHUB_EVENT_NAME") == "workflow_run":
         # Get the path to the file on the runner that contains the full event webhook payload.
         event_payload_path = os.environ.get("GITHUB_EVENT_PATH")
         # Load the event payload
         with open(event_payload_path) as fp:
             event_payload = json.load(fp)
-            # The event that triggers the `workflow_run` event.
+            # The event that triggers the original `workflow_run`.
             if "workflow_run" in event_payload:
                 is_scheduled_ci_run = event_payload["workflow_run"]["event"] == "schedule"
 
@@ -1443,7 +1439,7 @@ if __name__ == "__main__":
         default_result = {
             "failed": {"unclassified": 0, "single": 0, "multi": 0},
             "success": 0,
-            "time_spent": "",
+            "time_spent": [],
             "error": False,
             "failures": {},
             "job_link": {},

@@ -126,50 +126,6 @@ Finally, use [`~Trainer.push_to_hub`] to upload your model and tokenizer to the 
 trainer.push_to_hub()
 ```
 
-## TensorFlow
-
-[`Trainer`] is incompatible with Transformers TensorFlow models. Instead, fine-tune these models with [Keras](https://keras.io/) since they're implemented as a standard [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model).
-
-```py
-from transformers import TFAutoModelForSequenceClassification
-from datasets import load_dataset
-from transformers import AutoTokenizer
-
-model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
-dataset = load_dataset("yelp_review_full")
-tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
-
-def tokenize(examples):
-    return tokenizer(examples["text"])
-
-dataset = dataset.map(tokenize)
-```
-
-There are two methods to convert a dataset to [tf.data.Dataset](https://www.tensorflow.org/api_docs/python/tf/data/Dataset).
-
-- [`~TFPreTrainedModel.prepare_tf_dataset`] is the recommended way to create a [tf.data.Dataset](https://www.tensorflow.org/api_docs/python/tf/data/Dataset) because you can inspect the model to figure out which columns to use as inputs and which columns to discard. This allows you to create a simpler, more performant dataset.
-- [`~datasets.Dataset.to_tf_dataset`] is a more low-level method from the [Datasets](https://hf.co/docs/datasets/index) library that gives you more control over how a dataset is created by specifying the columns and label columns to use.
-
-Add the tokenizer to [`~TFPreTrainedModel.prepare_tf_dataset`] to pad each batch, and you can optionally shuffle the dataset. For more complicated preprocessing, pass the preprocessing function to the `collate_fn` parameter instead.
-
-```py
-tf_dataset = model.prepare_tf_dataset(
-    dataset["train"], batch_size=16, shuffle=True, tokenizer=tokenizer
-)
-```
-
-Finally, [compile](https://keras.io/api/models/model_training_apis/#compile-method) and [fit](https://keras.io/api/models/model_training_apis/#fit-method) the model to start training.
-
-> [!TIP]
-> It isn't necessary to pass a loss argument to [compile](https://keras.io/api/models/model_training_apis/#compile-method) because Transformers automatically chooses a loss that is appropriate for the task and architecture. However, you can always specify a loss argument if you want.
-
-```py
-from tensorflow.keras.optimizers import Adam
-
-model.compile(optimizer=Adam(3e-5))
-model.fit(tf_dataset)
-```
-
 ## Resources
 
 Refer to the Transformers [examples](https://github.com/huggingface/transformers/tree/main/examples) for more detailed training scripts on various tasks. You can also check out the [notebooks](./notebooks) for interactive examples.

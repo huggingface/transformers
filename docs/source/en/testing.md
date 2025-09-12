@@ -502,7 +502,7 @@ Inside tests:
 ```python
 from transformers.testing_utils import get_gpu_count
 
-n_gpu = get_gpu_count()  # works with torch and tf
+n_gpu = get_gpu_count()
 ```
 
 ### Testing with a specific PyTorch backend or device

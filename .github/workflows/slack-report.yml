@@ -24,6 +24,10 @@ on:
       report_repo_id:
         required: true
         type: string
+      commit_sha:
+        required: false
+        type: string
+
 
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
@@ -32,7 +36,7 @@ jobs:
   send_results:
     name: Send results to webhook
     runs-on: ubuntu-22.04
-    if: always()
+    if: always() && !cancelled()
     steps:
       - name: Preliminary job status
         shell: bash
@@ -41,6 +45,10 @@ jobs:
           echo "Setup status: ${{ inputs.setup_status }}"
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          ref: ${{ inputs.commit_sha || github.sha }}
+
       - uses: actions/download-artifact@v4
 
       - name: Prepare some setup values
@@ -67,7 +75,9 @@ jobs:
           SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: ${{ inputs.ci_event }}
-          CI_SHA: ${{ github.sha }}
+          # This `CI_TITLE` would be empty for `schedule` or `workflow_run` events.
+          CI_TITLE: ${{ github.event.head_commit.message }}
+          CI_SHA: ${{ inputs.commit_sha || github.sha }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
           REPORT_REPO_ID: ${{ inputs.report_repo_id }}
@@ -83,7 +93,7 @@ jobs:
             python utils/notification_service.py "${{ inputs.quantization_matrix }}"
           else
             python utils/notification_service.py "${{ inputs.folder_slices }}"
-          fi          
+          fi
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts

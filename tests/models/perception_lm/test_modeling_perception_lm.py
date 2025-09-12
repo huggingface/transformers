@@ -436,7 +436,6 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            video_load_backend="decord",
             padding=True,
             padding_side="left",
         ).to(torch_device)
@@ -462,7 +461,6 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            video_load_backend="decord",
             padding=True,
             padding_side="left",
         ).to(torch_device)

@@ -120,13 +120,12 @@ class Cohere2VisionText2TextModelTester:
     def prepare_config_and_inputs(self):
         config = self.get_config()
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        image_num_patches = torch.tensor([1] * self.batch_size).to(torch_device)
 
-        return config, pixel_values, image_num_patches
+        return config, pixel_values
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, image_num_patches = config_and_inputs
+        config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
@@ -136,7 +135,6 @@ class Cohere2VisionText2TextModelTester:
             "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "image_num_patches": image_num_patches,
         }
         return config, inputs_dict
 
@@ -188,7 +186,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     def get_model(self, dummy=True):
         device_type, major, _ = get_device_properties()
-        torch_dtype = torch.float16
+        dtype = torch.float16
 
         # too large to fit into A10
         config = Cohere2VisionConfig.from_pretrained(self.model_checkpoint)
@@ -199,7 +197,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         model = Cohere2VisionForConditionalGeneration.from_pretrained(
             self.model_checkpoint,
             config=config,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             device_map="auto",
         )
         return model
@@ -332,7 +330,10 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        },
                         {"type": "text", "text": "Describe this image"},
                     ],
                 },

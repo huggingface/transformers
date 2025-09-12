@@ -11,6 +11,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2017-12-20 and added to Hugging Face Transformers on 2024-03-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -120,7 +121,7 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
 
 ## Resources
 
-- Refer to this [noteboook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SuperPoint/Inference_with_SuperPoint_to_detect_interest_points_in_an_image.ipynb) for an inference and visualization example.
+- Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/SuperPoint/Inference_with_SuperPoint_to_detect_interest_points_in_an_image.ipynb) for an inference and visualization example.
 
 ## SuperPointConfig
 
@@ -138,12 +139,7 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
 - preprocess
 - post_process_keypoint_detection
 
-<frameworkcontent>
-<pt>
 ## SuperPointForKeypointDetection
 
 [[autodoc]] SuperPointForKeypointDetection
-
 - forward
-
-</pt>

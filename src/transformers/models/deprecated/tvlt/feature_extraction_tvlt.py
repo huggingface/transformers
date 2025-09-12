@@ -93,7 +93,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         ).T
 
-    def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform: np.ndarray) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided audio, gives similar results to Whisper's original torch
         implementation with 1e-5 tolerance.

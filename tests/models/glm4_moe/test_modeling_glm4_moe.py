@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 import torch
 from packaging import version
 
@@ -93,6 +94,7 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
@@ -107,10 +109,8 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         ]
 
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
-        tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4.5")
-        model = Glm4MoeForCausalLM.from_pretrained(
-            "THUDM/GLM-4.5", device_map=torch_device, torch_dtype=torch.bfloat16
-        )
+        tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
+        model = Glm4MoeForCausalLM.from_pretrained("zai-org/GLM-4.5", device_map=torch_device, dtype=torch.bfloat16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache

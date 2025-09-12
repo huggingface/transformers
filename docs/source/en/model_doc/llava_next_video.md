@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-05-31 and added to Hugging Face Transformers on 2024-06-26.*
 
 # LLaVa-NeXT-Video
 
@@ -129,7 +130,7 @@ import torch
 from transformers import LlavaNextVideoForConditionalGeneration, LlavaNextVideoProcessor
 
 # Load the model in half-precision
-model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", dtype=torch.float16, device_map="auto")
 processor = LlavaNextVideoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
 
 # Load the video as an np.array, sampling uniformly 8 frames (can sample more for longer videos)
@@ -243,7 +244,7 @@ from transformers import LlavaNextVideoForConditionalGeneration
 
 model = LlavaNextVideoForConditionalGeneration.from_pretrained(
     "llava-hf/LLaVA-NeXT-Video-7B-hf", 
-    torch_dtype=torch.float16, 
+    dtype=torch.float16, 
     attn_implementation="flash_attention_2",
 ).to(0)
 ```

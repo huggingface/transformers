@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import io
-import warnings
 from typing import Optional, Union
 
 from ...utils import is_mistral_common_available, is_soundfile_available, is_torch_available, logging
@@ -431,31 +430,6 @@ class VoxtralProcessor(ProcessorMixin):
                 return BatchFeature(data=data, tensor_type=return_tensors)
 
         return texts
-
-    # Deprecated typo'd method for backward compatibility
-    def apply_transcrition_request(self, *args, **kwargs):
-        """
-        Deprecated typo'd method. Use `apply_transcription_request` instead.
-        """
-        warnings.warn(
-            "`apply_transcrition_request` is deprecated due to a typo and will be removed in a future release. Please use `apply_transcription_request` instead.",
-            FutureWarning,
-        )
-        return self.apply_transcription_request(*args, **kwargs)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
 
 __all__ = ["VoxtralProcessor"]

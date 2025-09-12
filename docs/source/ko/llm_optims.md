@@ -99,11 +99,8 @@ model.generation_config.max_new_tokens = 16
 
 past_key_values = StaticCache(
     config=model.config,
-    max_batch_size=1,
     # 캐시를 재사용할 계획이 있는 경우, 모든 경우에 충분한 캐시 길이를 설정해야 합니다
     max_cache_len=prompt_length+(model.generation_config.max_new_tokens*2),
-    device=model.device,
-    dtype=model.dtype
 )
 outputs = model.generate(**input_ids, past_key_values=past_key_values)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -161,7 +158,7 @@ def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_valu
 batch_size, seq_length = inputs["input_ids"].shape
 with torch.no_grad():
     past_key_values = StaticCache(
-        config=model.config, max_batch_size=2, max_cache_len=4096, device=torch_device, dtype=model.dtype
+        config=model.config, max_cache_len=4096
     )
     cache_position = torch.arange(seq_length, device=torch_device)
     generated_ids = torch.zeros(
@@ -343,7 +340,7 @@ quant_config = BitsAndBytesConfig(load_in_8bit=True)
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2b",
     quantization_config=quant_config,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
 ```
@@ -363,7 +360,7 @@ from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
@@ -386,14 +383,14 @@ with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable
 	height="450"
 ></iframe>
 
-Mistral-7B-v0.1을 반정밀도로 로드하려면 [`~transformers.AutoModelForCausalLM.from_pretrained`] 메서드에서 `torch_dtype` 매개변수를 `torch.bfloat16`으로 설정하십시오. 이 경우 13.74GB의 메모리가 필요합니다.
+Mistral-7B-v0.1을 반정밀도로 로드하려면 [`~transformers.AutoModelForCausalLM.from_pretrained`] 메서드에서 `dtype` 매개변수를 `torch.bfloat16`으로 설정하십시오. 이 경우 13.74GB의 메모리가 필요합니다.
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
 model = AutoModelForCausalLM.from_pretrained(
-    "mistralai/Mistral-7B-v0.1", torch_dtype=torch.bfloat16, device_map="auto",
+    "mistralai/Mistral-7B-v0.1", dtype=torch.bfloat16, device_map="auto",
 )
 ```
 

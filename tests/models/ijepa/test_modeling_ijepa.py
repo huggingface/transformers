@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch IJEPA model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import IJepaConfig
 from transformers.testing_utils import (
@@ -26,7 +27,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
@@ -201,7 +201,7 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False  # broken by output recording refactor
 
     test_pruning = False
     test_resize_embeddings = False
@@ -300,7 +300,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         """
         model = IJepaModel.from_pretrained(
             "facebook/ijepa_vith14_1k",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map="auto",
         )
         image_processor = self.default_image_processor

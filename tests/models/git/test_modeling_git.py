@@ -331,24 +331,6 @@ class GitModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertTrue(result.loss.item() > 0)
 
-    def _test_beam_search_generate(self, config, input_ids, input_mask, pixel_values):
-        model = GitForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # generate
-        generated_ids = model.generate(
-            input_ids,
-            attention_mask=input_mask,
-            pixel_values=pixel_values,
-            do_sample=False,
-            max_length=20,
-            num_beams=2,
-            num_return_sequences=2,
-        )
-
-        self.parent.assertEqual(generated_ids.shape, (self.batch_size * 2, 20))
-
     def _test_batched_generate_captioning(self, config, input_ids, input_mask, pixel_values):
         model = GitForCausalLM(config=config)
         model.to(torch_device)
@@ -431,10 +413,6 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
-    def test_beam_search_generate(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester._test_beam_search_generate(*config_and_inputs)
-
     def test_batched_generate_captioning(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester._test_batched_generate_captioning(*config_and_inputs)
@@ -478,23 +456,7 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         pass
 
     @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(reason="GIT has pixel values as additional input")
     def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_dola_decoding_sample(self):
         pass
 
 

@@ -14,6 +14,7 @@
 
 import copy
 import unittest
+from functools import cached_property
 
 import numpy as np
 import pandas as pd
@@ -32,7 +33,6 @@ from transformers import (
 )
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask

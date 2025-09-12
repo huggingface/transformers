@@ -418,6 +418,26 @@ class SamHQVisionLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
+class SamHQPreTrainedModel(PreTrainedModel):
+    config: SamHQConfig
+    base_model_prefix = "sam_hq"
+    main_input_name = "pixel_values"
+    _no_split_modules = ["SamHQVisionAttention"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+        if isinstance(module, SamHQVisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
+        elif isinstance(module, SamHQVisionEncoder):
+            if self.config.use_abs_pos:
+                module.pos_embed.data.zero_()
+
+
 class SamHQPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -471,26 +491,6 @@ class SamHQVisionNeck(nn.Module):
         hidden_states = self.conv2(hidden_states)
         hidden_states = self.layer_norm2(hidden_states)
         return hidden_states
-
-
-@auto_docstring
-class SamHQPreTrainedModel(PreTrainedModel):
-    config: SamHQConfig
-    base_model_prefix = "sam_hq"
-    main_input_name = "pixel_values"
-    _no_split_modules = ["SamHQVisionAttention"]
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module: nn.Module):
-        super()._init_weights(module)
-        if isinstance(module, SamHQVisionAttention):
-            if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
-        elif isinstance(module, SamHQVisionEncoder):
-            if self.config.use_abs_pos:
-                module.pos_embed.data.zero_()
 
 
 class SamHQVisionEncoder(SamHQPreTrainedModel):
@@ -560,34 +560,30 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
         )
 
 
-class SamHQLayerNorm(nn.Module):
+class SamHQLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
 
 
 def eager_attention_forward(
@@ -678,7 +674,7 @@ class SamHQAttention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -814,7 +810,7 @@ class SamHQTwoWayTransformer(nn.Module):
                 attention_similarity=attention_similarity,
                 **kwargs,
             )
-        # Apply the final attenion layer from the points to the image
+        # Apply the final attention layer from the points to the image
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 

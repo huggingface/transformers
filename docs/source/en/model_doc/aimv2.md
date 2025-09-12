@@ -13,12 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-11-21 and added to Hugging Face Transformers on 2025-07-08.*
 
 # AIMv2
 
 ## Overview
 
-The AIMv2 model was proposed in [Multimodal Autoregressive Pre-training of Large Vision Encoders](https://arxiv.org/abs/2411.14402) by Enrico Fini, Mustafa Shukor, Xiujun Li, Philipp Dufter, Michal Klein, David Haldimann, Sai Aitharaju, Victor Guilherme Turrisi da Costa, Louis Béthune, Zhe Gan, Alexander T Toshev, Marcin Eichner, Moin Nabi, Yinfei Yang, Joshua M. Susskind, Alaaeldin El-Nouby.
+The AIMv2 model was proposed in [Multimodal Autoregressive Pre-training of Large Vision Encoders](https://huggingface.co/papers/2411.14402) by Enrico Fini, Mustafa Shukor, Xiujun Li, Philipp Dufter, Michal Klein, David Haldimann, Sai Aitharaju, Victor Guilherme Turrisi da Costa, Louis Béthune, Zhe Gan, Alexander T Toshev, Marcin Eichner, Moin Nabi, Yinfei Yang, Joshua M. Susskind, Alaaeldin El-Nouby.
 
 The abstract from the paper is the following:
 
@@ -99,6 +100,3 @@ probs = outputs.logits_per_image.softmax(dim=-1)
 
 [[autodoc]] Aimv2TextModel
     - forward
-
-</pt>
-<tf>

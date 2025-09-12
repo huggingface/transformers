@@ -1884,7 +1884,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(y_hat)
                 # y_hat should be a 2-tuple, each with dimension [bs, num_targets]
-                y_hat = tuple([item.view(-1, self.config.num_targets) for item in y_hat])
+                y_hat = tuple(item.view(-1, self.config.num_targets) for item in y_hat)
                 loss = nll(distribution, target_values)
                 # take average of the loss
                 loss = weighted_average(loss)

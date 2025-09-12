@@ -131,9 +131,6 @@ generation_output[:2]
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] HammingDiversityLogitsProcessor
-    - __call__
-
 [[autodoc]] InfNanRemoveLogitsProcessor
     - __call__
 
@@ -308,32 +305,6 @@ generation_output[:2]
 [[autodoc]] EosTokenCriteria
     - __call__
 
-## Constraint [[transformers.Constraint]]
-
-[`Constraint`]는 생성 출력에 특정 토큰이나 시퀀스를 강제로 포함시키는 데 사용됩니다. 이 기능은 PyTorch 구현에만 제공됩니다.
-
-[[autodoc]] Constraint
-
-[[autodoc]] PhrasalConstraint
-
-[[autodoc]] DisjunctiveConstraint
-
-[[autodoc]] ConstraintListState
-
-## 빔 검색 (BeamSearch) [[transformers.BeamScorer]]
-
-[[autodoc]] BeamScorer
-    - process
-    - finalize
-
-[[autodoc]] BeamSearchScorer
-    - process
-    - finalize
-
-[[autodoc]] ConstrainedBeamSearchScorer
-    - process
-    - finalize
-
 ## 스트리머 (Streamers) [[transformers.TextStreamer]]
 
 [[autodoc]] TextStreamer
@@ -362,21 +333,11 @@ generation_output[:2]
 [[autodoc]] SlidingWindowLayer
     - update
 
-[[autodoc]] CacheProcessor
-    - pre_update
-    - post_update
+[[autodoc]] QuantoQuantizedLayer
+    - update
 
-[[autodoc]] OffloadedCacheProcessor
-    - pre_update
-
-[[autodoc]] QuantizedCacheProcessor
-    - post_update
-
-[[autodoc]] QuantoQuantizedCacheProcessor
-    - post_update
-
-[[autodoc]] HQQQuantizedCacheProcessor
-    - post_update
+[[autodoc]] HQQQuantizedLayer
+    - update
 
 [[autodoc]] Cache
     - update
@@ -397,11 +358,7 @@ generation_output[:2]
 
 [[autodoc]] QuantoQuantizedCache
 
-[[autodoc]] QuantoQuantizedCacheProcessor
-
 [[autodoc]] HQQQuantizedCache
-
-[[autodoc]] HQQQuantizedCacheProcessor
 
 [[autodoc]] OffloadedCache
 
@@ -418,15 +375,6 @@ generation_output[:2]
 [[autodoc]] EncoderDecoderCache
     - to_legacy_cache
     - from_legacy_cache
-
-[[autodoc]] MambaCache
-    - update_conv_state
-    - update_ssm_state
-    - reset
-
-[[autodoc]] CacheConfig
-
-[[autodoc]] QuantizedCacheConfig
 
 ## 워터마크 유틸리티 (Watermark Utils) [[transformers.WatermarkDetector]]
 

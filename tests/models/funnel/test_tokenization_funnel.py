@@ -15,13 +15,12 @@
 
 import os
 import unittest
-from functools import lru_cache
 
 from transformers import FunnelTokenizer, FunnelTokenizerFast
 from transformers.models.funnel.tokenization_funnel import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
@@ -56,15 +55,11 @@ class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         pretrained_name = pretrained_name or cls.tmpdirname
         return FunnelTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
         pretrained_name = pretrained_name or cls.tmpdirname
         return FunnelTokenizerFast.from_pretrained(pretrained_name, **kwargs)

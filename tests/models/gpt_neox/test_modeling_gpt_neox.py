@@ -473,7 +473,7 @@ class GPTNeoXLanguageGenerationTest(unittest.TestCase):
 
     def pythia_integration_test(self):
         model_name_or_path = "EleutherAI/pythia-70m"
-        model = GPTNeoXForCausalLM.from_pretrained(model_name_or_path, torch_dtype=torch.float16).to(torch_device)
+        model = GPTNeoXForCausalLM.from_pretrained(model_name_or_path, dtype=torch.float16).to(torch_device)
         EXPECTED_LOGITS = torch.tensor([1069.0000,  228.7500, 1072.0000, 1072.0000, 1069.0000, 1068.0000, 1068.0000, 1071.0000, 1071.0000, 1071.0000, 1073.0000, 1070.0000, 1071.0000, 1075.0000, 1073.0000, 1075.0000, 1074.0000, 1069.0000, 1072.0000, 1071.0000, 1071.0000, 1071.0000, 1070.0000, 1069.0000, 1069.0000, 1069.0000, 1070.0000, 1075.0000, 1073.0000, 1074.0000])  # fmt: skip
         input_ids = [29, 93, 303, 64, 5478, 49651, 10394, 187, 34, 12939, 875]
         # alternative: tokenizer('<|im_start|>system\nA chat between')

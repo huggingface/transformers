@@ -138,11 +138,6 @@ class Idefics3Processor(ProcessorMixin):
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: Optional[str] = None, **kwargs
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
         self.image_token = AddedToken("<image>", normalized=False, special=True).content
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True).content
@@ -407,28 +402,6 @@ class Idefics3Processor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Idefics3TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        batched_decode_output = self.tokenizer.batch_decode(*args, **kwargs)
-        return [self._regex_to_remove_extra_special_tokens.sub("<image>", s) for s in batched_decode_output]
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Idefics3TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        decode_output = self.tokenizer.decode(*args, **kwargs)
-        return self._regex_to_remove_extra_special_tokens.sub("<image>", decode_output)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
 
 
 __all__ = ["Idefics3Processor"]

@@ -48,7 +48,7 @@ tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", quantization_config=quantization_config)
 
 prompt = "Hello, my llama is cute"
-inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 generated_ids = model.generate(**inputs)
 outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ```
@@ -197,10 +197,10 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto")
 
 input_text = "Hello, my llama is cute"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
+inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
@@ -245,7 +245,7 @@ Enable FlashAttention2 by setting `attn_implementation="flash_attention_2"` in [
 ```py
 from transformers import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", dtype=torch.bfloat16, attn_implementation="flash_attention_2")
 ```
 
 ### Benchmarks

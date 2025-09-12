@@ -427,9 +427,11 @@ class TokenClassificationPipeline(ChunkPipeline):
             if previous_entity["start"] <= entity["start"] < previous_entity["end"]:
                 current_length = entity["end"] - entity["start"]
                 previous_length = previous_entity["end"] - previous_entity["start"]
-                if current_length > previous_length:
-                    previous_entity = entity
-                elif current_length == previous_length and entity["score"] > previous_entity["score"]:
+                if (
+                    current_length > previous_length
+                    or current_length == previous_length
+                    and entity["score"] > previous_entity["score"]
+                ):
                     previous_entity = entity
             else:
                 aggregated_entities.append(previous_entity)

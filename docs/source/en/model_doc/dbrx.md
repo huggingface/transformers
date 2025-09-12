@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2024-03-27 and added to Hugging Face Transformers on 2024-04-18.*
 
 # DBRX
 
@@ -51,13 +52,13 @@ tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOU
 model = DbrxForCausalLM.from_pretrained(
     "databricks/dbrx-instruct",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     )
 
 input_text = "What does it take to build a great LLM?"
 messages = [{"role": "user", "content": input_text}]
-input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))
@@ -72,14 +73,14 @@ tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOU
 model = DbrxForCausalLM.from_pretrained(
     "databricks/dbrx-instruct",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     attn_implementation="flash_attention_2",
     )
 
 input_text = "What does it take to build a great LLM?"
 messages = [{"role": "user", "content": input_text}]
-input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))
@@ -94,14 +95,14 @@ tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOU
 model = DbrxForCausalLM.from_pretrained(
     "databricks/dbrx-instruct",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     attn_implementation="sdpa",
     )
 
 input_text = "What does it take to build a great LLM?"
 messages = [{"role": "user", "content": input_text}]
-input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=200)
 print(tokenizer.decode(outputs[0]))

@@ -153,8 +153,8 @@ class CsmGenerationMixin(GenerationMixin):
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
-        synced_gpus: bool,
-        streamer: Optional["BaseStreamer"],
+        synced_gpus: bool = False,
+        streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         """
@@ -167,7 +167,7 @@ class CsmGenerationMixin(GenerationMixin):
         3. Use these generated codebook tokens as input_ids to sample the next first codebook token using the backbone model
         4. Repeat until stopping criteria is met
 
-        Csm supports two stopping criterias:
+        Csm supports two stopping criteria:
         - stop when the generated sequence is at max_length
         - stop when all the generated codebook tokens are the codebook_eos_token_id
         """

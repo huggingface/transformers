@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-02-07 and added to Hugging Face Transformers on 2022-03-01.*
 
 # Data2Vec
 
@@ -42,7 +43,6 @@ natural language understanding demonstrate a new state of the art or competitive
 Models and code are available at www.github.com/pytorch/fairseq/tree/master/examples/data2vec.*
 
 This model was contributed by [edugp](https://huggingface.co/edugp) and [patrickvonplaten](https://huggingface.co/patrickvonplaten).
-[sayakpaul](https://github.com/sayakpaul) and [Rocketknight1](https://github.com/Rocketknight1) contributed Data2Vec for vision in TensorFlow.
 
 The original code (for NLP and Speech) can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/data2vec).
 The original code for vision can be found [here](https://github.com/facebookresearch/data2vec_vision/tree/main/beit).
@@ -53,24 +53,24 @@ The original code for vision can be found [here](https://github.com/facebookrese
 - For Data2VecAudio, preprocessing is identical to [`Wav2Vec2Model`], including feature extraction
 - For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
 - For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
-- The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`  
+- The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ### Using Scaled Dot Product Attention (SDPA)
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
 or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
 page for more information.
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
 The SDPA implementation is currently available for the Data2VecAudio and Data2VecVision models.
 
 ```
 from transformers import Data2VecVisionForImageClassification
-model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa", dtype=torch.float16)
 ...
 ```
 
@@ -102,7 +102,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="image-classification"/>
 
 - [`Data2VecVisionForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- To fine-tune [`TFData2VecVisionForImageClassification`] on a custom dataset, see [this notebook](https://colab.research.google.com/github/sayakpaul/TF-2.0-Hacks/blob/master/data2vec_vision_image_classification.ipynb).
 
 **Data2VecText documentation resources**
 - [Text classification task guide](../tasks/sequence_classification)
@@ -133,9 +132,6 @@ If you're interested in submitting a resource to be included here, please feel f
 ## Data2VecVisionConfig
 
 [[autodoc]] Data2VecVisionConfig
-
-<frameworkcontent>
-<pt>
 
 ## Data2VecAudioModel
 
@@ -211,24 +207,3 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] Data2VecVisionForSemanticSegmentation
     - forward
-
-</pt>
-<tf>
-
-## TFData2VecVisionModel
-
-[[autodoc]] TFData2VecVisionModel
-    - call
-
-## TFData2VecVisionForImageClassification
-
-[[autodoc]] TFData2VecVisionForImageClassification
-    - call
-
-## TFData2VecVisionForSemanticSegmentation
-
-[[autodoc]] TFData2VecVisionForSemanticSegmentation
-    - call
-
-</tf>
-</frameworkcontent>

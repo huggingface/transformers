@@ -22,7 +22,7 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 import numpy as np
 import torch
@@ -33,7 +33,9 @@ from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, is_accelerate_available
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
+from ...utils.generic import check_model_inputs
 from .configuration_eomt import EomtConfig
 
 
@@ -75,7 +77,7 @@ class EomtForUniversalSegmentationOutput(ModelOutput):
         Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Self and Cross Attentions weights from transformer decoder.
     patch_offsets (`list[torch.Tensor]`, *optional*):
-        list of tuples indicating the image index and start and end positions of patches for semantic segementation.
+        list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -895,20 +897,13 @@ class EomtLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        self_attention_outputs = self.attention(
-            self.norm1(hidden_states),  # in Eomt, layernorm is applied before self-attention
-            head_mask,
-            output_attentions=output_attentions,
-        )
-        attention_output = self_attention_outputs[0]
-
-        attention_output = self.layer_scale1(attention_output)
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+    ) -> torch.Tensor:
+        hidden_states_norm = self.norm1(hidden_states)
+        self_attention_output, _ = self.attention(hidden_states_norm, head_mask)
+        self_attention_output = self.layer_scale1(self_attention_output)
 
         # first residual connection
-        hidden_states = self.drop_path(attention_output) + hidden_states
+        hidden_states = self.drop_path(self_attention_output) + hidden_states
 
         # in Eomt, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
@@ -918,9 +913,7 @@ class EomtLayer(GradientCheckpointingLayer):
         # second residual connection
         layer_output = self.drop_path(layer_output) + hidden_states
 
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        return layer_output
 
 
 class EomtLayerNorm2d(nn.LayerNorm):
@@ -951,7 +944,7 @@ class EomtScaleLayer(nn.Module):
 
         self.layernorm2d = EomtLayerNorm2d(hidden_size)
 
-    def forward(self, hidden_states: torch.tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.conv2(hidden_states)
@@ -1001,7 +994,10 @@ class EomtPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
-    _supports_flash_attn = True
+    _can_record_outputs = {
+        "hidden_states": EomtLayer,
+        "attentions": EomtAttention,
+    }
 
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
@@ -1036,7 +1032,7 @@ class EomtPreTrainedModel(PreTrainedModel):
 class EomtForUniversalSegmentation(EomtPreTrainedModel):
     main_input_name = "pixel_values"
 
-    def __init__(self, config: EomtConfig) -> None:
+    def __init__(self, config: EomtConfig):
         super().__init__(config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
@@ -1091,16 +1087,15 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
     def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
+    @check_model_inputs
     @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         pixel_values: Tensor,
         mask_labels: Optional[list[Tensor]] = None,
         class_labels: Optional[list[Tensor]] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
         patch_offsets: Optional[list[Tensor]] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> EomtForUniversalSegmentationOutput:
         r"""
         mask_labels (`list[torch.Tensor]`, *optional*):
@@ -1109,15 +1104,8 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
         patch_offsets (`list[torch.Tensor]`, *optional*):
-            list of tuples indicating the image index and start and end positions of patches for semantic segementation.
+            list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
 
         masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()
         attention_mask = None
@@ -1128,9 +1116,6 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
         hidden_states = self.embeddings(pixel_values)
 
         for idx, layer_module in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
             if idx == self.num_hidden_layers - self.config.num_blocks:
                 query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1).to(hidden_states.device)
                 hidden_states = torch.cat((query, hidden_states), dim=1)
@@ -1176,15 +1161,9 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
                 attention_mask = attention_mask[:, None, ...].expand(-1, self.config.num_attention_heads, -1, -1)
                 attention_mask = attention_mask.float().masked_fill(~attention_mask, -1e9)
 
-            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions += (layer_outputs[1],)
+            hidden_states = layer_module(hidden_states, attention_mask)
 
         sequence_output = self.layernorm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states += (sequence_output,)
 
         masks_queries_logits, class_queries_logits = self.predict(sequence_output)
         masks_queries_logits_per_layer += (masks_queries_logits,)
@@ -1210,8 +1189,6 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
             masks_queries_logits=masks_queries_logits,
             class_queries_logits=class_queries_logits,
             last_hidden_state=sequence_output,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
             patch_offsets=patch_offsets,
         )
 

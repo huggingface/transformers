@@ -16,16 +16,12 @@
 import gc
 import unittest
 
-import pytest
-
 from transformers import AutoTokenizer, Dots1Config, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
-    require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -86,29 +82,6 @@ class Dots1ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = Dots1ModelTester
-
-    @unittest.skip("dots.llm1's moe is not compatible `token_indices, weight_indices = torch.where(mask)`.")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("dots.llm1's moe is not compatible `token_indices, weight_indices = torch.where(mask)`.")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("dots.llm1's moe is not compatible `token_indices, weight_indices = torch.where(mask)`")
-    def test_generate_compile_model_forward(self):
-        pass
-
-    @unittest.skip("dots.llm1's moe is not compatible token_indices, weight_indices = torch.where(mask).")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="dots.llm1 flash attention does not support right padding")
 
 
 @require_torch_accelerator

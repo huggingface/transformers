@@ -22,6 +22,7 @@ from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
 from ..granitemoeshared.modeling_granitemoeshared import (
@@ -76,11 +77,12 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -94,7 +96,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             attention_mask (`torch.FloatTensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -120,7 +122,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_position=cache_position,
-                cache_params=past_key_value,
+                cache_params=past_key_values,
                 attention_mask=attention_mask,
                 **kwargs,
             )
@@ -130,7 +132,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             hidden_states, self_attn_weights = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -190,7 +192,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
@@ -267,7 +269,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=layer_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,

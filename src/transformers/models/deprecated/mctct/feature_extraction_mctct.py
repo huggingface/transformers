@@ -104,7 +104,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = optimal_fft_length(self.sample_size)
         self.n_freqs = (self.n_fft // 2) + 1
 
-    def _extract_mfsc_features(self, one_waveform: np.array) -> np.ndarray:
+    def _extract_mfsc_features(self, one_waveform: np.ndarray) -> np.ndarray:
         """
         Extracts MFSC Features for one waveform vector (unbatched). Adapted from Flashlight's C++ MFSC code.
         """

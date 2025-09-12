@@ -25,7 +25,6 @@ import tempfile
 import traceback
 import unittest
 from collections import OrderedDict
-from functools import lru_cache
 from itertools import takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -43,6 +42,9 @@ from transformers import (
     SpecialTokensMixin,
     Trainer,
     TrainingArguments,
+    is_flax_available,
+    is_mlx_available,
+    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -301,15 +303,11 @@ class TokenizerTesterMixin:
             raise ValueError("This tokenizer class has no tokenizer to be tested.")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizerFast:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -3217,7 +3215,7 @@ class TokenizerTesterMixin:
                 self.assertRaises(TypeError, tokenizer_r.encode_plus, None)
                 self.assertRaises(TypeError, tokenizer_r.batch_encode_plus, None)
 
-    def test_alignement_methods(self):
+    def test_alignment_methods(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
@@ -4106,7 +4104,7 @@ class TokenizerTesterMixin:
 
                 shutil.rmtree(tmpdirname2)
 
-    def test_embeded_special_tokens(self):
+    def test_embedded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             self.skipTest(reason="test_slow_tokenizer is set to False")
@@ -4690,3 +4688,45 @@ class TokenizerTesterMixin:
             # Only the ByteLevel pre-tokenizer has the `add_prefix_space` attribute, we have to ensure that it's set correctly
             if hasattr(fast_tokenizer.backend_tokenizer.pre_tokenizer, "add_prefix_space"):
                 self.assertEqual(fast_tokenizer.backend_tokenizer.pre_tokenizer.add_prefix_space, add_prefix_space)
+
+    def test_empty_input_string(self):
+        empty_input_string = ""
+        tokenizer_return_type = []
+        output_tensor_type = []
+
+        if is_torch_available():
+            import numpy as np
+            import torch
+
+            tokenizer_return_type.append("pt")
+            output_tensor_type.append(torch.int64)
+            tokenizer_return_type.append("np")
+            output_tensor_type.append(np.int64)
+
+        if is_tf_available():
+            import tensorflow as tf
+
+            tokenizer_return_type.append("tf")
+            output_tensor_type.append(tf.int32)
+
+        if is_flax_available():
+            import jax.numpy as jnp
+
+            tokenizer_return_type.append("jax")
+            output_tensor_type.append(jnp.int32)
+
+        if is_mlx_available():
+            import mlx.core as mx
+
+            tokenizer_return_type.append("mlx")
+            output_tensor_type.append(mx.int32)
+
+        if len(tokenizer_return_type) == 0:
+            self.skipTest(reason="No expected framework from PT, TF, JAX or MLX found")
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(empty_input_string, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)

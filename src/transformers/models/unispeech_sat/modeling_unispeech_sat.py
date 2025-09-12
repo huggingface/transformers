@@ -67,7 +67,7 @@ class UniSpeechSatForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):
         Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-        paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+        paper](https://huggingface.co/papers/2006.11477).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`, *optional*):
         Prediction scores of the contrastive loss model, i.e. the output of the model before the final softmax.
     projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):

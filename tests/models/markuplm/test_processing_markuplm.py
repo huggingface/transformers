@@ -17,6 +17,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import (
     MarkupLMProcessor,
@@ -27,7 +28,7 @@ from transformers import (
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_bs4, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_bs4_available, is_tokenizers_available
+from transformers.utils import FEATURE_EXTRACTOR_NAME, is_bs4_available, is_tokenizers_available
 
 
 if is_bs4_available():
@@ -129,18 +130,6 @@ class MarkupLMProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, MarkupLMFeatureExtractor)
-
-    def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-
-        processor = MarkupLMProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-
-        self.assertListEqual(
-            processor.model_input_names,
-            tokenizer.model_input_names,
-            msg="`processor` and `tokenizer` model input names do not match",
-        )
 
 
 # different use cases tests

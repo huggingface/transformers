@@ -36,7 +36,7 @@ def process_file(
     # Read the actual modeling file
     with open(file_path, "r", encoding="utf-8") as modeling_file:
         content = modeling_file.read()
-    output_buffer = StringIO(generated_modeling_content[file_type][0])
+    output_buffer = StringIO(generated_modeling_content[file_type])
     output_buffer.seek(0)
     output_content = output_buffer.read()
     diff = difflib.unified_diff(
@@ -54,7 +54,7 @@ def process_file(
             shutil.copy(file_path, file_path + BACKUP_EXT)
         # we always save the generated content, to be able to update dependant files
         with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
-            modeling_file.write(generated_modeling_content[file_type][0])
+            modeling_file.write(generated_modeling_content[file_type])
         console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
         if show_diff:
             console.print(f"\n[bold red]Differences found between the generated code and {file_path}:[/bold red]\n")

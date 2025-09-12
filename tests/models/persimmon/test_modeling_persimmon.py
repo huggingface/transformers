@@ -77,6 +77,10 @@ class PersimmonModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
 
     @unittest.skip("Persimmon applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Persimmon applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 
@@ -93,7 +97,7 @@ class PersimmonIntegrationTest(unittest.TestCase):
     def test_model_8b_chat_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = PersimmonForCausalLM.from_pretrained(
-            "adept/persimmon-8b-chat", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.float16
+            "adept/persimmon-8b-chat", load_in_8bit=True, device_map={"": 0}, dtype=torch.float16
         )
         out = model(torch.tensor([input_ids], device=torch_device)).logits.float()
 
@@ -124,7 +128,7 @@ class PersimmonIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("adept/persimmon-8b-chat", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
         model = PersimmonForCausalLM.from_pretrained(
-            "adept/persimmon-8b-chat", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.float16
+            "adept/persimmon-8b-chat", load_in_8bit=True, device_map={"": 0}, dtype=torch.float16
         )
 
         # greedy generation outputs

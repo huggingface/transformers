@@ -35,7 +35,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
@@ -649,9 +649,9 @@ class FSMTDecoder(nn.Module):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # initialize `past_key_values`
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
@@ -717,9 +717,6 @@ class FSMTDecoder(nn.Module):
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         x = self.output_projection(x)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
@@ -796,7 +793,7 @@ class Attention(nn.Module):
             else:
                 curr_past_key_value = layer_state
 
-        # NOTE: FSMT has format (seq_len, BS, model_dim) ofr inputs
+        # NOTE: FSMT has format (seq_len, BS, model_dim) for inputs
         current_states = key if self.encoder_decoder_attention else query
         if self.encoder_decoder_attention and layer_state is not None and is_updated:
             # reuse k,v, cross_attentions
@@ -908,9 +905,6 @@ class FSMTModel(PretrainedFSMTModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:

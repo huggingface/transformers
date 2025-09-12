@@ -9,9 +9,11 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
@@ -252,12 +254,13 @@ class DeepseekV3Attention(nn.Module):
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -290,10 +293,10 @@ class DeepseekV3Attention(nn.Module):
         query_states = torch.cat((q_pass, q_rot), dim=-1)
         key_states = torch.cat((k_pass, k_rot), dim=-1)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
@@ -321,9 +324,9 @@ class DeepseekV3Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class DeepseekV3DecoderLayer(LlamaDecoderLayer, nn.Module):
+class DeepseekV3DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: DeepseekV3Config, layer_idx: int):
-        nn.Module().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
         self.self_attn = DeepseekV3Attention(config=config, layer_idx=layer_idx)
@@ -338,8 +341,10 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer, nn.Module):
 
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
+    _can_compile_fullgraph = False
+
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV3TopkRouter):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
@@ -352,8 +357,18 @@ class DeepseekV3ForCausalLM(LlamaForCausalLM):
     pass
 
 
+class DeepseekV3ForSequenceClassification(GenericForSequenceClassification, DeepseekV3PreTrainedModel):
+    pass
+
+
+class DeepseekV3ForTokenClassification(GenericForTokenClassification, DeepseekV3PreTrainedModel):
+    pass
+
+
 __all__ = [
     "DeepseekV3PreTrainedModel",
     "DeepseekV3Model",
     "DeepseekV3ForCausalLM",
+    "DeepseekV3ForSequenceClassification",
+    "DeepseekV3ForTokenClassification",
 ]

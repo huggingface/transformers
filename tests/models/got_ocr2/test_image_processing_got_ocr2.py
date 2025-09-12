@@ -182,6 +182,16 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(num_patches, 1)
 
             num_patches = image_processing.get_number_of_image_patches(
+                height=20, width=20, images_kwargs={"crop_to_patches": True}
+            )
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=60, width=60, images_kwargs={"crop_to_patches": True}
+            )
+            self.assertEqual(num_patches, 10)
+
+            num_patches = image_processing.get_number_of_image_patches(
                 height=100, width=100, images_kwargs={"crop_to_patches": True}
             )
             self.assertEqual(num_patches, 10)

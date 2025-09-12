@@ -869,7 +869,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
             if not self.expand_output:
                 remaining_encoder_outputs = encoder_outputs[1:]
                 remaining_encoder_outputs = tuple(
-                    [tf.transpose(h, perm=(0, 3, 1, 2)) for h in remaining_encoder_outputs[0]]
+                    tf.transpose(h, perm=(0, 3, 1, 2)) for h in remaining_encoder_outputs[0]
                 )
                 remaining_encoder_outputs = (remaining_encoder_outputs,)
                 return output + remaining_encoder_outputs
@@ -878,7 +878,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
 
         # Change the other hidden state outputs to NCHW as well
         if output_hidden_states:
-            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
+            hidden_states = tuple(tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1])
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,

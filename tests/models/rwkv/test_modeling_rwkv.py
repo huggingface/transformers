@@ -387,25 +387,11 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         super().test_beam_search_generate_dict_output()
         self.has_attentions = old_has_attentions
 
-    def test_constrained_beam_search_generate_dict_output(self):
-        # This model has a custom attention output shape AND config flags, let's skip those checks
-        old_has_attentions = self.has_attentions
-        self.has_attentions = False
-        super().test_constrained_beam_search_generate_dict_output()
-        self.has_attentions = old_has_attentions
-
     def test_greedy_generate_dict_outputs(self):
         # This model has a custom attention output shape AND config flags, let's skip those checks
         old_has_attentions = self.has_attentions
         self.has_attentions = False
         super().test_greedy_generate_dict_outputs()
-        self.has_attentions = old_has_attentions
-
-    def test_group_beam_search_generate_dict_output(self):
-        # This model has a custom attention output shape AND config flags, let's skip those checks
-        old_has_attentions = self.has_attentions
-        self.has_attentions = False
-        super().test_group_beam_search_generate_dict_output()
         self.has_attentions = old_has_attentions
 
     def test_sample_generate_dict_output(self):
@@ -440,7 +426,7 @@ class RWKVIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = RwkvForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = RwkvForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())

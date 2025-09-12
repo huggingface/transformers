@@ -64,9 +64,9 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Ten
     return mask
 
 
-class Wav2Vec2BertRotaryPositionalEmbedding(Wav2Vec2ConformerRotaryPositionalEmbedding, nn.Module):
+class Wav2Vec2BertRotaryPositionalEmbedding(Wav2Vec2ConformerRotaryPositionalEmbedding):
     def __init__(self, config):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         dim = config.hidden_size // config.num_attention_heads
         base = config.rotary_embedding_base
 
@@ -96,9 +96,9 @@ class Wav2Vec2BertFeatureProjection(nn.Module):
         return hidden_states, norm_hidden_states
 
 
-class Wav2Vec2BertFeedForward(Wav2Vec2FeedForward, nn.Module):
+class Wav2Vec2BertFeedForward(Wav2Vec2FeedForward):
     def __init__(self, config, act_fn=None, hidden_size=None):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         act_fn = act_fn if act_fn is not None else config.hidden_act
         hidden_size = hidden_size if hidden_size is not None else config.hidden_size
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
@@ -188,7 +188,7 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
     """
 
     def __init__(self, config, is_adapter_attention=False):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         hidden_size = config.hidden_size if not is_adapter_attention else config.output_hidden_size
 
         self.head_size = hidden_size // config.num_attention_heads
@@ -671,7 +671,7 @@ Wav2Vec2BertBaseModelOutput = Wav2Vec2BaseModelOutput
 
 class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
     def __init__(self, config: Wav2Vec2BertConfig):
-        Wav2Vec2BertPreTrainedModel.__init__(config)
+        Wav2Vec2BertPreTrainedModel.__init__(self, config)
         self.config = config
         self.feature_projection = Wav2Vec2BertFeatureProjection(config)
 

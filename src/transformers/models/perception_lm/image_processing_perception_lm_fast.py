@@ -272,6 +272,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         do_normalize: Optional[bool],
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        vision_input_type: str,
         tile_size: int,
         max_num_tiles: int,
         return_tensors: Optional[Union[str, TensorType]],
@@ -283,7 +284,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                if self.vision_input_type == "thumb+tile":
+                if vision_input_type == "thumb+tile":
                     thumbnails, _ = self.resize(stacked_images, tile_size, max_num_tiles=1)
                     images_for_tiling, (tiles_w, tiles_h) = self.resize(
                         stacked_images, tile_size, max_num_tiles=max_num_tiles
@@ -310,7 +311,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             )
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
+        processed_images = [p[None] if p.ndim == 3 else p for p in processed_images]  # add tiles dimension if needed
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

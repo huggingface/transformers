@@ -18,6 +18,7 @@ import inspect
 import math
 import re
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 
@@ -27,7 +28,6 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
@@ -638,7 +638,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
             # GroundingDino when sharing weights also uses the shared ones in GroundingDinoDecoder
             # Therefore, differently from DeformableDetr, we expect the group lens to be 2
-            # one for self.bbox_embed in GroundingDinoForObejectDetection and another one
+            # one for self.bbox_embed in GroundingDinoForObjectDetection and another one
             # in the decoder
             tied_params = [group for group in tied_params if len(group) > 2]
             self.assertListEqual(
@@ -692,7 +692,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]],
-                ("cuda", 8): [[-4.8927, -0.1910, -0.2169], [-4.9657, -0.3748, -0.3980], [-5.9579, -3.3812, -3.3153]],
+                ("cuda", 8): [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)

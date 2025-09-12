@@ -24,10 +24,9 @@ import math
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Optional, Union
 
-from transformers.image_processing_base import BatchFeature
-from transformers.image_transforms import group_images_by_shape, reorder_images
-
+from ...image_processing_base import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -63,7 +62,7 @@ elif is_torchvision_available():
 class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     ensure_multiple_of (`int`, *optional*, defaults to 1):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
         by `ensure_multiple_of` in `preprocess`.
     do_pad (`bool`, *optional*, defaults to `False`):
         Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
@@ -73,7 +72,7 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         DINOv2 paper, which uses the model in combination with DPT.
     keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
         If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-        be overidden by `keep_aspect_ratio` in `preprocess`.
+        be overridden by `keep_aspect_ratio` in `preprocess`.
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
         Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
         is used for background, and background itself is not included in all classes of a dataset (e.g.
@@ -314,7 +313,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         ensure_multiple_of: Optional[int] = 1,
         keep_aspect_ratio: bool = False,

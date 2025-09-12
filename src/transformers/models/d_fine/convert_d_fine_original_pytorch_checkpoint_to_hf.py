@@ -364,8 +364,8 @@ def read_in_q_k_v(state_dict, config, model_name):
         if model_name in ["dfine_n_coco", "dfine_n_obj2coco_e25", "dfine_n_obj365"]:
             state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:128, :]
             state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:128]
-            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:384, :]
-            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:384]
+            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[128:256, :]
+            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[128:256]
             state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-128:, :]
             state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-128:]
         else:

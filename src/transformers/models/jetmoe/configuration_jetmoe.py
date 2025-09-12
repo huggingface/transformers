@@ -94,6 +94,7 @@ class JetMoeConfig(PretrainedConfig):
 
     model_type = "jetmoe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"head_dim": "kv_channels"}
 
     def __init__(
         self,

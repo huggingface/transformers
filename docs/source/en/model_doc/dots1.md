@@ -13,12 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-06-06 and added to Hugging Face Transformers on 2025-06-25.*
 
 # dots.llm1
 
 ## Overview
 
-The `dots.llm1` model was proposed in [dots.llm1 technical report](https://www.arxiv.org/pdf/2506.05767) by rednote-hilab team.
+The `dots.llm1` model was proposed in [dots.llm1 technical report](https://huggingface.co/papers/2506.05767) by rednote-hilab team.
 
 The abstract from the report is the following:
 

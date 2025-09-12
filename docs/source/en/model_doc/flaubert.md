@@ -13,12 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-12-11 and added to Hugging Face Transformers on 2020-11-16.*
 
 # FlauBERT
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
@@ -62,9 +62,6 @@ Tips:
 
 [[autodoc]] FlaubertTokenizer
 
-<frameworkcontent>
-<pt>
-
 ## FlaubertModel
 
 [[autodoc]] FlaubertModel
@@ -99,42 +96,3 @@ Tips:
 
 [[autodoc]] FlaubertForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFFlaubertModel
-
-[[autodoc]] TFFlaubertModel
-    - call
-
-## TFFlaubertWithLMHeadModel
-
-[[autodoc]] TFFlaubertWithLMHeadModel
-    - call
-
-## TFFlaubertForSequenceClassification
-
-[[autodoc]] TFFlaubertForSequenceClassification
-    - call
-
-## TFFlaubertForMultipleChoice
-
-[[autodoc]] TFFlaubertForMultipleChoice
-    - call
-
-## TFFlaubertForTokenClassification
-
-[[autodoc]] TFFlaubertForTokenClassification
-    - call
-
-## TFFlaubertForQuestionAnsweringSimple
-
-[[autodoc]] TFFlaubertForQuestionAnsweringSimple
-    - call
-
-</tf>
-</frameworkcontent>
-
-
-

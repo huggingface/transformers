@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-04-20 and added to Hugging Face Transformers on 2023-06-20.*
 
 # QDQBERT
 
@@ -101,8 +102,10 @@ tensors. After setting up the tensor quantizers, one can use the following examp
 ...         module.load_calib_amax()
 ...         module.enable_quant()
 
->>> # If running on GPU, it needs to call .cuda() again because new tensors will be created by calibration process
->>> model.cuda()
+>>> # If running on accelerator, it needs to call `.to(xx)` again because new tensors will be created by calibration process
+>>> from transformers import infer_device
+>>> device = infer_device()
+>>> model.to(device)
 
 >>> # Keep running the quantized model
 >>> # ...

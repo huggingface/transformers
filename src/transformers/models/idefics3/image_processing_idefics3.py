@@ -526,7 +526,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
     def pad(
         self,
-        images: list[np.ndarray],
+        images: list[list[np.ndarray]],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -537,7 +537,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         For a list of images, for each images, pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width.
         For each sample in the batch, pads the sample with empty images to the max_number of images per sample in the batch. Optionally returns a pixel mask.
         Args:
-            images (`list[np.ndarray]`):
+            images (`list[list[np.ndarray]]`):
                 List of list of images to pad. Pads to the largest height and width in the batch.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
@@ -565,11 +565,13 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             else input_data_format
         )
         data_format = input_data_format if data_format is None else data_format
+        # filter out empty image lists, then take first image of the first sample
+        first_image_in_list = [sample_images for sample_images in images if sample_images][0][0]
 
         if input_data_format == ChannelDimension.FIRST:
-            n_channels = images[0][0].shape[0]
+            n_channels = first_image_in_list.shape[0]
         elif input_data_format == ChannelDimension.LAST:
-            n_channels = images[0][0].shape[-1]
+            n_channels = first_image_in_list.shape[-1]
         else:
             raise ValueError("Invalid channel dimension format.")
 
@@ -606,7 +608,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_image_splitting: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
         max_image_size: Optional[dict[str, int]] = None,
@@ -687,6 +689,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_pad = do_pad if do_pad is not None else self.do_pad
 
+        images = self.fetch_images(images)
         images_list = make_nested_list_of_images(images)
 
         if not valid_images(images_list[0]):
@@ -714,6 +717,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        # Search for the first image in the image list.
+        # NOTE: we can't slice the first image with images_list[0][0] if the first batch contains no images. See #36682
+        first_image_in_list = [images for images in images_list if images][0][0]
 
         # Extra channel dimension for grayscale images
         if input_data_format in [ChannelDimension.LAST, None]:
@@ -725,7 +731,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 [np.expand_dims(img, axis=0) if img.ndim == 2 else img for img in images] for images in images_list
             ]
 
-        if do_rescale and is_scaled_image(images_list[0][0]):
+        if do_rescale and is_scaled_image(first_image_in_list):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -733,7 +739,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
         # We assume that all images have the same channel dimension format.
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
+            input_data_format = infer_channel_dimension_format(first_image_in_list, num_channels=(1, 3, 4))
 
         if do_resize:
             images_list = [

@@ -13,11 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-04-10 and added to Hugging Face Transformers on 2021-01-05.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-            <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -44,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="summarization",
     model="allenai/led-base-16384",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("""Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
@@ -65,7 +65,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "allenai/led-base-16384",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto"
 )
 
@@ -73,10 +73,10 @@ input_text = """Plants are among the most remarkable and essential life forms on
 Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts. In the presence of light, plants absorb carbon dioxide from the atmosphere through small pores in their leaves called stomata, and take in water from the soil through their root systems.
 These ingredients are then transformed into glucose, a type of sugar that serves as a source of chemical energy, and oxygen, which is released as a byproduct into the atmosphere. The glucose produced during photosynthesis is not just used immediately; plants also store it as starch or convert it into other organic compounds like cellulose, which is essential for building their cellular structure.
 This energy reserve allows them to grow, develop leaves, produce flowers, bear fruit, and carry out various physiological processes throughout their lifecycle."""
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # Place global attention on the first token
-global_attention_mask = torch.zeros_like(input_ids.input_ids).to("cuda")
+global_attention_mask = torch.zeros_like(input_ids.input_ids).to(model.device)
 global_attention_mask[:, 0] = 1
 
 output = model.generate(**input_ids, global_attention_mask=global_attention_mask, cache_implementation="static")
@@ -107,7 +107,7 @@ quantization_config = BitsAndBytesConfig(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "allenai/led-large-16384",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -120,10 +120,10 @@ input_text = """Plants are among the most remarkable and essential life forms on
 Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts. In the presence of light, plants absorb carbon dioxide from the atmosphere through small pores in their leaves called stomata, and take in water from the soil through their root systems.
 These ingredients are then transformed into glucose, a type of sugar that serves as a source of chemical energy, and oxygen, which is released as a byproduct into the atmosphere. The glucose produced during photosynthesis is not just used immediately; plants also store it as starch or convert it into other organic compounds like cellulose, which is essential for building their cellular structure.
 This energy reserve allows them to grow, develop leaves, produce flowers, bear fruit, and carry out various physiological processes throughout their lifecycle."""
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # Place global attention on the first token
-global_attention_mask = torch.zeros_like(input_ids.input_ids).to("cuda")
+global_attention_mask = torch.zeros_like(input_ids.input_ids).to(model.device)
 global_attention_mask[:, 0] = 1
 
 output = model.generate(**input_ids, global_attention_mask=global_attention_mask, cache_implementation="static")
@@ -172,15 +172,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] models.led.modeling_led.LEDSeq2SeqQuestionAnsweringModelOutput
 
-[[autodoc]] models.led.modeling_tf_led.TFLEDEncoderBaseModelOutput
-
-[[autodoc]] models.led.modeling_tf_led.TFLEDSeq2SeqModelOutput
-
-[[autodoc]] models.led.modeling_tf_led.TFLEDSeq2SeqLMOutput
-
-<frameworkcontent>
-<pt>
-
 ## LEDModel
 
 [[autodoc]] LEDModel
@@ -200,22 +191,3 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] LEDForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFLEDModel
-
-[[autodoc]] TFLEDModel
-    - call
-
-## TFLEDForConditionalGeneration
-
-[[autodoc]] TFLEDForConditionalGeneration
-    - call
-
-</tf>
-</frameworkcontent>
-
-
-

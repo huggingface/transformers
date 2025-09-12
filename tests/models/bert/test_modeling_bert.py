@@ -11,18 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-import tempfile
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import AutoTokenizer, BertConfig, is_torch_available
+from transformers.cache_utils import EncoderDecoderCache
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -643,28 +642,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model = BertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @slow
-    @require_torch_accelerator
-    def test_torchscript_device_change(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            # BertForMultipleChoice behaves incorrectly in JIT environments.
-            if model_class == BertForMultipleChoice:
-                self.skipTest(reason="BertForMultipleChoice behaves incorrectly in JIT environments.")
-
-            config.torchscript = True
-            model = model_class(config=config)
-
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            traced_model = torch.jit.trace(
-                model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
-            )
-
-            with tempfile.TemporaryDirectory() as tmp:
-                torch.jit.save(traced_model, os.path.join(tmp, "bert.pt"))
-                loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
-                loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
-
 
 @require_torch
 class BertModelIntegrationTest(unittest.TestCase):
@@ -740,13 +717,14 @@ class BertModelIntegrationTest(unittest.TestCase):
             # Case where query length != kv_length. Note that model needs to be a decoder so we can use cache
             model.config.is_decoder = True
             model_sdpa.config.is_decoder = True
-            res_eager = model(**inp, past_key_values=pkv, use_cache=True)
-            res_sdpa = model_sdpa(**inp, past_key_values=pkv, use_cache=True)
+            res_eager = model(**inp, past_key_values=EncoderDecoderCache.from_legacy_cache(pkv), use_cache=True)
+            res_sdpa = model_sdpa(**inp, past_key_values=EncoderDecoderCache.from_legacy_cache(pkv), use_cache=True)
             self.assertTrue(
                 torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
             )
 
     @slow
+    @pytest.mark.torch_export_test
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")

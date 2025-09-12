@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-09-05 and added to Hugging Face Transformers on 2024-02-14.*
 
 # StableLM
 
@@ -24,14 +25,14 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-`StableLM 3B 4E1T` was proposed in [`StableLM 3B 4E1T`: Technical Report](https://stability.wandb.io/stability-llm/stable-lm/reports/StableLM-3B-4E1T--VmlldzoyMjU4?accessToken=u3zujipenkx5g7rtcj9qojjgxpconyjktjkli2po09nffrffdhhchq045vp0wyfo) by Stability AI and is the first model in a series of multi-epoch pre-trained language models.
+StableLM 3B 4E1T ([blog post](https://stability.ai/news/stable-lm-3b-sustainable-high-performance-language-models-smart-devices)) was proposed in [StableLM 3B 4E1T: Technical Report](https://stability.wandb.io/stability-llm/stable-lm/reports/StableLM-3B-4E1T--VmlldzoyMjU4?accessToken=u3zujipenkx5g7rtcj9qojjgxpconyjktjkli2po09nffrffdhhchq045vp0wyfo) by Stability AI and is the first model in a series of multi-epoch pre-trained language models.
 
 ### Model Details
 
-`StableLM 3B 4E1T` is a decoder-only base language model pre-trained on 1 trillion tokens of diverse English and code datasets for four epochs.
+StableLM 3B 4E1T is a decoder-only base language model pre-trained on 1 trillion tokens of diverse English and code datasets for four epochs.
 The model architecture is transformer-based with partial Rotary Position Embeddings, SwiGLU activation, LayerNorm, etc.
 
-We also provide `StableLM Zephyr 3B`, an instruction fine-tuned version of the model that can be used for chat-based applications.
+We also provide StableLM Zephyr 3B, an instruction fine-tuned version of the model that can be used for chat-based applications.
 
 ### Usage Tips
 
@@ -43,8 +44,8 @@ We also provide `StableLM Zephyr 3B`, an instruction fine-tuned version of the m
 The following code snippet demonstrates how to use `StableLM 3B 4E1T` for inference:
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
->>> device = "cuda" # the device to load the model onto
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device, set_seed
+>>> device = infer_device() # the device to load the model onto
 
 >>> set_seed(0)
 
@@ -74,13 +75,13 @@ Now, to run the model with Flash Attention 2, refer to the snippet below:
 
 ```python
 >>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
->>> device = "cuda" # the device to load the model onto
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device, set_seed
+>>> device = infer_device() # the device to load the model onto
 
 >>> set_seed(0)
 
 >>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")  # doctest: +SKIP
+>>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", dtype=torch.bfloat16, attn_implementation="flash_attention_2")  # doctest: +SKIP
 >>> model.to(device)  # doctest: +SKIP
 
 >>> model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)

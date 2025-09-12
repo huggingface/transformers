@@ -17,20 +17,24 @@ and remove unnecessary dependencies.
 """
 
 import base64
+import importlib
 import io
 import os
 import warnings
+from collections.abc import Sequence
 from io import BytesIO
 from typing import Any, Optional, Union
 
 import numpy as np
 import requests
+from packaging import version
 
 from .utils import (
     is_librosa_available,
     is_numpy_array,
     is_soundfile_available,
     is_torch_tensor,
+    is_torchcodec_available,
     requires_backends,
 )
 
@@ -43,6 +47,11 @@ if is_librosa_available():
 
     # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
     import soxr
+
+if is_torchcodec_available():
+    TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
+
+AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]  # noqa: F821
 
 
 def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
@@ -61,20 +70,70 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
     Returns:
         `np.ndarray`: A numpy array representing the audio.
     """
-    requires_backends(load_audio, ["librosa"])
-
     if isinstance(audio, str):
-        # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
-        if audio.startswith("http://") or audio.startswith("https://"):
-            audio = librosa.load(BytesIO(requests.get(audio, timeout=timeout).content), sr=sampling_rate)[0]
-        elif os.path.isfile(audio):
-            audio = librosa.load(audio, sr=sampling_rate)[0]
+        # Try to load with `torchcodec` but do not enforce users to install it. If not found
+        # fallback to `librosa`. If using an audio-only model, most probably `torchcodec` won't be
+        # needed. Do not raise any errors if not installed or versions do not match
+        if is_torchcodec_available() and TORCHCODEC_VERSION >= version.parse("0.3.0"):
+            audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate)
+        else:
+            audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
     elif isinstance(audio, np.ndarray):
         audio = audio
     else:
         raise TypeError(
             "Incorrect format used for `audio`. Should be an url linking to an audio, a local path, or numpy array."
         )
+    return audio
+
+
+def load_audio_torchcodec(audio: Union[str, np.ndarray], sampling_rate=16000) -> np.ndarray:
+    """
+    Loads `audio` to an np.ndarray object using `torchcodec`.
+
+    Args:
+        audio (`str` or `np.ndarray`):
+            The audio to be loaded to the numpy array format.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate to be used when loading the audio. It should be same as the
+            sampling rate the model you will be using further was trained with.
+
+    Returns:
+        `np.ndarray`: A numpy array representing the audio.
+    """
+    # Lazy import so that issues in torchcodec compatibility don't crash the whole library
+    requires_backends(load_audio_torchcodec, ["torchcodec"])
+    from torchcodec.decoders import AudioDecoder
+
+    # Set `num_channels` to `1` which is what most models expects and the default in librosa
+    decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
+    audio = decoder.get_all_samples().data[0].numpy()  # NOTE: feature extractors don't accept torch tensors
+    return audio
+
+
+def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
+    """
+    Loads `audio` to an np.ndarray object using `librosa`.
+
+    Args:
+        audio (`str` or `np.ndarray`):
+            The audio to be loaded to the numpy array format.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate to be used when loading the audio. It should be same as the
+            sampling rate the model you will be using further was trained with.
+        timeout (`float`, *optional*):
+            The timeout value in seconds for the URL request.
+
+    Returns:
+        `np.ndarray`: A numpy array representing the audio.
+    """
+    requires_backends(load_audio_librosa, ["librosa"])
+
+    # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
+    if audio.startswith("http://") or audio.startswith("https://"):
+        audio = librosa.load(BytesIO(requests.get(audio, timeout=timeout).content), sr=sampling_rate)[0]
+    elif os.path.isfile(audio):
+        audio = librosa.load(audio, sr=sampling_rate)[0]
     return audio
 
 
@@ -155,11 +214,6 @@ def load_audio_as(
 
     except Exception as e:
         raise ValueError(f"Error loading audio: {e}")
-
-
-AudioInput = Union[
-    np.ndarray, "torch.Tensor", list[np.ndarray], tuple[np.ndarray], list["torch.Tensor"], tuple["torch.Tensor"]  # noqa: F821
-]
 
 
 def is_valid_audio(audio):

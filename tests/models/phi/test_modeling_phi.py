@@ -36,7 +36,6 @@ if is_torch_available():
         PhiForTokenClassification,
         PhiModel,
     )
-    from transformers.models.phi.modeling_phi import PhiRotaryEmbedding
 
 
 class PhiModelTester(CausalLMModelTester):
@@ -69,7 +68,6 @@ class PhiModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = PhiModelTester
-    rotary_embedding_layer = PhiRotaryEmbedding
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
     def is_pipeline_test_to_skip(

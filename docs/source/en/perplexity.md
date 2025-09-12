@@ -72,10 +72,9 @@ predictions at each step.
 Let's demonstrate this process with GPT-2.
 
 ```python
-from transformers import GPT2LMHeadModel, GPT2TokenizerFast
-from accelerate.test_utils.testing import get_backend
+from transformers import GPT2LMHeadModel, GPT2TokenizerFast, infer_device
 
-device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+device = infer_device()
 model_id = "openai-community/gpt2-large"
 model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
 tokenizer = GPT2TokenizerFast.from_pretrained(model_id)

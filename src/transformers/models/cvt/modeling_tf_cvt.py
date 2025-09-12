@@ -784,7 +784,7 @@ class TFCvtEncoder(keras.layers.Layer):
         # Change back to (batch_size, num_channels, height, width) format to have uniformity in the modules
         hidden_state = tf.transpose(hidden_state, perm=(0, 3, 1, 2))
         if output_hidden_states:
-            all_hidden_states = tuple([tf.transpose(hs, perm=(0, 3, 1, 2)) for hs in all_hidden_states])
+            all_hidden_states = tuple(tf.transpose(hs, perm=(0, 3, 1, 2)) for hs in all_hidden_states)
 
         if not return_dict:
             return tuple(v for v in [hidden_state, cls_token, all_hidden_states] if v is not None)

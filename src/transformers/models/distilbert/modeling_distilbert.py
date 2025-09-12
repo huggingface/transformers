@@ -44,7 +44,6 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
-    is_torch_greater_or_equal_than_2_2,
     prune_linear_layer,
 )
 from ...utils import (
@@ -338,7 +337,6 @@ class DistilBertSdpaAttention(MultiHeadSelfAttention):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config=config)
         self.dropout_prob = config.attention_dropout
-        self.require_contiguous_qkv = not is_torch_greater_or_equal_than_2_2
 
     def forward(
         self,
@@ -390,14 +388,6 @@ class DistilBertSdpaAttention(MultiHeadSelfAttention):
         q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
         k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
         v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
-
-        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
-        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
-        # Reference: https://github.com/pytorch/pytorch/issues/112577
-        if self.require_contiguous_qkv and q.device.type == "cuda" and mask is not None:
-            q = q.contiguous()
-            k = k.contiguous()
-            v = v.contiguous()
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             q,
@@ -606,8 +596,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -722,13 +710,13 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
 
-        if self._use_flash_attention_2:
+        if self.config._attn_implementation == "flash_attention_2":
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
             if attention_mask is None:
                 attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
 
-            if self._use_sdpa and head_mask_is_none and not output_attentions:
+            if self.config._attn_implementation == "sdpa" and head_mask_is_none and not output_attentions:
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(
                     attention_mask, embeddings.dtype, tgt_len=input_shape[1]
                 )

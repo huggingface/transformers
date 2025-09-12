@@ -19,8 +19,9 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, filter_out_non_signature_kwargs, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel
@@ -100,17 +101,15 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        token_type_ids=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+    ) -> torch.FloatTensor:
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
@@ -119,37 +118,29 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import VisionTextDualEncoderModel, AutoTokenizer
 
         >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
         >>> tokenizer = AutoTokenizer.from_pretrained("clip-italian/clip-italian")
 
         >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        text_features = self.text_projection(text_outputs.pooler_output)
 
         return text_features
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+    def get_image_features(self, pixel_values: torch.Tensor) -> torch.FloatTensor:
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
@@ -158,29 +149,23 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
         >>> from transformers import VisionTextDualEncoderModel, AutoImageProcessor
+        >>> from transformers.image_utils import load_image
 
         >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
         >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
-        >>> image_features = model.get_image_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
+        vision_outputs = self.vision_model(pixel_values=pixel_values)
+        image_features = self.visual_projection(vision_outputs.pooler_output)
 
         return image_features
 

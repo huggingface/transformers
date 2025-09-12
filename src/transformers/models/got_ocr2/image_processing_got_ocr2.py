@@ -259,7 +259,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         crop_to_patches: Optional[bool] = None,
         min_patches: Optional[int] = None,
         max_patches: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -339,6 +339,8 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
+
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -420,7 +422,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         max_patches: int,
         use_thumbnail: bool = True,
         patch_size: Optional[Union[tuple, int, dict]] = None,
-        data_format: ChannelDimension = None,
+        data_format: Optional[ChannelDimension] = None,
     ):
         """
         Crop the image to patches and return a list of cropped images.
@@ -515,7 +517,8 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
             num_columns, num_rows = get_optimal_tiled_canvas(
                 (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
             )
-            num_patches += num_columns * num_rows
+            if num_columns * num_rows > 1:
+                num_patches += num_columns * num_rows
 
         return num_patches
 

@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2022-04-26 and added to Hugging Face Transformers on 2025-01-08.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -35,9 +36,9 @@ import requests
 import numpy as np
 import supervision as sv
 from PIL import Image
-from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation
+from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 url = "https://www.fcbarcelona.com/fcbarcelona/photo/2021/01/31/3c55a19f-dfc1-4451-885e-afd14e890a11/mini_2021-01-31-BARCELONA-ATHLETIC-BILBAOI-30.JPG"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -46,7 +47,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 person_image_processor = AutoProcessor.from_pretrained("PekingU/rtdetr_r50vd_coco_o365")
 person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map=device)
 
-inputs = person_image_processor(images=image, return_tensors="pt").to(device)
+inputs = person_image_processor(images=image, return_tensors="pt").to(person_model.device)
 
 with torch.no_grad():
     outputs = person_model(**inputs)
@@ -68,7 +69,7 @@ person_boxes[:, 3] = person_boxes[:, 3] - person_boxes[:, 1]
 image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-base-simple")
 model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple", device_map=device)
 
-inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(device)
+inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -161,14 +162,14 @@ image_pose_result = pose_results[0]
 - ViTPose++ has 6 different MoE expert heads (COCO validation `0`, AiC `1`, MPII `2`, AP-10K `3`, APT-36K `4`, COCO-WholeBody `5`) which supports 6 different datasets. Pass a specific value corresponding to the dataset to the `dataset_index` to indicate which expert to use.
 
     ```py
-    from transformers import AutoProcessor, VitPoseForPoseEstimation
+    from transformers import AutoProcessor, VitPoseForPoseEstimation, infer_device
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = infer_device()
 
     image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-plus-base")
     model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-base", device=device)
 
-    inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(device)
+    inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(model.device)
     dataset_index = torch.tensor([0], device=device) # must be a tensor of shape (batch_size,)
 
     with torch.no_grad():

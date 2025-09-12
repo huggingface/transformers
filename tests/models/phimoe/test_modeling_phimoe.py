@@ -16,6 +16,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import PhimoeConfig, StaticCache, is_torch_available
 from transformers.testing_utils import (
     require_torch,
@@ -42,13 +44,7 @@ if is_torch_available():
         def __init__(self, model: PhimoeForCausalLM, batch_size: int, max_seq_len: int):
             super().__init__()
             self.model = model
-            self.cache = StaticCache(
-                config=model.config,
-                max_batch_size=batch_size,
-                max_cache_len=max_seq_len,
-                device=self.model.device,
-                dtype=self.model.dtype,
-            )
+            self.cache = StaticCache(config=model.config, max_cache_len=max_seq_len)
 
         def forward(
             self,
@@ -120,6 +116,15 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
         return True
+
+    @unittest.skip("PhiMoE's RoPE has custom parameterization")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("PhiMoE's RoPE has custom parameterization")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @slow

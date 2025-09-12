@@ -17,6 +17,8 @@ import math
 import unittest
 from unittest.util import safe_repr
 
+import pytest
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -373,7 +375,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     @slow
     # Ignore copy
     def test_model_from_pretrained(self):
-        model = FalconMambaModel.from_pretrained("tiiuae/falcon-mamba-7b", torch_dtype=torch.float16)
+        model = FalconMambaModel.from_pretrained("tiiuae/falcon-mamba-7b", dtype=torch.float16)
         self.assertIsNotNone(model)
 
     def test_model_outputs_equivalence(self):
@@ -454,7 +456,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
     # On T4, get `NotImplementedError: Cannot copy out of meta tensor; no data!`
     @require_torch_large_accelerator
     def test_generation_fp16(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.float16, device_map="auto")
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -487,8 +489,9 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ",
         )
 
+    @pytest.mark.torch_compile_test
     def test_generation_torch_compile(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.float16).to(torch_device)
         model = torch.compile(model)
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
@@ -522,7 +525,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, torch_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, dtype=torch.float16)
 
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         out = tok.batch_decode(out, skip_special_tokens=True)
@@ -557,7 +560,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         model_id = "tiiuae/falcon-mamba-7b"
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype=torch.float16)
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello today"

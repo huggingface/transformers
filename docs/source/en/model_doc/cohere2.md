@@ -1,3 +1,18 @@
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+-->
+*This model was released on 2024-12-13 and added to Hugging Face Transformers on 2024-12-13.*
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -8,7 +23,7 @@
 </div>
 
 
-# Cohere2
+# Cohere 2
 
 [Cohere Command R7B](https://cohere.com/blog/command-r7b) is an open weights research release of a 7B billion parameter model. It is a multilingual model trained on 23 languages and has a context window of 128k. The model features three layers with sliding window attention and ROPE for efficient local context modeling and relative positional encoding. A fourth layer uses global attention without positional embeddings, enabling unrestricted token interactions across the entire sequence.
 
@@ -32,7 +47,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation", 
     model="CohereLabs/c4ai-command-r7b-12-2024",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map=0
 )
 
@@ -52,14 +67,14 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
 model = AutoModelForCausalLM.from_pretrained(
     "CohereLabs/c4ai-command-r7b-12-2024", 
-    torch_dtype=torch.float16, 
+    dtype=torch.float16, 
     device_map="auto", 
     attn_implementation="sdpa"
 )
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "Hello, can you please help me book a hotel in Japan?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 output = model.generate(
     input_ids,
     max_new_tokens=100,
@@ -75,7 +90,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```bash
 # pip install -U flash-attn --no-build-isolation
-transformers-cli chat CohereLabs/c4ai-command-r7b-12-2024 --torch_dtype auto --attn_implementation flash_attention_2
+transformers-cli chat CohereLabs/c4ai-command-r7b-12-2024 --dtype auto --attn_implementation flash_attention_2
 ```
 
 </hfoption>
@@ -93,7 +108,7 @@ bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
 model = AutoModelForCausalLM.from_pretrained(
     "CohereLabs/c4ai-command-r7b-12-2024", 
-    torch_dtype=torch.float16, 
+    dtype=torch.float16, 
     device_map="auto", 
     quantization_config=bnb_config, 
     attn_implementation="sdpa"
@@ -101,7 +116,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "Hello, can you please help me book a hotel in Japan?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 output = model.generate(
     input_ids,
     max_new_tokens=100,

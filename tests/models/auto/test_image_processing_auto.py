@@ -91,7 +91,7 @@ class AutoImageProcessorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model_config = CLIPConfig()
 
-            # Create a dummy config file with image_proceesor_type
+            # Create a dummy config file with image_processor_type
             processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
@@ -144,7 +144,7 @@ class AutoImageProcessorTest(unittest.TestCase):
     def test_image_processor_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named preprocessor_config.json.",
+            "Can't load image processor for 'hf-internal-testing/config-no-model'.",
         ):
             _ = AutoImageProcessor.from_pretrained("hf-internal-testing/config-no-model")
 

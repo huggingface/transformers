@@ -24,7 +24,6 @@ from transformers import (
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -203,7 +202,6 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         self.assertEqual(padded_gen_text[0], expected_output)
 
     @slow
-    @require_torch_sdpa
     def test_falcon_alibi_sdpa_matches_eager(self):
         input_ids = torch.randint(0, 1000, (5, 20))
 

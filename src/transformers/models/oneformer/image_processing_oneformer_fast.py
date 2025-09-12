@@ -399,7 +399,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
-        To be overriden by subclasses when image-like inputs other than images should be processed.
+        To be overridden by subclasses when image-like inputs other than images should be processed.
         It can be used for segmentation maps, depth maps, etc.
         """
         # Prepare input images
@@ -457,7 +457,11 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
             for shape, stacked_segmentation_maps in grouped_segmentation_maps.items():
                 if do_resize:
                     stacked_segmentation_maps = self.resize(
-                        stacked_segmentation_maps, size=size, interpolation=F.InterpolationMode.NEAREST_EXACT
+                        stacked_segmentation_maps,
+                        size=size,
+                        interpolation=F.InterpolationMode.NEAREST_EXACT
+                        if is_torchvision_v2_available()
+                        else F.InterpolationMode.NEAREST,
                     )
                 processed_segmentation_maps_grouped[shape] = stacked_segmentation_maps
             processed_segmentation_maps = reorder_images(

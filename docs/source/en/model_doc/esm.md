@@ -13,21 +13,21 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-04-19 and added to Hugging Face Transformers on 2022-09-30.*
 
 # ESM
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-This page provides code and pre-trained weights for Transformer protein language models from Meta AI's Fundamental 
+This page provides code and pre-trained weights for Transformer protein language models from Meta AI's Fundamental
 AI Research Team, providing the state-of-the-art ESMFold and ESM-2, and the previously released ESM-1b and ESM-1v.
 Transformer protein language models were introduced in the paper [Biological structure and function emerge from scaling
-unsupervised learning to 250 million protein sequences](https://www.pnas.org/content/118/15/e2016239118) by 
-Alexander Rives, Joshua Meier, Tom Sercu, Siddharth Goyal, Zeming Lin, Jason Liu, Demi Guo, Myle Ott, 
+unsupervised learning to 250 million protein sequences](https://www.pnas.org/content/118/15/e2016239118) by
+Alexander Rives, Joshua Meier, Tom Sercu, Siddharth Goyal, Zeming Lin, Jason Liu, Demi Guo, Myle Ott,
 C. Lawrence Zitnick, Jerry Ma, and Rob Fergus.
 The first version of this paper was [preprinted in 2019](https://www.biorxiv.org/content/10.1101/622803v1?versioned=true).
 
@@ -45,8 +45,8 @@ they do not require a database of known protein sequences and structures with as
 to make predictions, and are much faster as a result.
 
 
-The abstract from 
-"Biological structure and function emerge from scaling unsupervised learning to 250 
+The abstract from
+"Biological structure and function emerge from scaling unsupervised learning to 250
 million protein sequences" is
 
 
@@ -112,9 +112,6 @@ help throughout the process!
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-<frameworkcontent>
-<pt>
-
 ## EsmModel
 
 [[autodoc]] EsmModel
@@ -139,29 +136,3 @@ help throughout the process!
 
 [[autodoc]] EsmForProteinFolding
     - forward
-
-</pt>
-<tf>
-
-## TFEsmModel
-
-[[autodoc]] TFEsmModel
-    - call
-
-## TFEsmForMaskedLM
-
-[[autodoc]] TFEsmForMaskedLM
-    - call
-
-## TFEsmForSequenceClassification
-
-[[autodoc]] TFEsmForSequenceClassification
-    - call
-
-## TFEsmForTokenClassification
-
-[[autodoc]] TFEsmForTokenClassification
-    - call
-
-</tf>
-</frameworkcontent>

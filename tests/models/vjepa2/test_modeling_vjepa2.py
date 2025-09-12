@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch V-JEPA2 model."""
 
 import unittest
+from functools import cached_property
 
 import numpy as np
 
@@ -26,7 +27,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor

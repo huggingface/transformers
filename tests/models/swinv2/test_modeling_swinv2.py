@@ -16,10 +16,11 @@
 import collections
 import inspect
 import unittest
+from functools import cached_property
 
 from transformers import Swinv2Config
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -491,7 +492,7 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_fp16(self):
         model = Swinv2ForImageClassification.from_pretrained(
-            "microsoft/swinv2-tiny-patch4-window8-256", torch_dtype=torch.float16
+            "microsoft/swinv2-tiny-patch4-window8-256", dtype=torch.float16
         ).to(torch_device)
         image_processor = self.default_image_processor
 

@@ -29,7 +29,7 @@ the left. This means the model cannot see future tokens. GPT-2 is an example of 
 
 This guide will show you how to:
 
-1. Finetune [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/eli5) dataset.
+1. Finetune [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/dany0407/eli5_category) dataset.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -54,12 +54,12 @@ We encourage you to log in to your Hugging Face account so you can upload and sh
 
 ## Load ELI5 dataset
 
-Start by loading the first 5000 examples from the [ELI5-Category](https://huggingface.co/datasets/eli5_category) dataset with the 🤗 Datasets library. This'll give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
+Start by loading the first 5000 examples from the [ELI5-Category](https://huggingface.co/datasets/dany0407/eli5_category) dataset with the 🤗 Datasets library. This'll give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
 
 ```py
 >>> from datasets import load_dataset
 
->>> eli5 = load_dataset("eli5_category", split="train[:5000]")
+>>> eli5 = load_dataset("dany0407/eli5_category", split="train[:5000]")
 ```
 
 Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
@@ -189,8 +189,6 @@ Apply the `group_texts` function over the entire dataset:
 Now create a batch of examples using [`DataCollatorForLanguageModeling`]. It's more efficient to *dynamically pad* the
 sentences to the longest length in a batch during collation, instead of padding the whole dataset to the maximum length.
 
-<frameworkcontent>
-<pt>
 Use the end-of-sequence token as the padding token and set `mlm=False`. This will use the inputs as labels shifted to the right by one element:
 
 ```py
@@ -200,24 +198,8 @@ Use the end-of-sequence token as the padding token and set `mlm=False`. This wil
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 ```
 
-</pt>
-<tf>
-Use the end-of-sequence token as the padding token and set `mlm=False`. This will use the inputs as labels shifted to the right by one element:
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
-```
-
-</tf>
-</frameworkcontent>
-
-
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the [basic tutorial](../training#train-with-pytorch-trainer)!
@@ -274,81 +256,11 @@ Then share your model to the Hub with the [`~transformers.Trainer.push_to_hub`] 
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-If you aren't familiar with finetuning a model with Keras, take a look at the [basic tutorial](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-To finetune a model in TensorFlow, start by setting up an optimizer function, learning rate schedule, and some training hyperparameters:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-Then you can load DistilGPT2 with [`TFAutoModelForCausalLM`]:
-
-```py
->>> from transformers import TFAutoModelForCausalLM
-
->>> model = TFAutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
-```
-
-Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     lm_dataset["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     lm_dataset["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-This can be done by specifying where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> callback = PushToHubCallback(
-...     output_dir="my_awesome_eli5_clm-model",
-...     tokenizer=tokenizer,
-... )
-```
-
-Finally, you're ready to start training your model! Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) with your training and validation datasets, the number of epochs, and your callback to finetune the model:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=[callback])
-```
-
-Once training is completed, your model is automatically uploaded to the Hub so everyone can use it!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
 For a more in-depth example of how to finetune a model for causal language modeling, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
-or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
+[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
 
 </Tip>
 
@@ -372,8 +284,6 @@ The simplest way to try out your finetuned model for inference is to use it in a
 [{'generated_text': "Somatic hypermutation allows the immune system to be able to effectively reverse the damage caused by an infection.\n\n\nThe damage caused by an infection is caused by the immune system's ability to perform its own self-correcting tasks."}]
 ```
 
-<frameworkcontent>
-<pt>
 Tokenize the text and return the `input_ids` as PyTorch tensors:
 
 ```py
@@ -399,31 +309,3 @@ Decode the generated token ids back into text:
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ["Somatic hypermutation allows the immune system to react to drugs with the ability to adapt to a different environmental situation. In other words, a system of 'hypermutation' can help the immune system to adapt to a different environmental situation or in some cases even a single life. In contrast, researchers at the University of Massachusetts-Boston have found that 'hypermutation' is much stronger in mice than in humans but can be found in humans, and that it's not completely unknown to the immune system. A study on how the immune system"]
 ```
-</pt>
-<tf>
-Tokenize the text and return the `input_ids` as TensorFlow tensors:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_eli5_clm-model")
->>> inputs = tokenizer(prompt, return_tensors="tf").input_ids
-```
-
-Use the [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] method to create the summarization. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text generation strategies](../generation_strategies) page.
-
-```py
->>> from transformers import TFAutoModelForCausalLM
-
->>> model = TFAutoModelForCausalLM.from_pretrained("username/my_awesome_eli5_clm-model")
->>> outputs = model.generate(input_ids=inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95)
-```
-
-Decode the generated token ids back into text:
-
-```py
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Somatic hypermutation allows the immune system to detect the presence of other viruses as they become more prevalent. Therefore, researchers have identified a high proportion of human viruses. The proportion of virus-associated viruses in our study increases with age. Therefore, we propose a simple algorithm to detect the presence of these new viruses in our samples as a sign of improved immunity. A first study based on this algorithm, which will be published in Science on Friday, aims to show that this finding could translate into the development of a better vaccine that is more effective for']
-```
-</tf>
-</frameworkcontent>

@@ -37,7 +37,6 @@ if is_torch_available():
         StableLmForTokenClassification,
         StableLmModel,
     )
-    from transformers.models.stablelm.modeling_stablelm import StableLmRotaryEmbedding
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -78,7 +77,6 @@ class StableLmModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = StableLmModelTester
-    rotary_embedding_layer = StableLmRotaryEmbedding  # Enables RoPE tests if set
 
 
 @require_torch
@@ -159,7 +157,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         model = StableLmForCausalLM.from_pretrained(
             "stabilityai/stablelm-3b-4e1t",
             device_map="auto",
-            torch_dtype="auto",
+            dtype="auto",
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
         )

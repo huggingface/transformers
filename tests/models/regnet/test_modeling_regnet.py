@@ -14,9 +14,10 @@
 """Testing suite for the PyTorch RegNet model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import RegNetConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, is_flaky, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -255,7 +256,7 @@ class RegNetModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-0.4180, -1.5051, -3.4836],
-                ("cuda", 8): [-0.4168, -1.5056, -3.4836],
+                ("cuda", 8): [-0.4180, -1.5051, -3.4836],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

@@ -24,9 +24,9 @@ from pathlib import Path
 from huggingface_hub import HfFolder
 from requests.exceptions import HTTPError
 
-from transformers import AutoConfig, BertConfig, GPT2Config
+from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
 from transformers.configuration_utils import PretrainedConfig
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test
+from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -39,7 +39,7 @@ config_common_kwargs = {
     "output_hidden_states": True,
     "output_attentions": True,
     "torchscript": True,
-    "torch_dtype": "float16",
+    "dtype": "float16",
     "use_bfloat16": True,
     "tf_legacy_loss": True,
     "pruned_heads": {"a": 1},
@@ -300,3 +300,61 @@ class ConfigTestUtils(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             PretrainedConfig.from_pretrained("bert-base-uncased")
+
+    def test_get_text_config(self):
+        """Tests the `get_text_config` method."""
+        # 1. model with only text input -> returns the original config instance
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        self.assertEqual(config.get_text_config(), config)
+        self.assertEqual(config.get_text_config(decoder=True), config)
+
+        # 2. composite model (VLM) -> returns the text component
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlavaForConditionalGeneration")
+        self.assertEqual(config.get_text_config(), config.text_config)
+        self.assertEqual(config.get_text_config(decoder=True), config.text_config)
+
+        # 3. ! corner case! : composite model whose sub-config is an old composite model (should behave as above)
+        config = Florence2Config()
+        self.assertEqual(config.get_text_config(), config.text_config)
+        self.assertEqual(config.get_text_config(decoder=True), config.text_config)
+
+        # 4. old composite model -> may remove components based on the `decoder` or `encoder` argument
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-bart")
+        self.assertEqual(config.get_text_config(), config)
+        # both encoder_layers and decoder_layers exist
+        self.assertTrue(getattr(config, "encoder_layers", None) is not None)
+        self.assertTrue(getattr(config, "decoder_layers", None) is not None)
+        decoder_config = config.get_text_config(decoder=True)
+        self.assertNotEqual(decoder_config, config)
+        self.assertEqual(decoder_config.num_hidden_layers, config.decoder_layers)
+        self.assertTrue(getattr(decoder_config, "encoder_layers", None) is None)  # encoder_layers is removed
+        encoder_config = config.get_text_config(encoder=True)
+        self.assertNotEqual(encoder_config, config)
+        self.assertEqual(encoder_config.num_hidden_layers, config.encoder_layers)
+        self.assertTrue(getattr(encoder_config, "decoder_layers", None) is None)  # decoder_layers is removed
+
+    @require_torch
+    def test_bc_torch_dtype(self):
+        import torch
+
+        config = PretrainedConfig(dtype="bfloat16")
+        self.assertEqual(config.dtype, torch.bfloat16)
+
+        config = PretrainedConfig(torch_dtype="bfloat16")
+        self.assertEqual(config.dtype, torch.bfloat16)
+
+        # Check that if we pass both, `dtype` is used
+        config = PretrainedConfig(dtype="bfloat16", torch_dtype="float32")
+        self.assertEqual(config.dtype, torch.bfloat16)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+
+            config = PretrainedConfig.from_pretrained(tmpdirname)
+            self.assertEqual(config.dtype, torch.bfloat16)
+
+            config = PretrainedConfig.from_pretrained(tmpdirname, dtype="float32")
+            self.assertEqual(config.dtype, "float32")
+
+            config = PretrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
+            self.assertEqual(config.dtype, "float32")

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-01-19 and added to Hugging Face Transformers on 2024-12-05.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -48,7 +49,7 @@ feature_extractor = pipeline(
     task="image-feature-extraction",
     model="facebook/ijepa_vith14_1k",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 features = feature_extractor("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", return_tensors=True)  
 
@@ -72,7 +73,7 @@ image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("facebook/ijepa_vith14_1k")  
-model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", torch_dtype="auto", attn_implementation="sdpa")  
+model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", dtype="auto", attn_implementation="sdpa")  
 
 
 def infer(image):  
@@ -112,7 +113,7 @@ image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("facebook/ijepa_vitg16_22k")
-model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, torch_dtype="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, dtype="auto", attn_implementation="sdpa")
 
 
 def infer(image):

@@ -84,19 +84,19 @@ class CsmOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     depth_decoder_loss: Optional[torch.FloatTensor] = None
-    depth_decoder_logits: torch.FloatTensor = None
+    depth_decoder_logits: Optional[torch.FloatTensor] = None
     depth_decoder_past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
     depth_decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     depth_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     backbone_loss: Optional[torch.FloatTensor] = None
 
 
-# manually specify names for correct naming when converting from modualr
+# manually specify names for correct naming when converting from modular
 class CsmRMSNorm(LlamaRMSNorm):
     pass
 
@@ -162,7 +162,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         backbone_last_hidden_state: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -187,7 +187,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -231,7 +231,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
@@ -312,7 +312,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         backbone_last_hidden_state: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -495,7 +495,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     ) -> Optional[torch.Tensor]:
         """
         Merges the input_ids and input_values to produce a single inputs_embeds tensor:
-        1 - Infers the codec model on the input_values to retreive codebook token.
+        1 - Infers the codec model on the input_values to retrieve codebook token.
         2 - Embeds codebook tokens and places them at the correct positions in the inputs_embeds tensor.
         3 - If labels are provided, expands them to match codebook dimensions and position the target codebook tokens in the inputs_embeds tensor.
 
@@ -603,7 +603,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         input_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         input_values_cutoffs: Optional[torch.Tensor] = None,
@@ -634,7 +634,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             the input_values_cutoffs would be: [[l1, 2 * l1], [l2, -1]].
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[config.audio_token_id, -100, -101]`.
-            Requires targeted `input_values` to be provided as audio tokens will be infered from it using the `codec_model`.
+            Requires targeted `input_values` to be provided as audio tokens will be inferred from it using the `codec_model`.
             - `config.audio_token_id` indicates an audio frames (considering sequence length elements as frames)
             - `-100` will be ignored in the loss computation
             - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)
