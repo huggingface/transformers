@@ -145,22 +145,60 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
             self.assertEqual(list(pixel_values.shape), [1, 3, 768, 1024])
             self.assertEqual(list(prompt_depth_values.shape), [1, 1, 192, 256])
 
-    def test_prompt_depth_equivalence(self):
-        """Test numerical equivalence of prompt_depth processing between fast and slow processors."""
-        if self.fast_image_processing_class is None:
-            self.skipTest("Fast image processor not available")
+    @require_torch
+    @require_vision
+    def test_slow_fast_equivalence(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        size = {"height": 756, "width": 756}
-        slow_processor = self.image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
-        fast_processor = self.fast_image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
         image = np.zeros((756, 1008, 3))
         prompt_depth = np.random.random((192, 256))
 
-        slow_outputs = slow_processor(image, prompt_depth=prompt_depth, return_tensors="pt")
-        fast_outputs = fast_processor(image, prompt_depth=prompt_depth, return_tensors="pt")
-
-        self._assert_slow_fast_tensors_equivalence(slow_outputs.pixel_values, fast_outputs.pixel_values)
-        self._assert_slow_fast_tensors_equivalence(
-            slow_outputs.prompt_depth, fast_outputs.prompt_depth.to(slow_outputs.prompt_depth.dtype)
+        size = {"height": 756, "width": 756}
+        image_processor_slow = self.image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+        image_processor_fast = self.fast_image_processing_class(
+            size=size, keep_aspect_ratio=True, ensure_multiple_of=32
         )
+
+        encoding_slow = image_processor_slow(image, prompt_depth=prompt_depth, return_tensors="pt")
+        encoding_fast = image_processor_fast(image, prompt_depth=prompt_depth, return_tensors="pt")
+
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self.assertEqual(encoding_slow.prompt_depth.dtype, encoding_fast.prompt_depth.dtype)
+
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.prompt_depth, encoding_fast.prompt_depth)
+
+    @require_torch
+    @require_vision
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        batch_size = 4
+        images = [np.zeros((756, 1008, 3)) for _ in range(batch_size)]
+        prompt_depths = [np.random.random((192, 256)) for _ in range(batch_size)]
+
+        size = {"height": 756, "width": 756}
+        image_processor_slow = self.image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+        image_processor_fast = self.fast_image_processing_class(
+            size=size, keep_aspect_ratio=True, ensure_multiple_of=32
+        )
+
+        encoding_slow = image_processor_slow(images, prompt_depth=prompt_depths, return_tensors="pt")
+        encoding_fast = image_processor_fast(images, prompt_depth=prompt_depths, return_tensors="pt")
+
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self.assertEqual(encoding_slow.prompt_depth.dtype, encoding_fast.prompt_depth.dtype)
+
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.prompt_depth, encoding_fast.prompt_depth)
