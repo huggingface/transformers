@@ -186,7 +186,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
             )
 
         batch_size = 4
-        images = [np.zeros((756, 1008, 3)) for _ in range(batch_size)]
+        images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         prompt_depths = [np.random.random((192, 256)) for _ in range(batch_size)]
 
         size = {"height": 756, "width": 756}
