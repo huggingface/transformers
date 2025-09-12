@@ -177,10 +177,28 @@ class CircleCIJob:
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
             },
-            {"run": {"name": "fetch hub objects before pytest", "command": "python3 utils/fetch_hub_objects_for_ci.py"}},
+            # During the CircleCI docker images build time, we might already (or not) download the data.
+            # If it's done already, the files are inside the directory `/test_data/`.
+            {"run": {"name": "fetch hub objects before pytest", "command": "cp -r /test_data/* . 2>/dev/null || true; python3 utils/fetch_hub_objects_for_ci.py"}},
             {"run": {
                 "name": "Run tests",
                 "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+            },
+            {"run":
+                {
+                    "name": "Check for test crashes",
+                    "when": "always",
+                    "command": """if [ ! -f tests_output.txt ]; then
+                            echo "ERROR: tests_output.txt does not exist - tests may not have run properly"
+                            exit 1
+                        elif grep -q "crashed and worker restarting disabled" tests_output.txt; then
+                            echo "ERROR: Worker crash detected in test output"
+                            echo "Found: crashed and worker restarting disabled"
+                            exit 1
+                        else
+                            echo "Tests output file exists and no worker crashes detected"
+                        fi"""
+                },
             },
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
@@ -246,7 +264,6 @@ custom_tokenizers_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-custom-tokenizers"}],
 )
 
-
 examples_torch_job = CircleCIJob(
     "examples_torch",
     additional_env={"OMP_NUM_THREADS": 8},
@@ -270,19 +287,6 @@ hub_job = CircleCIJob(
     resource_class="medium",
 )
 
-
-onnx_job = CircleCIJob(
-    "onnx",
-    docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
-    install_steps=[
-        "uv pip install .[testing,sentencepiece,onnxruntime,vision,rjieba]",
-    ],
-    pytest_options={"k onnx": None},
-    pytest_num_workers=1,
-    resource_class="small",
-)
-
-
 exotic_models_job = CircleCIJob(
     "exotic_models",
     docker_image=[{"image":"huggingface/transformers-exotic-models"}],
@@ -290,14 +294,12 @@ exotic_models_job = CircleCIJob(
     pytest_options={"durations": 100},
 )
 
-
 repo_utils_job = CircleCIJob(
     "repo_utils",
     docker_image=[{"image":"huggingface/transformers-consistency"}],
     pytest_num_workers=4,
     resource_class="large",
 )
-
 
 non_model_job = CircleCIJob(
     "non_model",
@@ -334,7 +336,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
+REGULAR_TESTS = [torch_job, hub_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]

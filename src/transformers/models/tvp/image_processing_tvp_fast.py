@@ -101,9 +101,6 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         videos: Union[ImageInput, list[ImageInput], list[list[ImageInput]]],
         **kwargs: Unpack[TvpFastImageProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Preprocess videos using the fast image processor.
-        """
         return super().preprocess(videos, **kwargs)
 
     def _further_process_kwargs(
@@ -167,7 +164,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":

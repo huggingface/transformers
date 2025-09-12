@@ -129,7 +129,6 @@ class RichInterface:
             text = ""
             async for token in await stream:
                 outputs = token.choices[0].delta.content
-                request_id = token.id
 
                 if not outputs:
                     continue
@@ -168,7 +167,7 @@ class RichInterface:
 
         self._console.print()
 
-        return text, request_id
+        return text
 
     def input(self) -> str:
         """Gets user input from the console."""
@@ -290,8 +289,14 @@ class ChatArguments:
     def __post_init__(self):
         """Only used for BC `torch_dtype` argument."""
         # In this case only the BC torch_dtype was given
-        if self.torch_dtype is not None and self.dtype == "auto":
-            self.dtype = self.torch_dtype
+        if self.torch_dtype is not None:
+            if self.dtype is None:
+                self.dtype = self.torch_dtype
+            elif self.torch_dtype != self.dtype:
+                raise ValueError(
+                    f"`torch_dtype` {self.torch_dtype} and `dtype` {self.dtype} have different values. `torch_dtype` is deprecated and "
+                    "will be removed in 4.59.0, please set `dtype` instead."
+                )
 
 
 def chat_command_factory(args: Namespace):
@@ -700,8 +705,6 @@ class ChatCommand(BaseTransformersCLICommand):
         interface.clear()
         chat = self.clear_chat_history(args.system_prompt)
 
-        request_id = None
-
         # Starts the session with a minimal help message at the top, so that a user doesn't get stuck
         interface.print_help(minimal=True)
         while True:
@@ -733,13 +736,12 @@ class ChatCommand(BaseTransformersCLICommand):
                     chat,
                     stream=True,
                     extra_body={
-                        "request_id": request_id,
                         "generation_config": generation_config.to_json_string(),
                         "model": model,
                     },
                 )
 
-                model_output, request_id = await interface.stream_output(stream)
+                model_output = await interface.stream_output(stream)
 
                 chat.append({"role": "assistant", "content": model_output})
 

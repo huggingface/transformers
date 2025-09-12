@@ -53,7 +53,7 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
 
-    # Overriden for DINOv3 to preserve order of transforms
+    # Overridden for DINOv3 to preserve order of transforms
     # rescale -> resize -> normalize
     def _preprocess(
         self,

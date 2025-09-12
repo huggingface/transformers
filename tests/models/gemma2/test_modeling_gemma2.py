@@ -377,11 +377,17 @@ class Gemma2IntegrationTest(unittest.TestCase):
         we need to correctly slice the attention mask in all cases (because we use a hybrid cache).
         Outputs for every attention functions should be coherent and identical.
         """
+        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
+        if attn_implementation == "flex_attention":
+            self.skipTest(
+                reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
+            )
+
         if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
             self.skipTest("FlashAttention2 is required for this test.")
 
         if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "google/gemma-2-2b"
         EXPECTED_COMPLETIONS = [
@@ -417,11 +423,17 @@ class Gemma2IntegrationTest(unittest.TestCase):
         Same as above, but explicitly setting the cache to Dynamic, as it's otherwise static by default for
         the model on the hub
         """
+        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
+        if attn_implementation == "flex_attention":
+            self.skipTest(
+                reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
+            )
+
         if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
             self.skipTest("FlashAttention2 is required for this test.")
 
         if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "google/gemma-2-2b"
         EXPECTED_COMPLETIONS = [
