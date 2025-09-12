@@ -24,9 +24,10 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
     rotate_half,
 )
+from ..mixtral.modeling_mixtral import MixtralExperts
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .configuration_deepseek_v3 import DeepseekV3Config
-from ..mixtral.modeling_mixtral import MixtralMoe
+
 
 logger = logging.get_logger(__name__)
 
@@ -134,9 +135,9 @@ class DeepseekV3TopkRouter(nn.Module):
         return topk_indices, topk_weights
 
 
-class DeepseekV3NaiveMoe(MixtralExperts):
+class DeepseekV3NaiveMoe(MixtralExperts, nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        nn.Module.__init__(self)
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):

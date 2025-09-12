@@ -36,7 +36,13 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, LlamaRotaryEmbedding
-from ..mixtral.modeling_mixtral import MixtralDecoderLayer, MixtralForCausalLM, MixtralModel, MixtralPreTrainedModel, MixtralExperts
+from ..mixtral.modeling_mixtral import (
+    MixtralDecoderLayer,
+    MixtralExperts,
+    MixtralForCausalLM,
+    MixtralModel,
+    MixtralPreTrainedModel,
+)
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
 
@@ -89,11 +95,11 @@ class Qwen2MoeRouter(nn.Module):
         return router_logits, selected_experts, routing_weights
 
 
-class Qwen2MoeExperts(MixtralExperts):
+class Qwen2MoeExperts(MixtralExperts, nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        nn.Module.__init__(self)
         for _ in range(config.num_experts):
-            self.append(Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size))
+            self += [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size)]
 
 
 class Qwen2MoeSparseMoeBlock(nn.Module):
