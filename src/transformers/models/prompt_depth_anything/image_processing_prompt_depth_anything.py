@@ -13,7 +13,6 @@
 """Image processor class for PromptDepthAnything."""
 
 import math
-from collections.abc import Iterable
 from typing import TYPE_CHECKING, Optional, Union
 
 
@@ -68,13 +67,11 @@ def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
 
 def _get_resize_output_image_size(
     input_image: np.ndarray,
-    output_size: Union[int, Iterable[int]],
+    output_size: tuple[int, int],
     keep_aspect_ratio: bool,
     multiple: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> tuple[int, int]:
-    output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
-
     input_height, input_width = get_image_size(input_image, input_data_format)
     output_height, output_width = output_size
 

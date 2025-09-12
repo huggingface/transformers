@@ -72,13 +72,11 @@ def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
 
 def _get_resize_output_image_size(
     input_image: "torch.Tensor",
-    output_size: Union[int, tuple[int, int]],
+    output_size: tuple[int, int],
     keep_aspect_ratio: bool,
     multiple: int,
 ) -> tuple[int, int]:
     """Get the output size for resizing an image."""
-    output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
-
     input_height, input_width = input_image.shape[-2:]
     output_height, output_width = output_size
 
