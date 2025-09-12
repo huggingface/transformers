@@ -2533,7 +2533,6 @@ class Trainer:
         start_time = time.time()
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
-        steps_trained_progress_bar = None
 
         # Check if continuing training from a checkpoint
         if resume_from_checkpoint is not None and os.path.isfile(
@@ -2594,18 +2593,18 @@ class Trainer:
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
-            if epoch == epochs_trained and resume_from_checkpoint is not None and steps_trained_in_current_epoch == 0:
-                self._load_rng_state(resume_from_checkpoint)
-
-            rng_to_sync = False
-            steps_skipped = 0
-            if steps_trained_in_current_epoch > 0:
-                epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
-                steps_skipped = steps_trained_in_current_epoch
-                steps_trained_in_current_epoch = 0
-                rng_to_sync = True
-
             step = -1
+            rng_to_sync = False
+
+            # Handle resumption from checkpoint
+            if epoch == epochs_trained and resume_from_checkpoint is not None:
+                if steps_trained_in_current_epoch > 0 and not args.ignore_data_skip:
+                    epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
+                    step = steps_trained_in_current_epoch - 1
+                    rng_to_sync = True
+                elif steps_trained_in_current_epoch == 0:
+                    self._load_rng_state(resume_from_checkpoint)
+
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
             remainder = steps_in_epoch % args.gradient_accumulation_steps
@@ -2658,21 +2657,10 @@ class Trainer:
 
                             input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
                             self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
+
                     if rng_to_sync:
                         self._load_rng_state(resume_from_checkpoint)
                         rng_to_sync = False
-
-                    # Skip past any already trained steps if resuming training
-                    if steps_trained_in_current_epoch > 0:
-                        steps_trained_in_current_epoch -= 1
-                        if steps_trained_progress_bar is not None:
-                            steps_trained_progress_bar.update(1)
-                        if steps_trained_in_current_epoch == 0:
-                            self._load_rng_state(resume_from_checkpoint)
-                        continue
-                    elif steps_trained_progress_bar is not None:
-                        steps_trained_progress_bar.close()
-                        steps_trained_progress_bar = None
 
                     if step % args.gradient_accumulation_steps == 0:
                         self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
@@ -2765,7 +2753,7 @@ class Trainer:
 
                         model.zero_grad()
                         self.state.global_step += 1
-                        self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
+                        self.state.epoch = epoch + (step + 1) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
                         self._maybe_log_save_evaluate(
                             tr_loss,
