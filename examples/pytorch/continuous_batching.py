@@ -187,8 +187,8 @@ if __name__ == "__main__":
         "--attn", type=str, default="paged_attention|kernels-community/flash-attn", help="Attention implementation"
     )
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
-    parser.add_argument("--slice-inputs", action="store_false")  # enabled by default because much faster
-    parser.add_argument("--use-cuda-graph", action="store_true")
+    parser.add_argument("--no-slice-inputs", action="store_true")  # slicing is enabled by default because much faster
+    parser.add_argument("--use-cuda-graph", "-cg", action="store_true")
     parser.add_argument("--compile", action="store_true")
 
     parser.add_argument("--samples", type=int, default=500)
@@ -198,6 +198,8 @@ if __name__ == "__main__":
     parser.add_argument("--metrics", action="store_true")
     parser.add_argument("--profile", type=str, default=None)
     args = parser.parse_args()
+
+    args.slice_inputs = not args.no_slice_inputs
 
     # If turned on, we setup metrics
     if args.metrics:
