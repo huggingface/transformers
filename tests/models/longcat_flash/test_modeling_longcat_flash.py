@@ -18,10 +18,10 @@ import tempfile
 import unittest
 
 from parameterized import parameterized
+from pytest import mark
 
 from transformers import LongcatFlashConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    mark,
     require_bitsandbytes,
     require_flash_attn,
     require_large_cpu_ram,
