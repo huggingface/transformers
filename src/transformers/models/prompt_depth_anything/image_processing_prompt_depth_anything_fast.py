@@ -348,7 +348,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0)
-        
+
         return processed_images
 
     # Copied from transformers.models.dpt.image_processing_dpt.DPTImageProcessor.post_process_depth_estimation with DPT->PromptDepthAnything
