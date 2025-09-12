@@ -150,7 +150,7 @@ cohere_schema = {
         "messages": {
             "type": "array",
             "items": {
-                "type": "object",\
+                "type": "object",
                 "properties": {
                     "role": {
                         "type": "string",
@@ -160,7 +160,7 @@ cohere_schema = {
                     "content": {"type": "string"},
                     "tool_calls": {
                         "x-parser": "json",
-                        "x-parser-args": {"transform": "[*].{type: 'function', function: @"},
+                        "x-parser-args": {"transform": "[*].{type: 'function', function: {name: tool_name, arguments: parameters}}"},
                         "type": "array",
                         "prefixItems": [
                             {
@@ -173,6 +173,7 @@ cohere_schema = {
                                             "name": {"type": "string"},
                                             "arguments": {
                                                 "type": "object",
+                                                "additionalProperties": {"type": "any"},
                                             },
                                         }
                                     }
@@ -184,7 +185,8 @@ cohere_schema = {
                 "required": ["role", "content"],
             },
             "x-regex": r"^(.*?)(?:$|(?<=<\|END_OF_TURN_TOKEN\|>)<\|START_OF_TURN_TOKEN\|><\|SYSTEM_TOKEN\|>)",  # Trim off the extra instructions
-            "x-regex-iterator": r"<\|START_OF_TURN_TOKEN\|>(?P<role><\|(?:SYSTEM|USER|CHATBOT)_TOKEN\|>(?:<results>\n?)?)(?P<content>.*?)(?:\nAction:\n```json\n(?P<tool_calls>.*?)```|<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools|<\/results>)",
+            # TODO Need to catch the system message patterns in the other 2 templates, not just the tools one
+            "x-regex-iterator": r"<\|START_OF_TURN_TOKEN\|>(?P<role><\|(?:SYSTEM|USER|CHATBOT)_TOKEN\|>(?:<results>\n?)?)(?:(?i:#\s*Safety\s+Preamble)(?:(?!(?:\nAction:\n```json\n|<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools|<\/results>))[\s\S])*?(?i:#\s*User\s+Preamble)[^\n]*\n)?(?!(?:#\s*Safety\s+Preamble))(?P<content>.*?)(?:\nAction:\n```json\n(?P<tool_calls>.*?)```|<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools|<\/results>)",
         },
     },
 }
@@ -419,10 +421,11 @@ class ChatSchemaParserTest(unittest.TestCase):
             chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], chat_template="tool_use"
         )
         parsed_chat = recursive_parse(formatted_chat, cohere_schema)
-        self.assertEqual(parsed_chat["messages"][1:], chat)  # Remove the first message because the template adds it
+        self.assertEqual(parsed_chat["messages"][1:], chat)  # The template adds a default system message, we remove it
         self.assertEqual(
             parsed_chat["tools"], [get_json_schema(simple_tool), get_json_schema(tool_with_everything_all_at_once)]
         )
+        # TODO Remove offset code since we can't rely on it
         parsed_chat_with_offsets = recursive_parse(formatted_chat, cohere_schema, offset=0)
         self.assertEqual(remove_offsets(parsed_chat_with_offsets), parsed_chat)
         validate_offsets(parsed_chat_with_offsets, formatted_chat)
@@ -462,8 +465,8 @@ class ChatSchemaParserTest(unittest.TestCase):
             chat, tokenize=False, tools=[get_current_temperature], chat_template="tool_use"
         )
         parsed_chat = recursive_parse(formatted_chat, cohere_schema)
-        breakpoint()
-        print()
+        self.assertEqual(parsed_chat["messages"], chat)
+        self.assertEqual( parsed_chat["tools"], [get_json_schema(get_current_temperature)])
 
     def test_gpt_oss_template(self):
         def simple_tool(temperature_format: str):
@@ -541,7 +544,6 @@ class ChatSchemaParserTest(unittest.TestCase):
         formatted_chat = tokenizer.apply_chat_template(
             chat, tokenize=False, tools=[get_current_temperature]
         )
-        breakpoint()
         parsed_chat = recursive_parse(formatted_chat, gpt_oss_schema)
         self.assertEqual(parsed_chat["messages"], chat)
 
