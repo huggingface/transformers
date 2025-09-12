@@ -285,7 +285,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -309,9 +309,9 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        high_res_pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        high_res_pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -420,9 +420,9 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        high_res_pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        high_res_pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

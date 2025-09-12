@@ -38,7 +38,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
@@ -408,6 +408,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             for thw in out_dict["video_grid_thw"]:
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
             mm_len = expected_video_token_count
+        elif modality == "audio":
+            mm_len = batch_size
         else:
             mm_len = batch_size * 1564
         self.assertEqual(len(out_dict[input_name]), mm_len)
@@ -454,7 +456,9 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages[0][0]["content"].append(
             {
                 "type": "video",
-                "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
+                "url": url_to_local_path(
+                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                ),
             }
         )
         num_frames = 3
@@ -478,7 +482,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 14400)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5760)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -499,15 +503,19 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 432000)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 17280)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
         messages[0][0]["content"][-1] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
             ],
         }
         out_dict_with_video = processor.apply_chat_template(

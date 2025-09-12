@@ -85,7 +85,7 @@ class MusicgenUnconditionalInput(ModelOutput):
         from the prompts) and the unconditional logits (predicted without prompts).
     """
 
-    encoder_outputs: tuple[torch.FloatTensor] = None
+    encoder_outputs: Optional[tuple[torch.FloatTensor]] = None
     attention_mask: Optional[torch.LongTensor] = None
     guidance_scale: Optional[float] = None
 
@@ -250,6 +250,7 @@ class MusicgenAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
+        is_updated = False
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
@@ -277,7 +278,7 @@ class MusicgenAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = eager_attention_forward
@@ -560,7 +561,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
@@ -1257,7 +1258,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         self._prepare_cache_for_generation(
             generation_config,
             model_kwargs,
-            assistant_model=None,
+            generation_mode=None,
             batch_size=batch_size,
             max_cache_length=max_cache_length,
         )
@@ -1321,7 +1322,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         else:
             raise ValueError(
                 "Got incompatible mode for generation, should be one of greedy or sampling. "
-                "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
+                "Ensure that beam search is de-activated by setting `num_beams=1`."
             )
 
         if generation_config.return_dict_in_generate:
@@ -1930,7 +1931,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         model_kwargs: dict[str, torch.Tensor],
         decoder_start_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = None,
-        device: torch.device = None,
+        device: Optional[torch.device] = None,
     ) -> tuple[torch.LongTensor, dict[str, torch.Tensor]]:
         """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
 
@@ -2371,7 +2372,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         else:
             raise ValueError(
                 "Got incompatible mode for generation, should be one of greedy or sampling. "
-                "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
+                "Ensure that beam search is de-activated by setting `num_beams=1`."
             )
 
         if generation_config.return_dict_in_generate:

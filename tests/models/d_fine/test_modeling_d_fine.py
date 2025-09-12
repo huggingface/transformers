@@ -18,6 +18,7 @@ import inspect
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
@@ -34,7 +35,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 
 if is_torch_available():

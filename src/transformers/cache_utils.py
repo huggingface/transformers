@@ -29,7 +29,8 @@ class CacheLayerMixin(ABC):
     is_compileable = False
 
     def __init__(self):
-        self.keys, self.values = None, None
+        self.keys: Optional[torch.Tensor] = None
+        self.values: Optional[torch.Tensor] = None
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
@@ -99,7 +100,7 @@ class DynamicLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -182,7 +183,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -303,7 +304,7 @@ class StaticLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -378,7 +379,7 @@ class SlidingWindowLayer(StaticLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -457,7 +458,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -566,7 +567,7 @@ class QuantizedLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necessary kes and value states.
+        Update the key and value caches in-place, and return the necessary keys and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -996,7 +997,6 @@ class DynamicCache(Cache):
     >>> past_key_values = DynamicCache(config=model.config)
     >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
     >>> outputs.past_key_values # access cache filled with key/values from generation
-    DynamicCache()
     ```
     """
 
@@ -1010,7 +1010,7 @@ class DynamicCache(Cache):
         layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
-            config = config.get_text_config()
+            config = config.get_text_config(decoder=True)
             sliding_window = getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
             layer_types = getattr(config, "layer_types", None)
             if layer_types is None:
@@ -1018,6 +1018,9 @@ class DynamicCache(Cache):
                     "sliding_attention" if sliding_window is not None else "full_attention"
                     for _ in range(config.num_hidden_layers)
                 ]
+            # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
+            if hasattr(config, "num_kv_shared_layers"):
+                layer_types = layer_types[: -config.num_kv_shared_layers]
 
             for layer_type in layer_types:
                 if layer_type in ("sliding_attention", "chunked_attention"):
@@ -1119,7 +1122,7 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
-        config = config.get_text_config()
+        config = config.get_text_config(decoder=True)
         layer_types = getattr(config, "layer_types", None)
         # If `layer_types` is not explicitly provided, infer if the model is fully sliding
         if layer_types is None:
@@ -1129,6 +1132,9 @@ class StaticCache(Cache):
                 layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
             else:
                 layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
+        # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
+        if hasattr(config, "num_kv_shared_layers"):
+            layer_types = layer_types[: -config.num_kv_shared_layers]
 
         layers = []
         for layer_type in layer_types:
@@ -1223,8 +1229,8 @@ class EncoderDecoderCache(Cache):
     >>> inputs = processor(audio=YOUR-AUDIO, return_tensors="pt")
 
     >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
-    >>> self_attention_cache = DynamicCache()
-    >>> cross_attention_cache = DynamicCache()
+    >>> self_attention_cache = DynamicCache(config=self.config)
+    >>> cross_attention_cache = DynamicCache(config=self.config)
     >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
     >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
     >>> outputs.past_key_values # access cache filled with key/values from generation

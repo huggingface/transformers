@@ -463,6 +463,7 @@ class ProphetNetAttention(nn.Module):
         # previous time steps are cached - no need to recompute key and value if they are static
         query_states = self.query_proj(hidden_states) / (self.head_dim**0.5)
 
+        is_updated = False
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
@@ -492,7 +493,7 @@ class ProphetNetAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         query_states = query_states.view(batch_size, tgt_len, self.num_attn_heads, self.head_dim).transpose(1, 2)
@@ -1240,9 +1241,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = (
-                EncoderDecoderCache(DynamicCache(), DynamicCache())
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
                 if encoder_hidden_states is not None
-                else DynamicCache()
+                else DynamicCache(config=self.config)
             )
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(

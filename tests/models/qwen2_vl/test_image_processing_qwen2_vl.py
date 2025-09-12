@@ -17,14 +17,14 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, load_image
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs, prepare_video_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -346,9 +346,7 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
 
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
