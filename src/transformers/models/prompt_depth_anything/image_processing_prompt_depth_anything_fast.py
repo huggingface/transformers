@@ -278,9 +278,8 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
                 if depth.ndim == 2:  # Add channel dimension if needed
                     depth = depth.unsqueeze(0)
 
-                depth = depth.float() # Convert to float32 to match slow processor
+                depth = depth.float()  # Convert to float32 to match slow processor
                 final_prompt_depths.append(depth)
-
 
             if return_tensors:
                 final_prompt_depths = torch.stack(final_prompt_depths, dim=0)
@@ -389,4 +388,3 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
 
 __all__ = ["PromptDepthAnythingImageProcessorFast"]
-
