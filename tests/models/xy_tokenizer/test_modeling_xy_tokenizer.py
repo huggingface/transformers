@@ -39,7 +39,7 @@ if is_torch_available():
     import torch
 
     from transformers import XYTokenizer
-    from transformers.models.xy_tokenizer.modeling_xy_tokenizer import XYTokenizerDecodeOutput, XYTokenizerEncodeOutput
+    from transformers.models.xy_tokenizer.modeling_xy_tokenizer import XYTokenizerDecoderOutput, XYTokenizerEncoderOutput
 
 
 @require_torch
@@ -204,7 +204,7 @@ class XYTokenizerModelTester:
             for item in result:
                 self.parent.assertIsInstance(item, torch.Tensor)
         elif hasattr(result, "audio_values"):
-            # XYTokenizerOutput or XYTokenizerDecodeOutput
+            # XYTokenizerOutput or XYTokenizerDecoderOutput
             self.parent.assertIsNotNone(result.audio_values)
             if hasattr(result, "audio_codes"):
                 self.parent.assertIsNotNone(result.audio_codes)
@@ -224,7 +224,7 @@ class XYTokenizerModelTester:
             result = model.encode(batch_feature)
 
         # Check encode output
-        self.parent.assertIsInstance(result, XYTokenizerEncodeOutput)
+        self.parent.assertIsInstance(result, XYTokenizerEncoderOutput)
         self.parent.assertIsNotNone(result.audio_codes)
         self.parent.assertIsNotNone(result.quantized_representation)
         self.parent.assertEqual(result.audio_codes.shape[1], self.batch_size)
@@ -558,11 +558,11 @@ class XYTokenizerDataClassesTest(unittest.TestCase):
     """Test XY-Tokenizer output dataclasses."""
 
     def test_encode_output(self):
-        """Test XYTokenizerEncodeOutput dataclass."""
+        """Test XYTokenizerEncoderOutput dataclass."""
         batch_size, seq_len, num_quantizers = 2, 100, 8
         codebook_size = 256
 
-        output = XYTokenizerEncodeOutput(
+        output = XYTokenizerEncoderOutput(
             quantized_representation=torch.randn(batch_size, 128, seq_len),
             audio_codes=torch.randint(0, codebook_size, (num_quantizers, batch_size, seq_len)),
             codes_lengths=torch.tensor([seq_len, seq_len]),
@@ -574,10 +574,10 @@ class XYTokenizerDataClassesTest(unittest.TestCase):
         self.assertEqual(output.audio_codes.shape, (num_quantizers, batch_size, seq_len))
 
     def test_decode_output(self):
-        """Test XYTokenizerDecodeOutput dataclass."""
+        """Test XYTokenizerDecoderOutput dataclass."""
         batch_size, audio_len = 2, 16000
 
-        output = XYTokenizerDecodeOutput(
+        output = XYTokenizerDecoderOutput(
             audio_values=torch.randn(batch_size, 1, audio_len),
             output_length=torch.tensor([audio_len, audio_len]),
         )

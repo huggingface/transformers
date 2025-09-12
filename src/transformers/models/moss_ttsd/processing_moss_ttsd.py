@@ -631,12 +631,18 @@ class MossTTSDProcessor(ProcessorMixin):
         super().__init__(tokenizer, feature_extractor, audio_tokenizer, **kwargs)
 
         self.max_channels = (audio_tokenizer.quantizer.num_quantizers if audio_tokenizer else None) or 8
+        cfg = getattr(audio_tokenizer, "config", None)
+        # Prefer new names with fallbacks to deprecated ones
         self.input_sample_rate = (
-            getattr(audio_tokenizer, "config", None).input_sample_rate if audio_tokenizer else None
-        ) or 16000
+            (getattr(cfg, "input_sampling_rate", None) if cfg else None)
+            or (getattr(cfg, "input_sample_rate", None) if cfg else None)
+            or 16000
+        )
         self.output_sample_rate = (
-            getattr(audio_tokenizer, "config", None).output_sample_rate if audio_tokenizer else None
-        ) or 16000
+            (getattr(cfg, "sampling_rate", None) if cfg else None)
+            or (getattr(cfg, "output_sample_rate", None) if cfg else None)
+            or 16000
+        )
         self.encoder_downsample_rate = (
             getattr(audio_tokenizer, "config", None).encoder_downsample_rate if audio_tokenizer else None
         ) or 320
@@ -684,9 +690,8 @@ class MossTTSDProcessor(ProcessorMixin):
         audio_tokenizer_path = kwargs.pop(
             "audio_tokenizer_path", os.path.join(pretrained_model_name_or_path, "XY_Tokenizer")
         )
-        assert isinstance(audio_tokenizer_path, str), (
-            f"Unsupported audio_tokenizer_path input format: {type(audio_tokenizer_path)}"
-        )
+        if not isinstance(audio_tokenizer_path, str):
+            raise ValueError(f"Unsupported audio_tokenizer_path input format: {type(audio_tokenizer_path)}")
 
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
         feature_extractor = AutoFeatureExtractor.from_pretrained(

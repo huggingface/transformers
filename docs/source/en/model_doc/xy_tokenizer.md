@@ -15,9 +15,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 ## Overview
 
-**`XY-Tokenizer`** is a speech codec that simultaneously models both semantic and acoustic aspects of speech, converting audio into discrete tokens and decoding them back to high-quality audio. It achieves efficient speech representation at only 1kbps with RVQ8 quantization at 12.5Hz frame rate. 
+**`XY-Tokenizer`** is a speech codec that simultaneously models both semantic and acoustic aspects of speech, converting audio into discrete tokens and decoding them back to high-quality audio. It achieves efficient speech representation at only 1kbps with RVQ8 quantization at 12.5Hz frame rate.
 
--   **Paper:** [Read on arXiv](https://arxiv.org/abs/2506.23325)
+-   **Paper:** https://huggingface.co/papers/2506.23325
 -   **Source Code:** [GitHub Repo](https://github.com/OpenMOSS/MOSS-TTSD/tree/main/XY_Tokenizer)
 | [Hugging Face Repo](https://huggingface.co/spaces/fnlp/MOSS-TTSD/tree/main/XY_Tokenizer)
 

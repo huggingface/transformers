@@ -73,13 +73,13 @@ class ExtractorIterator:
         self.chunk_size = int(self.chunk_length * self.sampling_rate)
         self.overlap_size = int(self.overlap_seconds * self.sampling_rate)
         self.duration_size = self.chunk_size - self.overlap_size
-        assert (overlap_side == "right") or (self.overlap_size % 2 == 0), (
-            '`overlap_seconds` must be divisible by 2 when `overlap_side` is "both".'
-        )
+        if not ((overlap_side == "right") or (self.overlap_size % 2 == 0)):
+            raise ValueError("`overlap_seconds` must be divisible by 2 when `overlap_side` is 'both'.")
         # Note: here we only process non-overlapping blocks, and overlap will be processed outside (if needed)
         # or more explicitly in the iterator. For simplicity, we assume that the blocks are based on duration_size
 
-        assert callable(encode_func)
+        if not callable(encode_func):
+            raise TypeError("encode_func must be callable")
         self.encode_func = encode_func
 
     def __iter__(self):
