@@ -26,13 +26,14 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "padding": True,
+            "padding": "longest",
         },
         "text_kwargs": {
             "padding": True,
             "padding_side": "left",
             "add_special_tokens": False,
         },
+        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
