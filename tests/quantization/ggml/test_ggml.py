@@ -1087,11 +1087,10 @@ class GgufModelTests(unittest.TestCase):
         Verifies that a UMT5 encoder loads directly from a GGUF file using
         UMT5EncoderModel.from_pretrained(...), and the config is correctly UMT5.
         """
-
         model = UMT5EncoderModel.from_pretrained(
             self.umt5_encoder_model_id,
             gguf_file=self.q8_0_umt5_encoder_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map="auto",
         )
         model.eval()
@@ -1104,8 +1103,19 @@ class GgufModelTests(unittest.TestCase):
         self.assertIn("UMT5EncoderModel", getattr(model.config, "architectures", []))
 
         # --- Smoke: tiny forward pass to ensure weights/tensor mapping are valid ---
-        input_ids = torch.ones((1, 4), dtype=torch.long).to(torch_device)
+        input_ids = torch.tensor([[1, 2, 3, 4]], dtype=torch.long).to(torch_device)
         with torch.no_grad():
             outputs = model(input_ids=input_ids)
+
         self.assertTrue(hasattr(outputs, "last_hidden_state"))
         self.assertEqual(outputs.last_hidden_state.dim(), 3)  # (batch, seq_len, hidden)
+
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                [-0.0010, -0.0145, 0.0133],
+                [-0.0006, 0.1814, 0.1132],
+                [0.0005, 0.0083, -0.0285],
+            ]
+        ).to(torch_device)
+
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], EXPECTED_OUTPUT, rtol=6e-3, atol=4e-4)
