@@ -586,6 +586,23 @@ def is_mamba_2_ssm_available() -> bool:
     return False
 
 
+def is_flash_linear_attention_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+
+        try:
+            import fla
+
+            if version.parse(fla.__version__) >= version.parse("0.2.2"):
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def is_causal_conv1d_available() -> Union[tuple[bool, str], bool]:
     if is_torch_available():
         import torch
@@ -638,6 +655,8 @@ def is_torch_bf16_gpu_available() -> bool:
     if is_torch_mps_available():
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
+    if is_torch_musa_available():
+        return torch.musa.is_bf16_supported()
     return False
 
 
@@ -718,6 +737,11 @@ def is_torch_tf32_available() -> bool:
 
     import torch
 
+    if is_torch_musa_available():
+        device_info = torch.musa.get_device_properties(torch.musa.current_device())
+        if f"{device_info.major}{device_info.minor}" >= "22":
+            return True
+        return False
     if not torch.cuda.is_available() or torch.version.cuda is None:
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:

@@ -35,7 +35,6 @@ if is_torch_available():
 
     from transformers import RecurrentGemmaConfig, RecurrentGemmaForCausalLM, RecurrentGemmaModel
 
-
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
@@ -64,18 +63,6 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="RecurrentGemma only supports sdpa")
     def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate(self):
         pass
 
     @unittest.skip(reason="SQRBound is known to have issues with gc")
@@ -145,6 +132,15 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
     def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("RecurrentGemma doesn't have RoPE scaling implemented")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("RecurrentGemma doesn't have RoPE scaling implemented")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 

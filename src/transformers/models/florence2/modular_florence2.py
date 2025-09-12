@@ -357,7 +357,7 @@ class Florence2Processor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BartTokenizerFast's [`~BartTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -994,7 +994,7 @@ class Florence2PostProcessor:
                     instances = self.parse_description_with_bboxes_from_text_and_spans(text, image_size=image_size)
                 parsed_dict["description_with_bboxes_or_polygons"] = instances
             else:
-                raise ValueError("task {} is not supported".format(task))
+                raise ValueError(f"task {task} is not supported")
 
         return parsed_dict
 

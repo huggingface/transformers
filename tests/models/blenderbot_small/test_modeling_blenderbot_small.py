@@ -15,6 +15,7 @@
 
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import BlenderbotSmallConfig, is_torch_available
 from transformers.testing_utils import (
@@ -23,7 +24,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester

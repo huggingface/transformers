@@ -21,7 +21,6 @@ from typing import Optional, Union
 
 import numpy as np
 import requests
-from packaging import version
 
 from .utils import (
     ExplicitEnum,
@@ -51,10 +50,7 @@ if is_vision_available():
     import PIL.Image
     import PIL.ImageOps
 
-    if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
-        PILImageResampling = PIL.Image.Resampling
-    else:
-        PILImageResampling = PIL.Image
+    PILImageResampling = PIL.Image.Resampling
 
     if is_torchvision_available():
         from torchvision.transforms import InterpolationMode
@@ -363,7 +359,7 @@ def get_channel_dimension_axis(
     raise ValueError(f"Unsupported data format: {input_data_format}")
 
 
-def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
+def get_image_size(image: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
 

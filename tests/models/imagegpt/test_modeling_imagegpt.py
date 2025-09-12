@@ -15,10 +15,11 @@
 
 import inspect
 import unittest
+from functools import cached_property
 
 from transformers import ImageGPTConfig
 from transformers.testing_utils import require_torch, require_vision, run_test_using_subprocess, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester

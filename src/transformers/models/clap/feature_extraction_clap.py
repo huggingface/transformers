@@ -152,7 +152,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             del output["mel_filters_slaney"]
         return output
 
-    def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform: np.ndarray, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided `waveform` using the Hann window. In CLAP, two different filter
         banks are used depending on the truncation pattern:
@@ -199,7 +199,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         mel_fusion = np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
         return mel_fusion
 
-    def _get_input_mel(self, waveform: np.array, max_length, truncation, padding) -> np.array:
+    def _get_input_mel(self, waveform: np.ndarray, max_length, truncation, padding) -> np.array:
         """
         Extracts the mel spectrogram and prepares it for the mode based on the `truncation` and `padding` arguments.
         Four different path are possible:
