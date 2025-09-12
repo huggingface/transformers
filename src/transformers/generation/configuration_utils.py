@@ -172,7 +172,7 @@ class GenerationConfig(PushToHubMixin):
             Must be a value between 0 and 1. At each step, tokens are sorted by probability, and the smallest prefix of tokens
             is kept whose *renormalized* entropy is less than or equal to `top_h` times the entropy of the full distribution.
             Smaller values (e.g., 0.2–0.5) lead to more focused, deterministic outputs, while values closer to 1.0 allow more
-            randomness and diversity. Typical values are in the 0.3–0.6 range.    
+            randomness and diversity. Typical values are in the 0.3–0.6 range.
         typical_p (`float`, *optional*, defaults to 1.0):
             Local typicality measures how similar the conditional probability of predicting a target token next is to
             the expected conditional probability of predicting a random token next, given the partial text already
@@ -589,7 +589,7 @@ class GenerationConfig(PushToHubMixin):
             if self.min_p is not None:
                 minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
             if self.top_h is not None:
-                minor_issues["top_h"] = greedy_wrong_parameter_msg.format(flag_name="top_h", flag_value=self.top_h)                
+                minor_issues["top_h"] = greedy_wrong_parameter_msg.format(flag_name="top_h", flag_value=self.top_h)
             if self.typical_p is not None and self.typical_p != 1.0:
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
