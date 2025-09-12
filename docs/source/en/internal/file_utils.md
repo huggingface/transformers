@@ -41,10 +41,6 @@ Most of those are only useful if you are studying the general code in the librar
 
 [[autodoc]] utils.replace_return_docstrings
 
-## Special Properties
-
-[[autodoc]] utils.cached_property
-
 ## Other Utilities
 
 [[autodoc]] utils._LazyModule

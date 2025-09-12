@@ -373,7 +373,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
     def affine_transform(
         self,
-        image: np.array,
+        image: np.ndarray,
         center: tuple[float],
         scale: tuple[float],
         rotation: float,
