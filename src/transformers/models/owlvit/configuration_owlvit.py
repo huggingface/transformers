@@ -16,12 +16,11 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -318,13 +317,15 @@ class OwlViTOnnxConfig(OnnxConfig):
         processor: "ProcessorMixin",
         batch_size: int = -1,
         seq_length: int = -1,
-        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+            processor.tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
         )
         image_input_dict = super().generate_dummy_inputs(
-            processor.image_processor, batch_size=batch_size, framework=framework
+            processor.image_processor,
+            batch_size=batch_size,
         )
         return {**text_input_dict, **image_input_dict}
 

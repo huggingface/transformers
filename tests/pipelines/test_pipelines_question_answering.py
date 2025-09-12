@@ -18,7 +18,6 @@ from huggingface_hub import QuestionAnsweringOutputElement
 
 from transformers import (
     MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-    TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     LxmertConfig,
     QuestionAnsweringPipeline,
 )
@@ -30,7 +29,6 @@ from transformers.testing_utils import (
     is_torch_available,
     nested_simplify,
     require_torch,
-    require_torch_or_tf,
     slow,
 )
 
@@ -48,14 +46,9 @@ _TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
 @is_pipeline_test
 class QAPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
     if not hasattr(model_mapping, "is_dummy"):
         model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
-    if not hasattr(tf_model_mapping, "is_dummy"):
-        tf_model_mapping = {
-            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
-        }
 
     def get_test_pipeline(
         self,
@@ -207,7 +200,7 @@ class QAPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_iterator(self):
         # https://github.com/huggingface/transformers/issues/18510
-        pipe = pipeline(model="sshleifer/tiny-distilbert-base-cased-distilled-squad", batch_size=16, framework="pt")
+        pipe = pipeline(model="sshleifer/tiny-distilbert-base-cased-distilled-squad", batch_size=16)
 
         def data():
             for i in range(10):
@@ -416,7 +409,7 @@ between them. It's straightforward to train your models with one before loading 
         )
 
 
-@require_torch_or_tf
+@require_torch
 class QuestionAnsweringArgumentHandlerTests(unittest.TestCase):
     def test_argument_handler(self):
         qa = QuestionAnsweringArgumentHandler()

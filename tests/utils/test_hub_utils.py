@@ -24,8 +24,6 @@ from requests.exceptions import HTTPError
 
 from transformers.utils import (
     CONFIG_NAME,
-    FLAX_WEIGHTS_NAME,
-    TF2_WEIGHTS_NAME,
     TRANSFORMERS_CACHE,
     WEIGHTS_NAME,
     cached_file,
@@ -97,8 +95,8 @@ class GetFromCacheTests(unittest.TestCase):
 
     def test_has_file(self):
         self.assertTrue(has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME))
-        self.assertFalse(has_file(TINY_BERT_PT_ONLY, TF2_WEIGHTS_NAME))
-        self.assertFalse(has_file(TINY_BERT_PT_ONLY, FLAX_WEIGHTS_NAME))
+        self.assertFalse(has_file(TINY_BERT_PT_ONLY, "tf_model.h5"))
+        self.assertFalse(has_file(TINY_BERT_PT_ONLY, "flax_model.msgpack"))
 
     def test_has_file_in_cache(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -26,10 +26,8 @@ from .image_utils import (
     get_image_size,
     infer_channel_dimension_format,
 )
-from .utils import ExplicitEnum, TensorType, is_jax_tensor, is_tf_tensor, is_torch_tensor
+from .utils import ExplicitEnum, TensorType, is_torch_tensor
 from .utils.import_utils import (
-    is_flax_available,
-    is_tf_available,
     is_torch_available,
     is_vision_available,
     requires_backends,
@@ -43,12 +41,6 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
-
-if is_tf_available():
-    import tensorflow as tf
-
-if is_flax_available():
-    import jax.numpy as jnp
 
 
 def to_channel_dimension_format(
@@ -160,7 +152,7 @@ def _rescale_for_pil_conversion(image):
 
 
 def to_pil_image(
-    image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
+    image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor"],
     do_rescale: Optional[bool] = None,
     image_mode: Optional[str] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -170,7 +162,7 @@ def to_pil_image(
     needed.
 
     Args:
-        image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor` or `tf.Tensor`):
+        image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor`):
             The image to convert to the `PIL.Image` format.
         do_rescale (`bool`, *optional*):
             Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will default
@@ -190,10 +182,8 @@ def to_pil_image(
         return image
 
     # Convert all tensors to numpy arrays before converting to PIL image
-    if is_torch_tensor(image) or is_tf_tensor(image):
+    if is_torch_tensor(image):
         image = image.numpy()
-    elif is_jax_tensor(image):
-        image = np.array(image)
     elif not isinstance(image, np.ndarray):
         raise ValueError(f"Input image type not supported: {type(image)}")
 
@@ -556,16 +546,6 @@ def _center_to_corners_format_numpy(bboxes_center: np.ndarray) -> np.ndarray:
     return bboxes_corners
 
 
-def _center_to_corners_format_tf(bboxes_center: "tf.Tensor") -> "tf.Tensor":
-    center_x, center_y, width, height = tf.unstack(bboxes_center, axis=-1)
-    bboxes_corners = tf.stack(
-        # top left x, top left y, bottom right x, bottom right y
-        [center_x - 0.5 * width, center_y - 0.5 * height, center_x + 0.5 * width, center_y + 0.5 * height],
-        axis=-1,
-    )
-    return bboxes_corners
-
-
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
     """
@@ -576,14 +556,11 @@ def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
     corners format: contains the coordinates for the top-left and bottom-right corners of the box
         (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
     """
-    # Function is used during model forward pass, so we use the input framework if possible, without
-    # converting to numpy
+    # Function is used during model forward pass, so we use torch if relevant, without converting to numpy
     if is_torch_tensor(bboxes_center):
         return _center_to_corners_format_torch(bboxes_center)
     elif isinstance(bboxes_center, np.ndarray):
         return _center_to_corners_format_numpy(bboxes_center)
-    elif is_tf_tensor(bboxes_center):
-        return _center_to_corners_format_tf(bboxes_center)
 
     raise ValueError(f"Unsupported input type {type(bboxes_center)}")
 
@@ -613,20 +590,6 @@ def _corners_to_center_format_numpy(bboxes_corners: np.ndarray) -> np.ndarray:
     return bboxes_center
 
 
-def _corners_to_center_format_tf(bboxes_corners: "tf.Tensor") -> "tf.Tensor":
-    top_left_x, top_left_y, bottom_right_x, bottom_right_y = tf.unstack(bboxes_corners, axis=-1)
-    bboxes_center = tf.stack(
-        [
-            (top_left_x + bottom_right_x) / 2,  # center x
-            (top_left_y + bottom_right_y) / 2,  # center y
-            (bottom_right_x - top_left_x),  # width
-            (bottom_right_y - top_left_y),  # height
-        ],
-        axis=-1,
-    )
-    return bboxes_center
-
-
 def corners_to_center_format(bboxes_corners: TensorType) -> TensorType:
     """
     Converts bounding boxes from corners format to center format.
@@ -641,8 +604,6 @@ def corners_to_center_format(bboxes_corners: TensorType) -> TensorType:
         return _corners_to_center_format_torch(bboxes_corners)
     elif isinstance(bboxes_corners, np.ndarray):
         return _corners_to_center_format_numpy(bboxes_corners)
-    elif is_tf_tensor(bboxes_corners):
-        return _corners_to_center_format_tf(bboxes_corners)
 
     raise ValueError(f"Unsupported input type {type(bboxes_corners)}")
 

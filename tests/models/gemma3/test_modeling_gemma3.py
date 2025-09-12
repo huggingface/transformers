@@ -356,9 +356,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip(
-        reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation"
-    )
+    @unittest.skip(reason="Siglip (vision backbone) uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 

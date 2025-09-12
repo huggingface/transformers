@@ -4,7 +4,7 @@ import types
 from typing import Any, overload
 
 from ..generation import GenerationConfig
-from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import ModelOutput, add_end_docstrings, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -13,11 +13,6 @@ if is_torch_available():
 
     from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
     from .pt_utils import KeyDataset
-
-if is_tf_available():
-    import tensorflow as tf
-
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 ChatType = list[dict[str, str]]
 
@@ -119,9 +114,7 @@ class TextGenerationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.check_model_type(
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
             # as a "default".
@@ -181,7 +174,7 @@ class TextGenerationPipeline(Pipeline):
             preprocess_params["prefix"] = prefix
         if prefix:
             prefix_inputs = self.tokenizer(
-                prefix, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
+                prefix, padding=False, add_special_tokens=add_special_tokens, return_tensors="pt"
             )
             generate_kwargs["prefix_length"] = prefix_inputs["input_ids"].shape[-1]
 
@@ -298,14 +291,14 @@ class TextGenerationPipeline(Pipeline):
                 a chat, it is passed to `apply_chat_template`. Otherwise, it is passed to `__call__`.
             generate_kwargs (`dict`, *optional*):
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./text_generation)).
+                [here](./text_generation)).
 
         Return:
             A list or a list of lists of `dict`: Returns one of the following dictionaries (cannot return a combination
             of both `generated_text` and `generated_token_ids`):
 
             - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
-            - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
+            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The token
               ids of the generated text.
         """
         if isinstance(
@@ -365,11 +358,11 @@ class TextGenerationPipeline(Pipeline):
                 add_generation_prompt=not continue_final_message,
                 continue_final_message=continue_final_message,
                 return_dict=True,
-                return_tensors=self.framework,
+                return_tensors="pt",
                 **tokenizer_kwargs,
             )
         else:
-            inputs = self.tokenizer(prefix + prompt_text, return_tensors=self.framework, **tokenizer_kwargs)
+            inputs = self.tokenizer(prefix + prompt_text, return_tensors="pt", **tokenizer_kwargs)
 
         inputs["prompt_text"] = prompt_text
 
@@ -436,29 +429,18 @@ class TextGenerationPipeline(Pipeline):
             other_outputs = {k: v for k, v in output.items() if k not in {"sequences", "past_key_values"}}
             out_b = generated_sequence.shape[0]
 
-            if self.framework == "pt":
-                for key, value in other_outputs.items():
-                    if isinstance(value, torch.Tensor) and value.shape[0] == out_b:
-                        other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
-                    if isinstance(value, tuple) and len(value[0]) == out_b:
-                        value = torch.stack(value).swapaxes(0, 1)
-                        other_outputs[key] = value
-            elif self.framework == "tf":
-                for key, value in other_outputs.items():
-                    if isinstance(value, tf.Tensor) and value.shape[0] == out_b:
-                        other_outputs[key] = tf.reshape(value, (in_b, out_b // in_b, *value.shape[1:]))
-                    if isinstance(value, tuple) and len(value[0]) == out_b:
-                        value = tf.stack(value).swapaxes(0, 1)
-                        other_outputs[key] = value
+            for key, value in other_outputs.items():
+                if isinstance(value, torch.Tensor) and value.shape[0] == out_b:
+                    other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
+                if isinstance(value, tuple) and len(value[0]) == out_b:
+                    value = torch.stack(value).swapaxes(0, 1)
+                    other_outputs[key] = value
         else:
             generated_sequence = output
             other_outputs = {}
 
         out_b = generated_sequence.shape[0]
-        if self.framework == "pt":
-            generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
-        elif self.framework == "tf":
-            generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
+        generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
 
         model_outputs = {
             "generated_sequence": generated_sequence,
@@ -485,14 +467,9 @@ class TextGenerationPipeline(Pipeline):
         other_outputs = model_outputs.get("additional_outputs", {})
         split_keys = {}
         if other_outputs:
-            if self.framework == "pt":
-                for k, v in other_outputs.items():
-                    if isinstance(v, torch.Tensor) and v.shape[0] == len(generated_sequence):
-                        split_keys[k] = v.numpy().tolist()
-            elif self.framework == "tf":
-                for k, v in other_outputs.items():
-                    if isinstance(v, tf.Tensor) and v.shape[0] == len(generated_sequence):
-                        split_keys[k] = v.numpy().tolist()
+            for k, v in other_outputs.items():
+                if isinstance(v, torch.Tensor) and v.shape[0] == len(generated_sequence):
+                    split_keys[k] = v.numpy().tolist()
 
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
         for idx, sequence in enumerate(generated_sequence):

@@ -23,29 +23,20 @@ if is_sagemaker_available():
 @parameterized_class(
     [
         {
-            "framework": "pytorch",
             "script": "run_glue.py",
             "model_name_or_path": "distilbert/distilbert-base-cased",
             "instance_type": "ml.g4dn.xlarge",
             "results": {"train_runtime": 650, "eval_accuracy": 0.6, "eval_loss": 0.9},
         },
-        {
-            "framework": "tensorflow",
-            "script": "run_tf.py",
-            "model_name_or_path": "distilbert/distilbert-base-cased",
-            "instance_type": "ml.g4dn.xlarge",
-            "results": {"train_runtime": 600, "eval_accuracy": 0.3, "eval_loss": 0.9},
-        },
     ]
 )
 class SingleNodeTest(unittest.TestCase):
     def setUp(self):
-        if self.framework == "pytorch":
-            subprocess.run(
-                f"cp ./examples/pytorch/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
-                encoding="utf-8",
-                check=True,
-            )
+        subprocess.run(
+            f"cp ./examples/pytorch/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
+            encoding="utf-8",
+            check=True,
+        )
         assert hasattr(self, "env")
 
     def create_estimator(self, instance_count=1):

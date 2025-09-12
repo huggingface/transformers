@@ -465,8 +465,6 @@ OBJECTS_TO_IGNORE = {
 # below, make sure to add a comment explaining why.
 OBJECT_TO_IGNORE_PREFIXES = [
     "_",  # Private objects are not documented
-    "TF",  # TensorFlow objects are scheduled to be removed in the future
-    "Flax",  # Flax objects are scheduled to be removed in the future
 ]
 
 # Supported math operations when interpreting the value of defaults.
@@ -923,14 +921,10 @@ def find_matching_model_files(check_all: bool = False):
     potential_files = glob.glob(modeling_glob_pattern)
     image_processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/image_processing_*_fast.py")
     potential_files += glob.glob(image_processing_glob_pattern)
-    exclude_substrings = ["modeling_tf_", "modeling_flax_"]
     matching_files = []
     for file_path in potential_files:
         if os.path.isfile(file_path):
-            filename = os.path.basename(file_path)
-            is_excluded = any(exclude in filename for exclude in exclude_substrings)
-            if not is_excluded:
-                matching_files.append(file_path)
+            matching_files.append(file_path)
     if not check_all:
         # intersect with module_diff_files
         matching_files = sorted([file for file in matching_files if file in module_diff_files])

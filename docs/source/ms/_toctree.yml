@@ -115,8 +115,6 @@
       title: Latihan pada banyak CPU
     - local: perf_train_tpu
       title: Latihan mengenai TPU
-    - local: perf_train_tpu_tf
-      title: Latihan tentang TPU dengan TensorFlow
     - local: perf_train_special
       title: Latihan mengenai Perkakasan Khusus
     - local: perf_infer_cpu
@@ -135,8 +133,6 @@
       title: Penyahpepijatan
     - local: hpo_train
       title: Carian Hiperparameter menggunakan API Pelatih
-    - local: tf_xla
-      title: Penyepaduan XLA untuk Model TensorFlow
   title: Prestasi dan kebolehskalaan
 - sections:
     - local: contributing
@@ -185,8 +181,6 @@
           title: Configuration
         - local: main_classes/data_collator
           title: Data Collator
-        - local: main_classes/keras_callbacks
-          title: Keras callbacks
         - local: main_classes/logging
           title: Logging
         - local: main_classes/model
