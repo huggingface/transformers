@@ -14,12 +14,22 @@
 """Testing suite for the PyTorch LongcatFlash model."""
 
 import copy
+import tempfile
 import unittest
 
 from parameterized import parameterized
 
 from transformers import LongcatFlashConfig, is_torch_available, set_seed
-from transformers.testing_utils import require_large_cpu_ram, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    mark,
+    require_bitsandbytes,
+    require_flash_attn,
+    require_large_cpu_ram,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
@@ -302,6 +312,62 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("LongcatFlash router uses weight.type() directly in forward which prevents offloading")
     def test_disk_offload_safetensors(self):
         pass
+
+    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @require_flash_attn
+    @require_torch_gpu
+    @require_bitsandbytes
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_fp32_ln(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_input = inputs_dict[model.main_input_name]
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                batch_size = dummy_attention_mask.shape[0]
+
+                is_padding_right = dummy_attention_mask[:, -1].sum().item() != batch_size
+
+                if is_padding_right:
+                    dummy_attention_mask = torch.ones_like(dummy_input)
+
+                # Skip 4bit loading for LongcatFlash due to router compatibility issues
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                )
+
+                for _, param in model.named_parameters():
+                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
+                        param.data = param.data.to(torch.float32)
+
+                if model.config.is_encoder_decoder:
+                    dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
+                    dummy_decoder_attention_mask = inputs_dict["decoder_attention_mask"]
+
+                    _ = model(dummy_input, decoder_input_ids=dummy_decoder_input_ids)
+                    _ = model(
+                        dummy_input,
+                        attention_mask=dummy_attention_mask,
+                        decoder_input_ids=dummy_decoder_input_ids,
+                        decoder_attention_mask=dummy_decoder_attention_mask,
+                    )
+                else:
+                    _ = model(dummy_input)
+                    _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
