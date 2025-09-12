@@ -175,6 +175,8 @@ IGNORE_NON_TESTED = (
         "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "KeyeTextModel",  # Building part of bigger (tested) model. Tested implicitly through KeyeForConditionalGeneration.
+        "KeyeVisionModel",  # Building part of bigger (tested) model. Tested implicitly through KeyeForConditionalGeneration.
     ]
 )
 
@@ -397,6 +399,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
     "CsmForConditionalGeneration",  # Building part of a bigger model
     "Florence2VisionBackbone",  # Building part of a bigger model
+    "KeyeVisionModel",  # Building part of a bigger model
 ]
 
 # DO NOT edit this list!
