@@ -2134,9 +2134,9 @@ class GenerationTesterMixin:
         # (batch, # kv heads, seq_length, head_features)
         expected_shape = (
             batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            getattr(config, "num_key_value_heads", None) or config.num_attention_heads,
             cache_length,
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads,
+            getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads,
         )
 
         if isinstance(decoder_past_key_values, Cache):
