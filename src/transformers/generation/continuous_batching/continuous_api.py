@@ -174,7 +174,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_k = dict.fromkeys(layer_types, 0)
 
         if self.return_attention_mask():
-            attn_mask_kwargs = {"size": (1, 1, T, num_pages), "dtype": self.model_dtype, "device": self.model_device}
+            attn_mask_kwargs = {"size": (1, 1, T, num_pages + T), "dtype": self.model_dtype, "device": self.model_device}
             self.attention_mask = {layer_type: torch.empty(**attn_mask_kwargs) for layer_type in layer_types}
         else:
             self.attention_mask = None
@@ -229,7 +229,7 @@ class ContinuousBatchProcessor:
         """Get model keyword arguments for the current batch."""
         # Compute the slice to return
         q_len = self.total_query_length if self.slice_inputs else self.write_index_storage[0].size(-1)
-        b_size = self.total_batch_size
+        b_size = self.total_batch_size if self.slice_inputs else self.cumulative_seqlens_q.size(-1) - 1
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts
         kwargs = {
