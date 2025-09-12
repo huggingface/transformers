@@ -240,13 +240,12 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         """
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=False, input_data_format=input_data_format, device=device
-        )  # /!\ NB: do_convert_rgb=False to match the slow processor
+        )  # always use do_convert_rgb=False rather than defining it as a param to match slow processor
 
         # Process images with the standard pipeline
         images_kwargs = kwargs.copy()
         pixel_values = self._preprocess(images, **images_kwargs)
 
-        # Prepare result data
         data = {"pixel_values": pixel_values}
 
         # Process prompt depth if provided
@@ -259,7 +258,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
                 expected_ndims=2,
             )
 
-            # Validate prompt_depths has same length as images
+            # Validate prompt_depths has same length as images as in slow processor
             if len(processed_prompt_depths) != len(images):
                 raise ValueError(
                     f"Number of prompt depth images ({len(processed_prompt_depths)}) does not match number of input images ({len(images)})"
@@ -270,24 +269,19 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
             final_prompt_depths = []
             for depth in processed_prompt_depths:
-                # Scale to meters
                 depth = depth * prompt_scale_to_meter
 
                 # Handle case where depth is constant (min == max)
                 if depth.min() == depth.max():
-                    # Add small variation to avoid numerical issues
-                    depth[0, 0] = depth[0, 0] + 1e-6
+                    depth[0, 0] = depth[0, 0] + 1e-6  # Add small variation to avoid numerical issues
 
-                # Add channel dimension if needed
-                if depth.ndim == 2:
+                if depth.ndim == 2:  # Add channel dimension if needed
                     depth = depth.unsqueeze(0)
 
-                # Convert to float32 to match slow processor
-                depth = depth.float()
-
+                depth = depth.float() # Convert to float32 to match slow processor
                 final_prompt_depths.append(depth)
 
-            # Stack processed depths if return_tensors is set
+
             if return_tensors:
                 final_prompt_depths = torch.stack(final_prompt_depths, dim=0)
 
@@ -395,3 +389,4 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
 
 __all__ = ["PromptDepthAnythingImageProcessorFast"]
+
