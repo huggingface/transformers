@@ -750,6 +750,9 @@ def _load_state_dict_into_meta_model(
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
+    # Used to fix the issue mentioned in #37031: when loading a model with tied weights in state_dict + `tie_word_embeddings = False`,
+    # we need to make sure they are not loaded as tied weights!
+    data_ptrs = set()
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:  # when loading from ckpt, we skip param if doesnt exist in modeling
             continue
@@ -847,8 +850,15 @@ def _load_state_dict_into_meta_model(
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
+                # avoid tied weights
+                if param.data_ptr() in data_ptrs:
+                    param = param.clone()
+
                 _load_parameter_into_model(model, param_name, param.to(param_device))
 
+                # Add `data_ptr` of `model.state_dict()[param_name]` to avoid tied weights
+                module, param_type = get_module_from_name(model, param_name)
+                data_ptrs.add(module.state_dict()[param_type].data_ptr())
             else:
                 # TODO naming is stupid it loads it as well
                 hf_quantizer.create_quantized_param(
