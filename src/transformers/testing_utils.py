@@ -596,12 +596,12 @@ def require_flash_attn(test_case):
 
 def require_kernels(test_case):
     """
-    Decorator marking a test that requires Flash Attention.
+    Decorator marking a test that requires the kernels library.
 
-    These tests are skipped when Flash Attention isn't installed.
+    These tests are skipped when the kernels library isn't installed.
 
     """
-    return unittest.skipUnless(is_kernels_available(), "test requires Flash Attention")(test_case)
+    return unittest.skipUnless(is_kernels_available(), "test requires the kernels library")(test_case)
 
 
 def require_flash_attn_3(test_case):
