@@ -96,6 +96,13 @@ class ParakeetTDTDecoderConfig(PretrainedConfig):
         joint_hidden=640,
         vocab_size=1024,
         durations=[0,1,2,3,4],
+        norm=None,
+        forget_gate_bias=1.0,
+        pred_dropout=0.0,
+        norm_first_rnn=None,
+        t_max=None,
+        weights_init_scale=1.0,
+        hidden_hidden_bias_scale=0,
         **kwargs,
     ):
         super().__init__(
@@ -106,6 +113,14 @@ class ParakeetTDTDecoderConfig(PretrainedConfig):
         self.joint_hidden = joint_hidden
         self.vocab_size = vocab_size
         self.durations = durations
+        self.norm = norm
+        self.forget_gate_bias=forget_gate_bias
+        self.t_max=t_max
+        self.pred_dropout=pred_dropout
+        self.norm_first_rnn=norm_first_rnn
+        self.weights_init_scale=weights_init_scale
+        self.hidden_hidden_bias_scale=hidden_hidden_bias_scale
+
 
         print("SUCCESS!")
 #        self.pred_hidden = kwargs['pred_hidden']

@@ -21,7 +21,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, Tuple
 
 import torch
 from torch import nn
@@ -36,6 +36,91 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_parakeet import ParakeetConfig, ParakeetTDTConfig, ParakeetEncoderConfig, ParakeetTDTDecoderConfig
 
+class LSTMDropout(torch.nn.Module):
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int,
+        dropout: Optional[float],
+        forget_gate_bias: Optional[float],
+        t_max: Optional[int] = None,
+        weights_init_scale: float = 1.0,
+        hidden_hidden_bias_scale: float = 0.0,
+        proj_size: int = 0,
+    ):
+        """Returns an LSTM with forget gate bias init to `forget_gate_bias`.
+        Args:
+            input_size: See `torch.nn.LSTM`.
+            hidden_size: See `torch.nn.LSTM`.
+            num_layers: See `torch.nn.LSTM`.
+            dropout: See `torch.nn.LSTM`.
+
+            forget_gate_bias: float, set by default to 1.0, which constructs a forget gate
+                initialized to 1.0.
+                Reference:
+                [An Empirical Exploration of Recurrent Network Architectures](http://proceedings.mlr.press/v37/jozefowicz15.pdf)
+
+            t_max: int value, set to None by default. If an int is specified, performs Chrono Initialization
+                of the LSTM network, based on the maximum number of timesteps `t_max` expected during the course
+                of training.
+                Reference:
+                [Can recurrent neural networks warp time?](https://openreview.net/forum?id=SJcKhk-Ab)
+
+            weights_init_scale: Float scale of the weights after initialization. Setting to lower than one
+                sometimes helps reduce variance between runs.
+
+            hidden_hidden_bias_scale: Float scale for the hidden-to-hidden bias scale. Set to 0.0 for
+                the default behaviour.
+
+        Returns:
+            A `torch.nn.LSTM`.
+        """
+        super(LSTMDropout, self).__init__()
+
+        self.lstm = torch.nn.LSTM(
+            input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, dropout=dropout, proj_size=proj_size
+        )
+
+        if t_max is not None:
+            # apply chrono init
+            for name, v in self.lstm.named_parameters():
+                if 'bias' in name:
+                    p = getattr(self.lstm, name)
+                    n = p.nelement()
+                    hidden_size = n // 4
+                    p.data.fill_(0)
+                    p.data[hidden_size : 2 * hidden_size] = torch.log(
+                        torch.nn.init.uniform_(p.data[0:hidden_size], 1, t_max - 1)
+                    )
+                    # forget gate biases = log(uniform(1, Tmax-1))
+                    p.data[0:hidden_size] = -p.data[hidden_size : 2 * hidden_size]
+                    # input gate biases = -(forget gate biases)
+
+        elif forget_gate_bias is not None:
+            for name, v in self.lstm.named_parameters():
+                if "bias_ih" in name:
+                    bias = getattr(self.lstm, name)
+                    bias.data[hidden_size : 2 * hidden_size].fill_(forget_gate_bias)
+                if "bias_hh" in name:
+                    bias = getattr(self.lstm, name)
+                    bias.data[hidden_size : 2 * hidden_size] *= float(hidden_hidden_bias_scale)
+
+        self.dropout = torch.nn.Dropout(dropout) if dropout else None
+
+        for name, v in self.named_parameters():
+            if 'weight' in name or 'bias' in name:
+                v.data *= float(weights_init_scale)
+
+    def forward(
+        self, x: torch.Tensor, h: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        x, h = self.lstm(x, h)
+
+        if self.dropout:
+            x = self.dropout(x)
+
+        return x, h
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
     """Relative positional encoding for Parakeet."""
@@ -411,6 +496,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+
 @auto_docstring
 class ParakeetPreTrainedModel(PreTrainedModel):
     config: ParakeetConfig
@@ -466,6 +552,86 @@ class ParakeetPreTrainedModel(PreTrainedModel):
         max_length = target_length if target_length is not None else output_lengths.max()
         attention_mask = torch.arange(max_length, device=attention_mask.device) < output_lengths[:, None]
         return attention_mask
+
+class ParakeetTDTPredictor(ParakeetPreTrainedModel):
+    def __init__(self, config: ParakeetTDTDecoderConfig):
+        super().__init__(config)
+        self.config = config
+        self.gradient_checkpointing = False
+
+        self.predictor = self.rnn(
+                           config.pred_hidden,
+                           config.pred_hidden,
+                           config.pred_n_layers,
+                           config.norm,
+                           config.forget_gate_bias,
+                           config.pred_dropout,
+                           config.norm_first_rnn,
+                           config.t_max,
+                           config.weights_init_scale,
+                           config.hidden_hidden_bias_scale,
+        )
+        self.post_init()
+
+
+    def rnn(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int,
+        norm: Optional[str] = None,
+        forget_gate_bias: Optional[float] = 1.0,
+        dropout: Optional[float] = 0.0,
+        norm_first_rnn: Optional[bool] = None,
+        t_max: Optional[int] = None,
+        weights_init_scale: float = 1.0,
+        hidden_hidden_bias_scale: float = 0.0,
+        proj_size: int = 0,
+    ) -> torch.nn.Module:
+        if norm not in [None, "batch", "layer"]:
+            raise ValueError(f"unknown norm={norm}")
+
+        if norm is None:
+            return LSTMDropout(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                dropout=dropout,
+                forget_gate_bias=forget_gate_bias,
+                t_max=t_max,
+                weights_init_scale=weights_init_scale,
+                hidden_hidden_bias_scale=hidden_hidden_bias_scale,
+                proj_size=proj_size,
+            )
+
+        if norm == "batch":
+            return BNRNNSum(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                rnn_layers=num_layers,
+                batch_norm=True,
+                dropout=dropout,
+                forget_gate_bias=forget_gate_bias,
+                t_max=t_max,
+                 norm_first_rnn=norm_first_rnn,
+                 weights_init_scale=weights_init_scale,
+                 hidden_hidden_bias_scale=hidden_hidden_bias_scale,
+                 proj_size=proj_size,
+             )
+     
+        if norm == "layer":
+             return torch.jit.script(
+                 ln_lstm(
+                     input_size=input_size,
+                     hidden_size=hidden_size,
+                     num_layers=num_layers,
+                     dropout=dropout,
+                     forget_gate_bias=forget_gate_bias,
+                     t_max=t_max,
+                     weights_init_scale=weights_init_scale,
+                     hidden_hidden_bias_scale=hidden_hidden_bias_scale,
+                 )
+             )
 
 
 @auto_docstring(
@@ -577,18 +743,7 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
         vocab_size = config.vocab_size
         pred_hidden = config.pred_hidden
         self.emb = torch.nn.Embedding(vocab_size, pred_hidden)
-        self.rnn = rnn.rnn(
-                      input_size=pred_n_hidden,
-                      hidden_size=rnn_hidden_size if rnn_hidden_size > 0 else pred_n_hidden,
-                      num_layers=pred_rnn_layers,
-                      norm=norm,
-                      forget_gate_bias=forget_gate_bias,
-                      t_max=t_max,
-                      dropout=dropout,
-                      weights_init_scale=weights_init_scale,
-                      hidden_hidden_bias_scale=hidden_hidden_bias_scale,
-                      proj_size=pred_n_hidden if pred_n_hidden < rnn_hidden_size else 0,
-                  ),
+        self.pred = ParakeetTDTPredictor(config)
 
         self.post_init()
 
@@ -787,7 +942,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
 )
 class ParakeetForTDT(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetTDTConfig):
-        #super().__init__(config)
+        super().__init__(config)
         #self.encoder = ParakeetEncoder(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decolying layer
         self.decoder = ParakeetTDTDecoder(config.decoder_config)
