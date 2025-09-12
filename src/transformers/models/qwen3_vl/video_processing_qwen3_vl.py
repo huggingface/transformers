@@ -20,12 +20,13 @@ from typing import Optional, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, get_image_size
+from ...image_utils import ChannelDimension, SizeDict, get_image_size
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
     add_start_docstrings,
     is_torch_available,
+    is_vision_available,
     logging,
 )
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
@@ -36,6 +37,10 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
+
+
+if is_vision_available():
+    from ...image_utils import PILImageResampling
 
 
 def smart_resize(
@@ -186,7 +191,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: Optional[SizeDict] = None,
-        interpolation: PILImageResampling = PILImageResampling.BICUBIC,
+        interpolation: "PILImageResampling" = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
