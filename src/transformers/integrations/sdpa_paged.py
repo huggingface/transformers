@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 
@@ -20,7 +20,7 @@ def sdpa_attention_paged_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: Optional[Union[torch.Tensor, dict]],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
     is_causal: bool = False,
