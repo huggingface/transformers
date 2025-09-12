@@ -1882,9 +1882,9 @@ class BitNetQuantConfig(QuantizationConfigMixin):
     def __init__(
         self,
         modules_to_not_convert: Optional[list] = None,
-        linear_class: Optional[str] = "bitlinear",
-        quantization_mode: Optional[str] = "offline",
-        use_rms_norm: Optional[bool] = False,
+        linear_class: str = "bitlinear",
+        quantization_mode: str = "offline",
+        use_rms_norm: bool = False,
         rms_norm_eps: Optional[float] = 1e-6,
         **kwargs,
     ):
