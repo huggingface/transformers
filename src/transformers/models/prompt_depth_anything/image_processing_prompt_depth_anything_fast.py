@@ -107,6 +107,8 @@ class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwarg
     """
     keep_aspect_ratio (`bool`, *optional*):
         If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
+    ensure_multiple_of (`int`, *optional*):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
     do_pad (`bool`, *optional*):
         Whether to apply center padding.
     size_divisor (`int`, *optional*):
@@ -118,6 +120,7 @@ class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwarg
     """
 
     keep_aspect_ratio: Optional[bool]
+    ensure_multiple_of: Optional[int]
     do_pad: Optional[bool]
     size_divisor: Optional[int]
     prompt_depth: Optional[ImageInput]
@@ -135,7 +138,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = True
     keep_aspect_ratio = False
     ensure_multiple_of = 1
     do_pad = False
@@ -227,7 +229,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         prompt_depth: Optional[ImageInput],
-        do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
         prompt_scale_to_meter: Optional[float] = None,
@@ -237,10 +238,9 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         """
         Preprocess image-like inputs, including the main images and optional prompt depth.
         """
-        # Process main images
         images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
+            images=images, do_convert_rgb=False, input_data_format=input_data_format, device=device
+        )  # /!\ NB: do_convert_rgb=False to match the slow processor
 
         # Process images with the standard pipeline
         images_kwargs = kwargs.copy()
@@ -251,13 +251,12 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
         # Process prompt depth if provided
         if prompt_depth is not None:
-            # Convert prompt depth to tensor format similar to images
             processed_prompt_depths = self._prepare_image_like_inputs(
                 images=prompt_depth,
-                do_convert_rgb=False,  # Depth maps should not be converted to RGB
+                do_convert_rgb=False,  # Depth maps should not be converted
                 input_data_format=input_data_format,
                 device=images[0].device if images else device,
-                expected_ndims=2,  # Depth maps are typically 2D
+                expected_ndims=2,
             )
 
             # Validate prompt_depths has same length as images
@@ -266,7 +265,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
                     f"Number of prompt depth images ({len(processed_prompt_depths)}) does not match number of input images ({len(images)})"
                 )
 
-            # Use prompt_scale_to_meter from kwargs or instance attribute
             if prompt_scale_to_meter is None:
                 prompt_scale_to_meter = self.prompt_scale_to_meter
 
@@ -280,9 +278,12 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
                     # Add small variation to avoid numerical issues
                     depth[0, 0] = depth[0, 0] + 1e-6
 
-                # Add channel dimension if needed (depth maps are typically 2D)
+                # Add channel dimension if needed
                 if depth.ndim == 2:
                     depth = depth.unsqueeze(0)
+
+                # Convert to float32 to match slow processor
+                depth = depth.float()
 
                 final_prompt_depths.append(depth)
 
@@ -300,7 +301,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         keep_aspect_ratio: Optional[bool],
-        ensure_multiple_of: Optional[int],
         interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
@@ -308,8 +308,9 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
         disable_grouping: Optional[bool],
+        ensure_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         size_divisor: Optional[int] = None,
         **kwargs,
     ) -> "torch.Tensor":
@@ -346,8 +347,8 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-
+        processed_images = torch.stack(processed_images, dim=0)
+        
         return processed_images
 
     # Copied from transformers.models.dpt.image_processing_dpt.DPTImageProcessor.post_process_depth_estimation with DPT->PromptDepthAnything
@@ -391,3 +392,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
             results.append({"predicted_depth": depth})
 
         return results
+
+
+__all__ = ["PromptDepthAnythingImageProcessorFast"]
