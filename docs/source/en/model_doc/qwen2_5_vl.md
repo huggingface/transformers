@@ -146,7 +146,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     
     inputs = processor.apply_chat_template(
         conversation,
-        video_fps=1,
+        fps=1,
         add_generation_prompt=True,
         tokenize=True,
         return_dict=True,
