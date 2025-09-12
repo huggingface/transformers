@@ -23,7 +23,6 @@ def sdpa_attention_paged_forward(
     attention_mask: Optional[Union[torch.Tensor, dict]],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
-    is_causal: bool = False,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     # Add KV cache to the key and value tensors
@@ -58,7 +57,9 @@ def sdpa_attention_paged_forward(
         attn_mask=causal_mask,
         dropout_p=dropout,
         scale=scaling,
-        is_causal=is_causal,
+        # It is assume that either the caller specifies `attention_mask` or in otherwise non-causal context.
+        # See discussions in https://github.com/huggingface/transformers/pull/40838
+        is_causal=False,
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
 
