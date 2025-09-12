@@ -264,6 +264,43 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
         return super().preprocess(images, **kwargs)
 
+    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
+        """
+        Pad an image with zeros to the given size.
+        """
+        height, width = images.shape[-2:]
+        size = max(height, width)
+        pad_bottom = size - height
+        pad_right = size - width
+
+        padding = (0, 0, pad_right, pad_bottom)
+        padded_image = F.pad(images, padding, fill=constant_value)
+        return padded_image
+
+    def pad(
+        self,
+        images: list["torch.Tensor"],
+        disable_grouping: Optional[bool],
+        constant_value: float = 0.5,
+        **kwargs,
+    ) -> list["torch.Tensor"]:
+        """
+        Unlike the Base class `self.pad` where all images are padded to the maximum image size,
+        Owlv2 pads an image to square.
+        """
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self._pad_images(
+                stacked_images,
+                constant_value=constant_value,
+            )
+            processed_images_grouped[shape] = stacked_images
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        return processed_images
+
     def resize(
         self,
         image: "torch.Tensor",
@@ -350,7 +387,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
-            processed_images = self.pad(processed_images, fill_value=0.5, disable_grouping=disable_grouping)
+            processed_images = self.pad(processed_images, constant_value=0.5, disable_grouping=disable_grouping)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             processed_images, disable_grouping=disable_grouping

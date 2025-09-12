@@ -646,6 +646,18 @@ class ProcessorMixin(PushToHubMixin):
         if "chat_template" in output:
             del output["chat_template"]
 
+        def cast_array_to_list(dictionary):
+            """
+            Numpy arrays are not serialiazable but can be in pre-processing dicts.
+            This function casts arrays to list, recusring through the nested configs as well.
+            """
+            for key, value in dictionary.items():
+                if isinstance(value, np.ndarray):
+                    dictionary[key] = value.tolist()
+                elif isinstance(value, dict):
+                    dictionary[key] = cast_array_to_list(value)
+            return dictionary
+
         # Serialize attributes as a dict
         output = {
             k: v.to_dict() if isinstance(v, PushToHubMixin) else v
@@ -658,6 +670,7 @@ class ProcessorMixin(PushToHubMixin):
                 )  # remove `PushToHubMixin` objects
             )
         }
+        output = cast_array_to_list(output)
 
         # Special case, add `audio_tokenizer` dict which points to model weights and path
         if not legacy_serialization and "audio_tokenizer" in output:

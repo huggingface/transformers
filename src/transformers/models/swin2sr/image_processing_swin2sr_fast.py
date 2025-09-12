@@ -75,7 +75,6 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     def pad_size(self):
         logger.warning(
             "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
-            FutureWarning,
         )
         return self.size_divisor
 
@@ -83,7 +82,6 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     def pad_size(self, value):
         logger.warning(
             "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
-            FutureWarning,
         )
         self.size_divisor = value
 
