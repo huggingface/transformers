@@ -262,12 +262,13 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
                     depth[0, 0] = depth[0, 0] + 1e-6  # Add small variation to avoid numerical issues
 
                 if depth.ndim == 2:  # Add channel dimension if needed
-                    depth = depth.unsqueeze(0)
+                    depth = depth.unsqueeze(0)  # [H, W] -> [1, H, W] (channels first)
 
                 depth = depth.float()  # Convert to float32 to match slow processor
                 final_prompt_depths.append(depth)
 
             if return_tensors:
+                # Stack while preserving the [H, W, C] format that the slow processor uses
                 final_prompt_depths = torch.stack(final_prompt_depths, dim=0)
 
             data["prompt_depth"] = final_prompt_depths
@@ -326,7 +327,14 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors == "pt" else processed_images
+
+        # Only stack tensors if they all have the same shape and return_tensors is specified
+        if return_tensors == "pt" and processed_images:
+            # Check if all images have the same shape
+            first_shape = processed_images[0].shape
+            if all(img.shape == first_shape for img in processed_images):
+                processed_images = torch.stack(processed_images, dim=0)
+            # If shapes differ, keep as list and let BatchFeature handle the conversion/error
 
         return processed_images
 
