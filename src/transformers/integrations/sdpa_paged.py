@@ -23,7 +23,7 @@ def sdpa_attention_paged_forward(
     attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
-    is_causal: Optional[bool] = None,
+    is_causal: bool = False,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     # Add KV cache to the key and value tensors
@@ -58,7 +58,7 @@ def sdpa_attention_paged_forward(
         attn_mask=causal_mask,
         dropout_p=dropout,
         scale=scaling,
-        is_causal=False,
+        is_causal=is_causal,
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
 
