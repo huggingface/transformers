@@ -581,8 +581,8 @@ class TopKLogitsWarper(LogitsProcessor):
         scores_processed = scores.masked_fill(indices_to_remove, self.filter_value)
         return scores_processed
 
-class TopHLogitsWarper(LogitsProcessor):
 
+class TopHLogitsWarper(LogitsProcessor):
     """
     [`LogitsProcessor`] that implements Top-H sampling, a decoding method which adaptively selects a subset of
     high-probability tokens based on entropy and cumulative probability constraints.
@@ -613,7 +613,6 @@ class TopHLogitsWarper(LogitsProcessor):
     ```
     """
 
-
     def __init__(self, top_h: float, filter_value: float = -float("Inf")):
         super().__init__()
 
@@ -626,7 +625,6 @@ class TopHLogitsWarper(LogitsProcessor):
 
     @staticmethod
     def calculate_entropy(probs):
-
         """
         Computes Shannon entropy of a probability distribution.
 
@@ -637,8 +635,8 @@ class TopHLogitsWarper(LogitsProcessor):
         Return:
             `torch.FloatTensor`: Scalar entropy value.
         """
-        probs = probs [probs > 0]
-        probs = probs/torch.sum(probs)
+        probs = probs[probs > 0]
+        probs = probs / torch.sum(probs)
         return -torch.sum(probs * torch.log2(probs))
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -676,7 +674,7 @@ class TopHLogitsWarper(LogitsProcessor):
 
             # grow the kept set until the stopping rule triggers
             sigma = top_probs[0]
-            H = - top_probs[0] * torch.log2(top_probs[0])
+            H = -top_probs[0] * torch.log2(top_probs[0])
             chosen = []
             ind = 0
             for idx, p in zip(top_idx, top_probs):
@@ -698,6 +696,7 @@ class TopHLogitsWarper(LogitsProcessor):
         scores_processed = scores.clone()
         scores_processed[~keep_mask] = self.filter_value
         return scores_processed
+
 
 class MinPLogitsWarper(LogitsProcessor):
     """

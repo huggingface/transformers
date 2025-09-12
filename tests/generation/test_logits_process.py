@@ -394,6 +394,7 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # first batch should keep three tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [3, 2])
+
     def test_top_h_dist_warper(self):
         """
         We construct small distributions where the expected kept set is obvious for a given alpha.
