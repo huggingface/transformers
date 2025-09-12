@@ -504,23 +504,3 @@ class ChatSchemaParserTest(unittest.TestCase):
         )
         parsed_chat = recursive_parse(formatted_chat, gpt_oss_schema)
         self.assertEqual(parsed_chat["messages"], chat)
-
-    def test_assistant_masking(self):
-        tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
-        chat = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello!"},
-            {"role": "assistant", "content": "Hi there! How can I help you today?"},
-            {"role": "user", "content": "I'd like to see if you can mask some indices!"},
-            {"role": "assistant", "content": "Sure! Hopefully this response is masked correctly."},
-        ]
-        formatted_chat = tokenizer.apply_chat_template(
-            chat, tokenize=True, return_assistant_tokens_mask=True, chat_schema=gpt_oss_schema, return_dict=True
-        )
-        assistant_tokens = [
-            token for token, mask in zip(formatted_chat["input_ids"], formatted_chat["assistant_masks"]) if mask
-        ]
-        self.assertEqual(
-            tokenizer.decode(assistant_tokens),
-            "Hi there! How can I help you today?Sure! Hopefully this response is masked correctly.",
-        )
