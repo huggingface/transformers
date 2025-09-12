@@ -243,7 +243,7 @@ class ConversationTTLCache:
         self._closed = False
         self.conversation_cache: dict[str, Entry] = {}
         self.max_entries = max_entries
-        self.ttl = float(entry_timeout_seconds)
+        self.time_to_live = float(entry_timeout_seconds)
 
     def acquire_lease(self, conversation_id: str, evict_callback: Optional[EvictCallback] = None):
         """
