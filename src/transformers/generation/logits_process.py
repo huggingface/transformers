@@ -613,7 +613,7 @@ class TopHLogitsWarper(LogitsProcessor):
     ```
     """
 
-    def __init__(self, top_h: float, filter_value: float = -float("Inf")):
+    def __init__(self, top_h: float = 0.4, filter_value: float = -float("Inf")):
         super().__init__()
 
         # input checks
