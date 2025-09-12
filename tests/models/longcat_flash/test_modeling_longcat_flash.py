@@ -270,6 +270,9 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch
 class LongcatFlashIntegrationTest(unittest.TestCase):
     model_id = "Molbap/LongCat-ShortCat"
+    # This is a cut-down model that matches part of the early logits of the larger one
+    # Only a couple experts + layers
+    # But if it fails, it means the larger model might have issues as well
 
     @classmethod
     def setUpClass(cls):
