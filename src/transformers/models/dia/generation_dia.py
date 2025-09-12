@@ -45,7 +45,7 @@ class DiaGenerationMixin(GenerationMixin):
         self,
         generation_config: GenerationConfig,
         input_ids_seq_length: Optional[int] = None,
-        encoder_input_ids: torch.LongTensor = None,
+        encoder_input_ids: Optional[torch.LongTensor] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         device: Optional[str] = None,
@@ -278,7 +278,7 @@ class DiaGenerationMixin(GenerationMixin):
         generation_mode = generation_config.get_generation_mode(assistant_model)
 
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_generation_mode(generation_mode, generation_mode_kwargs)
+        self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:

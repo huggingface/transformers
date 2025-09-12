@@ -85,7 +85,7 @@ class ShieldGemma2Processor(Gemma3Processor):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text=None,
         videos=None,
         audio=None,
