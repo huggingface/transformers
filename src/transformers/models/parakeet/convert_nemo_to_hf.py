@@ -426,6 +426,7 @@ def create_hf_config_from_nemo(
 
     # Detect bias usage
     bias_keys = [k for k in state_dict.keys() if "linear_q.bias" in k]
+
     if bias_keys:
         actual_use_bias = True
         logger.info("Detected bias=True from state dict")
@@ -678,10 +679,6 @@ def create_hf_model(
 ) -> Union[ParakeetForCTC]:
     """Create the appropriate HuggingFace model and load weights."""
 
-    print("HERE hf_config", hf_config)
-
-    assert model_info["is_tdt_model"]
-
     if model_info["is_ctc_model"]:
         # Check if we already have a ParakeetCTCConfig or need to create one
         if isinstance(hf_config, ParakeetConfig):
@@ -712,9 +709,6 @@ def create_hf_model(
         else:
             # Fallback: create ParakeetConfig if we somehow still have FastConformerConfig
             vocab_size = 1024  # default
-#            if "decoder.ctc_head.weight" in hf_state_dict:
-#                vocab_size = hf_state_dict["decoder.ctc_head.weight"].shape[0]
-#                logger.info(f"Detected vocab_size: {vocab_size} from TDT head")
 
             logger.info("Creating ParakeetForCTC model with new ParakeetConfig...")
             tdt_config = ParakeetTDTConfig(
@@ -722,13 +716,10 @@ def create_hf_model(
                 blank_token_id=vocab_size,
                 tdt_loss_reduction="mean",
                 model_type='tdt',
-#                ctc_zero_infinity=True,
                 encoder_config=hf_config,
                 decoder_config=hf_config,
             )
             model = ParakeetForTDT(tdt_config)
-
-        print("TDT HERE MODEL", model)
 
     else:
         raise ValueError("Unsupported model type. Only CTC models are supported in this converter.")
@@ -766,6 +757,9 @@ def create_hf_model(
                     f"NeMo {hf_state_dict[param_name].shape}"
                 )
                 shape_mismatches += 1
+        else:
+            print("FAILING not in hf_model_state", param_name)
+        print("UPDATE", matched_params, "out of", len(model_state_dict.keys()))
 
     model.load_state_dict(updated_state_dict, strict=False)
     if matched_params != len(model_state_dict):
