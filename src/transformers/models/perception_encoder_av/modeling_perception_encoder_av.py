@@ -1,0 +1,919 @@
+import enum
+import math
+from dataclasses import asdict, dataclass
+from typing import Optional
+
+import torch
+import torch.nn.functional as F
+from einops import rearrange
+
+from transformers import ModernBertModel
+
+from ...modeling_utils import PreTrainedModel
+from ..dac.configuration_dac import DacConfig
+from ..dac.modeling_dac import DacEncoder
+from ..encodec.modeling_encodec import EncodecConv1d
+from .configuration_perception_encoder_av import (
+    ModernBERTConfig,
+    NormalizeType,
+    PerceptionEncoderAVConfig,
+    VideoEncoderConfig,
+)
+
+
+## Patcher
+def get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
+    # Copied from https://github.com/facebookresearch/audiocraft/blob/main/audiocraft/modules/conv.py
+    """See `pad_for_conv1d`."""
+    length = x.shape[-1]
+    n_frames = (length - kernel_size + padding_total) / stride + 1
+    ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
+    return ideal_length - length
+
+
+class Conv1d(torch.nn.Conv1d):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        kernel_size = self.kernel_size[0]
+        stride = self.stride[0]
+        dilation = self.dilation[0]
+        kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
+        padding_total = kernel_size - stride
+        extra_padding = get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
+        # Asymmetric padding required for odd strides
+        padding_right = padding_total // 2
+        padding_left = padding_total - padding_right
+        x = EncodecConv1d.pad1d(x, (padding_left, padding_right + extra_padding))
+        return super().forward(x)
+
+
+class ConvBlock1d(torch.nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        *,
+        kernel_size: int = 3,
+        stride: int = 1,
+        dilation: int = 1,
+        num_groups: int = 8,
+    ) -> None:
+        super().__init__()
+
+        self.groupnorm = torch.nn.GroupNorm(num_groups=num_groups, num_channels=in_channels)
+        self.activation = torch.nn.SiLU()
+        self.project = Conv1d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            dilation=dilation,
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        x = self.groupnorm(x)
+        x = self.activation(x)
+        return self.project(x)
+
+
+class ResnetBlock1d(torch.nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        *,
+        kernel_size: int = 3,
+        stride: int = 1,
+        dilation: int = 1,
+        num_groups: int = 8,
+    ) -> None:
+        super().__init__()
+
+        self.block1 = ConvBlock1d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            dilation=dilation,
+            num_groups=num_groups,
+        )
+
+        self.block2 = ConvBlock1d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            num_groups=num_groups,
+        )
+
+        self.to_out = (
+            Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=1)
+            if in_channels != out_channels
+            else torch.nn.Identity()
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.block1(x)
+        h = self.block2(h)
+        return h + self.to_out(x)
+
+
+class Patcher(torch.nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        patch_size: int,
+    ):
+        super().__init__()
+        assert_message = f"out_channels must be divisible by patch_size ({patch_size})"
+        assert out_channels % patch_size == 0, assert_message
+        self.patch_size = patch_size
+        self.block = ResnetBlock1d(
+            in_channels=in_channels,
+            out_channels=out_channels // patch_size,
+            num_groups=1,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.block(x)
+        x = rearrange(x, "b c (l p) -> b (c p) l", p=self.patch_size)
+        return x
+
+
+## Text Encoder
+
+
+class ModernBERTEncoder(torch.nn.Module):
+    def __init__(self, cfg: ModernBERTConfig):
+        super().__init__()
+        self.cfg = cfg
+        self.model = ModernBertModel.from_pretrained(cfg.model_id)
+        self.nth_layer = cfg.nth_layer
+
+    def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+        output = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=self.nth_layer is not None,
+        )
+        if self.nth_layer is None:
+            # Note that `hidden_state[-1]` is not necessarily equivalent to `last_hidden_state`
+            # https://huggingface.co/docs/transformers/en/main_classes/output#model-outputs
+            return output.last_hidden_state[:, 0]
+        return output.hidden_states[self.nth_layer][:, 0]
+
+
+class AlignModalities(torch.nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        normalize: bool = True,
+        btc: bool = True,
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.normalize = normalize
+        self.btc = btc
+        self.conv = torch.nn.Conv1d(in_channels=self.in_channels, out_channels=self.out_channels, kernel_size=1)
+        if self.normalize:
+            self.layer_norm = torch.nn.LayerNorm(self.out_channels)
+
+    def get_sizes(self, seq, mask):
+        if mask is not None:
+            sizes = mask.sum(-1)
+        else:
+            sizes = torch.full((seq.size(0),), seq.size(-1), device=seq.device)
+        if sizes.dim() > 1:
+            sizes = sizes.squeeze(1)
+        return sizes.long()
+
+    def interpolate(self, tgt, tgt_sizes, src_sizes) -> torch.Tensor:
+        result = torch.zeros(tgt.size(0), tgt.size(1), src_sizes.max(), device=tgt.device)
+        for i, (tgt_row, tgt_size, src_size) in enumerate(zip(tgt, tgt_sizes, src_sizes)):
+            tgt_row = tgt_row[:, :tgt_size]
+            interpolated = F.interpolate(tgt_row[None], size=src_size, mode="nearest")
+            result[i, :, :src_size] = interpolated[0]
+        return result
+
+    def forward(self, src, src_mask, tgt, tgt_mask):
+        # BxTxC -> BxCxT
+        src = src.transpose(1, 2)
+        tgt = tgt.transpose(1, 2)
+
+        tgt = self.conv(tgt)
+
+        src_sizes = self.get_sizes(src, src_mask)
+        tgt_sizes = self.get_sizes(tgt, tgt_mask)
+        if all(src_sizes == tgt_sizes):
+            upsampled = tgt
+        else:
+            upsampled = self.interpolate(tgt, tgt_sizes, src_sizes)
+
+        upsampled = upsampled.permute(0, 2, 1)  # BxCxT -> BxTxC
+        if self.normalize:
+            upsampled = self.layer_norm(upsampled)
+        return upsampled, src_mask
+
+
+class L2(torch.nn.Module):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.normalize(x, p=2, dim=-1, eps=1e-6)
+
+
+class ContrastiveHead(torch.nn.Module):
+    def __init__(
+        self,
+        in_dim: int,
+        out_dim: int,
+        norm_type: NormalizeType = NormalizeType.NONE,
+    ) -> None:
+        super().__init__()
+        self.layer_norm = torch.nn.LayerNorm(normalized_shape=in_dim, eps=1e-6)
+        self.proj = torch.nn.Linear(in_dim, out_dim, bias=False)
+        if norm_type == NormalizeType.L2:
+            self.norm = L2()
+        elif norm_type == NormalizeType.LAYER_NORM:
+            self.norm = torch.nn.LayerNorm(out_dim, eps=1e-6)
+        else:
+            assert norm_type == NormalizeType.NONE
+            self.norm = torch.nn.Identity()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        projected = self.proj(self.layer_norm(x))
+        return self.norm(projected)
+
+
+class TextType(enum.Enum):
+    audio = "audio"
+    visual = "visual"
+    audio_visual = "audio_visual"
+
+
+class VideoEncoder(torch.nn.Module):
+    def __init__(self, cfg: VideoEncoderConfig):
+        super().__init__()
+        try:
+            from core.vision_encoder import pe
+        except ImportError:
+            raise RuntimeError(
+                "Please install perception_models: `pip install git+https://github.com/facebookresearch/perception_models`"
+            )
+
+        self.backbone = pe.CLIP.from_config(cfg.backbone)
+        self.proj = torch.nn.Linear(self.backbone.visual.output_dim, cfg.transformer.dim, bias=False)
+        self.transformer = Transformer(**asdict(cfg.transformer))
+
+    def forward(self, video: torch.Tensor) -> torch.Tensor:
+        B, N, C, H, W = video.shape
+        backbone_output = self.backbone.encode_image(video.view(B * N, C, H, W), normalize=True).view(B, N, -1)
+        projected = self.proj(backbone_output)
+        return self.transformer(projected)
+
+
+## Audio Codec
+
+
+class VAEBottleneck(torch.nn.Module):
+    def __init__(
+        self,
+        input_dim: int = 512,
+        bottleneck_dim: int = 512,
+    ):
+        super().__init__()
+        self.in_proj = torch.nn.Conv1d(input_dim, bottleneck_dim * 2, kernel_size=1)
+        self.out_proj = torch.nn.Conv1d(bottleneck_dim, input_dim, kernel_size=1)
+
+    def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        mean, scale = self.in_proj(z).chunk(2, dim=1)
+        stdev = torch.nn.functional.softplus(scale) + 1e-4
+        var = stdev * stdev
+        logvar = torch.log(var)
+        latents = torch.randn_like(mean) * stdev + mean
+        kl = (mean * mean + var - logvar - 1).sum(1).mean()
+        return latents, kl
+
+
+class DACVAE(torch.nn.Module):
+    def __init__(self, config: DacConfig) -> None:
+        super().__init__()
+        self.encoder = DacEncoder(config)
+        self.bottleneck = VAEBottleneck(config.codebook_size, config.codebook_dim)
+        self.hop_length = config.hop_length
+        self.mean = 0.0
+        self.std = 1.0
+
+    def forward(self, waveform: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            z = self.encoder(self._pad(waveform))
+            encoded_frames, _ = self.bottleneck(z)
+            encoded_frames = (encoded_frames - self.mean) / self.std
+        return encoded_frames
+
+    def _pad(self, wavs):
+        length = wavs.size(-1)
+        if length % self.hop_length:
+            p1d = (0, self.hop_length - (length % self.hop_length))
+            return torch.nn.functional.pad(wavs, p1d, "reflect")
+        else:
+            return wavs
+
+
+## Transformer
+
+
+def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor, seq_dim: int):
+    """
+    Reshape frequency tensor for broadcasting it with another tensor.
+
+    This function reshapes the frequency tensor to have the same shape as the target tensor 'x'
+    for the purpose of broadcasting the frequency tensor during element-wise operations.
+
+    Args:
+        freqs_cis (torch.Tensor): Frequency tensor to be reshaped.
+        x (torch.Tensor): Target tensor for broadcasting compatibility.
+        seq_dim (int): Sequence dimension index.
+
+    Returns:
+        torch.Tensor: Reshaped frequency tensor.
+    """
+    ndim = x.ndim
+    assert 0 <= seq_dim < ndim
+    assert freqs_cis.shape == (
+        x.shape[seq_dim],
+        x.shape[-3],
+        2,
+        2,
+    ), f"freqs_cis vs x: {(freqs_cis.shape, x.shape)}"
+    shape = [d if i == seq_dim or i == ndim - 3 else 1 for i, d in enumerate(x.shape[:-2])] + [2, 2]
+    return freqs_cis.view(*shape)
+
+
+def apply_rotary_emb(
+    xq: torch.Tensor,
+    xk: torch.Tensor,
+    seq_dim: int,
+    freqs_cis: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    xq_ = xq.reshape(*xq.shape[:-1], -1, 1, 2)  # B S H D -> B S H D/2 1 2
+    xk_ = xk.reshape(*xk.shape[:-1], -1, 1, 2)  # B S H D -> B S H D/2 1 2
+    freqs_cis = reshape_for_broadcast(freqs_cis, xq_, seq_dim).float()  # S D/2 2 2 -> 1 S 1 D/2 2 2
+    xq_out = (xq_ * freqs_cis).sum(5).flatten(3)
+    xk_out = (xk_ * freqs_cis).sum(5).flatten(3)
+    return xq_out.type_as(xq), xk_out.type_as(xk)
+
+
+class RotaryEmbedding(torch.nn.Module):
+    """
+    RotaryEmbedding Module
+    """
+
+    def __init__(
+        self,
+        theta: float,
+        head_dim: int,
+        max_seqlen: int = 1024,
+        scale_factor: int = 1,
+        low_freq_factor: int = 1,
+        high_freq_factor: int = 32,
+        old_context_len: int = 8192,
+    ):
+        super().__init__()
+
+        self.theta = theta
+        self.head_dim = head_dim
+        self.max_seqlen = max_seqlen
+        self.scale_factor = scale_factor
+        self.low_freq_factor = low_freq_factor
+        self.high_freq_factor = high_freq_factor
+        self.old_context_len = old_context_len
+        if scale_factor != 1:
+            self.low_freq_wavelen = old_context_len / low_freq_factor
+            self.high_freq_wavelen = old_context_len / high_freq_factor
+            assert self.low_freq_wavelen >= self.high_freq_wavelen
+
+    def reset_parameters(self):
+        freqs_cis = self.precompute_freqs_cis(dim=self.head_dim, end=self.max_seqlen, theta=self.theta)
+        S, D, _, _ = freqs_cis.shape
+        # S D 2 2 -> 1 S 1 D 2 2
+        freqs_cis = freqs_cis.view(1, S, 1, D, 2, 2)
+        self.register_buffer(
+            "freqs_cis",
+            freqs_cis,
+            persistent=False,
+        )
+
+    def apply_scaling(self, freqs):
+        if self.scale_factor == 1:
+            return freqs
+        new_freqs = []
+        for freq in freqs:
+            wavelen = 2 * math.pi / freq
+            if wavelen < self.high_freq_wavelen:
+                new_freqs.append(freq)
+            elif wavelen > self.low_freq_wavelen:
+                new_freqs.append(freq / self.scale_factor)
+            else:
+                assert self.low_freq_wavelen != self.high_freq_wavelen
+                smooth = (self.old_context_len / wavelen - self.low_freq_factor) / (
+                    self.high_freq_factor - self.low_freq_factor
+                )
+                new_freqs.append((1 - smooth) * freq / self.scale_factor + smooth * freq)
+        return torch.tensor(new_freqs, dtype=freqs.dtype, device=freqs.device)
+
+    def precompute_freqs_cis(
+        self,
+        dim: int,
+        end: int,
+        theta: float = 10000.0,
+    ):
+        """
+        Precompute the frequency tensor for complex exponentials (cis) with given dimensions.
+
+        This function calculates a frequency tensor with complex exponentials using the given dimension 'dim'
+        and the end index 'end'. The 'theta' parameter scales the frequencies.
+        The returned tensor contains complex values in complex64 data type.
+
+        Args:
+            dim (int): Dimension of the frequency tensor.
+            end (int): End index for precomputing frequencies.
+            theta (float, optional): Scaling factor for frequency computation. Defaults to 10000.0.
+
+        Returns:
+            torch.Tensor: Precomputed frequency tensor with complex exponentials.
+        """
+        freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+        freqs = self.apply_scaling(freqs)
+
+        t = torch.arange(end, device=freqs.device)
+        freqs = torch.outer(t, freqs).float()
+
+        cos, sin = freqs.cos(), freqs.sin()
+
+        return torch.stack((cos, -sin, sin, cos), dim=-1).view(*freqs.size(), 2, 2)
+
+    def forward(self, x: torch.Tensor, bhle: bool = False, **kwargs):
+        if bhle:
+            x = x.transpose(1, 2)  # (B H L E) -> (B L H E)
+        seqlen = x.size(1)
+        x_ = x.reshape(*x.shape[:-1], -1, 1, 2)  # B L H E -> B L H E/2 1 2
+        x_out = (x_ * self.freqs_cis[:, :seqlen]).sum(5).flatten(3)
+        if bhle:
+            x_out = x_out.transpose(1, 2)
+        return x_out.type_as(x)
+
+
+class RMSNorm(torch.nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-5):
+        super().__init__()
+        self.eps = eps
+        self.weight = torch.nn.Parameter(torch.ones(dim))
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    def forward(self, x):
+        output = self._norm(x.float())
+        return (output * self.weight).type_as(x)
+
+
+class CLSToken(torch.nn.Module):
+    def __init__(self, d_model):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.randn(1, 1, d_model))
+
+    def forward(self, input_data: torch.Tensor) -> torch.Tensor:
+        """Expands CLS token to match input batch size.
+
+        Args:
+            input_data: Input tensor of shape (batch_size, seq_len, d_model)
+
+        Returns:
+            Expanded CLS tokens of shape (batch_size, 1, d_model)
+        """
+        return self.weight.expand(input_data.size(0), -1, -1)
+
+
+class Attention(torch.nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        head_dim: int,
+        n_heads: int,
+        n_kv_heads: int,
+        norm_eps: float = 1e-5,
+        use_qk_norm: bool = True,
+    ):
+        super().__init__()
+        assert n_heads % n_kv_heads == 0
+
+        self.head_dim = head_dim
+        self.n_heads = n_heads
+        self.n_kv_heads = n_kv_heads
+        self.use_qk_norm = use_qk_norm
+
+        # local heads
+        assert self.n_heads % self.n_kv_heads == 0
+
+        self.wq = torch.nn.Linear(dim, n_heads * head_dim, bias=False)
+        self.wk, self.wv = [torch.nn.Linear(dim, n_kv_heads * head_dim, bias=False) for _ in range(2)]
+        self.wo = torch.nn.Linear(n_heads * head_dim, dim, bias=False)
+
+        self.q_norm, self.k_norm = [RMSNorm(head_dim, norm_eps) for _ in range(2)]
+
+    def reshape_heads(self, x: torch.Tensor, heads: int) -> torch.Tensor:
+        B, T, C = x.shape
+        # B x T x C -> B x T x C/H x H
+        x = x.reshape(B, T, C // heads, heads)
+        # B x T x C/H x H -> B x H x T x C/H
+        return x.permute(0, 3, 1, 2)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        cross_x: Optional[torch.Tensor] = None,
+        key_padding_mask: Optional[torch.Tensor] = None,
+        rope_embeddings: Optional[RotaryEmbedding] = None,
+    ):
+        # x: B, T, E
+        xq = self.wq(x)
+        if cross_x is not None:
+            xk, xv = self.wk(cross_x), self.wv(cross_x)
+        else:
+            xk, xv = self.wk(x), self.wv(x)
+
+        xk = self.reshape_heads(xk, self.n_kv_heads)
+        xv = self.reshape_heads(xv, self.n_kv_heads)
+        xq = self.reshape_heads(xq, self.n_heads)
+        if self.use_qk_norm:
+            xq = self.q_norm(xq)
+            xk = self.k_norm(xk)
+
+        if rope_embeddings is not None:
+            xq = rope_embeddings(xq, bhle=True)
+            xk = rope_embeddings(xk, bhle=True)
+
+        attn_mask = None
+        if key_padding_mask is not None:
+            attn_mask = key_padding_mask[:, None, None, :]
+
+        output = F.scaled_dot_product_attention(xq, xk, xv, attn_mask=attn_mask)
+
+        output = rearrange(output, "b h n d -> b n (h d)")
+        return self.wo(output)
+
+
+class FeedForward(torch.nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        hidden_dim: int,
+        ffn_dim_multiplier: float,
+        multiple_of: int,
+        dropout: float,
+        non_linearity: str,
+    ):
+        super().__init__()
+        self.swiglu = non_linearity == "swiglu"
+        self.dropout = dropout
+        # swiglu hidden dim factor multiplier (same #params as relu / gelu)
+        hidden_dim = int(2 * hidden_dim / 3)
+
+        # custom dim factor multiplier
+        hidden_dim = int(ffn_dim_multiplier * hidden_dim)
+        # round hidden dimension to `multiple_of`
+        hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
+        # layers
+        self.w1 = torch.nn.Linear(
+            dim,
+            hidden_dim,
+            bias=False,
+        )
+        self.w2 = torch.nn.Linear(
+            hidden_dim,
+            dim,
+            bias=False,
+        )
+        if self.swiglu:
+            self.w3 = torch.nn.Linear(
+                dim,
+                hidden_dim,
+                bias=False,
+            )
+
+        # non-linearity
+        self.non_linearity = {
+            "relu": F.relu,
+            "gelu": F.gelu,
+            "swiglu": None,
+            "srelu": lambda x: F.relu(x) ** 2,
+            "silu": F.silu,
+        }[non_linearity]
+
+    def forward(
+        self,
+        x,
+    ):
+        hidden1 = self.w1(x)
+        if self.swiglu:
+            hidden3 = self.w3(x)
+            hidden = F.silu(hidden1) * hidden3
+        else:
+            hidden = self.non_linearity(hidden1)
+        hidden = F.dropout(hidden, p=self.dropout, training=self.training)
+        return self.w2(hidden)
+
+
+class TransformerBlock(torch.nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        n_heads: int,
+        n_kv_heads: Optional[int] = None,
+        dropout: float = 0.0,
+        pre_norm: bool = True,
+        norm_eps: float = 1e-5,
+        qk_norm: bool = True,
+        ffn_exp: int = 4,
+        ffn_dim_multiplier: int = 1,
+        multiple_of: int = 64,
+        non_linearity: str = "swiglu",
+    ):
+        super().__init__()
+        assert dim % n_heads == 0
+        self.n_heads = n_heads
+        self.n_kv_heads = n_heads if n_kv_heads is None else n_kv_heads
+        self.dim = dim
+        self.dropout = dropout
+        self.head_dim = dim // n_heads
+        self.pre_norm = pre_norm
+        assert self.n_heads % self.n_kv_heads == 0
+
+        self.attention = Attention(
+            dim=dim,
+            head_dim=self.head_dim,
+            n_heads=self.n_heads,
+            n_kv_heads=self.n_kv_heads,
+            norm_eps=norm_eps,
+            use_qk_norm=qk_norm,
+        )
+        self.feed_forward = FeedForward(
+            dim=dim,
+            hidden_dim=int(ffn_exp * dim),
+            ffn_dim_multiplier=ffn_dim_multiplier,
+            multiple_of=multiple_of,
+            dropout=dropout,
+            non_linearity=non_linearity,
+        )
+
+        self.attention_norm, self.ffn_norm = [RMSNorm(dim, norm_eps) for _ in range(2)]
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        padding_mask: Optional[torch.Tensor],
+        rope_embeddings: Optional[RotaryEmbedding] = None,
+    ):
+        assert self.attention is not None and self.attention_norm is not None
+        h_attn = self.attention(
+            self.attention_norm(x),
+            key_padding_mask=padding_mask,
+            rope_embeddings=rope_embeddings,
+        )
+        h = x + h_attn
+        h_ff = self.feed_forward(self.ffn_norm(h))
+        out = h + h_ff
+        return out
+
+
+class Transformer(torch.nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        dim: int,
+        n_heads: int,
+        n_layers: int,
+        out_channels: int,
+        dropout: float = 0.0,
+        pre_norm: bool = True,
+        norm_eps: float = 1e-5,
+        qk_norm: bool = True,
+        fc_bias: bool = False,
+        ffn_exp: int = 4,
+        ffn_dim_multiplier: int = 1,
+        multiple_of: int = 64,
+        non_linearity: str = "swiglu",
+        use_rope: bool = True,
+        max_positions: int = 10000,
+        patch_size: int = 1,
+    ):
+        self.patch_size = patch_size
+        self.out_channels = out_channels
+        self.output_size = (self.patch_size**2) * self.out_channels
+
+        super().__init__()
+        self.n_layers = n_layers
+        self.dim = dim
+        self.head_dim = dim // n_heads
+        self.dropout = dropout
+        self.use_rope = use_rope
+        self.non_linearity = non_linearity
+        self.n_kv_heads = n_heads
+
+        self.rope_embeddings = None
+        if self.use_rope:
+            self.rope_embeddings = RotaryEmbedding(
+                theta=max(10000, 2 * max_positions),
+                head_dim=dim // n_heads,
+                max_seqlen=max_positions,
+            )
+            self.rope_embeddings.reset_parameters()
+
+        # transformer blocks
+        self.layers = torch.nn.ModuleList()
+        for _ in range(n_layers):
+            layer = TransformerBlock(
+                dim=dim,
+                n_heads=n_heads,
+                n_kv_heads=self.n_kv_heads,
+                dropout=dropout,
+                pre_norm=pre_norm,
+                norm_eps=norm_eps,
+                qk_norm=qk_norm,
+                ffn_exp=ffn_exp,
+                ffn_dim_multiplier=ffn_dim_multiplier,
+                multiple_of=multiple_of,
+                non_linearity=non_linearity,
+            )
+            self.layers.append(layer)
+
+        self.norm = None
+        if pre_norm:
+            self.norm = RMSNorm(dim, norm_eps)
+
+        # output layer
+        self.output = torch.nn.Linear(dim, out_channels, bias=fc_bias)
+
+        self.x_embedder = Patcher(
+            in_channels=dim,
+            out_channels=dim,
+            patch_size=self.patch_size,
+        )
+
+        self.data_proj = torch.nn.Linear(in_channels, dim)
+        self.cls_token = CLSToken(dim)
+
+    def unpatchify(self, x):
+        return x
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        *,
+        padding_mask: Optional[torch.Tensor] = None,
+    ):
+        x = self.data_proj(x)
+
+        # Prepend the cls token
+        x = torch.cat([self.cls_token(x), x], dim=1)
+        if padding_mask is not None:
+            padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1)
+
+        x = rearrange(x, "b l c-> b c l")
+        h = self.x_embedder(x)
+        h = rearrange(h, "b c l -> b l c")
+        original_N = h.shape[1]
+        N = h.shape[1]
+        h = F.dropout(h, p=self.dropout, training=self.training)
+
+        for i, layer in enumerate(self.layers):
+            h = layer(
+                x=h,
+                padding_mask=padding_mask,
+                rope_embeddings=self.rope_embeddings,
+            )
+
+        # output layer
+        if self.norm is not None:
+            h = self.norm(h)
+        h = F.dropout(h, p=self.dropout, training=self.training)
+        output = self.output(h)
+        N = output.shape[1]
+        if original_N != N:
+            output = output[:, -original_N:]
+        output = self.unpatchify(output)
+        return output[:, 1:], output[:, 0]
+
+
+## Audio Video Encoder
+class AudioVideoEncoder(Transformer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.modality_aligner = AlignModalities(self.dim, self.dim, normalize=True, btc=True)
+        self.concat_modality_proj = torch.nn.Linear(self.dim * 2, self.dim)
+
+    def forward(
+        self,
+        audio: torch.Tensor,
+        video: torch.Tensor,
+        audio_mask: Optional[torch.Tensor] = None,
+        video_mask: Optional[torch.Tensor] = None,
+    ):
+        video, video_mask = self.modality_aligner(audio, audio_mask, video, video_mask)
+        x = torch.cat([audio, video], dim=-1)
+        x = self.concat_modality_proj(x)
+        return super().forward(x, padding_mask=video_mask)
+
+
+@dataclass
+class PerceptionEncoderAVResult:
+    audio_embedding: Optional[torch.Tensor] = None
+    text_embedding: Optional[torch.Tensor] = None
+    video_embedding: Optional[torch.Tensor] = None
+    audio_video_embedding: Optional[torch.Tensor] = None
+
+
+class PerceptionEncoderAVModel(PreTrainedModel):
+    config: PerceptionEncoderAVConfig
+
+    def __init__(
+        self,
+        cfg: PerceptionEncoderAVConfig,
+    ):
+        super().__init__(cfg)
+        self.audio_codec = DACVAE(cfg.dacvae_config)
+        self.audio_encoder = Transformer(**asdict(cfg.audio_encoder))
+        self.audio_video_encoder = AudioVideoEncoder(**asdict(cfg.audio_video_encoder))
+        self.video_encoder = VideoEncoder(cfg.video_encoder)
+        self.ouptut_dim = cfg.output_dim
+        self.av_dim = self.audio_video_encoder.dim
+        self.text_dim = cfg.text_encoder.dim
+        self.context_length = self.video_encoder.backbone.context_length
+        self.image_size = self.video_encoder.backbone.image_size
+        self.fixed_len_video = cfg.fixed_len_video
+        self.text_encoder = ModernBERTEncoder(cfg.text_encoder)
+
+        heads = ["video", "audio", "audio_visual"]
+        if cfg.separate_text_heads:
+            heads.extend(["audio_text", "visual_text", "audio_visual_text"])
+
+        for head in heads:
+            indim = self.text_dim if head.endswith("text") else self.av_dim
+            self.add_module(
+                f"{head}_head",
+                ContrastiveHead(indim, self.ouptut_dim, norm_type=cfg.contrastive_head_norm_type),
+            )
+
+    def encode_video(self, video):  # b n c h w
+        _, raw_feat = self.video_encoder(video)
+        return self.video_head(raw_feat)
+
+    def encode_text(self, text: torch.Tensor, kind: TextType = TextType.audio) -> torch.Tensor:
+        cls_embedding = self.text_encoder(text)
+        head = getattr(self, f"{kind.value}_text_head")
+        return head(cls_embedding)
+
+    def encode_audio(self, audio: torch.Tensor) -> torch.Tensor:
+        codec_features = self.audio_codec(audio).transpose(1, 2)
+        _, cls_emb = self.audio_encoder(codec_features)
+        return self.audio_head(cls_emb)
+
+    def encode_audio_video(self, audio: torch.Tensor, video: torch.Tensor) -> torch.Tensor:
+        # Encode audio
+        codec_features = self.audio_codec(audio).transpose(1, 2)
+        audio_features, _ = self.audio_encoder(codec_features)
+        # Encode video
+        video_feats, _ = self.video_encoder(video)
+        _, cls_emb = self.audio_video_encoder(audio_features, video_feats)
+        return self.audio_visual_head(cls_emb)
+
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        pixel_values_videos: Optional[torch.Tensor] = None,
+        audio: Optional[torch.Tensor] = None,
+    ) -> PerceptionEncoderAVResult:
+        audio_emb = text_emb = video_emb = audio_video_emb = None
+        if input_ids is not None:
+            text_emb = self.encode_text(input_ids)
+        if pixel_values_videos is not None:
+            video_emb = self.encode_video(pixel_values_videos)
+        if audio is not None:
+            audio_emb = self.encode_audio(audio)
+        if audio is not None and pixel_values_videos is not None:
+            audio_video_emb = self.encode_audio_video(audio, pixel_values_videos)
+
+        return PerceptionEncoderAVResult(
+            audio_embedding=audio_emb,
+            text_embedding=text_emb,
+            video_embedding=video_emb,
+            audio_video_embedding=audio_video_emb,
+        )
+
+
+__all__ = ["PerceptionEncoderAVModel"]
