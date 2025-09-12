@@ -461,7 +461,10 @@ class ServeArguments:
             if self.dtype is None:
                 self.dtype = self.torch_dtype
             elif self.torch_dtype != self.dtype:
-                raise ValueError(f"torch_dtype {self.torch_dtype} and dtype {self.dtype} have different values")
+                raise ValueError(
+                    f"`torch_dtype` {self.torch_dtype} and `dtype` {self.dtype} have different values. `torch_dtype` is deprecated and "
+                    "will be removed in 4.59.0, please set `dtype` instead."
+                )
 
 
 class ServeCommand(BaseTransformersCLICommand):
