@@ -590,3 +590,28 @@ class LightGlueModelIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(torch.sum(predicted_matches_values0 != expected_matches_values0) < 4)
         self.assertTrue(torch.sum(predicted_matches_values1 != expected_matches_values1) < 4)
+
+    @slow
+    def test_inference_order_with_early_stop(self):
+        model = LightGlueForKeypointMatching.from_pretrained(
+            "ETH-CVG/lightglue_superpoint", attn_implementation="eager"
+        ).to(torch_device)
+        preprocessor = self.default_image_processor
+        images = prepare_imgs()
+        # [[image2, image0], [image1, image1]] -> [[image2, image0], [image2, image0], [image1, image1]]
+        images = [images[0]] + images  # adding a 3rd pair to test batching with early stopping
+        inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
+
+        predicted_number_of_matches_pair0 = torch.sum(outputs.matches[0][0] != -1).item()
+        predicted_number_of_matches_pair1 = torch.sum(outputs.matches[1][0] != -1).item()
+        predicted_number_of_matches_pair2 = torch.sum(outputs.matches[2][0] != -1).item()
+
+        # pair 0 and 1 are the same, so should have the same number of matches
+        # pair 2 is [image1, image1] so should have more matches than first two pairs
+        # This ensures that early stopping does not affect the order of the outputs
+        # See : https://huggingface.co/ETH-CVG/lightglue_superpoint/discussions/6
+        # The bug made the pairs switch order when early stopping was activated
+        self.assertTrue(predicted_number_of_matches_pair0 == predicted_number_of_matches_pair1)
+        self.assertTrue(predicted_number_of_matches_pair0 < predicted_number_of_matches_pair2)
