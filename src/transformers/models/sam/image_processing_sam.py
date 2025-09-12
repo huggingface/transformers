@@ -1104,14 +1104,14 @@ def _generate_crop_boxes(
             Image to generate crops for.
         target_size (`int`):
             Size of the smallest crop.
-        crop_n_layers (`int`, *optional*):
+        crop_n_layers (`int`, *optional*, defaults to 0):
             If `crops_n_layers>0`, mask prediction will be run again on crops of the image. Sets the number of layers
             to run, where each layer has 2**i_layer number of image crops.
         overlap_ratio (`int`, *optional*):
             Sets the degree to which crops overlap. In the first crop layer, crops will overlap by this fraction of the
             image length. Later layers with more crops scale down this overlap.
         points_per_crop (`int`, *optional*):
-            Number of points to sample per crop.
+            Number of points to sample from each crop.
         crop_n_points_downscale_factor (`int`, *optional*):
             The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
         input_data_format (`str` or `ChannelDimension`, *optional*):
@@ -1135,9 +1135,18 @@ def _generate_crop_boxes(
     )
     crop_boxes = np.array(crop_boxes)
     crop_boxes = crop_boxes.astype(np.float32)
-    points_per_crop = np.array([point_grid_per_crop])
-    points_per_crop = np.transpose(points_per_crop, axes=(0, 2, 1, 3))
 
+    # Reshape points to match the expected format for batched processing
+    points_per_crop = np.array(point_grid_per_crop)
+    # Check if batch dimension already exists
+    if points_per_crop.ndim == 3:  # [num_crops, num_points, 2]
+        points_per_crop = np.expand_dims(
+            points_per_crop, axis=1
+        )  # Add batch dimension -> [num_crops, 1, num_points, 2]
+    elif points_per_crop.ndim == 4:  # Already in [num_crops, batch, num_points, 2] format
+        pass
+    else:
+        raise ValueError(f"Unexpected points_per_crop shape: {points_per_crop.shape}. Expected 3 or 4 dimensions.")
     input_labels = np.ones_like(points_per_crop[:, :, :, 0], dtype=np.int64)
 
     return crop_boxes, points_per_crop, cropped_images, input_labels
@@ -1213,7 +1222,8 @@ def _pad_masks(masks, crop_box: list[int], orig_height: int, orig_width: int):
         return masks
     # Coordinate transform masks
     pad_x, pad_y = orig_width - (right - left), orig_height - (bottom - top)
-    pad = (left, pad_x - left, top, pad_y - top)
+    # Convert padding values to tuple of ints in the format expected by F.pad
+    pad = (int(left), int(pad_x - left), int(top), int(pad_y - top))
     return torch.nn.functional.pad(masks, pad, value=0)
 
 
@@ -1223,7 +1233,8 @@ def _pad_masks_tf(masks, crop_box: list[int], orig_height: int, orig_width: int)
         return masks
     # Coordinate transform masks
     pad_x, pad_y = orig_width - (right - left), orig_height - (bottom - top)
-    pad = (left, pad_x - left, top, pad_y - top)
+    # Convert padding values to tuple of ints
+    pad = ((int(top), int(pad_y - top)), (int(left), int(pad_x - left)))
     return tf.pad(masks, pad, constant_values=0)
 
 
@@ -1438,7 +1449,7 @@ def _rle_to_mask(rle: dict[str, Any]) -> np.ndarray:
     return mask.transpose()  # Reshape to original shape
 
 
-def _postprocess_for_mg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
+def _postprocess_for_mg(self, rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
     """
     Perform NMS (Non Maximum Suppression) on the outputs.
 
@@ -1452,6 +1463,8 @@ def _postprocess_for_mg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=
             amg_crops_nms_thresh (`float`, *optional*, defaults to 0.7):
                 NMS threshold.
     """
+    requires_backends(self, ["torchvision"])
+
     keep_by_nms = batched_nms(
         boxes=mask_boxes.float(),
         scores=iou_scores,
