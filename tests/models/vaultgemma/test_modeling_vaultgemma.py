@@ -94,7 +94,7 @@ class VaultGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class Gemma2IntegrationTest(unittest.TestCase):
+class VaultGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
     def setUp(self):
