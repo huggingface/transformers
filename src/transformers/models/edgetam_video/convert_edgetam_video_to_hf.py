@@ -120,12 +120,14 @@ def replace_keys(state_dict):
     perceiver_resampler_patterns = {
         r"spatial_perceiver.latents": r"spatial_perceiver.latents_1d",
         r"spatial_perceiver.latents_1d_2d": r"spatial_perceiver.latents_2d",
-        r"spatial_perceiver.layers.(\d+).attn.layer_norm_x": r"spatial_perceiver.layers.\1.cross_attention.layer_norm_input",
+        r"spatial_perceiver.layers.(\d+).attn.layer_norm_x": r"spatial_perceiver.layers.\1.layer_norm_input",
+        r"spatial_perceiver.layers.(\d+).attn.layer_norm_latents": r"spatial_perceiver.layers.\1.layer_norm_latents",
+        r"spatial_perceiver.layers.(\d+).self_attn.layer_norm": r"spatial_perceiver.layers.\1.layer_norm_self",
         r"spatial_perceiver.layers.(\d+).attn.to_q": r"spatial_perceiver.layers.\1.cross_attention.q_proj",
-        r"spatial_perceiver.layers.(\d+).attn.to_kv": r"spatial_perceiver.layers.\1.cross_attention.kv_proj",
+        r"spatial_perceiver.layers.(\d+).attn.to_kv": r"spatial_perceiver.layers.\1.cross_attention.kv_proj_combined",
         r"spatial_perceiver.layers.(\d+).attn.to_out": r"spatial_perceiver.layers.\1.cross_attention.o_proj",
         r"spatial_perceiver.layers.(\d+).self_attn.to_q": r"spatial_perceiver.layers.\1.self_attention.q_proj",
-        r"spatial_perceiver.layers.(\d+).self_attn.to_kv": r"spatial_perceiver.layers.\1.self_attention.kv_proj",
+        r"spatial_perceiver.layers.(\d+).self_attn.to_kv": r"spatial_perceiver.layers.\1.self_attention.kv_proj_combined",
         r"spatial_perceiver.layers.(\d+).self_attn.to_out": r"spatial_perceiver.layers.\1.self_attention.o_proj",
         r"spatial_perceiver.layers.(\d+).attn": r"spatial_perceiver.layers.\1.cross_attention",
         r"spatial_perceiver.layers.(\d+).self_attn": r"spatial_perceiver.layers.\1.self_attention",
@@ -202,6 +204,15 @@ def replace_keys(state_dict):
                 key = key.replace(f"encoder.{layer_nb}", f"layers.{layer_nb // 3}.conv")
             elif layer_nb % 3 == 1:
                 key = key.replace(f"encoder.{layer_nb}", f"layers.{layer_nb // 3}.layer_norm")
+        if "kv_proj_combined" in key:
+            # Split the weight tensor in half along dimension 0 (output dimension)
+            k_weight, v_weight = torch.chunk(value, 2, dim=0)
+            # Create the k_proj and v_proj keys
+            k_key = key.replace("kv_proj_combined", "k_proj")
+            v_key = key.replace("kv_proj_combined", "v_proj")
+            model_state_dict[k_key] = k_weight
+            model_state_dict[v_key] = v_weight
+            continue
 
         model_state_dict[key] = value
 
@@ -216,7 +227,7 @@ def replace_keys(state_dict):
     return model_state_dict
 
 
-def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub):
+def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub, run_sanity_check):
     config = get_config(model_name)
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
@@ -235,25 +246,22 @@ def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder,
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
 
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    if run_sanity_check:
+        img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+        raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
-    input_points = [[[[1000, 600]]]]
-    input_labels = [[[1]]]
+        input_points = [[[[1000, 600]]]]
+        input_labels = [[[1]]]
 
-    inputs = processor(
-        images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-    ).to(device)
+        inputs = processor(
+            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to(device)
 
-    with torch.no_grad():
-        output = hf_model._single_frame_forward(**inputs)
-    scores = output.iou_scores.squeeze()
+        with torch.no_grad():
+            output = hf_model._single_frame_forward(**inputs)
+        scores = output.iou_scores.squeeze()
 
-    # commented scores are from original edgetam.1 model with Sam2Processor input, changes might be from bfloat16
-    if model_name == "EdgeTAM":
         assert torch.allclose(scores, torch.tensor([0.0356, 0.2141, 0.9707]).cuda(), atol=1e-3)
-    else:
-        raise ValueError(f"Model {model_name} not supported")
 
     if pytorch_dump_folder is not None:
         processor.save_pretrained(pytorch_dump_folder)
@@ -287,6 +295,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether to push the model and processor to the hub after converting",
     )
+    parser.add_argument(
+        "--run_sanity_check",
+        action="store_true",
+        help="Whether to run the sanity check after converting",
+    )
 
     args = parser.parse_args()
 
@@ -297,4 +310,6 @@ if __name__ == "__main__":
         else args.checkpoint_path
     )
 
-    convert_edgetam_checkpoint(args.model_name, checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_edgetam_checkpoint(
+        args.model_name, checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub, args.run_sanity_check
+    )

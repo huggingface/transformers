@@ -189,7 +189,7 @@ def replace_keys(state_dict):
     return model_state_dict
 
 
-def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub):
+def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub, run_sanity_check):
     config = get_config(model_name)
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
@@ -211,25 +211,22 @@ def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder,
         print("Unexpected keys:", unexpected_keys)
         raise ValueError("Missing or unexpected keys in the state dict")
 
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    if run_sanity_check:
+        img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+        raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
-    input_points = [[[[1000, 600]]]]
-    input_labels = [[[1]]]
+        input_points = [[[[1000, 600]]]]
+        input_labels = [[[1]]]
 
-    inputs = processor(
-        images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-    ).to(device)
+        inputs = processor(
+            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to(device)
 
-    with torch.no_grad():
-        output = hf_model(**inputs)
-    scores = output.iou_scores.squeeze()
+        with torch.no_grad():
+            output = hf_model(**inputs)
+        scores = output.iou_scores.squeeze()
 
-    # commented scores are from original edgetam.1 model with Sam2Processor input, changes might be from bfloat16
-    if model_name == "EdgeTAM":
         assert torch.allclose(scores, torch.tensor([0.0356, 0.2141, 0.9707]).cuda(), atol=1e-3)
-    else:
-        raise ValueError(f"Model {model_name} not supported")
 
     if pytorch_dump_folder is not None:
         processor.save_pretrained(pytorch_dump_folder)
@@ -263,6 +260,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether to push the model and processor to the hub after converting",
     )
+    parser.add_argument(
+        "--run_sanity_check",
+        action="store_true",
+        help="Whether to run the sanity check after converting",
+    )
 
     args = parser.parse_args()
 
@@ -273,4 +275,6 @@ if __name__ == "__main__":
         else args.checkpoint_path
     )
 
-    convert_edgetam_checkpoint(args.model_name, checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_edgetam_checkpoint(
+        args.model_name, checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub, args.run_sanity_check
+    )

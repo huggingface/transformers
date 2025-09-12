@@ -1138,7 +1138,7 @@ class EdgeTamVideoPerceiverFeedForward(nn.Module):
         return hidden_states
 
 
-class EdgeTamVideoPerceiverCrossAttention(nn.Module):
+class EdgeTamVideoPerceiverAttention(nn.Module):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
         self.config = config
@@ -1150,32 +1150,29 @@ class EdgeTamVideoPerceiverCrossAttention(nn.Module):
         self.inner_dim = self.head_dim * self.num_attention_heads
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
-        self.layer_norm_input = nn.LayerNorm(self.hidden_size)
-        self.layer_norm_latents = nn.LayerNorm(self.hidden_size)
 
         self.q_proj = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
-        self.kv_proj = nn.Linear(self.hidden_size, self.inner_dim * 2, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.o_proj = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
 
     def forward(
         self,
-        latents: torch.Tensor,
-        input_features: torch.Tensor,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
         positional_encoding: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
-        normalized_latents = self.layer_norm_latents(latents)
-        normalized_input = self.layer_norm_input(input_features)
-
-        # Project queries from latents
-        query = self.q_proj(normalized_latents)
-        key_value = self.kv_proj(normalized_input)
-        key, value = key_value.chunk(2, dim=-1)
+        # Project queries, keys, and values
+        query = self.q_proj(query)
+        key = self.k_proj(key)
+        value = self.v_proj(value)
 
         # Reshape for multi-head attention
-        batch_size, seq_len_q = normalized_latents.shape[:2]
+        batch_size, seq_len_q = query.shape[:2]
         query = query.view(batch_size, seq_len_q, self.num_attention_heads, self.head_dim).transpose(1, 2)
-        seq_len_kv = normalized_input.shape[1]
+        seq_len_kv = key.shape[1]
         key = key.view(batch_size, seq_len_kv, self.num_attention_heads, self.head_dim).transpose(1, 2)
         value = value.view(batch_size, seq_len_kv, self.num_attention_heads, self.head_dim).transpose(1, 2)
 
@@ -1209,71 +1206,21 @@ class EdgeTamVideoPerceiverCrossAttention(nn.Module):
         return self.o_proj(attn_output)
 
 
-class EdgeTamVideoPerceiverSelfAttention(nn.Module):
-    def __init__(self, config: EdgeTamVideoConfig):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.perceiver_resampler_hidden_size
-        self.num_attention_heads = config.perceiver_resampler_num_attention_heads
-        self.head_dim = config.perceiver_resampler_attention_head_dim
-        self.attention_dropout = config.perceiver_resampler_attention_dropout
-
-        self.inner_dim = self.head_dim * self.num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.is_causal = False
-
-        self.layer_norm = nn.LayerNorm(self.hidden_size)
-
-        self.q_proj = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
-        self.kv_proj = nn.Linear(self.hidden_size, self.inner_dim * 2, bias=False)
-        self.o_proj = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
-        normalized_states = self.layer_norm(hidden_states)
-
-        # Project queries, keys, and values
-        query = self.q_proj(normalized_states)
-        key_value = self.kv_proj(normalized_states)
-        key, value = key_value.chunk(2, dim=-1)
-
-        # Reshape for multi-head attention
-        batch_size, seq_len = normalized_states.shape[:2]
-        query = query.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
-        key = key.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
-        value = value.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
-
-        # Apply attention
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, _ = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=None,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-
-        # Reshape output
-        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, seq_len, self.inner_dim)
-        return self.o_proj(attn_output)
-
-
 class EdgeTamVideoPerceiverEncoderLayer(nn.Module):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
 
-        self.cross_attention = EdgeTamVideoPerceiverCrossAttention(config)
+        self.cross_attention = EdgeTamVideoPerceiverAttention(config)
         self.feed_forward = EdgeTamVideoPerceiverFeedForward(config)
         self.dropout = nn.Dropout(config.perceiver_resampler_hidden_dropout)
 
-        self.self_attention = EdgeTamVideoPerceiverSelfAttention(config)
+        self.self_attention = EdgeTamVideoPerceiverAttention(config)
         self.self_feed_forward = EdgeTamVideoPerceiverFeedForward(config)
+
+        # Layer norms moved from attention classes to here
+        self.layer_norm_input = nn.LayerNorm(config.perceiver_resampler_hidden_size)
+        self.layer_norm_latents = nn.LayerNorm(config.perceiver_resampler_hidden_size)
+        self.layer_norm_self = nn.LayerNorm(config.perceiver_resampler_hidden_size)
 
     def forward(
         self,
@@ -1281,13 +1228,25 @@ class EdgeTamVideoPerceiverEncoderLayer(nn.Module):
         input_features: torch.Tensor,
         positional_encoding: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        cross_attention_output = self.cross_attention(latents, input_features, positional_encoding)
+        # Cross attention with layer norms
+        normalized_latents = self.layer_norm_latents(latents)
+        normalized_input = self.layer_norm_input(input_features)
+        cross_attention_output = self.cross_attention(
+            query=normalized_latents,
+            key=normalized_input,
+            value=normalized_input,
+            positional_encoding=positional_encoding,
+        )
         latents = latents + self.dropout(cross_attention_output)
 
         feed_forward_output = self.feed_forward(latents)
         latents = latents + feed_forward_output
 
-        self_attention_output = self.self_attention(latents)
+        # Self attention with layer norm
+        normalized_latents_self = self.layer_norm_self(latents)
+        self_attention_output = self.self_attention(
+            query=normalized_latents_self, key=normalized_latents_self, value=normalized_latents_self
+        )
         latents = latents + self_attention_output
 
         self_feed_forward_output = self.self_feed_forward(latents)
@@ -1580,13 +1539,14 @@ class EdgeTamVideoPromptEncoder(nn.Module):
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
-        boxes = boxes + 0.5  # Shift to center of pixel
-        batch_size, nb_boxes = boxes.shape[:2]
-        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
-        input_shape = (self.input_image_size, self.input_image_size)
-        corner_embedding = self.shared_embedding(coords, input_shape)
+        boxes += 0.5  # Shift to center of pixel
+        coords = boxes.view(*boxes.shape[:2], 2, 2)
+        # add padding point for consistency with the original implementation
+        coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
+        corner_embedding = self.shared_embedding(coords, (self.input_image_size, self.input_image_size))
         corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
         corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
+        corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.expand_as(corner_embedding[:, :, 2, :])
         return corner_embedding
 
     def forward(
