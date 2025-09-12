@@ -592,10 +592,7 @@ class TopHLogitsWarper(LogitsProcessor):
     diversity and coherence.
 
     Args:
-        top_n (`int`, *optional*, defaults to 100):
-            The maximum number of tokens to consider for filtering.
-            Only the top `top_n` tokens (by probability) are evaluated.
-        alpha (`float`, *optional*, defaults to 0.4):
+        top_h (`float`, *optional*, defaults to 0.4):
             Scaling coefficient for the entropy-based threshold (`tau`). Must be in the range `(0, 1]`.
         filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
