@@ -152,7 +152,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         prompt_depth (`ImageInput`, *optional*):
             Prompt depth to preprocess.
         """
-        return super().preprocess(images, prompt_depth=prompt_depth, **kwargs)
+        return super().preprocess(images, prompt_depth, **kwargs)
 
     def resize_with_aspect_ratio(
         self,
