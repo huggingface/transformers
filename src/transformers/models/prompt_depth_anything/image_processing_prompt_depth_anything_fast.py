@@ -226,24 +226,22 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        prompt_depth: Optional[ImageInput] = None,
+        do_resize: bool = None,
+        size: SizeDict = None,
         keep_aspect_ratio: Optional[bool] = None,
         ensure_multiple_of: Optional[int] = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
         size_divisor: Optional[int] = None,
-        prompt_depth: Optional[ImageInput] = None,
         prompt_scale_to_meter: Optional[float] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        disable_grouping: Optional[bool] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -306,10 +304,6 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         processed_images_grouped = {}
 
         for shape, stacked_images in grouped_images.items():
-            if do_center_crop:
-                crop_dict = {"height": crop_size["height"], "width": crop_size["width"]}
-                stacked_images = self.center_crop(stacked_images, crop_dict)
-
             if do_pad:
                 stacked_images = self.pad_image(stacked_images, size_divisor) # Apply padding if requested
 
