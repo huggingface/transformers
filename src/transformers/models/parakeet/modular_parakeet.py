@@ -130,8 +130,8 @@ class ParakeetEncoderAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
         position_embeddings: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -162,7 +162,8 @@ class ParakeetEncoderAttention(LlamaAttention):
         matrix_bd = matrix_bd[..., :seq_length]
         matrix_bd = matrix_bd * self.scaling
 
-        matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), -10000.0)
+        if attention_mask is not None:
+            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), -10000.0)
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
@@ -170,7 +171,7 @@ class ParakeetEncoderAttention(LlamaAttention):
             query_states_with_bias_u,
             key_states,
             value_states,
-            matrix_bd if position_embeddings is not None else attention_mask,
+            matrix_bd,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
@@ -178,9 +179,10 @@ class ParakeetEncoderAttention(LlamaAttention):
 
         # to match the original implementation
         # cf https://github.com/NVIDIA/NeMo/blob/620d2ba07835c230b2e1ee25fe1322504ce01d79/nemo/collections/asr/parts/submodules/multi_head_attention.py#L336-L340
-        all_masked_rows = torch.all(~attention_mask, dim=-1).transpose(1, 2)
-        all_masked_rows = all_masked_rows.unsqueeze_(-1)
-        attn_output = attn_output.masked_fill(all_masked_rows, 0.0)
+        if attention_mask is not None:
+            all_masked_rows = torch.all(~attention_mask, dim=-1).transpose(1, 2)
+            all_masked_rows = all_masked_rows.unsqueeze_(-1)
+            attn_output = attn_output.masked_fill(all_masked_rows, 0.0)
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -413,25 +415,9 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
 
         if attention_mask is not None:
             attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
-
-            # NOTE: @eustlb, which mask utils to do the same?
-            # @ebezzam could use `create_causal_mask` but more complicated
-            # as `and_mask_function` requires callable mask function
             attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
             attention_mask = attention_mask & attention_mask.transpose(1, 2)
             attention_mask = attention_mask.unsqueeze(1)
-            # attention_mask = create_causal_mask(
-            #     self.config,
-            #     hidden_states,
-            #     attention_mask,
-            #     cache_position=torch.arange(attention_mask.shape[1], device=hidden_states.device),
-            #     past_key_values=None,
-            #     position_ids=None,
-            #     # and_mask_function=None,
-            # )
-            # # ensure boolean mask because of `~attention_mask` in later processing
-            # if attention_mask is not None and attention_mask.dtype != torch.bool:
-            #     attention_mask = attention_mask > 0
 
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
