@@ -9,8 +9,8 @@
 - isExpanded: false
   sections:
   - sections:
-    - local: in_translation
-      title: (번역중) Loading models
+    - local: models
+      title: 모델 로드하기
     - local: custom_models
       title: 사용자 정의 모델 공유하기
     - local: how_to_hack_models
@@ -507,7 +507,7 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
-      - local: in_translation
+      - local: model_doc/deepseek_v3
         title: DeepSeek-V3
       - local: in_translation
         title: DialoGPT
@@ -997,6 +997,8 @@
         title: WavLM
       - local: model_doc/whisper
         title: Whisper
+      - local: model_doc/xclip
+        title: xclip
       - local: in_translation
         title: XLS-R
       - local: in_translation
@@ -1035,7 +1037,7 @@
         title: Chinese-CLIP
       - local: model_doc/clip
         title: CLIP
-      - local: in_translation
+      - local: model_doc/clipseg
         title: CLIPSeg
       - local: in_translation
         title: CLVP

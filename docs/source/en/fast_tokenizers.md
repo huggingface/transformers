@@ -31,7 +31,7 @@ from transformers import AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 tokenizer("We are very happy to show you the 🤗 Transformers library", return_tensors="pt")
 {'input_ids': tensor([[     2,   1734,    708,   1508,   4915,    577,   1500,    692,    573,
-         156808, 128149,   9581, 235265]]), 
+         156808, 128149,   9581, 235265]]),
  'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
 }
 ```
@@ -62,7 +62,7 @@ from transformers import AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 tokenizer("We are very happy to show you the 🤗 Transformers library.", return_tensors="pt")
 {'input_ids': tensor([[     2,   1734,    708,   1508,   4915,    577,   1500,    692,    573,
-         156808, 128149,   9581, 235265]]), 
+         156808, 128149,   9581, 235265]]),
  'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
 }
 ```
@@ -112,7 +112,7 @@ tokenizer = GemmaTokenizerFast(vocab_file="my_vocab_file.txt")
 
 ## Multimodal tokenizers
 
-In addition to text tokens, multimodal tokenizers also holds tokens from other modalities as a part of its attributes for easy access. 
+In addition to text tokens, multimodal tokenizers also holds tokens from other modalities as a part of its attributes for easy access.
 
 To add these special tokens to a tokenizer, pass them as a dictionary to the `extra_special_tokens` parameter in [`~AutoTokenizer.from_pretrained`]. The example below adds the `image_token` to a vision-language model.
 
@@ -198,7 +198,7 @@ Add the `subfolder` parameter to [`~PreTrainedModel.from_pretrained`] to specify
 ```py
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", subfolder="original") 
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", subfolder="original")
 ```
 
 ### Create a tiktoken tokenizer
@@ -226,7 +226,7 @@ tokenizer = PreTrainedTokenizerFast.from_pretrained("config/save/dir")
 
 <Youtube id="Yffk5aydLzg"/>
 
-A Transformers model expects the input to be a PyTorch, TensorFlow, or NumPy tensor. A tokenizers job is to preprocess text into those tensors. Specify the framework tensor type to return with the `return_tensors` parameter.
+A Transformers model expects the input to be a PyTorch or NumPy tensor. A tokenizers job is to preprocess text into those tensors. Specify the framework tensor type to return with the `return_tensors` parameter.
 
 ```py
 from transformers import AutoTokenizer
@@ -234,7 +234,7 @@ from transformers import AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 tokenizer("We are very happy to show you the 🤗 Transformers library.", return_tensors="pt")
 {'input_ids': tensor([[     2,   1734,    708,   1508,   4915,    577,   1500,    692,    573,
-         156808, 128149,   9581, 235265]]), 
+         156808, 128149,   9581, 235265]]),
  'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
 }
 ```
@@ -321,12 +321,12 @@ batch_sentences = [
 encoded_inputs = tokenizer(batch_sentences, return_tensors="pt")
 print(encoded_inputs)
 {
- 'input_ids': 
-    [[2, 1860, 1212, 1105, 2257, 14457, 235336], 
-     [2, 4454, 235303, 235251, 1742, 693, 9242, 1105, 2257, 14457, 235269, 48782, 235265], 
-     [2, 1841, 1105, 29754, 37453, 235336]], 
- 'attention_mask': [[1, 1, 1, 1, 1, 1, 1], 
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+ 'input_ids':
+    [[2, 1860, 1212, 1105, 2257, 14457, 235336],
+     [2, 4454, 235303, 235251, 1742, 693, 9242, 1105, 2257, 14457, 235269, 48782, 235265],
+     [2, 1841, 1105, 29754, 37453, 235336]],
+ 'attention_mask': [[1, 1, 1, 1, 1, 1, 1],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [1, 1, 1, 1, 1, 1]]
 }
 ```

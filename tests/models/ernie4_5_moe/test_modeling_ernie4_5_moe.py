@@ -41,6 +41,7 @@ if is_torch_available():
         Ernie4_5_MoeForCausalLM,
         Ernie4_5_MoeModel,
     )
+
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 

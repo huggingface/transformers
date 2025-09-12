@@ -102,25 +102,25 @@ class GroundingDinoImageProcessorFast(DetrImageProcessorFast):
 
         return results
 
-    def post_process():
+    def post_process(self):
         raise NotImplementedError("Post-processing is not implemented for Grounding-Dino yet.")
 
-    def post_process_segmentation():
+    def post_process_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")
 
-    def post_process_instance():
+    def post_process_instance(self):
         raise NotImplementedError("Instance post-processing is not implemented for Grounding-Dino yet.")
 
-    def post_process_panoptic():
+    def post_process_panoptic(self):
         raise NotImplementedError("Panoptic post-processing is not implemented for Grounding-Dino yet.")
 
-    def post_process_instance_segmentation():
+    def post_process_instance_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")
 
-    def post_process_semantic_segmentation():
+    def post_process_semantic_segmentation(self):
         raise NotImplementedError("Semantic segmentation post-processing is not implemented for Grounding-Dino yet.")
 
-    def post_process_panoptic_segmentation():
+    def post_process_panoptic_segmentation(self):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Grounding-Dino yet.")
 
 

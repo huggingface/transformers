@@ -124,22 +124,6 @@ visualizer("You are an assistant. Make sure you print me")
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/gemma-2-attn-mask.png"/>
 </div>
 
-## Notes
-
-- Use a [`HybridCache`] instance to enable caching in Gemma 2. Gemma 2 doesn't support kv-caching strategies like [`DynamicCache`] or tuples of tensors because it uses sliding window attention every second layer.
-
-    ```python
-    from transformers import AutoTokenizer, AutoModelForCausalLM, HybridCache
-
-    model = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
-    tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
-
-    inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
-    max_generated_length = inputs.input_ids.shape[1] + 10
-    past_key_values = HybridCache(config=model.config, max_cache_len=max_generated_length)
-    outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-    ```
-
 ## Gemma2Config
 
 [[autodoc]] Gemma2Config

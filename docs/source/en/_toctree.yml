@@ -81,13 +81,13 @@
     - local: conversations
       title: Chat basics
     - local: chat_templating
-      title: Templates
+      title: Chat templates
     - local: chat_templating_multimodal
-      title: Multimodal templates
-    - local: chat_templating_writing
-      title: Template writing
+      title: Multimodal chat templates
     - local: chat_extras
-      title: Tools and RAG
+      title: Tool use
+    - local: chat_templating_writing
+      title: Writing a chat template
     title: Chat with models
   - sections:
     - local: serving
@@ -277,6 +277,8 @@
         title: Keypoint detection
       - local: tasks/knowledge_distillation_for_image_classification
         title: Knowledge Distillation for Computer Vision
+      - local: tasks/keypoint_matching
+        title: Keypoint matching
       title: Computer vision
     - sections:
       - local: tasks/image_captioning
@@ -373,6 +375,8 @@
     - sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/apertus
+        title: Apertus
       - local: model_doc/arcee
         title: Arcee
       - local: model_doc/bamba
@@ -581,6 +585,8 @@
         title: MegatronGPT2
       - local: model_doc/minimax
         title: MiniMax
+      - local: model_doc/ministral
+        title: Ministral
       - local: model_doc/mistral
         title: Mistral
       - local: model_doc/mixtral
@@ -653,6 +659,8 @@
         title: Qwen3
       - local: model_doc/qwen3_moe
         title: Qwen3MoE
+      - local: model_doc/qwen3_next
+        title: Qwen3Next
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -675,6 +683,8 @@
         title: RoFormer
       - local: model_doc/rwkv
         title: RWKV
+      - local: model_doc/seed_oss
+        title: Seed-Oss
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
@@ -699,6 +709,8 @@
         title: UL2
       - local: model_doc/umt5
         title: UMT5
+      - local: model_doc/vaultgemma
+        title: VaultGemma
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm

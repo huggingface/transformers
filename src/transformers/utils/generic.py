@@ -53,29 +53,6 @@ if is_torch_available():
     from ..model_debugging_utils import model_addition_debugger_context
 
 
-class cached_property(property):
-    """
-    Descriptor that mimics @property but caches output in member variable.
-
-    From tensorflow_datasets
-
-    Built-in in functools from Python 3.8.
-    """
-
-    def __get__(self, obj, objtype=None):
-        # See docs.python.org/3/howto/descriptor.html#properties
-        if obj is None:
-            return self
-        if self.fget is None:
-            raise AttributeError("unreadable attribute")
-        attr = "__cached_" + self.fget.__name__
-        cached = getattr(obj, attr, None)
-        if cached is None:
-            cached = self.fget(obj)
-            setattr(obj, attr, cached)
-        return cached
-
-
 # vendored from distutils.util
 def strtobool(val):
     """Convert a string representation of truth to true (1) or false (0).
@@ -836,21 +813,20 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
 
 class TransformersKwargs(TypedDict, total=False):
     """
-    Keyword arguments to be passed to the loss function
+    Keyword arguments to be passed to the forward pass of a `PreTrainedModel`.
 
     Attributes:
         num_items_in_batch (`Optional[torch.Tensor]`, *optional*):
-            Number of items in the batch. It is recommended to pass it when
-            you are doing gradient accumulation.
+            Number of items in the batch. It is recommended to pass it when you are doing gradient accumulation.
         output_hidden_states (`Optional[bool]`, *optional*):
             Most of the models support outputting all hidden states computed during the forward pass.
         output_attentions (`Optional[bool]`, *optional*):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):
             For MoE models, this allows returning the router logits to compute the loss.
-        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
+        cu_seq_lens_q (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for query state.
-        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
+        cu_seq_lens_k (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for key state.
         max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
@@ -862,8 +838,8 @@ class TransformersKwargs(TypedDict, total=False):
     output_hidden_states: Optional[bool]
     output_attentions: Optional[bool]
     output_router_logits: Optional[bool]
-    cumulative_seqlens_q: Optional["torch.LongTensor"]
-    cumulative_seqlens_k: Optional["torch.LongTensor"]
+    cu_seq_lens_q: Optional["torch.LongTensor"]
+    cu_seq_lens_k: Optional["torch.LongTensor"]
     max_length_q: Optional[int]
     max_length_k: Optional[int]
 
@@ -974,21 +950,21 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        use_cache = kwargs.get("use_cache")
-        if use_cache is None:
-            use_cache = getattr(self.config, "use_cache", False)
+        use_cache = (
+            kwargs["use_cache"] if kwargs.get("use_cache") is not None else getattr(self.config, "use_cache", None)
+        )
+        if use_cache is not None:
+            if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+                )
+                use_cache = False
+
+            kwargs["use_cache"] = use_cache
 
         return_dict = kwargs.pop("return_dict", None)
         if return_dict is None:
             return_dict = getattr(self.config, "return_dict", True)
-
-        if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
-        kwargs["use_cache"] = use_cache
 
         all_args = kwargs.copy()
         if "kwargs" in all_args:
@@ -1007,8 +983,29 @@ def check_model_inputs(func):
             )
             for k in capture_flags
         }
+
+        # We let cross attentions to be saved separately because some models add `cross-attn` layer
+        # when certain condtions are met. Let's output cross attention if attentions are requested (for BC)
+        if "output_attentions" in recordable_keys:
+            recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
+
         collected_outputs = defaultdict(tuple)
         monkey_patched_layers = []
+
+        # Check attention implementation is properly set for capturing attention outputs
+        if recordable_keys.get("output_attentions", False):
+            supported_attn = ["eager", "eager_paged", "flex_attention"]
+            config_attn = getattr(self.config, "_attn_implementation", None)
+            sub_configs = [getattr(self.config, key, None) for key in self.config.sub_configs]
+            sub_configs_attn = [
+                getattr(config, "_attn_implementation", None) for config in sub_configs if config is not None
+            ]
+            if config_attn not in supported_attn or any(attn not in supported_attn for attn in sub_configs_attn):
+                warnings.warn(
+                    f"`output_attentions=True` is not supported with `attn_implementation` other than {supported_attn}. "
+                    "Please use `model.set_attn_implementation('eager')` to enable capturing attention outputs.",
+                    UserWarning,
+                )
 
         def make_capture_wrapper(module, orig_forward, key, index):
             @wraps(orig_forward)
@@ -1061,7 +1058,22 @@ def check_model_inputs(func):
                         module.forward = make_capture_wrapper(module, original_forward, key, specs.index)
                         monkey_patched_layers.append((module, original_forward))
 
-        outputs = func(self, *args, **kwargs)
+        try:
+            outputs = func(self, *args, **kwargs)
+        except TypeError as original_exception:
+            # If we get a TypeError, it's possible that the model is not receiving the recordable kwargs correctly.
+            # Get a TypeError even after removing the recordable kwargs -> re-raise the original exception
+            # Otherwise -> we're probably missing `**kwargs` in the decorated function
+            kwargs_without_recordable = {k: v for k, v in kwargs.items() if k not in recordable_keys}
+            try:
+                outputs = func(self, *args, **kwargs_without_recordable)
+            except TypeError:
+                raise original_exception
+            raise TypeError(
+                "Missing `**kwargs` in the signature of the `@check_model_inputs`-decorated function "
+                f"({func.__qualname__})"
+            )
+
         # Restore original forward methods
         for module, original_forward in monkey_patched_layers:
             module.forward = original_forward
@@ -1069,10 +1081,11 @@ def check_model_inputs(func):
         # Inject collected outputs into model output
         for key in collected_outputs:
             if key == "hidden_states":
-                collected_outputs[key] = collected_outputs[key][:-1]
                 if hasattr(outputs, "vision_hidden_states"):
+                    collected_outputs[key] = collected_outputs[key][:-1]
                     collected_outputs[key] += (outputs.vision_hidden_states,)
                 elif hasattr(outputs, "last_hidden_state"):
+                    collected_outputs[key] = collected_outputs[key][:-1]
                     collected_outputs[key] += (outputs.last_hidden_state,)
 
                 outputs[key] = collected_outputs[key]

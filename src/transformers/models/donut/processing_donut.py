@@ -65,10 +65,6 @@ class DonutProcessor(ProcessorMixin):
             feature_extractor = kwargs.pop("feature_extractor")
 
         image_processor = image_processor if image_processor is not None else feature_extractor
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
@@ -76,7 +72,7 @@ class DonutProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         audio=None,
         videos=None,
