@@ -198,6 +198,17 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (LongcatFlashModel, LongcatFlashForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (LongcatFlashForCausalLM,) if is_torch_available() else ()
 
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": LongcatFlashModel,
+            "text-generation": LongcatFlashForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    model_split_percents = [0.3, 0.5]
+
     test_headmasking = False
     test_pruning = False
 
@@ -316,18 +327,20 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=torch.bfloat16,
         )
-        self.model.pad_token_id=3
+        self.model.generation_config.bos_token_id = 1
+        self.model.generation_config.pad_token_id = 3
+        self.model.generation_config.eos_token_id = 2
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
         chat = [{"role": "user", "content": "Paris is..."}]
         inputs = self.tokenizer.apply_chat_template(
             chat, tokenize=True, add_generation_prompt=True, return_tensors="pt"
-        )
+        ).to(self.model.device)
 
         with torch.no_grad():
             outputs = self.model.generate(inputs, max_new_tokens=10, do_sample=False)
 
         response = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
-        expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年冬季奥林匹克运动会菁四方级以上揽胜可视lexible"
+        expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年车龄juanaheast稍achaotingupebarebones"
 
         self.assertEqual(response, expected_output)
