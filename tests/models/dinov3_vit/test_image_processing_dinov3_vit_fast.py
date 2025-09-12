@@ -22,10 +22,10 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 
 if is_torchvision_available():
-    from transformers import DINOv3ViTImageProcessorFast
+    from transformers import Dinov3VitImageProcessorFast
 
 
-class DINOv3ViTImageProcessingTester:
+class Dinov3VitImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -90,14 +90,14 @@ class DINOv3ViTImageProcessingTester:
 
 @require_torch
 @require_vision
-class DINOv3ViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class Dinov3VitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = None
-    fast_image_processing_class = DINOv3ViTImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = Dinov3VitImageProcessorFast if is_torchvision_available() else None
     test_slow_image_processor = False
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = DINOv3ViTImageProcessingTester(self)
+        self.image_processor_tester = Dinov3VitImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
