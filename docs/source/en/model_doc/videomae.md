@@ -46,7 +46,7 @@ The example below demonstrates how to perform video classification with [`pipeli
 from transformers import pipeline
 from huggingface_hub import list_repo_files, hf_hub_download
 
-video_cls = pipeline(
+pipeline = pipeline(
     task="video-classification",
     model="MCG-NJU/videomae-base-finetuned-kinetics"
 )
@@ -55,7 +55,7 @@ files = list_repo_files("nateraw/kinetics-mini", repo_type="dataset")
 videos = [f for f in files if f.endswith(".mp4")]
 video_path = hf_hub_download("nateraw/kinetics-mini", repo_type="dataset", filename=videos[0])
 
-preds = video_cls(video_path)
+preds = pipeline(video_path)
 print(preds)
 ```
 
