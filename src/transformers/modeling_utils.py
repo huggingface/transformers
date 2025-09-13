@@ -126,6 +126,7 @@ from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 
 if is_torchao_available():
+    from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
     from torchao.quantization import Int4WeightOnlyConfig
 
 if is_accelerate_available():
@@ -727,6 +728,7 @@ def _load_state_dict_into_meta_model(
     keep_in_fp32_regex: Optional[re.Pattern] = None,
     unexpected_keys: Optional[list[str]] = None,  # passing `unexpected` for cleanup from quantization items
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
+    metadata: Optional[dict] = None,
 ) -> tuple[Optional[dict], Optional[dict]]:
     """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
     device in order to easily infer the shapes and dtypes that they will have. Then proper parameters are then loaded
@@ -741,14 +743,17 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in {
+    is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
         QuantizationMethod.HQQ,
         QuantizationMethod.BITS_AND_BYTES,
+        QuantizationMethod.TORCHAO,
     }
-    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb
+    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb_or_ao
     file_pointer = None
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
+    if hf_quantizer and hasattr(hf_quantizer, "transform_state_dict_before_saving") and is_metadata_torchao(metadata):
+        state_dict = hf_quantizer.transform_state_dict_before_saving(state_dict, metadata)
 
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:  # when loading from ckpt, we skip param if doesnt exist in modeling
@@ -887,7 +892,7 @@ def load_shard_file(args):
         shard_file,
         state_dict,
         disk_only_shard_files,
-        is_hqq_or_bnb,
+        is_hqq_or_bnb_or_ao,
         is_quantized,
         device_map,
         hf_quantizer,
@@ -913,7 +918,7 @@ def load_shard_file(args):
     map_location = "cpu"
     if (
         shard_file.endswith(".safetensors")
-        and not is_hqq_or_bnb
+        and not is_hqq_or_bnb_or_ao
         and not (is_deepspeed_zero3_enabled() and not is_quantized)
     ):
         map_location = "meta"
@@ -936,6 +941,10 @@ def load_shard_file(args):
 
     # Fix the key names
     state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
+    metadata = None
+    if shard_file.endswith(".safetensors") and is_safetensors_available():
+        with safe_open(shard_file, framework="pt") as f:
+            metadata = f.metadata()
 
     error_msgs = []
 
@@ -959,6 +968,7 @@ def load_shard_file(args):
             keep_in_fp32_regex=keep_in_fp32_regex,
             unexpected_keys=unexpected_keys,
             device_mesh=device_mesh,
+            metadata=metadata,
         )
 
     return error_msgs, disk_offload_index, cpu_offload_index
@@ -4012,8 +4022,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
+        metadata = {}
         if hf_quantizer is not None:
-            state_dict = hf_quantizer.get_state_dict(self)
+            if hf_quantizer.quantization_config.quant_method is QuantizationMethod.TORCHAO:
+                state_dict, metadata = hf_quantizer.get_state_dict_and_metadata(self, safe_serialization)
+            else:
+                state_dict = hf_quantizer.get_state_dict(self)
+        metadata["format"] = "pt"
+
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
@@ -4291,7 +4307,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough.
-                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
+                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
 
@@ -5432,9 +5448,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
-        is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in {
+        is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.BITS_AND_BYTES,
+            QuantizationMethod.TORCHAO,
         }
 
         # Get all the keys of the state dicts that we have to initialize the model
@@ -5607,7 +5624,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 shard_file,
                 state_dict,
                 disk_only_shard_files,
-                is_hqq_or_bnb,
+                is_hqq_or_bnb_or_ao,
                 is_quantized,
                 device_map,
                 hf_quantizer,
