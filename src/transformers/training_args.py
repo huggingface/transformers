@@ -1495,10 +1495,14 @@ class TrainingArguments:
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
     )
 
-    include_num_input_tokens_seen: Optional[bool] = field(
+    include_num_input_tokens_seen: Optional[Union[str, bool]] = field(
         default=False,
         metadata={
-            "help": "If set to `True`, will track the number of input tokens seen throughout training. (May be slower in distributed training)"
+            "help": (
+                "Whether to track the number of input tokens seen. "
+                "Can be `'all'` to count all tokens, `'non_padding'` to count only non-padding tokens, "
+                "or a boolean (`True` maps to `'all'`, `False` to `'no'`)."
+            )
         },
     )
 
@@ -1855,14 +1859,8 @@ class TrainingArguments:
                         torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
 
-        # if training args is specified, it will override the one specified in the accelerate config
-        if self.half_precision_backend != "apex":
-            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-            if self.fp16:
-                mixed_precision_dtype = "fp16"
-            elif self.bf16:
-                mixed_precision_dtype = "bf16"
-            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
+        # NOTE: Mixed precision environment variable setting moved to after DeepSpeed processing
+        # to ensure DeepSpeed config can override TrainingArguments defaults
 
         if self.report_to is None:
             logger.info(
@@ -2072,6 +2070,16 @@ class TrainingArguments:
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
+        # Set mixed precision environment variable after DeepSpeed processing
+        # This ensures DeepSpeed config overrides have been applied to fp16/bf16 settings
+        if self.half_precision_backend != "apex":
+            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+            if self.fp16:
+                mixed_precision_dtype = "fp16"
+            elif self.bf16:
+                mixed_precision_dtype = "bf16"
+            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
+
         if self.use_cpu:
             self.dataloader_pin_memory = False
 
@@ -2134,6 +2142,11 @@ class TrainingArguments:
                 "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead."
             )
             self.include_for_metrics.append("inputs")
+
+        if self.include_num_input_tokens_seen is True:
+            self.include_num_input_tokens_seen = "all"
+        elif self.include_num_input_tokens_seen is False:
+            self.include_num_input_tokens_seen = "no"
 
     def __str__(self):
         self_as_dict = asdict(self)
