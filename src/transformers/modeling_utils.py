@@ -94,6 +94,7 @@ from .utils import (
     download_url,
     extract_commit_hash,
     has_file,
+    init_empty_weights,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
