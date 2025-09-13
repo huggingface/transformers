@@ -53,8 +53,8 @@ files = list_repo_files("nateraw/kinetics-mini", repo_type="dataset")
 videos = [f for f in files if f.endswith(".mp4")]
 video_path = hf_hub_download("nateraw/kinetics-mini", repo_type="dataset", filename=videos[0])
 
-preds_pipeline = pipeline(video_path)
-print(preds_pipeline)
+preds = pipeline(video_path)
+print(preds)
 ```
 
 </hfoption>
