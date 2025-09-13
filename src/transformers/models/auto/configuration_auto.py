@@ -250,6 +250,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mgp-str", "MgpstrConfig"),
         ("mimi", "MimiConfig"),
         ("minimax", "MiniMaxConfig"),
+        ("ministral", "MinistralConfig"),
         ("mistral", "MistralConfig"),
         ("mistral3", "Mistral3Config"),
         ("mixtral", "MixtralConfig"),
@@ -323,6 +324,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("qwen2_vl_text", "Qwen2VLTextConfig"),
         ("qwen3", "Qwen3Config"),
         ("qwen3_moe", "Qwen3MoeConfig"),
+        ("qwen3_next", "Qwen3NextConfig"),
         ("rag", "RagConfig"),
         ("realm", "RealmConfig"),
         ("recurrent_gemma", "RecurrentGemmaConfig"),
@@ -398,6 +400,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
         ("van", "VanConfig"),
+        ("vaultgemma", "VaultGemmaConfig"),
         ("video_llava", "VideoLlavaConfig"),
         ("videollama3", "Videollama3Config"),
         ("videollama3_vision", "Videollama3VisionConfig"),
@@ -683,6 +686,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mgp-str", "MGP-STR"),
         ("mimi", "Mimi"),
         ("minimax", "MiniMax"),
+        ("ministral", "Ministral"),
         ("mistral", "Mistral"),
         ("mistral3", "Mistral3"),
         ("mixtral", "Mixtral"),
@@ -761,6 +765,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("qwen2_vl_text", "Qwen2VL"),
         ("qwen3", "Qwen3"),
         ("qwen3_moe", "Qwen3MoE"),
+        ("qwen3_next", "Qwen3Next"),
         ("rag", "RAG"),
         ("realm", "REALM"),
         ("recurrent_gemma", "RecurrentGemma"),
@@ -840,6 +845,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
         ("van", "VAN"),
+        ("vaultgemma", "VaultGemma"),
         ("video_llava", "VideoLlava"),
         ("videollama3", "Videollama3"),
         ("videollama3_vision", "Videollama3Vision"),
@@ -1310,6 +1316,13 @@ class AutoConfig:
             config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
+            # Apply heuristic: if model_type is mistral but layer_types is present, treat as ministral
+            if config_dict["model_type"] == "mistral" and "layer_types" in config_dict:
+                logger.info(
+                    "Detected mistral model with layer_types, treating as ministral for alternating attention compatibility. "
+                )
+                config_dict["model_type"] = "ministral"
+
             try:
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]
             except KeyError:
