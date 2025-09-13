@@ -79,7 +79,7 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
         else:
             audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
     elif isinstance(audio, np.ndarray):
-        audio = audio
+        pass
     else:
         raise TypeError(
             "Incorrect format used for `audio`. Should be an url linking to an audio, a local path, or numpy array."

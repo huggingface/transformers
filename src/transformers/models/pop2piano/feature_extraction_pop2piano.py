@@ -259,7 +259,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
             if add_zero_line:
                 # if it is batched then we separate each examples using zero array
-                zero_array_len = max([*zip(*features_shapes)][1])
+                zero_array_len = max([*zip(*features_shapes)][1])  # noqa :PLE0643
 
                 # we concatenate the zero array line here
                 each_padded_feature = np.concatenate(
