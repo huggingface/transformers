@@ -328,7 +328,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                # This is an excepton in the module, it's initialized with xavier_uniform without using initializer_range
+                # This is an exception in the module, it's initialized with xavier_uniform without using initializer_range
                 if name.endswith("patch_embeddings.projection.weight"):
                     continue
                 if param.requires_grad:

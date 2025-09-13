@@ -402,7 +402,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
-    def test_flash_attention_dispatches_by_defaul(self):
+    def test_flash_attention_dispatches_by_default(self):
         "ModernBert should dispatch to FA2 by default, not SDPA"
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:

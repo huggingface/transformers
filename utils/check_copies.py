@@ -504,7 +504,7 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict
         code (`str`):
             The object's code.
         code_splits (`List[Tuple[str, int, int]]`):
-            `code` splitted into blocks. See `split_code_into_blocks`.
+            `code` split into blocks. See `split_code_into_blocks`.
     """
     if buffer is None:
         buffer = {}
