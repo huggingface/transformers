@@ -338,9 +338,9 @@ class HfQuantizer(ABC):
         """Flag indicating whether the quantized model can be compiled"""
         return False
 
-    def get_state_dict(self, model):
-        """Get state dict. Useful when we need to modify a bit the state dict due to quantization"""
-        return None
+    def get_state_dict_and_metadata(self, model, safe_serialization=False):
+        """Get state dict and metadata. Useful when we need to modify a bit the state dict due to quantization"""
+        return None, {}
 
     @abstractmethod
     def _process_model_before_weight_loading(self, model, **kwargs): ...
