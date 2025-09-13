@@ -124,14 +124,28 @@ class FastConfig(PretrainedConfig):
 
         if backbone_config is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `TextNet` backbone.")
-            backbone_config = CONFIG_MAPPING["textnet"](out_features=["stage1", "stage2", "stage3", "stage4"])
+            backbone_config = CONFIG_MAPPING["textnet"](
+                out_features=["stage1", "stage2", "stage3", "stage4"],
+                attn_implementation="eager",  
+            )
 
         elif isinstance(backbone_config, dict):
+            backbone_config.setdefault("attn_implementation", "eager")
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
+        else:
+            if hasattr(backbone_config, "attn_implementation") and backbone_config.attn_implementation is None:
+                backbone_config.attn_implementation = "eager"
+
         self.backbone_config = backbone_config
+
+        self._attn_implementation = "eager"
+
+        if isinstance(backbone_config, PretrainedConfig):
+            if not hasattr(backbone_config, "_attn_implementation") or backbone_config._attn_implementation is None:
+                backbone_config._attn_implementation = "eager"
 
         self.neck_in_channels = neck_in_channels
         self.neck_out_channels = neck_out_channels
@@ -153,6 +167,15 @@ class FastConfig(PretrainedConfig):
         self.head_final_out_channels = head_final_out_channels
 
         self.initializer_range = initializer_range
+
+    def __setattr__(self, name, value):
+        if name == "_attn_implementation":
+            object.__setattr__(self, name, value)
+            for v in self.__dict__.values():
+                if isinstance(v, PretrainedConfig):
+                    setattr(v, "_attn_implementation", value)
+        else:
+            super().__setattr__(name, value)
 
     @classmethod
     def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
