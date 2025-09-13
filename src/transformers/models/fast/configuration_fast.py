@@ -126,7 +126,7 @@ class FastConfig(PretrainedConfig):
             logger.info("`backbone_config` is `None`. Initializing the config with the default `TextNet` backbone.")
             backbone_config = CONFIG_MAPPING["textnet"](
                 out_features=["stage1", "stage2", "stage3", "stage4"],
-                attn_implementation="eager",  
+                attn_implementation="eager",
             )
 
         elif isinstance(backbone_config, dict):
