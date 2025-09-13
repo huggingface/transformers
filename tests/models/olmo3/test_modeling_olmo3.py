@@ -115,6 +115,79 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    def test_model_rope_scaling_frequencies(self):
+        """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Parent test class's attempt to find Olmo3 rope fails, so we pass here explicitly.
+        rope_class = Olmo3RotaryEmbedding
+
+        scaling_factor = 10
+        short_input_length = 10
+        long_input_length = int(config.max_position_embeddings * 1.5)
+
+        # Inputs
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
+        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        position_ids_short = position_ids_short.unsqueeze(0)
+        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = position_ids_long.unsqueeze(0)
+
+        # Sanity check original RoPE
+        config.rope_scaling = {"rope_type": "default"}
+        original_rope = rope_class(config=config).to(torch_device)
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
+        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+
+        # Sanity check linear RoPE scaling
+        # New position "x" should match original position with index "x/scaling_factor"
+        config.rope_scaling = {"rope_type": "linear", "factor": scaling_factor}
+        linear_scaling_rope = rope_class(config=config).to(torch_device)
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        for new_position in range(0, long_input_length, scaling_factor):
+            original_position = int(new_position // scaling_factor)
+            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
+            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+
+        # Sanity check Dynamic NTK RoPE scaling
+        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
+        # with scaling_factor (or that `inv_freq` decreases)
+        config.rope_scaling = {"rope_type": "dynamic", "factor": scaling_factor}
+        ntk_scaling_rope = rope_class(config=config).to(torch_device)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(ntk_cos_short, original_cos_short)
+        torch.testing.assert_close(ntk_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_sin_long, original_sin_long)
+        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+
+        # Sanity check Yarn RoPE scaling
+        # Scaling should be over the entire input
+        config.rope_scaling = {"rope_type": "yarn", "factor": scaling_factor}
+        yarn_scaling_rope = rope_class(config=config).to(torch_device)
+        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
+        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_short, original_cos_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_long, original_sin_long)
+
 
 @require_torch
 class Olmo3IntegrationTest(unittest.TestCase):
