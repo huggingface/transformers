@@ -152,11 +152,7 @@ EncodedInputPair = tuple[list[int], list[int]]
 # Define type aliases for text-related non-text modalities
 AudioInput = Union["np.ndarray", "torch.Tensor", list["np.ndarray"], list["torch.Tensor"]]
 
-# Slow tokenizers used to be saved in three separated files
-SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
-ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
-
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
 _re_tokenizer_file = re.compile(r"tokenizer\.(.*)\.json")
@@ -1981,10 +1977,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             else:
                 # At this point pretrained_model_name_or_path is either a directory or a model identifier name
                 additional_files_names = {
-                    "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
-                    "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
                     "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                    # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
                     "tokenizer_file": FULL_TOKENIZER_FILE,
                     "chat_template_file": CHAT_TEMPLATE_FILE,
                 }
@@ -2247,14 +2240,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
-
         # Merge resolved_vocab_files arguments in init_kwargs.
-        added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
-        special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
         for args_name, file_path in resolved_vocab_files.items():
             if args_name not in init_kwargs:
                 init_kwargs[args_name] = file_path
-        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
 
         if slow_tokenizer is not None:
             init_kwargs["__slow_tokenizer"] = slow_tokenizer
@@ -2275,64 +2264,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     raise TypeError(
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary or an AddedToken instance"
                     )
-        else:
-            # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
-            if special_tokens_map_file is not None:
-                with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
-                    special_tokens_map = json.load(special_tokens_map_handle)
-                    for key, value in special_tokens_map.items():
-                        if key in kwargs and kwargs[key]:
-                            # This value has already been redefined by the kwargs
-                            # We keep this new value and ignore the one stored in the special_tokens_map_file
-                            continue
-                        if isinstance(value, dict):
-                            value["special"] = True
-                            value = AddedToken(**value)
-                        elif key == "additional_special_tokens" and isinstance(value, list):
-                            additional_special_tokens = init_kwargs.pop("additional_special_tokens", []) or []
-                            for token in value:
-                                if isinstance(token, dict):
-                                    token["special"] = True
-                                    token = AddedToken(**token)
-                                if token not in additional_special_tokens:
-                                    additional_special_tokens.append(token)
-                            value = additional_special_tokens
-                        init_kwargs[key] = value
-
-            # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
-            # this is for legacy purpose. We don't add the tokens after init for efficiency.
-            if added_tokens_file is not None:
-                special_tokens = []
-                for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
-                    if init_kwargs[key] is not None:
-                        if key == "additional_special_tokens":
-                            special_tokens += [str(token) for token in init_kwargs[key]]
-                        else:
-                            special_tokens.append(str(init_kwargs[key]))
-
-                with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
-                    added_tok_encoder = json.load(added_tokens_handle)
-                for str_token, index in added_tok_encoder.items():
-                    # if index not in added_tokens_decoder and str_token not in added_tokens_map:
-                    special = str_token in special_tokens
-                    added_tokens_decoder[index] = AddedToken(
-                        str_token, rstrip=False, lstrip=False, normalized=not special, special=special
-                    )
-                    added_tokens_map[str(token)] = added_tokens_decoder[index]
-
-            # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
-            # if `tokenizer_config.json` is `None`
-            if tokenizer_file is not None:
-                # This is for slow so can be done before
-                with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
-                    tokenizer_file_handle = json.load(tokenizer_file_handle)
-                    added_tokens = tokenizer_file_handle.pop("added_tokens")
-                for serialized_tokens in added_tokens:
-                    idx = serialized_tokens.pop("id")
-                    added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
-                    added_tokens_map[str(added_tokens_decoder[idx])] = added_tokens_decoder[idx]
-            # end legacy
-
         # Passing AddedTokens and not strings to the class to prevent it from casting the string to a different AddedToken
         # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
@@ -2521,9 +2452,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
-        special_tokens_map_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + SPECIAL_TOKENS_MAP_FILE
-        )
         tokenizer_config_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE
         )
@@ -2583,7 +2511,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # remove private information
         if "name_or_path" in tokenizer_config:
             tokenizer_config.pop("name_or_path")
-            tokenizer_config.pop("special_tokens_map_file", None)
             tokenizer_config.pop("tokenizer_file", None)
         if "device_map" in tokenizer_config:
             tokenizer_config.pop("device_map")
@@ -2592,17 +2519,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
         logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
-
-        # Sanitize AddedTokens in special_tokens_map
-
-        # kept for forward compatibility, will be removed in transoformers 5. Typefields are not saved for FC, special should not be save either
-        write_dict = self.convert_added_tokens(self.special_tokens_map_extended, save=True, add_type_field=False)
-        with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-            f.write(out_str)
-        logger.info(f"Special tokens file saved in {special_tokens_map_file}")
-
-        file_names = (tokenizer_config_file, special_tokens_map_file, *saved_raw_chat_template_files)
+        file_names = (tokenizer_config_file, *saved_raw_chat_template_files)
 
         save_files = self._save_pretrained(
             save_directory=save_directory,
