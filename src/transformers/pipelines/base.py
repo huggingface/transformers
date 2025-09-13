@@ -56,7 +56,7 @@ from ..utils import (
 
 GenericTensor = Union[list["GenericTensor"], "torch.Tensor"]
 
-if is_torch_available():
+if is_torch_available() or TYPE_CHECKING:
     import torch
     from torch.utils.data import DataLoader, Dataset
 
@@ -67,9 +67,6 @@ if is_torch_available():
 else:
     Dataset = None
     KeyDataset = None
-
-if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__name__)
@@ -200,7 +197,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
 def load_model(
     model,
     config: AutoConfig,
-    model_classes: Optional[tuple[type]] = None,
+    model_classes: Optional[tuple[type, ...]] = None,
     task: Optional[str] = None,
     **model_kwargs,
 ):
