@@ -71,6 +71,108 @@ class VideoPrismConfig(VivitConfig):
         self.apply_l2_norm = apply_l2_norm
 
 
+class VideoPrismTokenizer(T5Tokenizer):
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A sequence has the following format:
+
+        - single sequence: `X </s>`
+        - pair of sequences: `A </s> B </s>`
+
+        Args:
+            token_ids_0 (`list[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`list[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        # token_ids_0 = self._add_eos_if_not_present(token_ids_0)
+        if token_ids_1 is None:
+            return token_ids_0
+        else:
+            # token_ids_1 = self._add_eos_if_not_present(token_ids_1)
+            return token_ids_0 + token_ids_1
+
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. VIDEOPRISM does not make
+        use of token type ids, therefore a list of zeros is returned.
+
+        Args:
+            token_ids_0 (`list[int]`):
+                List of IDs.
+            token_ids_1 (`list[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `list[int]`: List of zeros.
+        """
+
+        if token_ids_1 is None:
+            return len(token_ids_0) * [0]
+        return len(token_ids_0 + token_ids_1) * [0]
+
+
+class VideoPrismTokenizerFast(T5TokenizerFast):
+    pass
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A sequence has the following format:
+
+        - single sequence: `X </s>`
+        - pair of sequences: `A </s> B </s>`
+
+        Args:
+            token_ids_0 (`list[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`list[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        # token_ids_0 = token_ids_0 + [self.eos_token_id]
+        if token_ids_1 is None:
+            return self.prefix_tokens + token_ids_0
+        else:
+            # token_ids_1 = token_ids_1 + [self.eos_token_id]
+            return self.prefix_tokens + token_ids_0 + token_ids_1
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
+        use of token type ids, therefore a list of zeros is returned.
+
+        Args:
+            token_ids_0 (`list[int]`):
+                List of IDs.
+            token_ids_1 (`list[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `list[int]`: List of zeros.
+        """
+
+        if token_ids_1 is None:
+            return len(token_ids_0) * [0]
+        return len(token_ids_0 + token_ids_1) * [0]
+
+
 def lecun_normal_(tensor):
     fan_in = tensor.size(1)  # For Embedding: (num_embeddings, embedding_dim)
     std = math.sqrt(1.0 / fan_in)
@@ -443,6 +545,11 @@ def _l2_normalize(x: torch.Tensor, dim: int | Sequence[int] = -1, epsilon: float
     norm = torch.sqrt(torch.sum(x**2, dim=dim, keepdims=True) + epsilon)
     return x / norm
 
+# from qwen 2
+# def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+#     """This function is intended to align with the l2norm implementation in the FLA library."""
+#     inv_norm = 1 / torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+#     return x * inv_norm
 
 class PerDimScale(nn.Module):
     def __init__(self, config):
@@ -691,114 +798,11 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         )
 
 
-class VideoPrismTokenizer(T5Tokenizer):
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A sequence has the following format:
-
-        - single sequence: `X </s>`
-        - pair of sequences: `A </s> B </s>`
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        # token_ids_0 = self._add_eos_if_not_present(token_ids_0)
-        if token_ids_1 is None:
-            return token_ids_0
-        else:
-            # token_ids_1 = self._add_eos_if_not_present(token_ids_1)
-            return token_ids_0 + token_ids_1
-
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. VIDEOPRISM does not make
-        use of token type ids, therefore a list of zeros is returned.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of zeros.
-        """
-
-        if token_ids_1 is None:
-            return len(token_ids_0) * [0]
-        return len(token_ids_0 + token_ids_1) * [0]
-
-
-class VideoPrismTokenizerFast(T5TokenizerFast):
-    pass
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A sequence has the following format:
-
-        - single sequence: `X </s>`
-        - pair of sequences: `A </s> B </s>`
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        # token_ids_0 = token_ids_0 + [self.eos_token_id]
-        if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0
-        else:
-            # token_ids_1 = token_ids_1 + [self.eos_token_id]
-            return self.prefix_tokens + token_ids_0 + token_ids_1
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
-        use of token type ids, therefore a list of zeros is returned.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of zeros.
-        """
-
-        if token_ids_1 is None:
-            return len(token_ids_0) * [0]
-        return len(token_ids_0 + token_ids_1) * [0]
-
-
-
 __all__ = [
     "VideoPrismConfig",
-    "VideoPrismModel",
+    "VideoPrismFactorizedEncoderModel",
     "VideoPrismPreTrainedModel",
-    "VideoPrismClip",
+    "VideoPrismClipModel",
     "VideoPrismTokenizer",
     "VideoPrismTokenizerFast",
 ]

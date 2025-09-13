@@ -7,7 +7,10 @@ from huggingface_hub import HfApi, hf_hub_download
 from safetensors.torch import load_file, save_file
 
 from transformers import VideoPrismConfig, VideoPrismTokenizer, VideoPrismTokenizerFast
+from transformers import T5TokenizerFast
 from transformers.models.videoprism.modeling_videoprism import VideoPrismClipModel, VideoPrismFactorizedEncoderModel
+
+
 def get_checkpoint_info(model_type="backbone", model_size="base"):
     backbone_base = {
         "model_type": "backbone",
@@ -339,7 +342,8 @@ def ids_to_attention_mask(input_ids: torch.Tensor, pad_token_id: int = 0) -> tor
 
 def prepare_texts():
     tokenizer = VideoPrismTokenizerFast(
-    # tokenizer_object=sp,
+
+    legacy=False,
     vocab_file="./sentencepiece.model",
     unk_token="<unk>",
     pad_token="<pad>",
@@ -507,14 +511,13 @@ def convert(
                     [262, 266, 768, 267, 1376, 289, 10691, 259],
                     [262, 266, 768, 267, 4605, 259],
                 ]
-                input_ids = pad_and_stack(sentences, pad_token_id=0, max_length=64)
-                mask = ids_to_attention_mask(input_ids)
+                # input_ids = pad_and_stack(sentences, pad_token_id=0, max_length=64)
+                # mask = ids_to_attention_mask(input_ids)
 
 
                 # print(input_vid[0, -1, 0, :3, :3])
-                # input_ids, mask = prepare_texts()
+                input_ids, mask = prepare_texts()
                 
-
                 outputs = model(input_vid, input_ids, mask)
                 
                 lvt_video_base_expected_tensor = torch.tensor(
@@ -577,7 +580,7 @@ def convert(
                     assert torch.allclose(outputs.video_embeds[:, :9], lvt_video_large_expected_tensor, atol=1e-5), (
                         "Video output does not match expected tensor."
                     )
-                    print("video ok")
+                    print("video ok")                    
                     assert torch.allclose(outputs.text_embeds[:, :3], lvt_text_large_expected_tensor, atol=1e-5), (
                         "Text output does not match expected tensor."
                     )
