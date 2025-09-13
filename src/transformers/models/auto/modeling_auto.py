@@ -386,6 +386,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("van", "VanModel"),
         ("vaultgemma", "VaultGemmaModel"),
         ("video_llava", "VideoLlavaModel"),
+        ("videollama3", "Videollama3Model"),
+        ("videollama3_vision", "Videollama3VisionModel"),
         ("videomae", "VideoMAEModel"),
         ("vilt", "ViltModel"),
         ("vipllava", "VipLlavaModel"),
@@ -1031,6 +1033,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("shieldgemma2", "Gemma3ForConditionalGeneration"),
         ("smolvlm", "SmolVLMForConditionalGeneration"),
         ("udop", "UdopForConditionalGeneration"),
+        ("videollama3", "Videollama3ForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
     ]
