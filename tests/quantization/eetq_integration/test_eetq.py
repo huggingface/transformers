@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import os
 import tempfile
 import unittest
 
@@ -34,6 +35,14 @@ if is_torch_available():
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
+
+try:
+    from safetensors import safe_open
+    from safetensors.torch import save_file as save_file_pt
+
+    _safetensors_available = True
+except ImportError:
+    _safetensors_available = False
 
 
 @require_torch_gpu
@@ -169,3 +178,110 @@ class EetqTest(unittest.TestCase):
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_check_quantized_param_as_tensor(self):
+        r"""
+        Test the `check_quantized_param` method with torch.Tensor objects.
+        This verifies that the method correctly handles regular torch tensors with dtype attribute.
+        """
+        from unittest.mock import Mock
+
+        from eetq import EetqLinear
+
+        from transformers.quantizers.quantizer_eetq import EetqHfQuantizer
+
+        # Create quantizer directly
+        config = EetqConfig()
+        quantizer = EetqHfQuantizer(config)
+        quantizer.pre_quantized = True
+
+        # Create a mock model with a mock module that has EetqLinear
+        mock_model = Mock()
+        mock_module = Mock(spec=EetqLinear)
+
+        # Mock the get_module_from_name function
+        def mock_get_module_from_name(model, param_name):
+            return mock_module, "weight"
+
+        # Patch the function
+        import transformers.quantizers.quantizer_eetq as quantizer_module
+
+        original_get_module_from_name = quantizer_module.get_module_from_name
+        quantizer_module.get_module_from_name = mock_get_module_from_name
+
+        try:
+            param_name = "test.weight"
+            state_dict = {}
+
+            # Test with correct int8 tensor (should return False for pre-quantized)
+            int8_tensor = torch.randint(-128, 127, (10, 5), dtype=torch.int8)
+            result = quantizer.check_quantized_param(mock_model, int8_tensor, param_name, state_dict)
+            self.assertFalse(result)  # Pre-quantized weights return False
+
+        finally:
+            # Restore original function
+            quantizer_module.get_module_from_name = original_get_module_from_name
+
+    @unittest.skipIf(not _safetensors_available, "safetensors not available")
+    def test_check_quantized_param_as_slice(self):
+        r"""
+        Test the `check_quantized_param` method with PySafeSlice objects.
+        This verifies that the method correctly handles safetensors slices with get_dtype() method.
+        """
+        from unittest.mock import Mock
+
+        from eetq import EetqLinear
+
+        from transformers.quantizers.quantizer_eetq import EetqHfQuantizer
+
+        # Create quantizer directly
+        config = EetqConfig()
+        quantizer = EetqHfQuantizer(config)
+        quantizer.pre_quantized = True
+
+        # Create a mock model with a mock module that has EetqLinear
+        mock_model = Mock()
+        mock_module = Mock(spec=EetqLinear)
+
+        # Mock the get_module_from_name function
+        def mock_get_module_from_name(model, param_name):
+            return mock_module, "weight"
+
+        # Patch the function
+        import transformers.quantizers.quantizer_eetq as quantizer_module
+
+        original_get_module_from_name = quantizer_module.get_module_from_name
+        quantizer_module.get_module_from_name = mock_get_module_from_name
+
+        try:
+            param_name = "test.weight"
+            state_dict = {}
+
+            # Create a safetensors file with int8 data
+            A = torch.randint(-128, 127, (10, 5), dtype=torch.int8)
+            tensors = {"test_tensor": A}
+            safetensors_path = "./slice.safetensors"
+
+            try:
+                save_file_pt(tensors, safetensors_path)
+
+                # Load and test with safetensors slice (should return False for pre-quantized)
+                with safe_open(safetensors_path, framework="pt", device="cpu") as f:
+                    slice_ = f.get_slice("test_tensor")
+
+                    # Verify the slice has get_dtype method and returns "I8" for int8
+                    self.assertTrue(hasattr(slice_, "get_dtype"))
+                    self.assertEqual(slice_.get_dtype(), "I8")
+
+                    # Test the check_quantized_param method with the slice
+                    result = quantizer.check_quantized_param(mock_model, slice_, param_name, state_dict)
+                    self.assertFalse(result)  # Pre-quantized weights return False
+
+            finally:
+                # Clean up safetensors file
+                if os.path.exists(safetensors_path):
+                    os.remove(safetensors_path)
+
+        finally:
+            # Restore original function
+            quantizer_module.get_module_from_name = original_get_module_from_name
