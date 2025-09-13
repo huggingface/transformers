@@ -256,6 +256,10 @@ class GenerationConfig(PushToHubMixin):
         output_logits (`bool`, *optional*):
             Whether or not to return the unprocessed prediction logit scores. See `logits` under returned tensors for
             more details.
+        offload_logits_to_cpu (`bool`, *optional*, defaults to `False`):
+            Whether or not to transfer logits and scores to CPU memory after each generation step to reduce GPU memory
+            usage. Only effective when `output_scores=True` or `output_logits=True`. This can significantly reduce
+            GPU memory consumption during long generations at the cost of some CPU-GPU transfer overhead.
         return_dict_in_generate (`bool`, *optional*, defaults to `False`):
             Whether or not to return a [`~utils.ModelOutput`], as opposed to returning exclusively the generated
             sequence. This flag must be set to `True` to return the generation cache (when `use_cache` is `True`)
@@ -328,7 +332,7 @@ class GenerationConfig(PushToHubMixin):
             need to use this flag.
     """
 
-    extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
+    extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits", "offload_logits_to_cpu")
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
@@ -390,6 +394,7 @@ class GenerationConfig(PushToHubMixin):
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_scores = kwargs.pop("output_scores", False)
         self.output_logits = kwargs.pop("output_logits", None)
+        self.offload_logits_to_cpu = kwargs.pop("offload_logits_to_cpu", False)
         self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
 
         # Special tokens that can be used at generation time

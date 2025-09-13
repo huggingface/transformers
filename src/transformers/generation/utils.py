@@ -130,6 +130,23 @@ ALL_CACHE_NAMES = [
 ]
 
 
+def _maybe_offload_to_cpu(tensor: torch.Tensor, offload_to_cpu: bool) -> torch.Tensor:
+    """
+    Conditionally transfer a tensor to CPU memory if offloading is enabled.
+
+    Args:
+        tensor (torch.Tensor): The tensor to potentially transfer to CPU.
+        offload_to_cpu (bool): Whether to transfer the tensor to CPU.
+
+    Returns:
+        torch.Tensor: The tensor on CPU if offloading is enabled, otherwise unchanged.
+    """
+    if offload_to_cpu and tensor.device != torch.device('cpu'):
+        return tensor.cpu()
+    return tensor
+
+
+
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
     """
@@ -2723,6 +2740,7 @@ class GenerationMixin(ContinuousMixin):
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
         output_logits = generation_config.output_logits
+        offload_logits_to_cpu = generation_config.offload_logits_to_cpu
         return_dict_in_generate = generation_config.return_dict_in_generate
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
         do_sample = generation_config.do_sample
@@ -2801,9 +2819,9 @@ class GenerationMixin(ContinuousMixin):
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (next_token_scores,)
+                    scores += (_maybe_offload_to_cpu(next_token_scores, offload_logits_to_cpu),)
                 if output_logits:
-                    raw_logits += (next_token_logits,)
+                    raw_logits += (_maybe_offload_to_cpu(next_token_logits, offload_logits_to_cpu),)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -3156,6 +3174,7 @@ class GenerationMixin(ContinuousMixin):
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
         output_logits = generation_config.output_logits
+        offload_logits_to_cpu = generation_config.offload_logits_to_cpu
         return_dict_in_generate = generation_config.return_dict_in_generate
         do_sample = generation_config.do_sample
         early_stopping = generation_config.early_stopping
@@ -3282,9 +3301,9 @@ class GenerationMixin(ContinuousMixin):
             # Store logits, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_logits:
-                    raw_logits += (logits.clone(),)
+                    raw_logits += (_maybe_offload_to_cpu(logits.clone(), offload_logits_to_cpu),)
                 if return_dict_in_generate and output_scores:
-                    all_scores += (log_probs.clone(),)
+                    all_scores += (_maybe_offload_to_cpu(log_probs.clone(), offload_logits_to_cpu),)
 
                 if output_attentions:
                     decoder_attentions += (
@@ -3494,6 +3513,7 @@ class GenerationMixin(ContinuousMixin):
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
         output_logits = generation_config.output_logits
+        offload_logits_to_cpu = generation_config.offload_logits_to_cpu
         return_dict_in_generate = generation_config.return_dict_in_generate
 
         # init attention / hidden states / scores tuples
@@ -3631,9 +3651,9 @@ class GenerationMixin(ContinuousMixin):
             if return_dict_in_generate:
                 newly_added_length = n_matches + 1
                 if output_scores:
-                    scores += tuple(new_logits[:, i, :] for i in range(newly_added_length))
+                    scores += tuple(_maybe_offload_to_cpu(new_logits[:, i, :], offload_logits_to_cpu) for i in range(newly_added_length))
                 if output_logits:
-                    raw_logits += tuple(next_token_logits[:, i, :] for i in range(newly_added_length))
+                    raw_logits += tuple(_maybe_offload_to_cpu(next_token_logits[:, i, :], offload_logits_to_cpu) for i in range(newly_added_length))
 
                 newly_added_length = new_cur_len if is_first_iteration else newly_added_length
                 if output_attentions:
