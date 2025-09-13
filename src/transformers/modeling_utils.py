@@ -5971,15 +5971,28 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def loss_function(self, value):
         self._loss_function = value
 
-    def get_compiled_call(self, compile_config: Optional[CompileConfig]) -> Callable:
+    def maybe_get_compiled_call(self, model_kwargs, generation_config) -> Callable:
         """Return a `torch.compile`'d version of `self.__call__`. This is useful to dynamically choose between
         non-compiled/compiled `forward` during inference, especially to switch between prefill (where we don't
         want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
         (where we want the speed-ups of compiled version with static shapes)."""
-        # Only reset it if not present or different from previous config
-        if "llama4" in self.config.model_type:  # TODO try to enable for FULL COMPILE HYBRID CACHE SUPPORT
+        can_compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
+        if (
+            not can_compile_forward or "llama4" in self.config.model_type
+        ):  # TODO try to enable for FULL COMPILE HYBRID CACHE SUPPORT for llama4
             return self.__call__
-        compile_config = compile_config or CompileConfig()
+        os.environ["TOKENIZERS_PARALLELISM"] = "0"
+        # If we use FA2 and a static cache, we cannot compile with fullgraph
+        if self.config._attn_implementation == "flash_attention_2":
+            # only raise warning if the user passed an explicit compile-config
+            if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
+                logger.warning_once(
+                    "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
+                    "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
+                )
+                generation_config.compile_config.fullgraph = False
+        # Only reset it if not present or different from previous config
+        compile_config = generation_config.compile_config or CompileConfig()
         default_config = getattr(self.generation_config, "compile_config", None) or CompileConfig()
         if (
             not hasattr(self, "_compiled_call")

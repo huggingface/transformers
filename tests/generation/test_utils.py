@@ -1803,6 +1803,62 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
+    @pytest.mark.generate
+    def test_prepare_inputs_for_generation_kwargs_forwarding(self, **extra_kwargs):
+        """Tests that prepare_inputs_for_generation forwards arbitrary kwargs while manipulating specific args."""
+        # TODO: fixme. These old models do not clone input ids like the reference `prepare_inputs_for_generation`.
+        # Thus, we skip the clone check on them.
+        non_compilable_model_classes = [
+            "BambaForCausalLM",
+            "CTRLLMHeadModel",
+            "FalconH1ForCausalLM",
+            "FalconMambaForCausalLM",
+            "GitForCausalLM",
+            "GraniteMoeHybridForCausalLM",
+            "JambaForCausalLM",
+            "Kosmos2_5ForConditionalGeneration",
+            "MambaForCausalLM",
+            "Mamba2ForCausalLM",
+            "OpenAIGPTLMHeadModel",
+            "ProphetNetForCausalLM",
+            "ReformerModelWithLMHead",
+            "RwkvForCausalLM",
+            "XLMRobertaXLForCausalLM",
+            "xLSTMForCausalLM",
+            "ZambaForCausalLM",
+            "Zamba2ForCausalLM",
+        ]
+
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.prepare_config_and_inputs_for_generate()
+
+            model = model_class(config).to(torch_device).eval()
+
+            input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]]).to(torch_device)
+
+            input_args = {
+                "input_ids": input_ids,
+                "cache_position": [0],
+                "position_ids": torch.tensor([[0, 1, 2], [0, 1, 2]]).to(torch_device),
+            }
+            arbitrary_kwargs = {
+                "output_attentions": True,
+                "output_hidden_states": True,
+                "custom_arg": "test_value",
+                "numeric_arg": 42,
+            }
+
+            model_inputs = model.prepare_inputs_for_generation(**input_args, **arbitrary_kwargs, **extra_kwargs)
+
+            if model_class.__name__ not in non_compilable_model_classes:
+                # Verify that input_ids is cloned
+                input_ids_key = "decoder_input_ids" if config.is_encoder_decoder else "input_ids"
+                self.assertTrue(model_inputs[input_ids_key] is not input_ids)
+
+            for key, value in arbitrary_kwargs.items():
+                self.assertTrue(key in model_inputs)
+                self.assertTrue(model_inputs[key] == value)
+
     def _test_attention_implementation(self, attn_implementation):
         """
         Compares the output of generate with the eager attention implementation against other implementations.

@@ -46,6 +46,7 @@ from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
+    TransformersKwargs,
     is_accelerate_available,
     is_hqq_available,
     is_optimum_quanto_available,
@@ -559,8 +560,9 @@ class GenerationMixin(ContinuousMixin):
         **kwargs,
     ):
         """
-        Prepare the model inputs for generation. It includes operations like computing the 4D attention mask or
-        slicing inputs given the existing cache.
+        Prepare the model inputs for generation. Notable steps include selecting the correct input key and cloning when appropriate,
+        creating position_ids from the attention_mask when missing, slicing inputs and converting 2D attention masks to 4D for
+        compilable caches, and finally forwarding all additional keyword arguments unchanged to the model's forward pass.
 
         See the forward pass in the model documentation for expected arguments (different models might have different
         requirements for e.g. `past_key_values`). This function should work as is for most LLMs.
@@ -1592,8 +1594,9 @@ class GenerationMixin(ContinuousMixin):
                 decoder_model_args = set(inspect.signature(decoder.forward).parameters)
                 model_args |= {f"decoder_{x}" for x in decoder_model_args}
 
+        # TransformersKwargs are model-agnostic attention and generation arguments such as 'output_attentions'
         for key, value in model_kwargs.items():
-            if value is not None and key not in model_args:
+            if value is not None and key not in model_args and key not in TransformersKwargs.__optional_keys__:
                 unused_model_args.append(key)
 
         if unused_model_args:
@@ -1798,6 +1801,11 @@ class GenerationMixin(ContinuousMixin):
 
         # Finally, apply any passed kwargs
         model_kwargs = generation_config.update(**kwargs)
+        # And keep in model_kwargs variable output controls
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        model_kwargs.update({"output_attentions": output_attentions} if output_attentions else {})
+        model_kwargs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
         return generation_config, model_kwargs
 
@@ -2520,7 +2528,7 @@ class GenerationMixin(ContinuousMixin):
                 UserWarning,
             )
 
-        # 8. prepare logits processors and stopping criteria
+        # 8. Prepare logits processors and stopping criteria
         prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_length,
@@ -2540,6 +2548,11 @@ class GenerationMixin(ContinuousMixin):
 
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
+
+        # 8b. Prefill pass
+        # Some decoding methods (e.g. assisted generation) do not admit the prefill pass
+        if "prefill_outputs" in inspect.signature(decoding_method).parameters:
+            generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
 
         # 9. Call generation mode
         result = decoding_method(
@@ -2672,6 +2685,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        prefill_outputs: torch.FloatTensor = None,
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -2706,6 +2720,8 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
+        if prefill_outputs is None:
+            raise ValueError("Prefill outputs must be provided.")
         # init values
         pad_token_id = generation_config._pad_token_tensor
         output_attentions = generation_config.output_attentions
@@ -2734,43 +2750,16 @@ class GenerationMixin(ContinuousMixin):
         batch_size, cur_len = input_ids.shape[:2]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
-        model_forward = self.__call__
-        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
-        if compile_forward:
-            os.environ["TOKENIZERS_PARALLELISM"] = "0"
-            # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2":
-                # only raise warning if the user passed an explicit compile-config
-                if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
-                    logger.warning_once(
-                        "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
-                        "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
-                    )
-                    generation_config.compile_config.fullgraph = False
-            model_forward = self.get_compiled_call(generation_config.compile_config)
-
-        if generation_config.prefill_chunk_size is not None:
-            model_kwargs = self._prefill_chunking(input_ids, generation_config, **model_kwargs)
-            is_prefill = False
-        else:
-            is_prefill = True
+        model_forward = self.maybe_get_compiled_call(model_kwargs, generation_config)
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            # prepare model inputs
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-
-            if is_prefill:
-                outputs = self(**model_inputs, return_dict=True)
-                is_prefill = False
+            if prefill_outputs is not None:
+                outputs = prefill_outputs
+                prefill_outputs = None
             else:
+                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
                 outputs = model_forward(**model_inputs, return_dict=True)
-
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
@@ -3100,6 +3089,7 @@ class GenerationMixin(ContinuousMixin):
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
+        prefill_outputs: torch.FloatTensor = None,
         **model_kwargs,
     ) -> Union[GenerateBeamOutput, torch.LongTensor]:
         r"""
@@ -3137,7 +3127,8 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateBeamEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-
+        if prefill_outputs is None:
+            raise ValueError("Prefill outputs must be provided.")
         # 1. init beam_search values
         pad_token_id = generation_config._pad_token_tensor
         eos_token_id = generation_config._eos_token_tensor
@@ -3177,8 +3168,6 @@ class GenerationMixin(ContinuousMixin):
             (torch.ones((num_beams), dtype=torch.bool), torch.zeros((beams_to_keep - num_beams), dtype=torch.bool)),
             dim=0,
         ).to(input_ids.device)
-
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         # (joao) feature lost in the refactor. Probably won't implement, hurts readability with minimal gains (there
         # are newer low-memory alternatives like the offloaded cache)
@@ -3243,15 +3232,16 @@ class GenerationMixin(ContinuousMixin):
 
         # 4. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            # a. Forward current tokens, obtain the logits
-            flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
-            model_inputs = self.prepare_inputs_for_generation(flat_running_sequences, **model_kwargs)
+            if prefill_outputs is not None:
+                model_outputs = prefill_outputs
+                flat_running_sequences = input_ids
+                prefill_outputs = None
+            else:
+                # a. Forward current tokens, obtain the logits
+                flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
+                model_inputs = self.prepare_inputs_for_generation(flat_running_sequences, **model_kwargs)
 
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-
-            model_outputs = self(**model_inputs, return_dict=True)
+                model_outputs = self(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -3575,9 +3565,6 @@ class GenerationMixin(ContinuousMixin):
                 model_inputs["logits_to_keep"] = candidate_length + 1
 
             # 2.2. Run a forward pass on the candidate sequence
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
             outputs = self(**model_inputs)
 
@@ -3728,49 +3715,53 @@ class GenerationMixin(ContinuousMixin):
         else:
             return input_ids
 
-    def _prefill_chunking(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, **model_kwargs):
-        # Even if we are not compiling the forward, flex is always compiled when used. With chunk prefill, we may
-        # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
-        torch._dynamo.config.cache_size_limit = 64
+    def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
 
-        chunk_size = generation_config.prefill_chunk_size
-        # Only chunk up the token just before last, so that decoding is completely performed outside this function
-        # (here we simply prefill the cache)
-        input_chunks = torch.split(input_ids[:, :-1], chunk_size, dim=-1)
+        if generation_config.prefill_chunk_size is None:
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
+            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
+            return self(**model_inputs, return_dict=True)
+        else:  # Chunked prefill
+            # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
+            # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
+            torch._dynamo.config.cache_size_limit = 64
 
-        if "past_key_values" not in model_kwargs:
-            raise ValueError("Cannot use prefill chunking without a cache")
+            chunk_size = generation_config.prefill_chunk_size
+            input_chunks = torch.split(input_ids, chunk_size, dim=-1)
 
-        model_forward = self.forward
+            if "past_key_values" not in model_kwargs:
+                raise ValueError("Cannot use prefill chunking without a cache")
 
-        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
-        if compile_forward:
-            model_forward = self.get_compiled_call(generation_config.compile_config)
+            model_forward = self.maybe_get_compiled_call(model_kwargs, generation_config)
+            attention_mask = model_kwargs.pop("attention_mask", None)
+            past_length = 0
+            for input_chunk in input_chunks:
+                current_length = past_length + input_chunk.shape[-1]
+                # Prepare inputs
+                if attention_mask is not None:
+                    model_kwargs["attention_mask"] = attention_mask[:, :current_length]
+                model_kwargs["cache_position"] = torch.arange(
+                    past_length, current_length, dtype=torch.long, device=input_chunk.device
+                )
+                model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
+                model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
+                model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
+                model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
-        attention_mask = model_kwargs.pop("attention_mask", None)
+                outputs = model_forward(**model_inputs, return_dict=True)
 
-        past_length = 0
-        for input_chunk in input_chunks:
-            current_length = past_length + input_chunk.shape[-1]
-            # Prepare inputs
-            if attention_mask is not None:
-                model_kwargs["attention_mask"] = attention_mask[:, :current_length]
-            model_kwargs["cache_position"] = torch.arange(
-                past_length, current_length, dtype=torch.long, device=input_chunk.device
-            )
-            model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
-            model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
+                model_kwargs["past_key_values"] = outputs.past_key_values
+                past_length = current_length
 
-            outputs = model_forward(**model_inputs, return_dict=True)
-
-            model_kwargs["past_key_values"] = outputs.past_key_values
-            past_length = current_length
-
-        model_kwargs["attention_mask"] = attention_mask
-        model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
-        _ = model_kwargs.pop("position_ids", None)
-
-        return model_kwargs
+            model_kwargs["attention_mask"] = attention_mask
+            model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
+            _ = model_kwargs.pop("position_ids", None)
+            # Latest outputs contain next token logits
+            return outputs
 
 
 def _speculative_sampling(
