@@ -557,6 +557,8 @@
         title: Llama2
       - local: model_doc/llama3
         title: Llama3
+      - local: model_doc/longcat_flash
+        title: LongCatFlash
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
