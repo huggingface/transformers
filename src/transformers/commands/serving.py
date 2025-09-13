@@ -31,7 +31,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
 from threading import Thread
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
@@ -212,6 +212,131 @@ _TOOL_CALL_TOKENS = {
 _MODELS_WITH_TOOL_SUPPORT = list(_TOOL_CALL_TOKENS.keys())
 
 X_REQUEST_ID = "x-request-id"
+
+
+EvictCallback = Callable[[str], None]
+
+
+@dataclass
+class Entry:
+    conversation_id: str
+    expiry_task: asyncio.Task
+    evict_callback: Optional[EvictCallback] = None
+    lease: int = 0
+    _lease_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+
+
+class ConversationTTLCache:
+    """
+    A simple TTL (time to live) cache for conversations, with a maximum number of entries. Each entry has a TTL, after which it is
+    evicted from the cache. The cache is implemented as a dictionary, with the conversation ID as the key and an
+    Entry object as the value. The Entry object contains the conversation ID, the expiry task, and an optional
+    eviction callback.
+
+    We use this TTL cache to track conversations across http requests and manually evict KV Cache entries handled by the `ContinuousBatchingManager`
+    by setting the CBM's `manual_eviction` flag to `True` and using the `evict_callback` of this cache's entries.
+    """
+
+    def __init__(self, entry_timeout_seconds: int, max_entries: int = 512):
+        if max_entries <= 0:
+            raise ValueError("max_entries must be greater than 0")
+        self._closed = False
+        self.conversation_cache: dict[str, Entry] = {}
+        self.max_entries = max_entries
+        self.time_to_live = float(entry_timeout_seconds)
+
+    def acquire_lease(self, conversation_id: str, evict_callback: Optional[EvictCallback] = None):
+        """
+        Acquire a lease on a given cache entry, incrementing its lease counter to prevent the entry from being evicted when in use.
+        """
+        self.touch(conversation_id, evict_callback)  # ensure entry exists
+        entry = self.conversation_cache.get(conversation_id)
+        if entry is not None:
+            with entry._lease_lock:
+                entry.lease += 1
+
+    def release_lease(self, conversation_id: str):
+        """
+        Release a lease on a cache entry, decrementing its lease counter which allows for eviction when lease == 0.
+        """
+        entry = self.conversation_cache.get(conversation_id)
+        if entry is not None:
+            with entry._lease_lock:
+                entry.lease -= 1
+                if entry.lease < 0:
+                    logger.warning(f"Lease for conversation {conversation_id} is negative")
+                    entry.lease = 0
+                self.touch(conversation_id)  # reset the TTL on release
+
+    def touch(self, conversation_id: str, evict_callback: Optional[EvictCallback] = None):
+        """
+        Touch an entry in the conversation cache, resetting its TTL. If the entry does not exist, create it.
+        """
+        if self._closed:
+            return
+        entry = self.conversation_cache.get(conversation_id)
+        if entry is not None:
+            if evict_callback is not None:
+                entry.evict_callback = evict_callback
+            entry.expiry_task.cancel()
+            entry.expiry_task = asyncio.create_task(
+                self.evict_entry_after_expiry(conversation_id, self.ttl), name=f"ttl-{conversation_id}"
+            )
+            self.conversation_cache[conversation_id] = entry
+        else:
+            while len(self.conversation_cache) >= self.max_entries:
+                # Evict the least recently used entry
+                lru_conversation_id = next(iter(self.conversation_cache))
+                self.evict_entry(lru_conversation_id)
+            entry = Entry(
+                conversation_id=conversation_id,
+                expiry_task=asyncio.create_task(
+                    self.evict_entry_after_expiry(conversation_id, self.ttl), name=f"ttl-{conversation_id}"
+                ),
+                evict_callback=evict_callback,
+            )
+            self.conversation_cache[conversation_id] = entry
+
+    async def evict_entry_after_expiry(self, conversation_id: str, ttl: float):
+        """Schedules an entry to be evicted after a given TTL."""
+        entry = self.conversation_cache.get(conversation_id)
+        if entry is None:
+            logger.warning(f"Tried to schedule eviction for non-existent conversation {conversation_id}")
+            return
+        try:
+            while True:
+                await asyncio.sleep(ttl)
+                with entry._lease_lock:
+                    if entry.lease <= 0:
+                        break
+        except asyncio.CancelledError:
+            return
+        self.evict_entry(conversation_id)
+        gc.collect()
+
+    def evict_entry(self, conversation_id: str):
+        if conversation_id in self.conversation_cache:
+            entry = self.conversation_cache.pop(conversation_id)
+            if entry.expiry_task is not asyncio.current_task():
+                entry.expiry_task.cancel()
+            if entry.evict_callback is not None:
+                try:
+                    entry.evict_callback(conversation_id)
+                except Exception as e:
+                    logger.error(f"Error in evict callback for conversation {conversation_id}: {e}")
+            logger.info(f"Evicted conversation {conversation_id} from cache")
+
+    def close(self) -> None:
+        self._closed = True
+        for e in list(self.conversation_cache.values()):
+            if e.expiry_task and not e.expiry_task.cancelled():
+                e.expiry_task.cancel()
+        self.conversation_cache.clear()
+
+    def stats(self):
+        return {
+            "active_conversations": len(self.conversation_cache),
+        }
 
 
 class Modality(enum.Enum):
@@ -415,6 +540,10 @@ class ServeArguments:
     model_timeout: int = field(
         default=300,
         metadata={"help": "Time in seconds after which a model will be removed from memory."},
+    )
+    cache_timeout: int = field(
+        default=300,
+        metadata={"help": "Time in seconds after which a conversation's KV Cache will be cleared."},
     )
 
     # Other settings
@@ -692,6 +821,9 @@ class ServeCommand(BaseTransformersCLICommand):
                 model.delete_model()
             if self.running_continuous_batching_manager is not None:
                 self.running_continuous_batching_manager.stop(block=True, timeout=5)
+            self.conversation_cache.close()
+
+        self.conversation_cache = ConversationTTLCache(entry_timeout_seconds=self.args.cache_timeout)
 
         app = FastAPI(lifespan=lifespan)
 
@@ -716,7 +848,7 @@ class ServeCommand(BaseTransformersCLICommand):
             self.validate_chat_completion_request(request=body)
 
             if self.use_continuous_batching:
-                output = self.continuous_batching_chat_completion(body, request.state.request_id)
+                output = self.continuous_batching_chat_completion(body, request.state.conversation_id)
             else:
                 output = self.generate_chat_completion(body)
             return StreamingResponse(output, media_type="text/event-stream")
@@ -756,12 +888,35 @@ class ServeCommand(BaseTransformersCLICommand):
             return JSONResponse({"status": "ok"})
 
         @app.middleware("http")
-        async def get_or_set_request_id(request: Request, call_next):
+        async def extract_request_id(request: Request, call_next):
             request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
             request.state.request_id = request_id
             response = await call_next(request)
             response.headers[X_REQUEST_ID] = request_id
             return response
+
+        @app.middleware("http")
+        async def extract_conversation_id(request: Request, call_next):
+            conv_id = (
+                request.headers.get("X-Conversation-ID")
+                or parse_cookie(request.headers.get("Cookie")).get("conversation_id")
+                or str(uuid.uuid4())
+            )
+            request.state.conversation_id = conv_id
+            response = await call_next(request)
+            if "conversation_id" not in response.headers:
+                response.headers["Set-Cookie"] = f"conversation_id={conv_id}; Path=/; SameSite=Lax"
+            return response
+
+        def parse_cookie(cookie):
+            if not cookie:
+                return {}
+            cookies = {}
+            for item in cookie.split(";"):
+                if "=" in item:
+                    key, value = item.strip().split("=", 1)
+                    cookies[key] = value
+            return cookies
 
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
@@ -846,7 +1001,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         if self.running_continuous_batching_manager is None:
             self.running_continuous_batching_manager = model.init_continuous_batching(
-                generation_config=generation_config, streaming=True
+                generation_config=generation_config, streaming=True, manual_eviction=True
             )
 
             # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching
@@ -894,9 +1049,13 @@ class ServeCommand(BaseTransformersCLICommand):
                 request_id = self.running_continuous_batching_manager.add_request(
                     _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens
                 )
+                self.conversation_cache.acquire_lease(
+                    request_id, self.running_continuous_batching_manager.cancel_request
+                )
                 for chunk in stream_chat_completion(request_id, decode_stream):
                     yield chunk
                     await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
+                self.conversation_cache.release_lease(request_id)
             except asyncio.CancelledError:
                 self.running_continuous_batching_manager.cancel_request(request_id)
                 logger.warning(f"Request {request_id} was cancelled.")
