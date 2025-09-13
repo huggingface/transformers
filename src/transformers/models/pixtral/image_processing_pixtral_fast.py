@@ -162,6 +162,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         patch_size = get_size_dict(patch_size, default_to_square=True)
         patch_size = SizeDict(**patch_size)
