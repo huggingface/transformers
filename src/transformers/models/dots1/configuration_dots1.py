@@ -71,6 +71,8 @@ class Dots1Config(PretrainedConfig):
             Epsilon used by the RMS normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions. Only relevant if `config.is_decoder=True`.
+        use_grouped_gemm (`bool`, *optional*, defaults to `False`):
+            Whether to use grouped gemm to speed up the model.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie the input and output word embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -152,6 +154,7 @@ class Dots1Config(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
+        use_grouped_gemm=False,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
@@ -184,6 +187,7 @@ class Dots1Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
+        self.use_grouped_gemm = use_grouped_gemm
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
@@ -201,6 +205,12 @@ class Dots1Config(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        if self.use_grouped_gemm:
+            import importlib.util
+
+            if importlib.util.find_spec("grouped_gemm") is None:
+                raise ImportError("Cannot fuse experts because 'grouped_gemm' is not installed.")
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
