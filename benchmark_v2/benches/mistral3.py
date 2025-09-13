@@ -24,16 +24,16 @@ os.environ["TOKENIZERS_PARALLELISM"] = "1"
 torch.set_float32_matmul_precision("high")
 
 
-class LLaMABenchmark(ModelBenchmark):
-    """Simplified LLaMA model benchmark implementation using the ModelBenchmark base class."""
+class Mistral3Benchmark(ModelBenchmark):
+    """Simplified Mistral3 model benchmark implementation using the ModelBenchmark base class."""
 
     def __init__(self, logger: logging.Logger):
         super().__init__(logger)
-        self._default_prompt = "Why dogs are so cute?"  # Custom prompt for LLaMA
+        self._default_prompt = "Why dogs are so cute?"  # Custom prompt for Mistral3
 
     def get_scenario_configs(self) -> list[dict[str, Any]]:
         """
-        Get LLaMA-specific scenario configurations.
+        Get Mistral3-specific scenario configurations.
 
         Returns:
             List of scenario configuration dictionaries
@@ -58,7 +58,7 @@ class LLaMABenchmark(ModelBenchmark):
         ]
 
     def _is_kernelization_available(self) -> bool:
-        """Check if kernelization is available for LLaMA."""
+        """Check if kernelization is available for Mistral3."""
         try:
             from kernels import Mode, kernelize  # noqa: F401
 
@@ -68,7 +68,7 @@ class LLaMABenchmark(ModelBenchmark):
             return False
 
     def get_default_generation_config(self) -> dict[str, Any]:
-        """Get LLaMA-specific generation configuration."""
+        """Get Mistral3-specific generation configuration."""
         return {
             "do_sample": False,
             "top_p": 1.0,
@@ -78,7 +78,7 @@ class LLaMABenchmark(ModelBenchmark):
         }
 
     def get_model_init_kwargs(self, config) -> dict[str, Any]:
-        """Get LLaMA-specific model initialization kwargs."""
+        """Get Mistral3-specific model initialization kwargs."""
         return {
             "torch_dtype": getattr(torch, config.torch_dtype),
             "attn_implementation": config.attn_implementation,
@@ -86,17 +86,17 @@ class LLaMABenchmark(ModelBenchmark):
         }
 
     def get_default_torch_dtype(self) -> str:
-        """Get default torch dtype for LLaMA."""
-        return "float16"  # LLaMA works well with float16
+        """Get default torch dtype for Mistral3."""
+        return "float16"  # Mistral3 works well with float16
 
     def get_default_device(self) -> str:
-        """Get default device for LLaMA."""
-        return "cuda"  # LLaMA prefers CUDA
+        """Get default device for Mistral3."""
+        return "cuda"  # Mistral3 prefers CUDA
 
 
-def run_llama(logger, output_dir, **kwargs):
+def run_mistral3(logger, output_dir, **kwargs):
     """
-    Run LLaMA benchmark with the given configuration.
+    Run Mistral3 benchmark with the given configuration.
 
     Args:
         logger: Logger instance
@@ -109,7 +109,7 @@ def run_llama(logger, output_dir, **kwargs):
     from benchmark_framework import BenchmarkRunner
 
     # Extract parameters with defaults
-    model_id = kwargs.get("model_id", "meta-llama/Llama-2-7b-hf")
+    model_id = kwargs.get("model_id", "mistralai/Mistral-7B-v0.3")
     warmup_iterations = kwargs.get("warmup_iterations", 3)
     measurement_iterations = kwargs.get("measurement_iterations", 5)
     num_tokens_to_generate = kwargs.get("num_tokens_to_generate", 100)
@@ -119,14 +119,14 @@ def run_llama(logger, output_dir, **kwargs):
     batch_size = kwargs.get("batch_size", 1)
     commit_id = kwargs.get("commit_id")
 
-    logger.info(f"Starting LLaMA benchmark for model: {model_id}")
+    logger.info(f"Starting Mistral3 benchmark for model: {model_id}")
     logger.info(
         f"Configuration: warmup={warmup_iterations}, measurement={measurement_iterations}, tokens={num_tokens_to_generate}"
     )
 
     try:
         # Create benchmark instance
-        benchmark = LLaMABenchmark(logger)
+        benchmark = Mistral3Benchmark(logger)
 
         # Create scenarios
         scenarios = benchmark.create_scenarios(
@@ -154,11 +154,11 @@ def run_llama(logger, output_dir, **kwargs):
         model_name = model_id.split("/")[-1]  # Extract model name from ID
         output_file = runner.save_results(model_name, results)
 
-        logger.info(f"LLaMA benchmark completed successfully. Results saved to: {output_file}")
+        logger.info(f"Mistral3 benchmark completed successfully. Results saved to: {output_file}")
         return output_file
 
     except Exception as e:
-        logger.error(f"LLaMA benchmark failed: {e}")
+        logger.error(f"Mistral3 benchmark failed: {e}")
         import traceback
 
         logger.debug(traceback.format_exc())
