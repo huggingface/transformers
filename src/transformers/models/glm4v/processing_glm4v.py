@@ -48,6 +48,7 @@ class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_token_type_ids": False,
             "return_mm_token_type_ids": False,
         },
         "videos_kwargs": {"return_metadata": True},
@@ -93,9 +94,9 @@ class Glm4vProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
         """

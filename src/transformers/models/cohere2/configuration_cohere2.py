@@ -19,8 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
-
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 
@@ -229,18 +227,6 @@ class Cohere2Config(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
-
-    @property
-    def sliding_window_pattern(self):
-        warnings.warn(
-            "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.55.0.",
-            FutureWarning,
-        )
-        return self._sliding_window_pattern
-
-    @sliding_window_pattern.setter
-    def sliding_window_pattern(self, value):
-        self._sliding_window_pattern = value
 
 
 __all__ = ["Cohere2Config"]

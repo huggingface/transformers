@@ -308,7 +308,7 @@ class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast):
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
-    def post_process_segmentation():
+    def post_process_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for Mask2Former yet.")
 
 

@@ -618,7 +618,7 @@ class TransfoXLModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    mems: list[torch.FloatTensor] = None
+    mems: Optional[list[torch.FloatTensor]] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -652,7 +652,7 @@ class TransfoXLSequenceClassifierOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    mems: list[torch.FloatTensor] = None
+    mems: Optional[list[torch.FloatTensor]] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -688,7 +688,7 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
 
     losses: Optional[torch.FloatTensor] = None
     prediction_scores: Optional[torch.FloatTensor] = None
-    mems: list[torch.FloatTensor] = None
+    mems: Optional[list[torch.FloatTensor]] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     loss: Optional[torch.FloatTensor] = None

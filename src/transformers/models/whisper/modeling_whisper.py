@@ -756,8 +756,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.layers = nn.ModuleList(
             [WhisperDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)]
         )
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1058,7 +1056,7 @@ class WhisperModel(WhisperPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         decoder_inputs_embeds: Optional[tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -1221,7 +1219,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         decoder_inputs_embeds: Optional[tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[tuple[torch.LongTensor]] = None,
         labels: Optional[torch.LongTensor] = None,

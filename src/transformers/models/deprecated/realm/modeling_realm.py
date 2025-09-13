@@ -719,12 +719,12 @@ class RealmReaderOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     retriever_loss: Optional[torch.FloatTensor] = None
     reader_loss: Optional[torch.FloatTensor] = None
-    retriever_correct: torch.BoolTensor = None
-    reader_correct: torch.BoolTensor = None
+    retriever_correct: Optional[torch.BoolTensor] = None
+    reader_correct: Optional[torch.BoolTensor] = None
     block_idx: Optional[torch.LongTensor] = None
     candidate: Optional[torch.LongTensor] = None
-    start_pos: torch.int32 = None
-    end_pos: torch.int32 = None
+    start_pos: Optional[torch.IntTensor] = None
+    end_pos: Optional[torch.IntTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -742,7 +742,7 @@ class RealmForOpenQAOutput(ModelOutput):
             Predicted answer ids.
     """
 
-    reader_output: dict = None
+    reader_output: Optional[dict] = None
     predicted_answer_ids: Optional[torch.LongTensor] = None
 
 
