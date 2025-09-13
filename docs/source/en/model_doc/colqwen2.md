@@ -157,14 +157,14 @@ print("Retrieval scores (query x image):")
 print(scores)
 ```
 
-You can also use checkpoints for `ColQwen2.5` that are **compatible with the ColQwen2 architecture**. This version of the model uses [Qwen2_5_VL](./qwen2_5_vl) as the backbone, and this should be specified when instantiating the processor.
+You can also use checkpoints for `ColQwen2.5` that are **compatible with the ColQwen2 architecture**. This version of the model uses [Qwen2_5_VL](./qwen2_5_vl) as the backbone.
 
 ```python
 import torch
 from transformers import ColQwen2ForRetrieval, ColQwen2Processor
 from transformers.utils.import_utils import is_flash_attn_2_available
 
-model_name = "Sahil-Kabir/colqwen2.5-v0.2" # An existing compatible checkpoint
+model_name = "Sahil-Kabir/colqwen2.5-v0.2-hf" # An existing compatible checkpoint
 
 model = ColQwen2ForRetrieval.from_pretrained(
     model_name,

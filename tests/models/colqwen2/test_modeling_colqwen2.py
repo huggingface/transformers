@@ -355,17 +355,17 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         This test uses a ColQwen2.5 checkpoint that is compatible with the ColQwen2 architecture.
         """
         model = ColQwen2ForRetrieval.from_pretrained(
-            "Sahil-Kabir/colqwen2.5-v0.2",
+            "Sahil-Kabir/colqwen2.5-v0.2-hf",
             dtype=torch.bfloat16,
         ).eval()
-        processor = ColQwen2Processor.from_pretrained("Sahil-Kabir/colqwen2.5-v0.2", trust_remote_code=True)
+        processor = ColQwen2Processor.from_pretrained("Sahil-Kabir/colqwen2.5-v0.2-hf", trust_remote_code=True)
 
         # Load the test dataset
         ds = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")
 
         # Preprocess the examples
-        batch_images = self.processor(images=list(ds["image"])).to(torch_device)
-        batch_queries = self.processor(text=list(ds["query"])).to(torch_device)
+        batch_images = processor(images=list(ds["image"])).to(torch_device)
+        batch_queries = processor(text=list(ds["query"])).to(torch_device)
 
         with torch.inference_mode():
             image_embeddings = model(**batch_images).embeddings
