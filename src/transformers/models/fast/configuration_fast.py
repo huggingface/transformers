@@ -183,7 +183,7 @@ class FastConfig(PretrainedConfig):
 
         Args:
             backbone_config ([`PretrainedConfig`]):
-                The backbone configuration
+                The backbone configuration.
         Returns:
             [`FastConfig`]: An instance of a configuration object
         """
