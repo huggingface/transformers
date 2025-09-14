@@ -1,18 +1,17 @@
 import enum
 import math
-from dataclasses import asdict, dataclass, is_dataclass, field
-from typing import Optional, Tuple
+from dataclasses import asdict, dataclass, field, is_dataclass
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from einops import rearrange
 
-from ..modernbert import ModernBertModel
-
-from ...modeling_utils import PreTrainedModel
-from ..dac.modeling_dac import DacEncoder
-from ..dac.configuration_dac import DacConfig
 from ...configuration_utils import PretrainedConfig
+from ...modeling_utils import PreTrainedModel
+from ..dac.configuration_dac import DacConfig
+from ..dac.modeling_dac import DacEncoder
+from ..modernbert import ModernBertModel
 
 
 class NormalizeTypeConfig(str, enum.Enum):
@@ -26,6 +25,7 @@ class Config:
     @classmethod
     def from_dict(cls, kwargs):
         return cls(**kwargs)
+
 
 @dataclass(frozen=True, kw_only=True)
 class TransformerConfig(Config):
@@ -87,6 +87,7 @@ class VideoEncoderConfig(Config):
             kwargs["transformer"] = TransformerConfig.from_dict(kwargs["transformer"])
         return cls(**kwargs)
 
+
 class DACVAEConfig(DacConfig): ...
 
 
@@ -124,12 +125,12 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         return {k: asdict(v) if is_dataclass(v) else v for k, v in output.items()}
 
 
-
 ## Patcher
+
 
 def pad1d(
     x: torch.Tensor,
-    paddings: Tuple[int, int],
+    paddings: tuple[int, int],
     mode: str = "constant",
     value: float = 0.0,
 ):
@@ -151,6 +152,7 @@ def pad1d(
         return padded[..., :end]
     else:
         return F.pad(x, paddings, mode, value)
+
 
 def get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
     # Copied from https://github.com/facebookresearch/audiocraft/blob/main/audiocraft/modules/conv.py
@@ -429,6 +431,7 @@ class VAEBottleneck(torch.nn.Module):
 
 class DACVAEEncoder(DacEncoder): ...
 
+
 class DACVAE(torch.nn.Module):
     def __init__(self, config: DACVAEConfig) -> None:
         super().__init__()
@@ -470,6 +473,7 @@ class DACVAE(torch.nn.Module):
         target_length = torch.ceil(new_freq * wav_idx / orig_freq)
         feature_idx = torch.ceil(target_length / self.hop_length)
         return feature_idx.int()
+
 
 ## Transformer
 

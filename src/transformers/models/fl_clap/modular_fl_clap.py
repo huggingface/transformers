@@ -1,26 +1,33 @@
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Optional
+
 import torch
-from ..perception_encoder_av.modeling_perception_encoder_av import (
-    DACVAE,
-    Transformer,
-    ModernBERTEncoder,
-)
+
+from ...configuration_utils import PretrainedConfig
+from ...modeling_utils import PreTrainedModel
 from ..perception_encoder_av.configuration_perception_encoder_av import (
+    DACVAEConfig,
     ModernBERTConfig,
     TransformerConfig,
-    DACVAEConfig,
 )
-from ...modeling_utils import PreTrainedModel
-from ...configuration_utils import PretrainedConfig
-from torch.nn.utils.rnn import pad_sequence
-from typing import Tuple
+from ..perception_encoder_av.modeling_perception_encoder_av import (
+    DACVAE,
+    ModernBERTEncoder,
+    Transformer,
+)
+
 
 EMPTY_DICT = {}
 
+
 class TransformerConfig(TransformerConfig): ...
+
+
 class DACVAEConfig(DACVAEConfig): ...
+
+
 class ModernBERTConfig(ModernBERTConfig): ...
+
 
 class FLCLAPConfig(PretrainedConfig):
     audio_codec: DACVAEConfig
@@ -47,7 +54,11 @@ class FLCLAPConfig(PretrainedConfig):
 
 
 class FLCLAPDACVAE(DACVAE): ...
+
+
 class FLCLAPTransformer(Transformer): ...
+
+
 class FLCLAPModernBERTEncoder(ModernBERTEncoder): ...
 
 
@@ -57,6 +68,7 @@ class JudgeOutput:
     recall: torch.Tensor
     precision: torch.Tensor
     faithfulness: torch.Tensor
+
 
 class ContrastiveHead(torch.nn.Module):
     def __init__(self, in_dim: int, out_dim: int) -> None:
@@ -73,8 +85,10 @@ class FLCLAPOutput:
     text_embeddings: Optional[torch.Tensor] = None
     audio_embeddings: Optional[torch.Tensor] = None
 
+
 class FLCLAPModel(PreTrainedModel):
     config: FLCLAPConfig
+
     def __init__(self, cfg: FLCLAPConfig):
         super().__init__(cfg)
         self.cfg = cfg
@@ -89,9 +103,7 @@ class FLCLAPModel(PreTrainedModel):
     def sample_rate(self):
         return self.cfg.audio_codec.sample_rate
 
-    def encode_text(
-        self, text: torch.Tensor, attention_mask: Optional[torch.Tensor] = None
-    ):
+    def encode_text(self, text: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         return self.text_head(self.text_encoder(text, attention_mask=attention_mask))
 
     def encode_audio(self, audio: torch.Tensor):
@@ -99,7 +111,12 @@ class FLCLAPModel(PreTrainedModel):
         emb, _ = self.audio_encoder(features.transpose(1, 2))
         return self.audio_head(emb)
 
-    def forward(self, audio: Optional[torch.Tensor] = None, input_ids: Optional[torch.Tensor] = None, attention_mask: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        audio: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
         audio_emb = text_emb = None
         if audio is not None:
             audio_emb = self.encode_audio(audio)
