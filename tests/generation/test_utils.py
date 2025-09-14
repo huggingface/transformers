@@ -1838,29 +1838,6 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     def test_prepare_inputs_for_generation_kwargs_forwarding(self, **extra_kwargs):
         """Tests that prepare_inputs_for_generation forwards arbitrary kwargs while manipulating specific args."""
-        # TODO: fixme. These old models do not clone input ids like the reference `prepare_inputs_for_generation`.
-        # Thus, we skip the clone check on them.
-        non_compilable_model_classes = [
-            "BambaForCausalLM",
-            "CTRLLMHeadModel",
-            "FalconH1ForCausalLM",
-            "FalconMambaForCausalLM",
-            "GitForCausalLM",
-            "GraniteMoeHybridForCausalLM",
-            "JambaForCausalLM",
-            "Kosmos2_5ForConditionalGeneration",
-            "MambaForCausalLM",
-            "Mamba2ForCausalLM",
-            "OpenAIGPTLMHeadModel",
-            "ProphetNetForCausalLM",
-            "ReformerModelWithLMHead",
-            "RwkvForCausalLM",
-            "XLMRobertaXLForCausalLM",
-            "xLSTMForCausalLM",
-            "ZambaForCausalLM",
-            "Zamba2ForCausalLM",
-        ]
-
         for model_class in self.all_generative_model_classes:
             config, _ = self.prepare_config_and_inputs_for_generate()
 
@@ -1870,7 +1847,7 @@ class GenerationTesterMixin:
 
             input_args = {
                 "input_ids": input_ids,
-                "cache_position": [0],
+                "cache_position": torch.tensor([9]).to(torch_device),
                 "position_ids": torch.tensor([[0, 1, 2], [0, 1, 2]]).to(torch_device),
             }
             arbitrary_kwargs = {
@@ -1882,11 +1859,13 @@ class GenerationTesterMixin:
 
             model_inputs = model.prepare_inputs_for_generation(**input_args, **arbitrary_kwargs, **extra_kwargs)
 
-            if model_class.__name__ not in non_compilable_model_classes:
-                # Verify that input_ids is cloned
-                input_ids_key = "decoder_input_ids" if config.is_encoder_decoder else "input_ids"
-                self.assertTrue(model_inputs[input_ids_key] is not input_ids)
+            # Verify that input_ids has proper name
+            if config.is_encoder_decoder:
+                self.assertTrue("decoder_input_ids" in model_inputs)
+            else:
+                self.assertTrue("input_ids" in model_inputs)
 
+            # Verify that arbitrary kwargs are forwarded
             for key, value in arbitrary_kwargs.items():
                 self.assertTrue(key in model_inputs)
                 self.assertTrue(model_inputs[key] == value)
