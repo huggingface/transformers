@@ -2219,6 +2219,57 @@ class GenerationTesterMixin:
 
         self.assertTrue(flag)
 
+    @pytest.mark.generate
+    @require_torch_gpu
+    def test_offload_logits_to_cpu(self):
+        # Test that CPU offloading works correctly and preserves generation outputs
+        for model_class in self.all_generative_model_classes:  # Only one model for speed
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+
+            with torch.no_grad():
+                # Generate with CPU offloading disabled (default)
+                output_gpu = model.generate(
+                    **inputs_dict,
+                    max_new_tokens=5,
+                    output_scores=True,
+                    output_logits=True,
+                    return_dict_in_generate=True,
+                    offload_logits_to_cpu=False,
+                    do_sample=False,
+                )
+
+                # Generate with CPU offloading enabled
+                output_cpu_offload = model.generate(
+                    **inputs_dict,
+                    max_new_tokens=5,
+                    output_scores=True,
+                    output_logits=True,
+                    return_dict_in_generate=True,
+                    offload_logits_to_cpu=True,
+                    do_sample=False,
+                )
+
+            # Check that sequences are identical (functionality preserved)
+            self.assertTrue(torch.equal(output_gpu.sequences, output_cpu_offload.sequences))
+
+            # Check that scores/logits shapes are preserved
+            self.assertEqual(len(output_gpu.scores), len(output_cpu_offload.scores))
+            self.assertEqual(len(output_gpu.logits), len(output_cpu_offload.logits))
+
+            # Verify that offloading worked: scores and logits should be on CPU
+            for i in range(len(output_cpu_offload.scores)):
+                self.assertEqual(output_cpu_offload.scores[i].device.type, "cpu")
+                self.assertEqual(output_cpu_offload.logits[i].device.type, "cpu")
+
+                # Verify that values are equal when moved to the same device
+                self.assertTrue(
+                    torch.allclose(output_gpu.scores[i].cpu(), output_cpu_offload.scores[i], atol=1e-5, rtol=1e-5)
+                )
+                self.assertTrue(
+                    torch.allclose(output_gpu.logits[i].cpu(), output_cpu_offload.logits[i], atol=1e-5, rtol=1e-5)
+                )
+
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
