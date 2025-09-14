@@ -46,8 +46,8 @@ inputs = image_processor(image, return_tensors="pt")
 
 이미지 프로세서들은 [`~BaseImageProcessor.center_crop`], [`~BaseImageProcessor.normalize`], [`~BaseImageProcessor.rescale`] 함수를 제공하는 [`BaseImageProcessor`] 클래스를 상속받습니다. 이미지 프로세서에는 두 가지 종류가 있습니다.
 
-- 1) [`BaseImageProcessor`]는 파이썬 기반 구현체입니다.
-- 2) [`BaseImageProcessorFast`]는 더 빠른 [torchvision-backed](https://pytorch.org/vision/stable/index.html) 버전입니다. [torch.Tensor](https://pytorch.org/docs/stable/tensors.html)입력의 배치 처리 시 최대 33배 더 빠를 수 있습니다. [`BaseImageProcessorFast`]는 현재 모든 비전 모델에서 사용할 수 있는 것은 아니기 때문에 모델의 API 문서를 참조하여 지원 여부를 확인해 주세요.
+- [`BaseImageProcessor`]는 파이썬 기반 구현체입니다.
+- [`BaseImageProcessorFast`]는 더 빠른 [torchvision-backed](https://pytorch.org/vision/stable/index.html) 버전입니다. [torch.Tensor](https://pytorch.org/docs/stable/tensors.html)입력의 배치 처리 시 최대 33배 더 빠를 수 있습니다. [`BaseImageProcessorFast`]는 현재 모든 비전 모델에서 사용할 수 있는 것은 아니기 때문에 모델의 API 문서를 참조하여 지원 여부를 확인해 주세요.
 
 각 이미지 프로세서는 이미지 프로세서를 불러오고 저장하기 위한 [`~ImageProcessingMixin.from_pretrained`]와 [`~ImageProcessingMixin.save_pretrained`] 메소드를 제공하는 [`ImageProcessingMixin`] 클래스를 상속받아 기능을 확장시킵니다.
 
