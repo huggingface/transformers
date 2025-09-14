@@ -33,7 +33,7 @@ An overheated GPU throttles its performance and can even shutdown if it's too ho
 
 ## Multi-GPU connectivity
 
-When your setup uses multiple GPUs, it is important to consider how they're connected. [NVLink](https://www.nvidia.com/en-us/design-visualization/nvlink-bridges/) connections are faster than PCIe bridges, but you should also consider the [parallelism](./perf_train_gpu_many) strategy you're using. For example, in DistributedDataParallel, GPUs communicate less frequently compared to ZeRO-DP. In this case, a slower connection is not as important.
+When your setup uses multiple GPUs, it is important to consider how they're connected. [NVLink](https://www.nvidia.com/en-us/design-visualization/nvlink-bridges/) connections are faster than PCIe bridges, but you should also consider the [parallelism](./perf_train_gpu_many) strategy you're using. For example, in DistributedDataParallel(DDP), GPUs communicate less frequently compared to ZeRO-DP. In this case, a slower connection is not as important.
 
 Run the command below to check how your GPUs are connected.
 
