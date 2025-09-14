@@ -1,3 +1,16 @@
+# Copyright 2025 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Image processor class for VideoLLaMA3."""
 
 import math
@@ -5,24 +18,26 @@ from typing import Optional, Union
 
 import numpy as np
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_utils import (
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BaseImageProcessor
+from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
+from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
     get_image_size,
+    infer_channel_dimension_format,
+    is_scaled_image,
     make_flat_list_of_images,
+    make_list_of_images,
+    to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
-from transformers.utils import TensorType, logging
-from transformers.video_utils import VideoInput
-
-from ...image_processing_utils import BaseImageProcessor
-from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
-from ...image_utils import infer_channel_dimension_format, is_scaled_image, make_list_of_images, to_numpy_array
+from ...utils import TensorType, logging
+from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)

@@ -4,30 +4,38 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_videollama3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2025 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import math
 from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_utils import (
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
+    PILImageResampling,
     SizeDict,
     get_image_size,
 )
-from transformers.processing_utils import Unpack
-from transformers.utils import TensorType
-from transformers.video_utils import group_videos_by_shape, reorder_videos
-
-from ...image_utils import PILImageResampling
-from ...processing_utils import VideosKwargs
-from ...utils import add_start_docstrings
-from ...utils.import_utils import requires
+from ...processing_utils import Unpack, VideosKwargs
+from ...utils import TensorType, add_start_docstrings
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
-from ...video_utils import VideoMetadata
+from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_videollama3 import smart_resize
 
 
@@ -62,7 +70,6 @@ class Videollama3VideoProcessorInitKwargs(VideosKwargs):
             The maximum number of frames that can be sampled.
     """,
 )
-@requires(backends=("torchvision",))
 class Videollama3VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}

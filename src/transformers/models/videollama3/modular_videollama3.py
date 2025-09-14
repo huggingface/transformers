@@ -1,3 +1,16 @@
+# Copyright 2025 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -9,13 +22,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import LayerNorm
 
-from transformers.cache_utils import Cache
-from transformers.configuration_utils import PretrainedConfig
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_processing_utils_fast import (
+from ...cache_utils import Cache
+from ...configuration_utils import PretrainedConfig
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils_fast import (
     DefaultFastImageProcessorKwargs,
 )
-from transformers.image_utils import (
+from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
@@ -23,14 +36,30 @@ from transformers.image_utils import (
     SizeDict,
     get_image_size,
 )
-from transformers.modeling_outputs import BaseModelOutput, ModelOutput
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from transformers.models.auto.modeling_auto import AutoModel
-from transformers.models.qwen2_vl.image_processing_qwen2_vl_fast import (
+from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
+from ...utils.generic import check_model_inputs
+from ...video_utils import (
+    VideoInput,
+    group_videos_by_shape,
+    make_batched_videos,
+    reorder_videos,
+)
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto.modeling_auto import AutoModel
+from ..qwen2_vl.image_processing_qwen2_vl_fast import (
     Qwen2VLFastImageProcessorKwargs,
     Qwen2VLImageProcessorFast,
 )
-from transformers.models.qwen2_vl.modeling_qwen2_vl import (
+from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
     Qwen2VLPreTrainedModel,
@@ -39,39 +68,22 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
-from transformers.models.qwen2_vl.processing_qwen2_vl import (
+from ..qwen2_vl.processing_qwen2_vl import (
     Qwen2VLImagesKwargs,
     Qwen2VLProcessor,
     Qwen2VLProcessorKwargs,
 )
-from transformers.models.qwen2_vl.video_processing_qwen2_vl import (
+from ..qwen2_vl.video_processing_qwen2_vl import (
     Qwen2VLVideoProcessor,
     Qwen2VLVideoProcessorInitKwargs,
 )
-from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
-from transformers.models.siglip.modeling_siglip import (
+from ..siglip.configuration_siglip import SiglipVisionConfig
+from ..siglip.modeling_siglip import (
     SiglipAttention,
     SiglipEncoder,
     SiglipEncoderLayer,
     SiglipMLP,
 )
-from transformers.processing_utils import Unpack
-from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
-from transformers.utils import (
-    TensorType,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
-from transformers.utils.generic import check_model_inputs
-from transformers.video_utils import (
-    VideoInput,
-    group_videos_by_shape,
-    make_batched_videos,
-    reorder_videos,
-)
-
-from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -283,7 +295,39 @@ class Videollama3CausalLMOutputWithPast(ModelOutput):
 
 
 class Videollama3VisionRotaryEmbedding(VisionRotaryEmbedding):
-    pass
+    def forward(self, grid_thw, merge_sizes) -> tuple[torch.Tensor, torch.Tensor]:
+        pos_ids = []
+        for (t, h, w), merge_size in zip(grid_thw, merge_sizes):
+            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
+            hpos_ids = hpos_ids.reshape(
+                h // merge_size,
+                merge_size,
+                w // merge_size,
+                merge_size,
+            )
+            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
+            hpos_ids = hpos_ids.flatten()
+
+            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
+            wpos_ids = wpos_ids.reshape(
+                h // merge_size,
+                merge_size,
+                w // merge_size,
+                merge_size,
+            )
+            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
+            wpos_ids = wpos_ids.flatten()
+            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+
+        pos_ids = torch.cat(pos_ids, dim=0)
+        max_grid_thw = grid_thw[:, 1:].max()
+
+        seq = torch.arange(max_grid_thw, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        rotary_pos_emb_full = torch.outer(seq, self.inv_freq)
+        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+
+        return (emb.cos(), emb.sin())
 
 
 class Videollama3VisionEmbeddings(nn.Module):
@@ -330,8 +374,8 @@ class Videollama3VisionAttention(SiglipAttention):
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(batch, seq_len, embed_dim)`.
+            hidden_states (`torch.Tensor`):
+                Input to the layer of shape `(seq_len, embed_dim)`.
             cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
                 The cumulative sequence lengths of each image or video feature.
             position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
@@ -417,8 +461,8 @@ class Videollama3VisionEncoderLayer(SiglipEncoderLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(batch, seq_len, embed_dim)`.
+            hidden_states (`torch.Tensor`):
+                Input to the layer of shape `(seq_len, embed_dim)`.
             cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
                 The cumulative sequence lengths of each image or video feature.
             position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
@@ -476,13 +520,12 @@ class Videollama3VisionEncoder(SiglipEncoder):
 
 class Videollama3PreTrainedModel(Qwen2VLPreTrainedModel):
     config: Videollama3Config
-    _no_split_modules = ["Qwen2DecoderLayer", "Videollama3VisionEncoderLayer"]
+    _no_split_modules = ["Videollama3VisionEncoderLayer"]
 
 
 class Videollama3VisionModel(Videollama3PreTrainedModel):
     config: Videollama3VisionConfig
     main_input_name = "pixel_values"
-    _no_split_modules = ["Videollama3VisionEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": Videollama3VisionEncoderLayer,
         "attentions": Videollama3VisionAttention,
@@ -501,37 +544,6 @@ class Videollama3VisionModel(Videollama3PreTrainedModel):
 
     def get_input_embeddings(self) -> Videollama3VisionEmbeddings:
         return self.embeddings.patch_embedding
-
-    def rot_pos_emb(self, grid_thw, merge_sizes):
-        pos_ids = []
-        for (t, h, w), merge_size in zip(grid_thw, merge_sizes):
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // merge_size,
-                merge_size,
-                w // merge_size,
-                merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // merge_size,
-                merge_size,
-                w // merge_size,
-                merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_thw = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_thw)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-
-        return rotary_pos_emb
 
     def pixel_unshuffle(
         self,
@@ -571,9 +583,7 @@ class Videollama3VisionModel(Videollama3PreTrainedModel):
         merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
             The spatial downsampling ratio of each image or video feature.
         """
-        rotary_pos_emb = self.rot_pos_emb(grid_thw, merge_sizes)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(grid_thw, merge_sizes)
 
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0,
@@ -616,13 +626,12 @@ class Videollama3Projector(nn.Module):
         return hidden_states
 
 
-class Videollama3Model(Qwen2VLModel, PreTrainedModel):
+class Videollama3Model(Qwen2VLModel):
     _checkpoint_conversion_mapping = {}
-    _no_split_modules = ["Qwen2DecoderLayer", "Videollama3VisionEncoderLayer"]
     _can_compile_fullgraph = False
 
     def __init__(self, config: Videollama3Config):
-        PreTrainedModel.__init__(config)
+        PreTrainedModel.__init__(self, config)
         self.vision_model = AutoModel.from_config(config.vision_config)
         self.projector = Videollama3Projector(config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -649,18 +658,7 @@ class Videollama3Model(Qwen2VLModel, PreTrainedModel):
             video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
                 The spatial downsampling ratio of each video feature.
         """
-        video_embeds = self.vision_model(
-            pixel_values=pixel_values_videos,
-            grid_thw=video_grid_thw,
-            merge_sizes=video_merge_sizes,
-            return_dict=True,
-        ).last_hidden_state
-        video_embeds = self.projector(video_embeds)
-
-        split_sizes = video_grid_thw.prod(dim=1) // (video_merge_sizes**2)
-        video_embeds = torch.split(video_embeds, split_sizes.tolist())
-
-        return video_embeds
+        return self.get_image_features(pixel_values_videos, video_grid_thw, video_merge_sizes)
 
     def get_image_features(
         self,
@@ -692,6 +690,7 @@ class Videollama3Model(Qwen2VLModel, PreTrainedModel):
 
         return image_embeds
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -700,9 +699,6 @@ class Videollama3Model(Qwen2VLModel, PreTrainedModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         image_merge_sizes: Optional[torch.LongTensor] = None,
@@ -725,12 +721,6 @@ class Videollama3Model(Qwen2VLModel, PreTrainedModel):
         video_compression_mask (`torch.BoolTensor` of shape `(num_video_features,)`, *optional*):
             The mask to indicate which video features are kept after token compression.
         """
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -762,14 +752,11 @@ class Videollama3Model(Qwen2VLModel, PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
 
-        output = Videollama3ModelOutputWithPast(
+        return Videollama3ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -777,16 +764,14 @@ class Videollama3Model(Qwen2VLModel, PreTrainedModel):
             image_hidden_states=image_embeds,
             video_hidden_states=video_embeds,
         )
-        return output if return_dict else output.to_tuple()
 
 
-class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration, PreTrainedModel):
+class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
-    _no_split_modules = ["Qwen2DecoderLayer", "Videollama3VisionEncoderLayer"]
     _can_compile_fullgraph = False
 
     def __init__(self, config: Videollama3Config):
-        PreTrainedModel.__init__(config)
+        PreTrainedModel.__init__(self, config)
         self.model = Videollama3Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
@@ -810,8 +795,6 @@ class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration, PreTr
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         image_merge_sizes: Optional[torch.LongTensor] = None,
@@ -839,11 +822,6 @@ class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration, PreTr
             The mask to indicate which video features are kept after token compression.
         """
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -858,8 +836,6 @@ class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration, PreTr
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
             **kwargs,
