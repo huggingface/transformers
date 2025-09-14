@@ -29,7 +29,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
+from transformers.utils.generic import OutputRecorder
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -41,6 +41,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
 )
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
 from .configuration_sam2 import (
     Sam2Config,
@@ -73,7 +74,7 @@ class Sam2VisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     fpn_hidden_states: Optional[torch.FloatTensor] = None
     fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -105,9 +106,9 @@ class Sam2ImageSegmentationOutput(ModelOutput):
         Attentions weights of the mask decoder.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    object_score_logits: torch.FloatTensor = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -792,13 +793,14 @@ class Sam2PromptEncoder(nn.Module):
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
-        boxes = boxes + 0.5  # Shift to center of pixel
-        batch_size, nb_boxes = boxes.shape[:2]
-        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
-        input_shape = (self.input_image_size, self.input_image_size)
-        corner_embedding = self.shared_embedding(coords, input_shape)
+        boxes += 0.5  # Shift to center of pixel
+        coords = boxes.view(*boxes.shape[:2], 2, 2)
+        # add padding point for consistency with the original implementation
+        coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
+        corner_embedding = self.shared_embedding(coords, (self.input_image_size, self.input_image_size))
         corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
         corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
+        corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.expand_as(corner_embedding[:, :, 2, :])
         return corner_embedding
 
     def forward(
@@ -892,7 +894,7 @@ class Sam2Attention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -1040,34 +1042,30 @@ class Sam2TwoWayTransformer(nn.Module):
         return queries, keys
 
 
-class Sam2LayerNorm(nn.Module):
+class Sam2LayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
 
 
 class Sam2MaskDecoder(nn.Module):
@@ -1490,9 +1488,7 @@ class Sam2Model(Sam2PreTrainedModel):
         if input_points is not None and input_boxes is not None:
             if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        input_points.shape[1], input_boxes.shape[1]
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {input_points.shape[1]} and {input_boxes.shape[1]}."
                 )
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()

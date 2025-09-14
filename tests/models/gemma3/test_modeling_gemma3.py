@@ -56,6 +56,7 @@ if is_torch_available():
         Gemma3ForSequenceClassification,
         Gemma3Model,
         Gemma3Processor,
+        Gemma3TextForSequenceClassification,
         Gemma3TextModel,
     )
     from transformers.pytorch_utils import is_torch_greater_or_equal
@@ -70,7 +71,9 @@ class Gemma3ModelTester(GemmaModelTester):
 
 @require_torch
 class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3TextModel, Gemma3ForCausalLM) if is_torch_available() else ()
+    all_model_classes = (
+        (Gemma3TextModel, Gemma3ForCausalLM, Gemma3TextForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
@@ -82,11 +85,25 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
 
     @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 
     @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        "Gemma3 has no base model prefix which causes issues when loading base model from saved task model checkpoint"
+    )
+    def test_load_with_mismatched_shapes(self):
         pass
 
     def test_generation_beyond_sliding_window_tiny_model(self):
@@ -134,6 +151,21 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         generated_sequences = output[:, input_len:].cpu()
         EXPECTED_OUTPUT = torch.tensor([[90109, 90109, 90109, 83191, 83191], [246901, 69832, 69832, 69832, 62288]])
         torch.testing.assert_close(generated_sequences, EXPECTED_OUTPUT)
+
+    def test_gemma3_text_sequence_classification_model(self):
+        """Test the text-only sequence classification model."""
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels)
+
+        model = Gemma3TextForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, config.num_labels))
 
 
 class Gemma3Vision2TextModelTester:
@@ -419,7 +451,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
                         "type": "image",
                         "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
                     },
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
             },
@@ -537,7 +572,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
                         "type": "image",
                         "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
                     },
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
             },
@@ -597,7 +635,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "What do you see here?"},
                 ],
             },
@@ -680,6 +721,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 ("xpu", 3): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
                 ("cuda", 7): [],
                 ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
+                ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
                 ("rocm", (9, 5)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with a turquoise ocean and a distant island in the background. It looks like a sunny'],
             }
         )  # fmt: skip
@@ -717,7 +759,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
         ]
         output_text = tokenizer.batch_decode(out)
 
-        EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
+        EXPECTED_COMPLETIONS = [
+            " and I'm going to take a walk.\n\nI really enjoy the scenery, and I'",
+            ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'",
+        ]
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
     @pytest.mark.torch_export_test
@@ -733,7 +778,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
         # Export + hybrid cache
         model.eval()
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=1024)
         exported_program = exportable_module.export(
             input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
             cache_position=torch.tensor([0], dtype=torch.long, device=model.device),

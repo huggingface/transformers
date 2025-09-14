@@ -21,15 +21,15 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pytest
-import requests
 
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
     require_vision,
 )
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -52,7 +52,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = Kosmos2_5ImageProcessor()
-        tokenizer = AutoTokenizer.from_pretrained("ydshieh/kosmos-2.5")
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/kosmos-2.5")
         processor = Kosmos2_5Processor(image_processor, tokenizer)
         processor.save_pretrained(self.tmpdirname)
 
@@ -67,7 +67,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_procesor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
-        image_processor = Kosmos2_5ImageProcessor.from_pretrained("ydshieh/kosmos-2.5")
+        image_processor = Kosmos2_5ImageProcessor.from_pretrained("microsoft/kosmos-2.5")
         with TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
             reloaded_image_processor = Kosmos2_5ImageProcessor.from_pretrained(tmp_dir)
@@ -120,7 +120,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_can_load_various_tokenizers(self):
-        for checkpoint in ["ydshieh/kosmos-2.5"]:
+        for checkpoint in ["microsoft/kosmos-2.5"]:
             processor = AutoProcessor.from_pretrained(checkpoint)
             tokenizer = AutoTokenizer.from_pretrained(checkpoint)
             self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
@@ -299,8 +299,8 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_full_processor(self):
-        url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
-        processor = AutoProcessor.from_pretrained("ydshieh/kosmos-2.5")
+        url = url_to_local_path("https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png")
+        processor = AutoProcessor.from_pretrained("microsoft/kosmos-2.5")
         texts = ["<md>", "<ocr>"]
         expected_input_ids = [
             [100288],
@@ -308,7 +308,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         expected_attention_mask = [[1], [1]]
 
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_image(url)
         # To match the official (microsoft) Kosmos-2 demo from which the expected values here are grabbed
         image_path = os.path.join(self.tmpdirname, "image.png")
         image.save(image_path)

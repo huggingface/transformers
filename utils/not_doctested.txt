@@ -324,7 +324,6 @@ src/transformers/commands/train.py
 src/transformers/commands/transformers_cli.py
 src/transformers/configuration_utils.py
 src/transformers/convert_graph_to_onnx.py
-src/transformers/convert_pytorch_checkpoint_to_tf2.py
 src/transformers/convert_slow_tokenizer.py
 src/transformers/convert_slow_tokenizers_checkpoints_to_fast.py
 src/transformers/convert_tf_hub_seq_to_seq_bert_to_pytorch.py

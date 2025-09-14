@@ -120,6 +120,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("mask-generation", "MODEL_FOR_MASK_GENERATION_MAPPING_NAMES", "AutoModelForMaskGeneration"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "AutoModelForTextToSpectrogram"),
     ("text-to-audio", "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "AutoModelForTextToWaveform"),
+    ("keypoint-matching", "MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES", "AutoModelForKeypointMatching"),
 ]
 
 
@@ -151,9 +152,9 @@ def get_frameworks_table() -> pd.DataFrame:
     modules.
     """
     # Dictionary model names to config.
-    config_maping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
+    config_mapping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
     model_prefix_to_model_type = {
-        config.replace("Config", ""): model_type for model_type, config in config_maping_names.items()
+        config.replace("Config", ""): model_type for model_type, config in config_mapping_names.items()
     }
 
     # Dictionaries flagging if each model prefix has a backend in PT/TF/Flax.

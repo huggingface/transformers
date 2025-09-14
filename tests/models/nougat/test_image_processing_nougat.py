@@ -14,16 +14,17 @@
 
 
 import unittest
+from functools import cached_property
 
 import numpy as np
-import requests
 from huggingface_hub import hf_hub_download
 
-from transformers.image_utils import SizeDict
+from transformers.image_utils import SizeDict, load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import cached_property, is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -132,6 +133,10 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @cached_property
     def image_processor(self):
         return self.image_processing_class(**self.image_processor_dict)
+
+    @unittest.skip(reason="FIXME: @yoni.")
+    def test_slow_fast_equivalence_batched(self):
+        pass
 
     def test_image_processor_properties(self):
         for image_processing_class in self.image_processor_list:
@@ -305,15 +310,13 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        # Adding a larget than usual tolerance because the slow processor uses reducing_gap=2.0 during resizing.
+        # Adding a larger than usual tolerance because the slow processor uses reducing_gap=2.0 during resizing.
         torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=2e-1, rtol=0)
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-2

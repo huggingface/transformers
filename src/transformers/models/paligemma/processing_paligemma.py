@@ -21,7 +21,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
     ImagesKwargs,
     MultiModalData,
@@ -125,10 +125,6 @@ class PaliGemmaProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
@@ -152,7 +148,7 @@ class PaliGemmaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -161,7 +157,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to GemmaTokenizerFast's [`~GemmaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -275,7 +271,6 @@ class PaliGemmaProcessor(ProcessorMixin):
                     )
                     for prompt, image_list in zip(text, images)
                 ]
-                images = make_flat_list_of_images(images)
             else:
                 expanded_samples = []
                 for sample in text:

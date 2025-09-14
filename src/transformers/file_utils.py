@@ -67,7 +67,6 @@ from .utils import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    cached_property,
     copy_func,
     default_cache_path,
     define_sagemaker_information,

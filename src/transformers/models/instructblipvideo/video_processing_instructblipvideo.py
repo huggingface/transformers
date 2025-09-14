@@ -19,43 +19,25 @@ Video processor class for InstructBLIPVideo
 
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    SizeDict,
-)
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import (
-    TensorType,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
-)
-from ...utils.import_utils import requires
+from ...utils import TensorType, is_torchvision_v2_available
 from ...video_processing_utils import BaseVideoProcessor
-from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+from ...video_utils import group_videos_by_shape, reorder_videos
 
 
-if is_vision_available():
-    from ...image_utils import PILImageResampling
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-if is_torch_available():
-    import torch
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 
 class InstructBlipVideoVideoProcessorInitKwargs(VideosKwargs): ...
 
 
-@requires(backends=("torchvision",))
 class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -76,7 +58,6 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        video_metadata: Union[list[VideoMetadata], list[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -88,24 +69,11 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
-        do_sample_frames: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        fps: Optional[Union[int, float]] = None,
-        num_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        device: Optional["torch.Tensor"] = None,
+        **kwargs,
     ) -> BatchFeature:
-        if do_sample_frames:
-            videos = [
-                self.sample_frames(video, metadata, num_frames, fps) for video, metadata in zip(videos, video_metadata)
-            ]
-
-        # We need to sample frames first before moving to device, if `do_sample_frames=True`. Otherwise
-        # moving the whole video incurs high GPU mem usage for long videos
-        if device is not None:
-            videos = [video.to(device) for video in videos]
-
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}

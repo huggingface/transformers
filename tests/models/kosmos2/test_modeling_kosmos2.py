@@ -464,6 +464,14 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 
@@ -473,7 +481,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # Overwrite because Kosmos-2 need to padd pixel values and pad image-attn-mask
+        # Overwrite because Kosmos-2 need to pad pixel values and pad image-attn-mask
 
         def _prepare_model_kwargs(input_ids, attention_mask, pad_size, signature):
             model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
