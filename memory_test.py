@@ -25,8 +25,8 @@ def test_memory_scenario():
     """Test memory efficiency of CPU offloading with gpt2-large."""
 
     model_name = "gpt2-large"
-    max_new_tokens = 500
-    prompt_text = "Artificial intelligence is"
+    max_new_tokens = 1000
+    prompt_text = "This essay will start with a detailed and verbose introduction to deep learning. To start with,"
 
     print(f"Testing model: {model_name}")
     print(f"Tokens to generate: {max_new_tokens}")
@@ -43,10 +43,6 @@ def test_memory_scenario():
     inputs = tokenizer(prompt_text, return_tensors="pt")
     inputs = {k: v.cuda() for k, v in inputs.items()}
 
-    # Calculate expected logits memory
-    vocab_size = model.config.vocab_size
-    logits_per_token_mb = vocab_size * 2 / 1024 / 1024  # float16 = 2 bytes
-    expected_logits_mb = logits_per_token_mb * max_new_tokens
 
     # Test WITHOUT CPU offloading
     clear_memory()
@@ -117,30 +113,11 @@ def test_memory_scenario():
     sequences_match = torch.equal(gpu_sequences, outputs_cpu.sequences)
 
     print("\nResults:")
-    print("Expected memory savings based on logits size:" f"{expected_logits_mb:.1f} MB")
+    print("Number of tokens generated:", outputs_cpu.sequences.shape[1])
     print(f"Memory saved: {memory_saved:.1f} MB")
     print(f"Memory reduction: {reduction_pct:.1f}%")
     print(f"Time overhead: {time_overhead:+.1f}%")
     print(f"Sequences match: {sequences_match}")
-
-    # Show sample output
-    generated_text = tokenizer.decode(
-        outputs_cpu.sequences[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True
-    )
-    print(f"\nSample generated text: '{generated_text[:100]}...'")
-
-    # Cleanup
-    del model, tokenizer, outputs_cpu
-    clear_memory()
-
-    return {
-        "memory_saved_mb": memory_saved,
-        "reduction_pct": reduction_pct,
-        "time_overhead_pct": time_overhead,
-        "sequences_match": sequences_match,
-        "expected_logits_mb": expected_logits_mb,
-    }
-
 
 if __name__ == "__main__":
     test_memory_scenario()
