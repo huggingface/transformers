@@ -284,7 +284,9 @@ class Mamba2Mixer(nn.Module):
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
-        self.norm = MambaRMSNormGated(self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=self.layer_norm_epsilon)
+        self.norm = MambaRMSNormGated(
+            self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=self.layer_norm_epsilon
+        )
         self.D = nn.Parameter(torch.ones(self.num_heads))
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
