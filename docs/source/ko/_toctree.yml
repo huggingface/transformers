@@ -1037,7 +1037,7 @@
         title: Chinese-CLIP
       - local: model_doc/clip
         title: CLIP
-      - local: in_translation
+      - local: model_doc/clipseg
         title: CLIPSeg
       - local: in_translation
         title: CLVP

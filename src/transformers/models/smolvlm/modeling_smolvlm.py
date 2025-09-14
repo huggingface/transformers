@@ -368,6 +368,7 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
         self,
         pixel_values,
         patch_attention_mask: Optional[torch.BoolTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
