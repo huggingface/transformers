@@ -410,7 +410,7 @@ class JanusVQVAEOutput(ModelOutput):
     """
 
     decoded_pixel_values: Optional[torch.FloatTensor] = None
-    embedding_loss: torch.FloatTensor = None
+    embedding_loss: Optional[torch.FloatTensor] = None
 
 
 class JanusBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -934,8 +934,8 @@ class JanusModel(JanusPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1009,8 +1009,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1103,7 +1103,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     @torch.no_grad
     def generate(
         self,
-        inputs: torch.Tensor = None,
+        inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         **kwargs,
@@ -1368,7 +1368,7 @@ class JanusImageProcessor(BlipImageProcessor):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -1554,7 +1554,7 @@ class JanusImageProcessor(BlipImageProcessor):
 
     def unnormalize(
         self,
-        image: np.array,
+        image: np.ndarray,
         image_mean: Union[float, Iterable[float]],
         image_std: Union[float, Iterable[float]],
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
