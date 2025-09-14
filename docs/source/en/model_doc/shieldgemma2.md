@@ -16,27 +16,29 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2025-04-01 and added to Hugging Face Transformers on 2025-03-20.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
+    </div>
+</div>
+
 # ShieldGemma 2
 
-## Overview
-
-The ShieldGemma 2 model was proposed in a [technical report](https://huggingface.co/papers/2504.01081) by Google. ShieldGemma 2, built on [Gemma 3](https://ai.google.dev/gemma/docs/core/model_card_3), is a 4 billion (4B) parameter model that checks the safety of both synthetic and natural images against key categories to help you build robust datasets and models. With this addition to the Gemma family of models, researchers and developers can now easily minimize the risk of harmful content in their models across key areas of harm as defined below:
+[ShieldGemma 2](https://huggingface.co/papers/2504.01081) is a 4B parameter model built on [Gemma 3](https://ai.google.dev/gemma/docs/core/model_card_3) that checks the safety of both synthetic and natural images against key categories to help you build robust datasets and models. Think of it as a safety guardian for your images! With this addition to the Gemma family of models, researchers and developers can now easily minimize the risk of harmful content in their models across key areas of harm as defined below:
 
 -   No Sexually Explicit content: The image shall not contain content that depicts explicit or graphic sexual acts (e.g., pornography, erotic nudity, depictions of rape or sexual assault).
 -   No Dangerous Content: The image shall not contain content that facilitates or encourages activities that could cause real-world harm (e.g., building firearms and explosive devices, promotion of terrorism, instructions for suicide).
 -   No Violence/Gore content: The image shall not contain content that depicts shocking, sensational, or gratuitous violence (e.g., excessive blood and gore, gratuitous violence against animals, extreme injury or moment of death).
 
-We recommend using ShieldGemma 2 as an input filter to vision language models, or as an output filter of image generation systems. To train a robust image safety model, we curated training datasets of natural and synthetic images and instruction-tuned Gemma 3 to demonstrate strong performance.
+You can use ShieldGemma 2 as an input filter for a vision-language model, or as an output filter for an image generation system to make your AI applications more robust and responsible.
 
-This model was contributed by [Ryan Mullins](https://huggingface.co/RyanMullins).
+> [!TIP]
+> This model was contributed by [Ryan Mullins](https://huggingface.co/RyanMullins).
+> Click on the ShieldGemma 2 models in the right sidebar for more examples of how to apply it to image safety classification tasks.
 
-## Usage Example
+<hfoptions id="usage">
 
-- ShieldGemma 2 provides a Processor that accepts a list of `images` and an optional list of `policies` as input, and constructs a batch of prompts as the product of these two lists using the provided chat template.
-- You can extend ShieldGemma's built-in in policies with the `custom_policies` argument to the Processor. Using the same key as one of the built-in policies will overwrite that policy with your custom definition.
-- ShieldGemma 2 does not support the image cropping capabilities used by Gemma 3.
-
-### Classification against Built-in Policies
+<hfoption id="AutoModel">
 
 ```python
 from PIL import Image
@@ -56,7 +58,52 @@ output = model(**inputs)
 print(output.probabilities)
 ```
 
-### Classification against Custom Policies
+</hfoption>
+
+</hfoptions>
+
+## Quantization
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the Quantization overview for more available quantization backends.
+
+The example below uses bitsandbytes to quantize the model to 4-bits, making it much more memory-efficient.
+
+```python
+!pip install bitsandbytes
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, ShieldGemma2ForImageClassification, BitsAndBytesConfig
+
+model_id = "google/shieldgemma-2-4b-it"
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.bfloat16
+)
+
+model = ShieldGemma2ForImageClassification.from_pretrained(
+    model_id,
+    quantization_config=quantization_config,
+    dtype=torch.bfloat16, 
+    device_map="auto"
+)
+processor = AutoProcessor.from_pretrained(model_id)
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+with torch.no_grad():
+    inputs = processor(images=[image], return_tensors="pt").to(model.device)
+    output = model(**inputs)
+
+print(output.probabilities)
+```
+
+## Notes
+
+- ShieldGemma 2 provides a Processor that accepts a list of `images` and an optional list of `policies` as input, and constructs a batch of prompts as the product of these two lists using the provided chat template.
+- You can extend ShieldGemma's built-in in policies with the `custom_policies` argument to the Processor. Using the same key as one of the built-in policies will overwrite that policy with your custom definition.
 
 ```python
 from PIL import Image
@@ -86,6 +133,7 @@ output = model(**inputs)
 print(output.probabilities)
 ```
 
+- ShieldGemma 2 does not support the image cropping capabilities used by Gemma 3.
 
 ## ShieldGemma2Processor
 
