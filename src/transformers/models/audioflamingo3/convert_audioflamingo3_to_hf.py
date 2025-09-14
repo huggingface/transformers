@@ -27,7 +27,7 @@ from typing import Any, Dict, Iterable, List
 
 import torch
 from safetensors.torch import safe_open
-from transformers import AutoConfig, AudioFlamingo3ForConditionalGeneration
+from transformers import AutoConfig, AudioFlamingo3ForConditionalGeneration, GenerationConfig
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -56,11 +56,11 @@ def _strip_keys(d: Dict[str, Any], keys: Iterable[str]) -> Dict[str, Any]:
     return {k: v for k, v in d.items() if k not in ks}
 
 
-def write_generation_config(src_root: Path, dst_root: Path) -> None:
+def write_generation_config(src_root: Path, dst_root: Path) -> Dict[str, Any]:
     data = _load_json(src_root / "llm" / "generation_config.json")
     data["max_new_tokens"] = 1024
-    _save_json(data, dst_root / "generation_config.json")
     logger.info("generation_config.json")
+    return data
 
 
 _BASE_MAIN_CONFIG: Dict[str, Any] = {
@@ -185,7 +185,7 @@ def _resolve_component_dir(dirpath: Path):
     return ("file", cands[0]) if len(cands) == 1 else None
 
 
-def merge_and_shard_weights(src_root: Path, dst_root: Path) -> None:
+def merge_and_shard_weights(src_root: Path, dst_root: Path, gen_cfg_dict: Dict[str, Any]) -> None:
     state: Dict[str, Any] = {}
     for tag in COMPONENTS:
         comp = _resolve_component_dir(src_root / tag)
@@ -214,6 +214,10 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path) -> None:
     with torch.device("meta"):
         model = AudioFlamingo3ForConditionalGeneration(cfg)
 
+    gen_cfg = GenerationConfig(**gen_cfg_dict)
+    gen_cfg._from_model_config = False
+    model.generation_config = gen_cfg
+
     model.save_pretrained(
         save_directory=str(dst_root),
         state_dict=state
@@ -230,11 +234,11 @@ def main() -> None:
     src_root = Path(args.src_dir).resolve()
     dst_root = Path(args.dst_dir).resolve()
 
-    write_generation_config(src_root, dst_root)
+    gen_cfg_dict = write_generation_config(src_root, dst_root)
     write_main_config(src_root, dst_root)
     write_tokenizer(src_root, dst_root)
     write_preprocessor_config(dst_root)
-    merge_and_shard_weights(src_root, dst_root)
+    merge_and_shard_weights(src_root, dst_root, gen_cfg_dict)
 
 
 if __name__ == "__main__":
