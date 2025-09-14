@@ -1161,7 +1161,7 @@
         title: SigLIP2
       - local: in_translation
         title: SmolLM3
-      - local: smolvlm
+      - local: model_doc/smolvlm
         title: 소형 비전 언어 모델
       - local: in_translation
         title: Speech Encoder Decoder Models
