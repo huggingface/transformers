@@ -141,10 +141,9 @@ def _maybe_offload_to_cpu(tensor: torch.Tensor, offload_to_cpu: bool) -> torch.T
     Returns:
         torch.Tensor: The tensor on CPU if offloading is enabled, otherwise unchanged.
     """
-    if offload_to_cpu and tensor.device != torch.device('cpu'):
+    if offload_to_cpu and tensor.device != torch.device("cpu"):
         return tensor.cpu()
     return tensor
-
 
 
 @dataclass
@@ -3651,9 +3650,15 @@ class GenerationMixin(ContinuousMixin):
             if return_dict_in_generate:
                 newly_added_length = n_matches + 1
                 if output_scores:
-                    scores += tuple(_maybe_offload_to_cpu(new_logits[:, i, :], offload_logits_to_cpu) for i in range(newly_added_length))
+                    scores += tuple(
+                        _maybe_offload_to_cpu(new_logits[:, i, :], offload_logits_to_cpu)
+                        for i in range(newly_added_length)
+                    )
                 if output_logits:
-                    raw_logits += tuple(_maybe_offload_to_cpu(next_token_logits[:, i, :], offload_logits_to_cpu) for i in range(newly_added_length))
+                    raw_logits += tuple(
+                        _maybe_offload_to_cpu(next_token_logits[:, i, :], offload_logits_to_cpu)
+                        for i in range(newly_added_length)
+                    )
 
                 newly_added_length = new_cur_len if is_first_iteration else newly_added_length
                 if output_attentions:

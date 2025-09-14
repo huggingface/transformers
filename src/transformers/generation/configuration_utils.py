@@ -332,7 +332,13 @@ class GenerationConfig(PushToHubMixin):
             need to use this flag.
     """
 
-    extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits", "offload_logits_to_cpu")
+    extra_output_flags = (
+        "output_attentions",
+        "output_hidden_states",
+        "output_scores",
+        "output_logits",
+        "offload_logits_to_cpu",
+    )
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
