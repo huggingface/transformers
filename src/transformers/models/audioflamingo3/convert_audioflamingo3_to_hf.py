@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # coding=utf-8
 # Copyright 2025 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights
 # reserved.
@@ -22,12 +21,13 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import struct
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List
 
-from safetensors.torch import safe_open, save_file
+import torch
+from safetensors.torch import safe_open
+from transformers import AutoConfig, AudioFlamingo3ForConditionalGeneration
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -166,25 +166,6 @@ def write_preprocessor_config(dst_root: Path) -> None:
 
 
 COMPONENTS = ("llm", "sound_tower", "sound_mm_projector")
-MAX_SHARD_BYTES = 4 * 1024 * 1024 * 1024
-
-DTYPE_SIZES: Dict[str, int] = {
-    "F64": 8, "F32": 4, "F16": 2, "BF16": 2,
-    "I64": 8, "I32": 4, "I16": 2, "I8": 1, "U8": 1, "BOOL": 1,
-}
-
-
-def _read_header(path: Path) -> Dict[str, Any]:
-    with path.open("rb") as f:
-        n = struct.unpack("<Q", f.read(8))[0]
-        return json.loads(f.read(n))
-
-
-def _numel(shape: List[int]) -> int:
-    r = 1
-    for s in shape:
-        r *= int(s)
-    return r
 
 
 def _resolve_component_dir(dirpath: Path):
@@ -204,76 +185,39 @@ def _resolve_component_dir(dirpath: Path):
     return ("file", cands[0]) if len(cands) == 1 else None
 
 
-def _gather_entries(src_dir: Path) -> List[Tuple[str, Path, str, int]]:
-    entries: List[Tuple[str, Path, str, int]] = []
+def merge_and_shard_weights(src_root: Path, dst_root: Path) -> None:
+    state: Dict[str, Any] = {}
     for tag in COMPONENTS:
-        comp = _resolve_component_dir(src_dir / tag)
+        comp = _resolve_component_dir(src_root / tag)
         if not comp:
             continue
         if comp[0] == "file":
             fp: Path = comp[1]
-            hdr = _read_header(fp)
-            for k in sorted(hdr.keys()):
-                if k == "__metadata__":
-                    continue
-                meta = hdr[k]
-                sz = DTYPE_SIZES[meta["dtype"]] * _numel(meta["shape"])
-                entries.append((f"{tag}.{k}", fp, k, sz))
+            with safe_open(str(fp), framework="pt", device="cpu") as f:
+                for k in f.keys():
+                    if k == "__metadata__":
+                        continue
+                    state[f"{tag}.{k}"] = f.get_tensor(k)
         else:
             base: Path = comp[1]
             shard_map: Dict[str, List[str]] = comp[2]
             for shard, keys in shard_map.items():
                 sp = base / shard
-                hdr = _read_header(sp)
-                for k in keys:
-                    meta = hdr[k]
-                    sz = DTYPE_SIZES[meta["dtype"]] * _numel(meta["shape"])
-                    entries.append((f"{tag}.{k}", sp, k, sz))
-    if not entries:
+                with safe_open(str(sp), framework="pt", device="cpu") as f:
+                    for k in keys:
+                        state[f"{tag}.{k}"] = f.get_tensor(k)
+
+    if not state:
         raise FileNotFoundError("No tensors found in llm/, sound_tower/, or sound_mm_projector/.")
-    return entries
 
+    cfg = AutoConfig.from_pretrained(dst_root)
+    with torch.device("meta"):
+        model = AudioFlamingo3ForConditionalGeneration(cfg)
 
-def _plan_shards(entries: List[Tuple[str, Path, str, int]]) -> List[List[int]]:
-    shards: List[List[int]] = []
-    cur: List[int] = []
-    acc = 0
-    for i, (_, _, _, sz) in enumerate(entries):
-        if cur and acc + sz > MAX_SHARD_BYTES:
-            shards.append(cur)
-            cur, acc = [], 0
-        cur.append(i)
-        acc += sz
-    if cur:
-        shards.append(cur)
-    return shards
-
-
-def _write_shards(entries: List[Tuple[str, Path, str, int]], shards: List[List[int]], dst_dir: Path) -> None:
-    _ensure_dir(dst_dir)
-    n = len(shards)
-    weight_map: Dict[str, str] = {}
-    for si, idxs in enumerate(shards, 1):
-        shard_name = f"model-{si:05d}-of-{n:05d}.safetensors"
-        shard_path = dst_dir / shard_name
-        by_src: Dict[Path, List[Tuple[str, str]]] = defaultdict(list)
-        for i in idxs:
-            pref_key, file_path, local_key, _ = entries[i]
-            by_src[file_path].append((pref_key, local_key))
-            weight_map[pref_key] = shard_name
-        tensors: Dict[str, Any] = {}
-        for fp, pairs in by_src.items():
-            with safe_open(str(fp), framework="pt", device="cpu") as f:
-                for pk, lk in pairs:
-                    tensors[pk] = f.get_tensor(lk)
-        save_file(tensors, str(shard_path), metadata={"format": "pt"})
-    _save_json({"metadata": {"format": "pt"}, "weight_map": weight_map}, dst_dir / "model.safetensors.index.json")
-
-
-def merge_and_shard_weights(src_root: Path, dst_root: Path) -> None:
-    entries = _gather_entries(src_root)
-    shards = _plan_shards(entries)
-    _write_shards(entries, shards, dst_root)
+    model.save_pretrained(
+        save_directory=str(dst_root),
+        state_dict=state
+    )
     logger.info("model.safetensors index and shards")
 
 
