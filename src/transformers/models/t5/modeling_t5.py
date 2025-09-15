@@ -1898,7 +1898,7 @@ class T5EncoderForSequenceClassification(T5PreTrainedModel):
                 loss = loss_fct(logits.view(batch_size, self.num_labels), labels.view(batch_size, self.num_labels))
 
         if not return_dict:
-            output = (logits,) + outputs
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
