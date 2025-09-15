@@ -156,6 +156,7 @@ else:
             ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen2_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
+            ("qwen3_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("resnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
