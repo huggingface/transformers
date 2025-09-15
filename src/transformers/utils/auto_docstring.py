@@ -66,7 +66,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "kosmos2-5": "Kosmos2_5Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
-    "zagros_next": "ZagrosNextConfig"
+    "zagros-next": "ZagrosNextConfig"
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
