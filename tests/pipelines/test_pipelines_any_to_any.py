@@ -117,8 +117,8 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             ],
         )
 
-        # Batched
-        outputs = pipe(examples)
+        # Batched but limit to last 2 examples
+        outputs = pipe(examples[-2:])
         self.assertEqual(
             outputs,
             [

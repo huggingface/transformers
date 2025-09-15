@@ -23,16 +23,11 @@ from ..processing_utils import ProcessingKwargs, Unpack
 from ..utils import (
     add_end_docstrings,
     is_torch_available,
-    is_vision_available,
     logging,
     requires_backends,
 )
 from ..video_utils import VideoInput
 from .base import Pipeline, build_pipeline_init_args
-
-
-if is_vision_available():
-    pass
 
 
 if is_torch_available():
@@ -360,7 +355,12 @@ class AnyToAnyPipeline(Pipeline):
             text = inputs
             inputs = {}
         else:
+            inputs = inputs.copy()  # avoid in-place changes if users passed dict
             text = inputs.pop("text")
+
+            # Feature extractor do not load audio files and expect a decode array
+            if "audio" in inputs and hasattr(self.processor, "feature_extractor"):
+                inputs["audio"] = self.processor.feature_extractor.fetch_audio(inputs["audio"])
 
         # If batched text inputs, we set padding to True unless specified otherwise
         if isinstance(text, (list, tuple)) and len(text) > 1:
