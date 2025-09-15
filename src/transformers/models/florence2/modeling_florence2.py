@@ -25,7 +25,6 @@ from typing import Any, Callable, Optional, Union
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -726,7 +725,6 @@ class Florence2Model(Florence2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -777,7 +775,6 @@ class Florence2Model(Florence2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             return_dict=True,
-            **kwargs,
         )
 
         return Florence2Seq2SeqModelOutput(
@@ -922,7 +919,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            **kwargs,
+            # **kwargs, ## TODO: add back when Bart attention is refactored and takes kwargs
         )
 
         hidden_states = outputs[0]
