@@ -418,15 +418,16 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 class LongcatFlashIntegrationTest(unittest.TestCase):
-    model_id = "hf-internal-testing/LongCat-ShortCat"
+    short_model_id = "hf-internal-testing/LongCat-ShortCat"
     # This is a cut-down model that matches part of the early logits of the larger one
     # Only a couple experts + layers
     # But if it fails, it means the larger model might have issues as well
+    model_id = "meituan-longcat/LongCat-Flash-Chat"
 
     @slow
     def test_shortcat_generation(self):
         self.model = LongcatFlashForCausalLM.from_pretrained(
-            self.model_id,
+            self.short_model_id,
             device_map="auto",
             dtype=torch.bfloat16,
         )
@@ -452,10 +453,8 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
     @require_large_cpu_ram
     def test_longcat_generation_cpu(self):
         # takes absolutely forever and a lot RAM, but allows to test the output in the CI
-        model = LongcatFlashForCausalLM.from_pretrained(
-            "meituan-longcat/LongCat-Flash-Chat", device_map="cpu", dtype=torch.bfloat16
-        )
-        tokenizer = AutoTokenizer.from_pretrained("meituan-longcat/LongCat-Flash-Chat")
+        model = LongcatFlashForCausalLM.from_pretrained(self.model_id, device_map="cpu", dtype=torch.bfloat16)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
         chat = [{"role": "user", "content": "Paris is..."}]
         inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt")
