@@ -165,6 +165,7 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     pipeline_model_mapping = (
         {
             "image-text-to-text": AyaVisionForConditionalGeneration,
+            "multimodal-generation": AyaVisionForConditionalGeneration,
         }
         if is_torch_available()
         else {}

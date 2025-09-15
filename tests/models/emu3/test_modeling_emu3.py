@@ -320,6 +320,11 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"multimodal-generation": Emu3ForConditionalGeneration, "image-text-to-text": Emu3ForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     pipeline_model_mapping = {}
     test_headmasking = False
     test_pruning = False

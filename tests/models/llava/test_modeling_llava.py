@@ -179,7 +179,11 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         else ()
     )
     pipeline_model_mapping = (
-        {"image-to-text": LlavaForConditionalGeneration, "image-text-to-text": LlavaForConditionalGeneration}
+        {
+            "image-to-text": LlavaForConditionalGeneration,
+            "image-text-to-text": LlavaForConditionalGeneration,
+            "multimodal-generation": LlavaForConditionalGeneration,
+        }
         if is_torch_available()
         else {}
     )

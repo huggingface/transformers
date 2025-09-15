@@ -219,6 +219,9 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
     """
 
     all_model_classes = (GraniteSpeechForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"multimodal-generation": GraniteSpeechForConditionalGeneration} if is_torch_available() else {}
+    )
     test_pruning = False
     test_head_masking = False
     _is_composite = True

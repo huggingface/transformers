@@ -166,6 +166,7 @@ _import_structure = {
         "JsonPipelineDataFormat",
         "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
+        "MultimodalGenerationPipeline",
         "NerPipeline",
         "ObjectDetectionPipeline",
         "PipedPipelineDataFormat",
@@ -836,6 +837,7 @@ if TYPE_CHECKING:
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
     from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
+    from .pipelines import MultimodalGenerationPipeline as MultimodalGenerationPipeline
     from .pipelines import NerPipeline as NerPipeline
     from .pipelines import ObjectDetectionPipeline as ObjectDetectionPipeline
     from .pipelines import PipedPipelineDataFormat as PipedPipelineDataFormat

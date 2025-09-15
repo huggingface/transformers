@@ -320,7 +320,11 @@ class IdeficsModelTester:
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": IdeficsModel, "image-text-to-text": IdeficsForVisionText2Text}
+        {
+            "feature-extraction": IdeficsModel,
+            "image-text-to-text": IdeficsForVisionText2Text,
+            "multimodal-generation": IdeficsForVisionText2Text,
+        }
         if is_torch_available()
         else {}
     )

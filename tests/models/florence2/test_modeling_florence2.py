@@ -227,6 +227,7 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         {
             "image-to-text": Florence2ForConditionalGeneration,
             "image-text-to-text": Florence2ForConditionalGeneration,
+            "multimodal-generation": Florence2ForConditionalGeneration,
         }
         if is_torch_available()
         else {}

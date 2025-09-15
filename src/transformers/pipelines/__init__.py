@@ -46,6 +46,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
+from .any_to_any import MultimodalGenerationPipeline
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -125,6 +126,7 @@ if is_torch_available():
         AutoModelForKeypointMatching,
         AutoModelForMaskedLM,
         AutoModelForMaskGeneration,
+        AutoModelForMultimodalLM,
         AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
         AutoModelForSemanticSegmentation,
@@ -447,6 +449,17 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForKeypointMatching,) if is_torch_available() else (),
         "default": {"model": {"pt": ("magic-leap-community/superglue_outdoor", "f4041f8")}},
         "type": "image",
+    },
+    "multimodal-generation": {
+        "impl": MultimodalGenerationPipeline,
+        "tf": (),
+        "pt": (AutoModelForMultimodalLM,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("google/gemma-3n-E4B-it", "c1221e9"),
+            }
+        },
+        "type": "multimodal",
     },
 }
 

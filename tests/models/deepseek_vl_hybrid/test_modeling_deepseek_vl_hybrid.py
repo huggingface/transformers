@@ -162,6 +162,7 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         {
             "feature-extraction": DeepseekVLHybridModel,
             "image-text-to-text": DeepseekVLHybridForConditionalGeneration,
+            "multimodal-generation": DeepseekVLHybridForConditionalGeneration,
         }
         if is_torch_available()
         else {}

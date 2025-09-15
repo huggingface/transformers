@@ -133,6 +133,7 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         {
             "feature-extraction": DeepseekVLModel,
             "image-text-to-text": DeepseekVLForConditionalGeneration,
+            "multimodal-generation": DeepseekVLForConditionalGeneration,
         }
         if is_torch_available()
         else {}

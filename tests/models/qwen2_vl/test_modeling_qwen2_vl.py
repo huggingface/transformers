@@ -199,7 +199,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
+    pipeline_model_mapping = {
+        "image-text-to-text": Qwen2VLForConditionalGeneration,
+        "multimodal-generation": Qwen2VLForConditionalGeneration,
+    }
     test_pruning = False
     test_head_masking = False
     _is_composite = True
