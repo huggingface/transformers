@@ -352,7 +352,7 @@ class StaticLayer(CacheLayerMixin):
         return self.max_cache_len
 
 
-class SlidingWindowLayer(StaticLayer):
+class StaticSlidingWindowLayer(StaticLayer):
     """
     A static cache layer that stores the key and value states as static tensors of shape
     `[batch_size, num_heads, min(max_cache_len, sliding_window), head_dim]`. It lazily allocates its full backing
@@ -1080,11 +1080,11 @@ class StaticCache(Cache):
         layers = []
         for layer_type in layer_types:
             if layer_type == "sliding_attention":
-                layer = SlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
+                layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
             elif layer_type == "chunked_attention":
                 # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
                 # states they should return - only the mask changes to make them different at the end!
-                layer = SlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size)
+                layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size)
             else:
                 layer = StaticLayer(max_cache_len=max_cache_len)
             layers.append(layer)
@@ -1356,12 +1356,20 @@ class EncoderDecoderCache(Cache):
 
 ### Deprecated classes
 
+class SlidingWindowLayer(StaticSlidingWindowLayer):
+    def __init__(self, max_cache_len: int, sliding_window: int):
+        logger.warning_once(
+            "`SlidingWindowLayer` is deprecated and will be removed in version v4.59 "
+            "Use `StaticSlidingWindowLayer` instead, which is a better name for it."
+        )
+        super().__init__(max_cache_len, sliding_window)
 
-class ChunkedSlidingLayer(SlidingWindowLayer):
+
+class ChunkedSlidingLayer(StaticSlidingWindowLayer):
     def __init__(self, max_cache_len: int, sliding_window: int):
         logger.warning_once(
             "`ChunkedSlidingLayer` is deprecated and will be removed in version v4.59 "
-            "Use `SlidingWindowLayer` instead, which has the exact same functionalities."
+            "Use `StaticSlidingWindowLayer` instead, which has the exact same functionalities."
         )
         super().__init__(max_cache_len, sliding_window)
 
