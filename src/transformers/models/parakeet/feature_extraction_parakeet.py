@@ -90,7 +90,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         self.preemphasis = preemphasis
 
         # TODO: @eustlb, for now we use librosa to compute the mel filters
-        # indeed mel_filter_bank uses np.float64 (while librosa uses np.float32), giving numerial differences
+        # indeed mel_filter_bank uses np.float64 (while librosa uses np.float32), giving numerical differences
         # self.mel_filters = mel_filter_bank(
         #     num_frequency_bins=n_fft // 2 + 1,
         #     num_mel_filters=feature_size,
@@ -144,7 +144,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = "max_length",
+        padding: Optional[str] = "longest",
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
         do_normalize: Optional[bool] = None,
