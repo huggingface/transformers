@@ -1458,7 +1458,7 @@ def create_tiny_models(
             all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
         with multiprocessing.Pool() as pool:
             results = pool.starmap(build, all_build_args)
-            results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
+            results = {build_args[0].__name__: result for build_args, result in zip(all_build_args, results)}
 
     if upload:
         if organization is None:
