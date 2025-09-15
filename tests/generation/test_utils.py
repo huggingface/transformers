@@ -1804,8 +1804,8 @@ class GenerationTesterMixin:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
     @pytest.mark.generate
-    def test_prepare_inputs_for_generation_kwargs_forwarding(self, **extra_kwargs):
-        """Tests that prepare_inputs_for_generation forwards arbitrary kwargs while manipulating specific args."""
+    def test_prepare_inputs_for_generation_kwargs_forwards(self, **extra_kwargs):
+        """Tests that prepare_inputs_for_generation forwards arbitrary kwargs."""
         for model_class in self.all_generative_model_classes:
             config, _ = self.prepare_config_and_inputs_for_generate()
 
