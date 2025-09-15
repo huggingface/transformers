@@ -106,7 +106,7 @@ model_id = "Manel/vocos-encodec-24khz"
 model = VocosModel.from_pretrained(model_id)
 processor = VocosProcessor.from_pretrained(model_id)
 
-# Generate random codes for 6 kbps (8 codeboooks, 200 frames)
+# Generate random codes for 6 kbps (8 codebooks, 200 frames)
 audio_codes = torch.randint(low=0, high=1024, size=(8, 200))  
 inputs = processor(codes=audio_codes, bandwidth=6.0)
 # -- `inputs.features` shape (batch, channels, frame): [1, 128, 200]
@@ -114,6 +114,69 @@ audio = model(**inputs)
 # -- `audio` shape (batch, time): [1, 64000]
 ```
 
+
+### Reconstructing audio from Bark tokens
+
+Bark is a text-to-speech model that encodes input text into discrete EnCodec RVQ codes, then uses EnCodec to convert those codes into an audio waveform. The Vocos vocoder is often integrated with Bark instead of relying only on the EnCodec's decoder for better audio quality.
+
+Below is an example using the Transformers [`BarkModel`](https://huggingface.co/docs/transformers/model_doc/bark) to generate quantized codes from text, then decoding them with `VocosProcessor` and `VocosModel` :
+
+```python 
+import torch
+from IPython.display import Audio
+from transformers import VocosModel, VocosProcessor, BarkProcessor, BarkModel
+from transformers.models.bark.generation_configuration_bark import BarkSemanticGenerationConfig, BarkCoarseGenerationConfig, BarkFineGenerationConfig
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# load the Bark model and processor
+bark_id = "suno/bark-small"
+bark_processor = BarkProcessor.from_pretrained(bark_id)
+bark = BarkModel.from_pretrained(bark_id).to(device)
+
+text_prompt = "So, you've heard about neural vocoding? [laughs] We've been messing around with this new model called Vocos."
+bark_inputs = bark_processor(text_prompt, return_tensors="pt").to(device)
+
+# building generation configs for each stage
+semantic_generation_config = BarkSemanticGenerationConfig(**bark.generation_config.semantic_config)
+coarse_generation_config = BarkCoarseGenerationConfig(**bark.generation_config.coarse_acoustics_config)
+fine_generation_config = BarkFineGenerationConfig(**bark.generation_config.fine_acoustics_config)
+
+# generating the RVQ codes
+semantic_tokens = bark.semantic.generate(
+    input_ids=bark_inputs.input_ids,
+    attention_mask=bark_inputs.attention_mask,
+    semantic_generation_config=semantic_generation_config)
+
+coarse_tokens = bark.coarse_acoustics.generate(
+    semantic_tokens,
+    semantic_generation_config=semantic_generation_config,
+    coarse_generation_config=coarse_generation_config,
+    codebook_size=bark.generation_config.codebook_size)
+
+fine_tokens = bark.fine_acoustics.generate(
+    coarse_tokens,
+    semantic_generation_config=semantic_generation_config,
+    coarse_generation_config=coarse_generation_config,
+    fine_generation_config=fine_generation_config,
+    codebook_size=bark.generation_config.codebook_size)
+
+codes = fine_tokens.squeeze(0)
+# -- `codes` shape (8 codebooks, 939 frames): [8, 939] 
+
+# Reconstruct audio with Vocos from codes
+vocos_id = "Manel/vocos-encodec-24khz"
+vocos_processor = VocosProcessor.from_pretrained(vocos_id)
+vocos_model = VocosModel.from_pretrained(vocos_id).to(device)
+
+inputs = vocos_processor(codes=codes, bandwidth=6.0)   
+# -- `inputs.features` shape (batch, channels, frame): [1, 128, 939]
+audio = vocos_model(**inputs)
+# -- `audio` shape (batch, time): [1, 300480]
+
+# listen to the synthesized speech audio
+Audio(audio.detach().numpy(), rate=vocos_processor.feature_extractor.sampling_rate)
+```
 
 ## VocosConfig
 
