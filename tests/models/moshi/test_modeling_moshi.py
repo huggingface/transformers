@@ -870,9 +870,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @pytest.mark.generate
     @unittest.skip(reason="Moshi requires setting `model.generated_audio_codes` in generate() before preparing inputs")
-    def test_prepare_inputs_for_generation_kwargs_forwarding(self):
+    def test_prepare_inputs_for_generation_kwargs_forwards(self):
         # If in the future `model.generated_audio_codes` is not required, this test can be re-enabled
-        super().test_prepare_inputs_for_generation_kwargs_forwarding(
+        super().test_prepare_inputs_for_generation_kwargs_forwards(
             last_hidden_state=torch.randn(2, 3, 32), kwargs_depth_decoder={}
         )
 
