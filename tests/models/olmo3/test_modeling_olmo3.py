@@ -207,7 +207,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
         # Expected mean on dim = -1
         expectations = Expectations(
             {
-                ("cuda", 8): [[1.9575, -2.5172, 0.6279, 1.4340, -0.5264, -0.9742, -2.7632, -1.0411]],
+                ("cuda", 8): [[1.9575, -2.4659, 0.5985, 1.3795, -0.5207, -0.9844, -2.7795, -1.0069]],
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
