@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from ...cache_utils import EncoderDecoderCache
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_attention_mask_for_sdpa,
@@ -251,7 +251,7 @@ class InformerProbSparseAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
