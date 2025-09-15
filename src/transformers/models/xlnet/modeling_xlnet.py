@@ -1472,7 +1472,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         )
         target_mapping[:, 0, -1] = 1.0
 
-        inputs = {
+        model_inputs = {
             "input_ids": input_ids,
             "perm_mask": perm_mask,
             "target_mapping": target_mapping,
@@ -1481,9 +1481,18 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
 
         # if past is defined in model kwargs then use it for faster decoding
         if past_key_values:
-            inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past_key_values)
+            model_inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past_key_values)
 
-        return inputs
+        # Attention mask is computed on the fly on XLNetModel.forward()
+        kwargs.pop("attention_mask", None)
+        # TODO: Ignoring use_cache should not happen, fixme.
+        kwargs.pop("use_cache", None)
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
+        return model_inputs
 
     @auto_docstring
     def forward(
