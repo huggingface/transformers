@@ -22,7 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -271,7 +271,7 @@ class CTRLModel(CTRLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -456,7 +456,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -570,7 +570,17 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
-        return {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
+        model_inputs = {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
+
+        # token_type_ids are computed on CTRLModel.forward()
+        kwargs.pop("token_type_ids", None)
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                print(f"Warning: {key} is not a recognized input.")
+                model_inputs[key] = value
+
+        return model_inputs
 
 
 @auto_docstring(
@@ -598,7 +608,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,

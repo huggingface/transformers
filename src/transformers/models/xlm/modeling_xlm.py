@@ -994,7 +994,18 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             langs = torch.full_like(input_ids, lang_id)
         else:
             langs = None
-        return {"input_ids": input_ids, "langs": langs}
+        model_inputs = {"input_ids": input_ids, "langs": langs}
+
+        # They are calculated on the fly on XLMModel.forward()
+        kwargs.pop("token_type_ids", None)
+        kwargs.pop("attention_mask", None)
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
+        return model_inputs
 
     @auto_docstring
     def forward(
