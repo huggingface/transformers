@@ -5000,6 +5000,17 @@
         ],
         "sha": "c40765c382515ae627652d60e9077b6478448d48"
     },
+    "Qwen2_5OmniForConditionalGeneration": {
+        "tokenizer_classes": [
+            "Qwen2Tokenizer",
+            "Qwen2TokenizerFast"
+        ],
+        "processor_classes": ["Qwen2_5OmniProcessor"],
+        "model_classes": [
+            "Qwen2_5OmniForConditionalGeneration"
+        ],
+        "sha": "9bc7a812cc447b430acb994f8d42e8e64c7b61f6"
+    },
     "ReformerForMaskedLM": {
         "tokenizer_classes": [
             "ReformerTokenizer",

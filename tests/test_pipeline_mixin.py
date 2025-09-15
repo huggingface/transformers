@@ -61,6 +61,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import direct_transformers_import, logging
 
+from .pipelines.test_pipelines_any_to_any import AnyToAnyPipelineTests
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
 from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
@@ -74,7 +75,6 @@ from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipeline
 from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
 from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
 from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
-from .pipelines.test_pipelines_multimodal_generation import MultimodalGenerationPipelineTests
 from .pipelines.test_pipelines_object_detection import ObjectDetectionPipelineTests
 from .pipelines.test_pipelines_question_answering import QAPipelineTests
 from .pipelines.test_pipelines_summarization import SummarizationPipelineTests
@@ -107,7 +107,7 @@ pipeline_test_mapping = {
     "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
     "mask-generation": {"test": MaskGenerationPipelineTests},
-    "multimodal-generation": {"test": MultimodalGenerationPipelineTests},
+    "multimodal-generation": {"test": AnyToAnyPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
     "question-answering": {"test": QAPipelineTests},
     "summarization": {"test": SummarizationPipelineTests},
