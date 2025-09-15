@@ -148,7 +148,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         prompt_depth: Optional[ImageInput] = None,
         **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         prompt_depth (`ImageInput`, *optional*):
             Prompt depth to preprocess.
         """
@@ -329,12 +329,8 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         # Only stack tensors if they all have the same shape and return_tensors is specified
-        if return_tensors == "pt" and processed_images:
-            # Check if all images have the same shape
-            first_shape = processed_images[0].shape
-            if all(img.shape == first_shape for img in processed_images):
-                processed_images = torch.stack(processed_images, dim=0)
-            # If shapes differ, keep as list and let BatchFeature handle the conversion/error
+        if return_tensors == "pt":
+            processed_images = torch.stack(processed_images, dim=0)
 
         return processed_images
 
