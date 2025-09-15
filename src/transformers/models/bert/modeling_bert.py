@@ -203,7 +203,7 @@ def eager_attention_forward(
     dropout: float = 0.0,
     head_mask: Optional[torch.Tensor] = None,
     use_cache: Optional[bool] = None,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
