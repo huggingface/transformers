@@ -214,12 +214,7 @@ class Qwen3MoeMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x, num_tokens_per_expert=None):
-        import os
-
-        if os.environ.get("USE_NEW_MOE", "false") != "false":
-            return self.new_forward(x, num_tokens_per_expert)
-
+    def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -324,13 +319,12 @@ class Qwen3MoeExperts(nn.Module):
 class Qwen3MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.num_experts = config.num_experts
         self.experts = Qwen3MoeExperts(config)
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.top_k = config.num_experts_per_tok
-        self.act_fn = ACT2FN[config.hidden_act]
-
         self.norm_topk_prob = config.norm_topk_prob
-        self.num_experts = config.num_experts
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         B, S, H = hidden_states.shape
@@ -341,7 +335,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
 
-        if self.norm_topk_prob:
+        if self.norm_topk_prob: # only diff with mixtral sparse moe block!
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
 
         tokens_per_expert = torch.histc(
@@ -374,6 +368,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
 
         return hidden_states
 
+
 @use_kernel_forward_from_hub("RMSNorm")
 class Qwen3MoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -401,8 +396,6 @@ class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Qwen3MoeAttention(config, layer_idx)
-        self.num_experts = config.num_experts
-
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
         ):
