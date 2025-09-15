@@ -89,3 +89,4 @@ messages = [
 output = pipe(text=messages, fps=2, use_audio_in_video=True, max_new_tokens=20, generation_mmode="audio")
 sf.write("generated_audio.wav", out[0]["generated_audio"])
 ```
+
