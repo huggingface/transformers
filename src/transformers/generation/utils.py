@@ -2719,7 +2719,6 @@ class GenerationMixin(ContinuousMixin):
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
         do_sample = generation_config.do_sample
 
-        # init output container
         generate_output = self._init_generate_output(generation_config, model_kwargs)
 
         # keep track of which sequences are already finished
@@ -3101,7 +3100,6 @@ class GenerationMixin(ContinuousMixin):
         num_beams = generation_config.num_beams
         num_return_sequences = generation_config.num_return_sequences
 
-        # init output container
         generate_output = self._init_generate_output(generation_config, model_kwargs)
 
         batch_size_unflattened, cur_len = input_ids.shape[:2]
@@ -3405,7 +3403,6 @@ class GenerationMixin(ContinuousMixin):
         # init values
         do_sample = generation_config.do_sample
 
-        # init output container
         generate_output = self._init_generate_output(generation_config, model_kwargs)
 
         # keep track of which sequences are already finished
