@@ -45,7 +45,7 @@ from unittest.mock import patch
 
 import httpx
 import urllib3
-from huggingface_hub import delete_repo, create_repo
+from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
 from transformers import Trainer
