@@ -25,6 +25,7 @@ from typing import Any, TypeVar, Union
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
+from ..zagros_next.configuration_zagros_next import ZagrosNextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -438,6 +439,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("zagros_next", "ZagrosNextConfig"),
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
         ("zoedepth", "ZoeDepthConfig"),
@@ -885,6 +887,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("zagros_next", "ZagrosNext"),
         ("zamba", "Zamba"),
         ("zamba2", "Zamba2"),
         ("zoedepth", "ZoeDepth"),
