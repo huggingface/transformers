@@ -33,7 +33,8 @@ from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_prophetnet import ProphetNetConfig
 
@@ -1058,8 +1059,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Example:
@@ -1075,11 +1075,8 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
+        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
 
         if input_ids is None and inputs_embeds is None:
             raise ValueError("Either input_ids or inputs_embeds has to be passed.")
@@ -1178,6 +1175,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     def set_input_embeddings(self, value):
         self.word_embeddings = value
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1190,10 +1188,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, ProphetNetDecoderModelOutput]:
         r"""
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
@@ -1215,12 +1211,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
+        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
+        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is None and inputs_embeds is None:
             raise ValueError("Either `decoder_input_ids` or `decoder_inputs_embeds` has to be passed.")
@@ -1365,21 +1358,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         last_hidden_state = hidden_states[:, :sequence_length]
         last_hidden_state_ngram = hidden_states[:, sequence_length:] if self.config.ngram > 0 else None
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    last_hidden_state,
-                    last_hidden_state_ngram,
-                    past_key_values,
-                    all_main_stream_hidden_states,
-                    all_ngram_stream_hidden_states,
-                    all_main_stream_attns,
-                    all_ngram_stream_attns,
-                    all_cross_attns,
-                ]
-                if v is not None
-            )
         return ProphetNetDecoderModelOutput(
             last_hidden_state=last_hidden_state,
             last_hidden_state_ngram=last_hidden_state_ngram,
@@ -1510,6 +1488,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1525,10 +1504,8 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, ProphetNetSeq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1569,11 +1546,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         >>> last_hidden_states_ngram = outputs.last_hidden_state_ngram  # predict hidden states
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1581,8 +1553,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
                 attention_mask=attention_mask,
                 head_mask=head_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
+                **kwargs,
             )
 
         # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
@@ -1595,15 +1566,10 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
-            return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
 
         return ProphetNetSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1646,6 +1612,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1662,10 +1629,8 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, ProphetNetSeq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1709,7 +1674,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         >>> logits_next_token = outputs.logits  # logits to predict next token as usual
         >>> logits_ngram_next_tokens = outputs.logits_ngram  # logits to predict 2nd, 3rd, ... next tokens
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
@@ -1728,10 +1692,8 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
         batch_size, sequence_length = (
             decoder_input_ids.shape if decoder_input_ids is not None else decoder_inputs_embeds.shape[:2]
@@ -1751,24 +1713,20 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         if labels is not None:
             loss = self._compute_loss(predict_logits, labels)
 
-        if not return_dict:
-            all_logits = tuple(v for v in [logits, logits_ngram] if v is not None)
-            return (loss,) + all_logits + outputs[2:] if loss is not None else all_logits + outputs[2:]
-        else:
-            return ProphetNetSeq2SeqLMOutput(
-                loss=loss,
-                logits=logits,
-                logits_ngram=logits_ngram,
-                past_key_values=outputs.past_key_values,
-                decoder_hidden_states=outputs.decoder_hidden_states,
-                decoder_ngram_hidden_states=outputs.decoder_ngram_hidden_states,
-                decoder_attentions=outputs.decoder_attentions,
-                decoder_ngram_attentions=outputs.decoder_ngram_attentions,
-                cross_attentions=outputs.cross_attentions,
-                encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-                encoder_hidden_states=outputs.encoder_hidden_states,
-                encoder_attentions=outputs.encoder_attentions,
-            )
+        return ProphetNetSeq2SeqLMOutput(
+            loss=loss,
+            logits=logits,
+            logits_ngram=logits_ngram,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_ngram_hidden_states=outputs.decoder_ngram_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            decoder_ngram_attentions=outputs.decoder_ngram_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
 
     def _compute_loss(self, logits, labels, ignore_index=-100):
         expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(ignore_index)
@@ -1852,6 +1810,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.prophetnet.decoder
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1865,9 +1824,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, ProphetNetDecoderLMOutput]:
         r"""
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
@@ -1917,7 +1874,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
 
         >>> loss = outputs.loss
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
         outputs = self.prophetnet.decoder(
@@ -1930,9 +1886,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         batch_size, sequence_length = input_ids.shape if input_ids is not None else inputs_embeds.shape[:2]
@@ -1947,21 +1901,17 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self._compute_loss(predict_logits, labels)
 
-        if not return_dict:
-            all_logits = tuple(v for v in [logits, logits_ngram] if v is not None)
-            return (loss,) + all_logits + outputs[2:] if loss is not None else all_logits + outputs[2:]
-        else:
-            return ProphetNetDecoderLMOutput(
-                loss=loss,
-                logits=logits,
-                logits_ngram=logits_ngram,
-                past_key_values=outputs.past_key_values,
-                hidden_states=outputs.hidden_states,
-                hidden_states_ngram=outputs.hidden_states_ngram,
-                attentions=outputs.attentions,
-                ngram_attentions=outputs.ngram_attentions,
-                cross_attentions=outputs.cross_attentions,
-            )
+        return ProphetNetDecoderLMOutput(
+            loss=loss,
+            logits=logits,
+            logits_ngram=logits_ngram,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            hidden_states_ngram=outputs.hidden_states_ngram,
+            attentions=outputs.attentions,
+            ngram_attentions=outputs.ngram_attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
 
     def _compute_loss(self, logits, labels, ignore_index=-100):
         expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(ignore_index)
