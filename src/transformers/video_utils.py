@@ -61,12 +61,12 @@ Path = NewType("Path", str)
 
 VideoInput = Union[
     list["PIL.Image.Image"],
-    "np.ndarray",
+    np.ndarray,
     "torch.Tensor",
-    list["np.ndarray"],
+    list[np.ndarray],
     list["torch.Tensor"],
     list[list["PIL.Image.Image"]],
-    list[list["np.ndarrray"]],
+    list[list[np.ndarray]],
     list[list["torch.Tensor"]],
     URL,
     list[URL],
@@ -80,12 +80,12 @@ VideoInput = Union[
 @dataclass
 class VideoMetadata(Mapping):
     total_num_frames: int
-    fps: float = None
-    width: int = None
-    height: int = None
-    duration: float = None
-    video_backend: str = None
-    frames_indices: list[int] = None
+    fps: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    duration: Optional[float] = None
+    video_backend: Optional[str] = None
+    frames_indices: Optional[list[int]] = None
 
     def __iter__(self):
         return (f.name for f in fields(self))
@@ -152,7 +152,7 @@ def is_scaled_video(video: np.ndarray) -> bool:
     return np.min(video) >= 0 and np.max(video) <= 1
 
 
-def convert_pil_frames_to_video(videos: list[VideoInput]) -> list[Union["np.ndarray", "torch.Tensor"]]:
+def convert_pil_frames_to_video(videos: list[VideoInput]) -> list[Union[np.ndarray, "torch.Tensor"]]:
     """
     Given a batch of videos, converts each video to a 4D array. If video is already in array type,
     it is simply returned. We assume that all inputs in the list are in the same format, based on the type of the first element.
@@ -173,7 +173,7 @@ def convert_pil_frames_to_video(videos: list[VideoInput]) -> list[Union["np.ndar
     return video_converted
 
 
-def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "URL", "Path"]]:
+def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL", "Path"]]:
     """
     Ensure that the input is a list of videos. If the input is a single video, it is converted to a list of length 1.
     If the input is a batch of videos, it is converted to a list of 4D video arrays. Videos passed as list `PIL.Image`
@@ -217,7 +217,7 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "URL
 
 def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadata, dict]):
     if video_metadata is None:
-        # Create default metadata and fill attrbiutes we can infer from given video
+        # Create default metadata and fill attributes we can infer from given video
         video_metadata = [
             {
                 "total_num_frames": len(video),
@@ -245,7 +245,7 @@ def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadat
     return video_metadata
 
 
-def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
+def get_video_size(video: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the video.
 
@@ -713,10 +713,10 @@ def load_video(
 
 
 def convert_to_rgb(
-    video: np.array,
+    video: np.ndarray,
     data_format: Optional[ChannelDimension] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> np.array:
+) -> np.ndarray:
     """
     Convert video to RGB by blending the transparency layer if it's in RGBA format, otherwise simply returns it.
 

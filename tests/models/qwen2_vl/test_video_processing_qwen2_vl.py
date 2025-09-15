@@ -156,7 +156,7 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(video_processing, "image_std"))
         self.assertTrue(hasattr(video_processing, "do_convert_rgb"))
 
-    # OVERRIDEN BECAUSE QWEN2_VL HAS SPECIAL OUTPUT SHAPES
+    # OVERRIDDEN BECAUSE QWEN2_VL HAS SPECIAL OUTPUT SHAPES
     def test_video_processor_from_dict_with_kwargs(self):
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
