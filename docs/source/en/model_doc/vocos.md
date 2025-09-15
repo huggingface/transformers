@@ -67,6 +67,20 @@ audio = model(**inputs)
 # -- `audio` shape (batch, time): [1, 140544]
 ```
 
+To save audio to file:
+```python
+from scipy.io.wavfile import write as write_wav
+
+write_wav("vocos.wav", processor.feature_extractor.sampling_rate, audio[0].detach().cpu().numpy())
+```
+
+Or to listen (from an IPython notebook):
+```python
+from IPython.display import Audio
+
+Audio(audio.detach().numpy(), rate=processor.feature_extractor.sampling_rate)
+```
+
 ### Neural audio codec variant (with EnCodec)
 
 Instead of reconstructing audio from mel spectrograms, recent research has started to utilize learned neural audio codec features. Vocos supports [EnCodec](./encodec)-based reconstruction for high-quality audio generation.
@@ -114,16 +128,14 @@ audio = model(**inputs)
 # -- `audio` shape (batch, time): [1, 64000]
 ```
 
-
 ### Reconstructing audio from Bark tokens
 
 Bark is a text-to-speech model that encodes input text into discrete EnCodec RVQ codes, then uses EnCodec to convert those codes into an audio waveform. The Vocos vocoder is often integrated with Bark instead of relying only on the EnCodec's decoder for better audio quality.
 
-Below is an example using the Transformers [`BarkModel`](https://huggingface.co/docs/transformers/model_doc/bark) to generate quantized codes from text, then decoding them with `VocosProcessor` and `VocosModel` :
+Below is an example using the Transformers implementation of  [Bark](./bark) to generate quantized codes from text, then decoding them with `VocosProcessor` and `VocosModel` :
 
 ```python 
 import torch
-from IPython.display import Audio
 from transformers import VocosModel, VocosProcessor, BarkProcessor, BarkModel
 from transformers.models.bark.generation_configuration_bark import BarkSemanticGenerationConfig, BarkCoarseGenerationConfig, BarkFineGenerationConfig
 
@@ -147,13 +159,11 @@ semantic_tokens = bark.semantic.generate(
     input_ids=bark_inputs.input_ids,
     attention_mask=bark_inputs.attention_mask,
     semantic_generation_config=semantic_generation_config)
-
 coarse_tokens = bark.coarse_acoustics.generate(
     semantic_tokens,
     semantic_generation_config=semantic_generation_config,
     coarse_generation_config=coarse_generation_config,
     codebook_size=bark.generation_config.codebook_size)
-
 fine_tokens = bark.fine_acoustics.generate(
     coarse_tokens,
     semantic_generation_config=semantic_generation_config,
@@ -162,20 +172,17 @@ fine_tokens = bark.fine_acoustics.generate(
     codebook_size=bark.generation_config.codebook_size)
 
 codes = fine_tokens.squeeze(0)
-# -- `codes` shape (8 codebooks, 939 frames): [8, 939] 
+# -- `codes` shape (8 codebooks, * frames)
 
 # Reconstruct audio with Vocos from codes
 vocos_id = "Manel/vocos-encodec-24khz"
-vocos_processor = VocosProcessor.from_pretrained(vocos_id)
+processor = VocosProcessor.from_pretrained(vocos_id)
 vocos_model = VocosModel.from_pretrained(vocos_id).to(device)
 
-inputs = vocos_processor(codes=codes, bandwidth=6.0)   
-# -- `inputs.features` shape (batch, channels, frame): [1, 128, 939]
+inputs = processor(codes=codes.to("cpu"), bandwidth=6.0)   
+# -- `inputs.features` shape (batch, channels, frame): [1, 128, *]
 audio = vocos_model(**inputs)
-# -- `audio` shape (batch, time): [1, 300480]
-
-# listen to the synthesized speech audio
-Audio(audio.detach().numpy(), rate=vocos_processor.feature_extractor.sampling_rate)
+# -- `audio` shape (batch, time): [1, *]
 ```
 
 ## VocosConfig
