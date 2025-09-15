@@ -40,19 +40,6 @@ from .configuration_timesfm_2p5 import Timesfm2P5Config
 logger = logging.get_logger(__name__)
 
 
-class PerDimScale(nn.Module):
-    """Per-dimension scaling matching official TimesFM 2.5."""
-
-    def __init__(self, num_dims: int):
-        super().__init__()
-        self.num_dims = num_dims
-        self.per_dim_scale = nn.Parameter(torch.zeros(num_dims))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        scale_factor = 1.442695041 / math.sqrt(self.num_dims) * F.softplus(self.per_dim_scale)
-        return x * scale_factor
-
-
 @dataclass
 @auto_docstring
 class Timesfm2P5Output(BaseModelOutput):
@@ -143,7 +130,8 @@ class Timesfm2P5RMSNorm(nn.Module):
         inputs = inputs.to(torch.float32)
         var = torch.mean(torch.square(inputs), dim=-1, keepdim=True)
         normed_inputs = inputs * torch.rsqrt(var + self.epsilon)
-        normed_inputs = normed_inputs * self.scale
+        # Ensure scale is in float32 for the multiplication, then convert to target dtype
+        normed_inputs = normed_inputs * self.scale.to(torch.float32)
         return normed_inputs.to(input_dtype)
 
     def extra_repr(self):
@@ -252,9 +240,6 @@ class Timesfm2P5Attention(nn.Module):
         self.query_ln = Timesfm2P5RMSNorm(config.head_dim, eps=config.rms_norm_eps)
         self.key_ln = Timesfm2P5RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
-        # Add per-dimension scaling
-        self.per_dim_scale = PerDimScale(num_dims=config.head_dim)
-
         # Rotary positional embeddings
         if config.use_rotary_position_embeddings:
             self.rotary_emb = Timesfm2P5RotaryPositionalEmbedding(
@@ -291,8 +276,16 @@ class Timesfm2P5Attention(nn.Module):
         query_states = self.query_ln(query_states)
         key_states = self.key_ln(key_states)
 
-        # Apply per-dimension scaling to query
-        query_states = self.per_dim_scale(query_states)
+        # Apply per-dimension scaling to query using parent's method
+        # First transpose to match expected shape for _scale_query: (batch, heads, seq, head_dim)
+        query_states = query_states.transpose(1, 2)
+        query_states = self._scale_query(query_states)
+        query_states = query_states.transpose(1, 2)
+
+        # Ensure all states have the same dtype for attention computation
+        target_dtype = value_states.dtype
+        query_states = query_states.to(target_dtype)
+        key_states = key_states.to(target_dtype)
 
         # Transpose for attention computation
         query_states = query_states.transpose(1, 2)
