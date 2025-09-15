@@ -490,6 +490,12 @@ Pipelines available for multimodal tasks include the following.
     - __call__
     - all
 
+### AnyToAnyPipeline
+
+[[autodoc]] ImageTextToTextPipeline
+    - __call__
+    - all
+
 ### MaskGenerationPipeline
 
 [[autodoc]] MaskGenerationPipeline
