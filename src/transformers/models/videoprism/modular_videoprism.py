@@ -539,17 +539,12 @@ class VideoPrismFactorizedEncoderModel(VideoPrismPreTrainedModel):
         )
 
 
-def _l2_normalize(x: torch.Tensor, dim: int | Sequence[int] = -1, epsilon: float = 1e-12) -> torch.Tensor:
-    """ L2 Normalization of a tensor along the specified axis. """
-    
-    norm = torch.sqrt(torch.sum(x**2, dim=dim, keepdims=True) + epsilon)
-    return x / norm
+# copied from transformers.models.qwen3_next.modeling_qwen3_next.l2norm
+def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+    """This function is intended to align with the l2norm implementation in the FLA library."""
+    inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+    return x * inv_norm
 
-# from qwen 2
-# def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
-#     """This function is intended to align with the l2norm implementation in the FLA library."""
-#     inv_norm = 1 / torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)
-#     return x * inv_norm
 
 class PerDimScale(nn.Module):
     def __init__(self, config):
@@ -663,7 +658,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.normalize = config.apply_l2_norm
-        self.l2norm = _l2_normalize
+        self.l2norm = l2norm
         self.post_init()
 
     def forward(
@@ -721,7 +716,7 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         self.config.num_hidden_layers = config.num_auxiliary_layers
         self.auxiliary_encoder = VideoPrismEncoder(self.config)
         self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
-        self.l2norm = _l2_normalize
+        self.l2norm = l2norm
         self.normalize = config.apply_l2_norm
         self.post_init()
 
