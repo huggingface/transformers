@@ -27,6 +27,7 @@ from typing import Optional, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
+import httpx
 import huggingface_hub
 import requests
 from huggingface_hub import (
@@ -58,7 +59,6 @@ from huggingface_hub.utils import (
     hf_raise_for_status,
     send_telemetry,
 )
-from requests.exceptions import HTTPError
 
 from . import __version__, logging
 from .generic import working_or_temp_dir
@@ -176,7 +176,7 @@ def list_repo_templates(
             ]
         except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
             raise  # valid errors => do not catch
-        except (HTTPError, OfflineModeIsEnabled, requests.exceptions.ConnectionError):
+        except (HfHubHTTPError, OfflineModeIsEnabled, httpx.NetworkError):
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files
@@ -683,14 +683,10 @@ def has_file(
             proxies=proxies,
             timeout=10,
         )
-    except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+    except httpx.ProxyError:
         # Actually raise for those subclasses of ConnectionError
         raise
-    except (
-        requests.exceptions.ConnectionError,
-        requests.exceptions.Timeout,
-        OfflineModeIsEnabled,
-    ):
+    except (httpx.ConnectError, httpx.TimeoutException, OfflineModeIsEnabled):
         return has_file_in_cache
 
     try:
@@ -714,7 +710,7 @@ def has_file(
         ) from e
     except EntryNotFoundError:
         return False  # File does not exist
-    except requests.HTTPError:
+    except HfHubHttpError:
         # Any authentication/authorization error will be caught here => default to cache
         return has_file_in_cache
 

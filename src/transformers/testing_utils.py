@@ -43,8 +43,7 @@ from typing import Any, Callable, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
-import huggingface_hub.utils
-import requests
+import httpx
 import urllib3
 from huggingface_hub import delete_repo
 from packaging import version
@@ -2748,13 +2747,14 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
             while retry_count < max_attempts:
                 try:
                     return test_func_ref(*args, **kwargs)
-                # We catch all exceptions related to network issues from requests
+                # We catch all exceptions related to network issues from httpx
                 except (
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout,
-                    requests.exceptions.ReadTimeout,
-                    requests.exceptions.HTTPError,
-                    requests.exceptions.RequestException,
+                    httpx.HTTPError,
+                    httpx.RequestError,
+                    httpx.TimeoutException,
+                    httpx.ReadTimeout,
+                    httpx.ConnectError,
+                    httpx.NetworkError,
                 ) as err:
                     logger.error(
                         f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
