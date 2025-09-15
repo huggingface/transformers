@@ -1013,12 +1013,22 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
             if position_ids is not None:
                 position_ids = position_ids[:, remove_prefix_length:]
 
-        return {
+        model_inputs = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
             "past_key_values": past_key_values,
         }
+
+        # They are calculated on the fly on XLMRobertaXLModel.forward()
+        model_kwargs.pop("token_type_ids", None)
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in model_kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
+        return model_inputs
 
 
 @auto_docstring

@@ -1803,6 +1803,41 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
+    @pytest.mark.generate
+    def test_prepare_inputs_for_generation_kwargs_forwards(self, **extra_kwargs):
+        """Tests that prepare_inputs_for_generation forwards arbitrary kwargs."""
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.prepare_config_and_inputs_for_generate()
+
+            model = model_class(config).to(torch_device).eval()
+
+            input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]]).to(torch_device)
+
+            input_args = {
+                "input_ids": input_ids,
+                "cache_position": torch.tensor([9]).to(torch_device),
+                "position_ids": torch.tensor([[0, 1, 2], [0, 1, 2]]).to(torch_device),
+            }
+            arbitrary_kwargs = {
+                "output_attentions": True,
+                "output_hidden_states": True,
+                "custom_arg": "test_value",
+                "numeric_arg": 42,
+            }
+
+            model_inputs = model.prepare_inputs_for_generation(**input_args, **arbitrary_kwargs, **extra_kwargs)
+
+            # Verify that input_ids has proper name
+            if config.is_encoder_decoder:
+                self.assertTrue("decoder_input_ids" in model_inputs)
+            else:
+                self.assertTrue("input_ids" in model_inputs)
+
+            # Verify that arbitrary kwargs are forwarded
+            for key, value in arbitrary_kwargs.items():
+                self.assertTrue(key in model_inputs)
+                self.assertTrue(model_inputs[key] == value)
+
     def _test_attention_implementation(self, attn_implementation):
         """
         Compares the output of generate with the eager attention implementation against other implementations.
