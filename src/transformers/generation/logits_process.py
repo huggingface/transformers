@@ -20,6 +20,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import numpy as np
+import sys
 import torch
 
 from ..pytorch_utils import isin_mps_friendly
@@ -3594,22 +3595,27 @@ class LogitProcessorRegistry:
     @classmethod
     def get_processor_class(cls, name: str) -> type:
         """Get a LogitProcessor class by name."""
-        if name not in cls._registry:
-            # Try to get from globals in this module
-            import sys
+        if name in cls._registry:
+                    return cls._registry[name]
 
-            current_module = sys.modules[__name__]
-            if hasattr(current_module, name):
-                processor_class = getattr(current_module, name)
-                if isinstance(processor_class, type) and issubclass(
-                    processor_class, LogitsProcessor
-                ):
-                    cls.register(processor_class)
-                    return processor_class
-            raise ValueError(
-                f"LogitProcessor '{name}' not found in registry. Available: {list(cls._registry.keys())}"
-            )
-        return cls._registry[name]
+        # Lazy lookup: if a class with that name exists here and is a LogitsProcessor subclass, register it.
+        current_module = sys.modules[__name__]
+        if hasattr(current_module, name):
+            obj = getattr(current_module, name)
+            if isinstance(obj, type):
+                try:
+                    from .utils import LogitsProcessor  # adjust if already imported elsewhere
+                except Exception:
+                    pass  # avoid raising just on failed optional import
+                # We only check subclassing if LogitsProcessor is in globals (it should be)
+                base = globals().get("LogitsProcessor")
+                if base and isinstance(obj, type) and issubclass(obj, base) and obj is not base:
+                    cls.register(obj)
+                    return obj
+
+        raise ValueError(
+            f"LogitProcessor '{name}' not found. Available (registered so far): {list(cls._registry.keys())}"
+        )
 
     @classmethod
     def list_processors(cls) -> list[str]:
@@ -3632,47 +3638,6 @@ class LogitProcessorRegistry:
             return processor_class(**args)
         except TypeError as e:
             raise ValueError(f"Invalid arguments for {processor_type}: {e}")
-
-
-# Register built-in processors
-# Register the actual built-in processors (not placeholder classes)
-# These are the real implementations defined earlier in the file
-LogitProcessorRegistry.register(TemperatureLogitsWarper)
-LogitProcessorRegistry.register(TopKLogitsWarper)
-LogitProcessorRegistry.register(TopPLogitsWarper)
-LogitProcessorRegistry.register(RepetitionPenaltyLogitsProcessor)
-LogitProcessorRegistry.register(NoRepeatNGramLogitsProcessor)
-LogitProcessorRegistry.register(MinLengthLogitsProcessor)
-LogitProcessorRegistry.register(MinNewTokensLengthLogitsProcessor)
-LogitProcessorRegistry.register(MinPLogitsWarper)
-LogitProcessorRegistry.register(TypicalLogitsWarper)
-LogitProcessorRegistry.register(EpsilonLogitsWarper)
-LogitProcessorRegistry.register(EtaLogitsWarper)
-LogitProcessorRegistry.register(EncoderRepetitionPenaltyLogitsProcessor)
-LogitProcessorRegistry.register(EncoderNoRepeatNGramLogitsProcessor)
-LogitProcessorRegistry.register(SequenceBiasLogitsProcessor)
-LogitProcessorRegistry.register(NoBadWordsLogitsProcessor)
-LogitProcessorRegistry.register(PrefixConstrainedLogitsProcessor)
-LogitProcessorRegistry.register(HammingDiversityLogitsProcessor)
-LogitProcessorRegistry.register(ForcedBOSTokenLogitsProcessor)
-LogitProcessorRegistry.register(ForcedEOSTokenLogitsProcessor)
-LogitProcessorRegistry.register(InfNanRemoveLogitsProcessor)
-LogitProcessorRegistry.register(ExponentialDecayLengthPenalty)
-LogitProcessorRegistry.register(LogitNormalization)
-LogitProcessorRegistry.register(SuppressTokensAtBeginLogitsProcessor)
-LogitProcessorRegistry.register(SuppressTokensLogitsProcessor)
-LogitProcessorRegistry.register(WhisperTimeStampLogitsProcessor)
-LogitProcessorRegistry.register(WhisperNoSpeechDetection)
-LogitProcessorRegistry.register(ClassifierFreeGuidanceLogitsProcessor)
-LogitProcessorRegistry.register(AlternatingCodebooksLogitsProcessor)
-LogitProcessorRegistry.register(UnbatchedClassifierFreeGuidanceLogitsProcessor)
-LogitProcessorRegistry.register(BarkEosPrioritizerLogitsProcessor)
-LogitProcessorRegistry.register(WatermarkLogitsProcessor)
-LogitProcessorRegistry.register(SynthIDTextWatermarkLogitsProcessor)
-LogitProcessorRegistry.register(DiaClassifierFreeGuidanceLogitsProcessor)
-LogitProcessorRegistry.register(DiaEOSChannelFilterLogitsProcessor)
-LogitProcessorRegistry.register(DiaEOSDelayPatternLogitsProcessor)
-
 
 # Enhanced LogitsProcessorList
 class ConfigurableLogitsProcessorList(LogitsProcessorList):

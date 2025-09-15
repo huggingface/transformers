@@ -39,19 +39,11 @@ from ..utils import (
 
 if TYPE_CHECKING:  # noqa: D401 - type checking imports only
     from ..modeling_utils import PreTrainedModel
-    from .logits_process import (
-        SynthIDTextWatermarkLogitsProcessor,
-        WatermarkLogitsProcessor,
-    )
 
 
 logger = logging.get_logger(__name__)
-METADATA_FIELDS = (
-    "_from_model_config",
-    "_commit_hash",
-    "_original_object_hash",
-    "transformers_version",
-)
+METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
+
 STATIC_CACHE_IMPLEMENTATIONS = ("static", "offloaded_static")
 DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "dynamic_full", "offloaded", "quantized")
 # All the following are redundant and deprecated, but kept for BC
@@ -62,19 +54,12 @@ DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS = (
     "offloaded_hybrid",
     "offloaded_hybrid_chunked",
 )
-ALL_STATIC_CACHE_IMPLEMENTATIONS = (
-    STATIC_CACHE_IMPLEMENTATIONS + DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS
-)
-ALL_CACHE_IMPLEMENTATIONS = (
-    ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMPLEMENTATIONS
-)
+ALL_STATIC_CACHE_IMPLEMENTATIONS = STATIC_CACHE_IMPLEMENTATIONS + DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS
+ALL_CACHE_IMPLEMENTATIONS = ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMPLEMENTATIONS
 
 
 if is_torch_available():
-    from .logits_process import (
-        SynthIDTextWatermarkLogitsProcessor,
-        WatermarkLogitsProcessor,
-    )
+    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 class GenerationMode(ExplicitEnum):
@@ -376,13 +361,7 @@ class GenerationConfig(PushToHubMixin):
             need to use this flag.
     """
 
-    extra_output_flags = (
-        "output_attentions",
-        "output_hidden_states",
-        "output_scores",
-        "output_logits",
-    )
-
+    extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
         self.max_length = kwargs.pop("max_length", 20)
@@ -426,9 +405,7 @@ class GenerationConfig(PushToHubMixin):
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
-        self.exponential_decay_length_penalty = kwargs.pop(
-            "exponential_decay_length_penalty", None
-        )
+        self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.sequence_bias = kwargs.pop("sequence_bias", None)
@@ -457,20 +434,14 @@ class GenerationConfig(PushToHubMixin):
         self.eos_token_id = kwargs.pop("eos_token_id", None)
 
         # Generation parameters exclusive to encoder-decoder models
-        self.encoder_no_repeat_ngram_size = kwargs.pop(
-            "encoder_no_repeat_ngram_size", 0
-        )
+        self.encoder_no_repeat_ngram_size = kwargs.pop("encoder_no_repeat_ngram_size", 0)
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # Assistant generation
         self.is_assistant = False
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 20)
-        self.num_assistant_tokens_schedule = kwargs.pop(
-            "num_assistant_tokens_schedule", "constant"
-        )
-        self.assistant_confidence_threshold = kwargs.pop(
-            "assistant_confidence_threshold", 0.4
-        )
+        self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "constant")
+        self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", 0.4)
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
         self.max_matching_ngram_size = kwargs.pop("max_matching_ngram_size", None)
         self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
@@ -517,20 +488,14 @@ class GenerationConfig(PushToHubMixin):
         if not isinstance(other, GenerationConfig):
             return False
 
-        self_without_metadata = self.to_json_string(
-            use_diff=False, ignore_metadata=True
-        )
-        other_without_metadata = other.to_json_string(
-            use_diff=False, ignore_metadata=True
-        )
+        self_without_metadata = self.to_json_string(use_diff=False, ignore_metadata=True)
+        other_without_metadata = other.to_json_string(use_diff=False, ignore_metadata=True)
         return self_without_metadata == other_without_metadata
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string(ignore_metadata=True)}"
 
-    def get_generation_mode(
-        self, assistant_model: Optional["PreTrainedModel"] = None
-    ) -> GenerationMode:
+    def get_generation_mode(self, assistant_model: Optional["PreTrainedModel"] = None) -> GenerationMode:
         """
         Returns the generation mode triggered by the [`GenerationConfig`] instance.
 
@@ -611,13 +576,9 @@ class GenerationConfig(PushToHubMixin):
         # 1. Validation of individual attributes
         # 1.1. Decoding attributes
         if self.early_stopping not in {True, False, "never"}:
-            raise ValueError(
-                f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}."
-            )
+            raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
-            raise ValueError(
-                f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}."
-            )
+            raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
@@ -625,38 +586,17 @@ class GenerationConfig(PushToHubMixin):
                 "`model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
             )
         # 1.2. Cache attributes
-        if (
-            self.cache_implementation is not None
-            and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS
-        ):
+        if (self.cache_implementation is not None and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS):
             raise ValueError(
                 f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
                 f"{ALL_CACHE_IMPLEMENTATIONS}"
             )
         # 1.3. Performance attributes
-        if self.compile_config is not None and not isinstance(
-            self.compile_config, CompileConfig
-        ):
+        if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
             raise ValueError(
                 f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an "
                 "instance of `CompileConfig`."
             )
-        # 1.4. Watermarking attributes
-        if self.watermarking_config is not None:
-            if not (
-                isinstance(
-                    self.watermarking_config,
-                    (WatermarkingConfig, SynthIDTextWatermarkingConfig),
-                )
-            ):
-                minor_issues["watermarking_config"] = (
-                    "`watermarking_config` as a dict is deprecated and will be removed in v4.54.0. Please construct "
-                    "`watermarking_config` object with `WatermarkingConfig` or `SynthIDTextWatermarkingConfig` class."
-                )
-                self.watermarking_config = WatermarkingConfig.from_dict(
-                    self.watermarking_config
-                )
-            self.watermarking_config.validate()
 
         # 2. Validation of attribute combinations
         # 2.1. detect sampling-only parameterization when not in sampling mode
