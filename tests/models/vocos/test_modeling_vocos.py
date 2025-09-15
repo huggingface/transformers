@@ -257,7 +257,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
         processor = VocosProcessor.from_pretrained(hf_repo_id)
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
 
-        EXPECTED_AUDIO = torch.tensor(self.mel_expected["reconstructed_audio"], dtype=torch.float32)
+        EXPECTED_AUDIO = torch.tensor(self.mel_expected["reconstructed_audio"], dtype=torch.float32).to(torch_device)
 
         inputs = processor(self.audio, return_tensors="pt").to(torch_device)
         with torch.no_grad():
@@ -279,9 +279,9 @@ class VocosModelIntegrationTest(unittest.TestCase):
             # now resconstructing audio from raw audio :
             inputs = processor(audio=self.audio, bandwidth=entry["bandwidth"], return_tensors="pt")
             with torch.no_grad():
-                output_from_audio = model(**inputs)
+                output_from_audio = model(**inputs.to(torch_device))
 
-            EXPECTED_AUDIO = torch.tensor(entry["reconstructed_from_audio"], dtype=torch.float32)
+            EXPECTED_AUDIO = torch.tensor(entry["reconstructed_from_audio"], dtype=torch.float32).to(torch_device)
 
             torch.testing.assert_close(
                 output_from_audio.squeeze(0)[: EXPECTED_AUDIO.shape[0]],
@@ -295,9 +295,11 @@ class VocosModelIntegrationTest(unittest.TestCase):
             inputs = processor(codes=codes, bandwidth=entry["bandwidth"], return_tensors="pt")
 
             with torch.no_grad():
-                output_from_codes = model(**inputs)
+                output_from_codes = model(**inputs.to(torch_device))
 
-            EXPECTED_AUDIO_FROM_CODES = torch.tensor(entry["reconstructed_from_codes"], dtype=torch.float32)
+            EXPECTED_AUDIO_FROM_CODES = torch.tensor(entry["reconstructed_from_codes"], dtype=torch.float32).to(
+                torch_device
+            )
 
             torch.testing.assert_close(
                 output_from_codes.squeeze(0)[: EXPECTED_AUDIO_FROM_CODES.shape[0]],
