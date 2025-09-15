@@ -32,7 +32,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
-from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
+from huggingface_hub import ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
 
@@ -5168,7 +5168,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:

@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 import requests
-from huggingface_hub import HfApi, HfFolder
+from huggingface_hub import HfApi
 from parameterized import parameterized
 from pytest import mark
 from requests.exceptions import HTTPError
@@ -2265,7 +2265,6 @@ class ModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub(self):

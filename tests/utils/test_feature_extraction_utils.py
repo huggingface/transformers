@@ -19,7 +19,6 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder
 from requests.exceptions import HTTPError
 
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
@@ -57,7 +56,6 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:

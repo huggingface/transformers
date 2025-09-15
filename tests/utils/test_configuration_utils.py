@@ -21,7 +21,6 @@ import unittest.mock as mock
 import warnings
 from pathlib import Path
 
-from huggingface_hub import HfFolder
 from requests.exceptions import HTTPError
 
 from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
@@ -95,7 +94,6 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:

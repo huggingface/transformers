@@ -6,7 +6,7 @@ from typing import Callable, Optional, Union
 
 import numpy as np
 import tensorflow as tf
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import create_repo
 from packaging.version import parse
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
@@ -340,7 +340,8 @@ class PushToHubCallback(keras.callbacks.Callback):
         self.hub_model_id = create_repo(repo_id=hub_model_id, exist_ok=True, token=hub_token).repo_id
 
         self.output_dir = output_dir
-        self.repo = Repository(str(self.output_dir), clone_from=self.hub_model_id, token=hub_token)
+        # TODO: remove Repository (or even deprecated Keras altogether?)
+        # self.repo = Repository(str(self.output_dir), clone_from=self.hub_model_id, token=hub_token)
 
         self.tokenizer = tokenizer
         self.last_job = None
@@ -360,9 +361,9 @@ class PushToHubCallback(keras.callbacks.Callback):
             self.model.save_pretrained(self.output_dir)
             if self.tokenizer is not None:
                 self.tokenizer.save_pretrained(self.output_dir)
-            _, self.last_job = self.repo.push_to_hub(
-                commit_message=f"Training in progress steps {batch}", blocking=False
-            )
+            # _, self.last_job = self.repo.push_to_hub(
+            #     commit_message=f"Training in progress steps {batch}", blocking=False
+            # )
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs.copy()  # Don't accidentally write things that Keras will read later
@@ -387,9 +388,9 @@ class PushToHubCallback(keras.callbacks.Callback):
             model_card = train_summary.to_model_card()
             with (self.output_dir / "README.md").open("w") as f:
                 f.write(model_card)
-            _, self.last_job = self.repo.push_to_hub(
-                commit_message=f"Training in progress epoch {epoch}", blocking=False
-            )
+            # _, self.last_job = self.repo.push_to_hub(
+            #     commit_message=f"Training in progress epoch {epoch}", blocking=False
+            # )
 
     def on_train_end(self, logs=None):
         # Makes sure the latest version of the model is uploaded
@@ -410,4 +411,4 @@ class PushToHubCallback(keras.callbacks.Callback):
             model_card = train_summary.to_model_card()
             with (self.output_dir / "README.md").open("w") as f:
                 f.write(model_card)
-            self.repo.push_to_hub(commit_message="End of training", blocking=True)
+            # self.repo.push_to_hub(commit_message="End of training", blocking=True)

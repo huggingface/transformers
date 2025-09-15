@@ -28,7 +28,7 @@ import os
 import time
 
 from create_dummy_models import COMPOSITE_MODELS, create_tiny_models
-from huggingface_hub import ModelFilter, hf_api
+from huggingface_hub import hf_api
 
 import transformers
 from transformers import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer
@@ -88,9 +88,7 @@ def get_tiny_model_summary_from_hub(output_path):
     # All tiny model base names on Hub
     model_names = get_all_model_names()
     models = hf_api.list_models(
-        filter=ModelFilter(
-            author="hf-internal-testing",
-        )
+        author="hf-internal-testing",
     )
     _models = set()
     for x in models:

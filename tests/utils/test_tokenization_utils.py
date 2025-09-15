@@ -19,7 +19,6 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder
 from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 
@@ -115,7 +114,6 @@ class TokenizerPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:

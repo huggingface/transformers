@@ -44,6 +44,7 @@ jobs:
         steps:
             - checkout
             - run: uv pip install -U -e .
+            - run: uv pip install --prerelease allow "huggingface_hub==1.0.0.rc0"
             - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
@@ -96,6 +97,7 @@ jobs:
         steps:
             - checkout
             - run: uv pip install -U -e .
+            - run: uv pip install --prerelease allow "huggingface_hub==1.0.0.rc0"
             - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py --fetch_all | tee tests_fetched_summary.txt
@@ -149,6 +151,7 @@ jobs:
         steps:
             - checkout
             - run: uv pip install -e ".[quality]"
+            - run: uv pip install --prerelease allow "huggingface_hub==1.0.0.rc0"
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt
@@ -174,6 +177,7 @@ jobs:
         steps:
             - checkout
             - run: uv pip install -e ".[quality]"
+            - run: uv pip install --prerelease allow "huggingface_hub==1.0.0.rc0"
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt

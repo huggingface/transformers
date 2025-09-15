@@ -1,7 +1,7 @@
 import os
 
 import requests
-from huggingface_hub import Repository, hf_hub_download
+from huggingface_hub import Repository, hf_hub_download  # TODO: remove Repository
 
 from transformers.testing_utils import _run_pipeline_tests, _run_staging
 from transformers.utils.import_utils import is_mistral_common_available
