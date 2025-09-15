@@ -39,6 +39,8 @@ jobs:
   benchmark-v2:
     name: Benchmark v2
     runs-on: ${{ inputs.runner }}
+    if: |
+      (github.event_name == 'pull_request' && contains( github.event.pull_request.labels.*.name, 'run-benchmark'))
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --privileged --ipc host --shm-size "16gb"

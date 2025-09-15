@@ -4,9 +4,8 @@ on:
   schedule:
     # Run daily at 16:30 UTC
     - cron: "30 16 * * *"
-  push:
-    branches:
-      - run-benchmarking-gh-actions*
+  pull_request:
+    types: [ opened, labeled, reopened, synchronize ]
 
 jobs:
   benchmark-v2-default:
