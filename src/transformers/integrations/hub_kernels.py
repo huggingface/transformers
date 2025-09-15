@@ -85,22 +85,28 @@ try:
             },
         },
         "FastGELU": {
-            "cuda": LayerRepository(
-                repo_id="kernels-community/activation",
-                layer_name="FastGELU",
-            )
+            "cuda": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/activation",
+                    layer_name="FastGELU",
+                )
+            }
         },
         "QuickGELU": {
-            "cuda": LayerRepository(
-                repo_id="kernels-community/activation",
-                layer_name="QuickGELU",
-            )
+            "cuda": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/activation",
+                    layer_name="QuickGELU",
+                )
+            }
         },
         "NewGELU": {
-            "cuda": LayerRepository(
-                repo_id="kernels-community/activation",
-                layer_name="NewGELU",
-            )
+            "cuda": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/activation",
+                    layer_name="NewGELU",
+                )
+            }
         },
     }
 

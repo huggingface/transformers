@@ -18,10 +18,10 @@ from collections import OrderedDict
 import torch
 from torch import Tensor, nn
 
+from .integrations.hub_kernels import use_kernel_forward_from_hub
 from .utils import logging
 from .utils.import_utils import is_torchdynamo_compiling
 
-from .integrations.hub_kernels import use_kernel_forward_from_hub
 
 logger = logging.get_logger(__name__)
 
@@ -38,6 +38,7 @@ class PytorchGELUTanh(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
         return nn.functional.gelu(input, approximate="tanh")
 
+
 @use_kernel_forward_from_hub("NewGELU")
 class NewGELUActivation(nn.Module):
     """
@@ -46,6 +47,7 @@ class NewGELUActivation(nn.Module):
     """
 
     def forward(self, input: Tensor) -> Tensor:
+        print("hereeeeee")
         return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
 
 
@@ -69,6 +71,7 @@ class GELUActivation(nn.Module):
 
     def forward(self, input: Tensor) -> Tensor:
         return self.act(input)
+
 
 @use_kernel_forward_from_hub("FastGELU")
 class FastGELUActivation(nn.Module):
