@@ -1819,9 +1819,11 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
 
 @auto_docstring
 class T5EncoderForSequenceClassification(T5PreTrainedModel):
+    keys_to_ignore_on_load_unexpected = [r"decoder"]
 
     def __init__(self, config: T5Config):
         super().__init__(config)
+
         self.num_labels = config.num_labels
 
         self.transformer = T5EncoderModel(config)
