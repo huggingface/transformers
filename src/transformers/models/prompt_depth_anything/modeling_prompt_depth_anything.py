@@ -161,7 +161,7 @@ class PromptDepthAnythingFeatureFusionLayer(nn.Module):
 
 
 class PromptDepthAnythingFeatureFusionStage(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: PromptDepthAnythingConfig):
         super().__init__()
         self.layers = nn.ModuleList()
         for _ in range(len(config.neck_hidden_sizes)):
@@ -240,17 +240,10 @@ class PromptDepthAnythingDepthEstimationHead(nn.Module):
 
 @auto_docstring
 class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
-    config_class = PromptDepthAnythingConfig
+    config: PromptDepthAnythingConfig
     base_model_prefix = "prompt_depth_anything"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
 
 class PromptDepthAnythingReassembleLayer(nn.Module):

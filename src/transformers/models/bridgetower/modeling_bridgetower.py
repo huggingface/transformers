@@ -34,9 +34,10 @@ from ...modeling_outputs import (
     ModelOutput,
     SequenceClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, apply_chunking_to_forward
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging, torch_int
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging, torch_int
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -143,7 +144,7 @@ class BridgeTowerResidualAttention(nn.Module):
     def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         residual_state = hidden_state + self.attention(self.ln_1(hidden_state), attention_mask)
         hidden_state = self.ln_2(residual_state)
-        for _, layer in self.mlp.items():
+        for layer in self.mlp.values():
             hidden_state = layer(hidden_state)
         hidden_state = residual_state + hidden_state
         return hidden_state
@@ -415,7 +416,7 @@ def eager_attention_forward(
     dropout: float = 0.0,
     head_mask: Optional[torch.Tensor] = None,
     use_cache: Optional[bool] = None,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
@@ -502,7 +503,7 @@ class BridgeTowerSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
         bsz, tgt_len = hidden_states.shape[:-1]
@@ -601,7 +602,7 @@ class BridgeTowerCrossAttention(nn.Module):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[EncoderDecoderCache] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
         bsz, tgt_len = hidden_states.shape[:-1]
@@ -616,8 +617,8 @@ class BridgeTowerCrossAttention(nn.Module):
         is_updated = past_key_value.is_updated.get(self.layer_idx) if past_key_value is not None else False
         if past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value.cross_attention_cache.key_cache[self.layer_idx]
-            value_layer = past_key_value.cross_attention_cache.value_cache[self.layer_idx]
+            key_layer = past_key_value.cross_attention_cache.layers[self.layer_idx].keys
+            value_layer = past_key_value.cross_attention_cache.layers[self.layer_idx].values
         else:
             key_layer = self.key(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
             value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
@@ -625,9 +626,7 @@ class BridgeTowerCrossAttention(nn.Module):
             if past_key_value is not None:
                 # save all states to the cache
                 key_layer, value_layer = past_key_value.cross_attention_cache.update(
-                    key_layer,
-                    value_layer,
-                    self.layer_idx,
+                    key_layer, value_layer, self.layer_idx
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 past_key_value.is_updated[self.layer_idx] = True
@@ -705,7 +704,7 @@ class BridgeTowerAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         if self.is_cross_attention:
             self_outputs = self.self(
@@ -826,7 +825,7 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
@@ -901,6 +900,7 @@ class BridgeTowerTextEncoder(nn.Module):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -921,6 +921,7 @@ class BridgeTowerTextEncoder(nn.Module):
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_value=past_key_values,
                 cache_position=cache_position,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -1006,16 +1007,17 @@ class BridgeTowerTextEmbeddings(nn.Module):
         else:
             input_shape = inputs_embeds.size()[:-1]
 
-        seq_length = input_shape[1]
+        batch_size, seq_length = input_shape
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
         # issue #5664
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
-                buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
+                # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
+                buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
+                buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
+                token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
@@ -1068,41 +1070,41 @@ class BridgeTowerTextEmbeddings(nn.Module):
 
 @auto_docstring
 class BridgeTowerPreTrainedModel(PreTrainedModel):
-    config_class = BridgeTowerConfig
+    config: BridgeTowerConfig
     base_model_prefix = "bridgetower"
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
     _skip_keys_device_placement = "past_key_values"
 
-    def _init_weights(self, module):
-        if isinstance(module, BridgeTowerVisionModel):
-            proj_std = (module.visual.transformer.hidden_size**-0.5) * (
-                (2 * module.visual.transformer.num_hidden_layers) ** -0.5
-            )
-            attn_std = module.visual.transformer.hidden_size**-0.5
-            fc_std = (2 * module.visual.transformer.hidden_size) ** -0.5
-            for block in module.visual.transformer.resblocks:
-                nn.init.normal_(block.attn.in_proj_weight, std=attn_std * self.config.initializer_factor)
-                nn.init.normal_(block.attn.out_proj.weight, std=proj_std * self.config.initializer_factor)
-                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * self.config.initializer_factor)
-                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * self.config.initializer_factor)
+    def _init_weights(self, module: nn.Module):
+        std = self.config.initializer_factor
+        if isinstance(module, BridgeTowerVisionTransformer):
+            proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5)
+            attn_std = self.config.hidden_size**-0.5
+            fc_std = (2 * self.config.hidden_size) ** -0.5
+            for block in module.transformer.resblocks:
+                nn.init.normal_(block.attn.in_proj_weight, std=attn_std * std)
+                block.attn.in_proj_bias.data.zero_()
+                nn.init.normal_(block.attn.out_proj.weight, std=proj_std * std)
+                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * std)
+                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * std)
 
-            nn.init.normal_(module.visual.embeddings.class_embedding, std=attn_std * self.config.initializer_factor)
-            nn.init.normal_(
-                module.visual.embeddings.position_embedding.weight, std=attn_std * self.config.initializer_factor
-            )
+            nn.init.normal_(module.embeddings.class_embedding, std=attn_std * std)
+            nn.init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.05 * self.config.initializer_factor)
+            module.weight.data.normal_(mean=0.0, std=0.05 * std)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, BridgeTowerForContrastiveLearning):
+            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
 
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        if isinstance(module, (nn.Linear, BridgeTowerMLMHead)) and module.bias is not None:
             module.bias.data.zero_()
 
 
 class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
-    config_class = BridgeTowerVisionConfig
+    config: BridgeTowerVisionConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -1131,7 +1133,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     """
 )
 class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
-    config_class = BridgeTowerTextConfig
+    config: BridgeTowerTextConfig
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1182,7 +1184,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1229,14 +1231,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         if cache_position is None:
             cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
 
-        if token_type_ids is None:
-            if hasattr(self.embeddings, "token_type_ids"):
-                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -1245,15 +1239,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
-        if attention_mask is None:
-            # required mask seq length can be calculated via length of past cache
-            mask_seq_length = past_key_values_length + seq_length
-            attention_mask = torch.ones(batch_size, mask_seq_length, device=device)
-
-        if self.config.is_decoder and encoder_hidden_states is not None and encoder_attention_mask is None:
-            encoder_attention_mask = torch.ones(encoder_hidden_states.shape[:2], device=device)
-
-        if attention_mask.dim() == 2:
+        if attention_mask is not None and attention_mask.dim() == 2:
             if self.config.is_decoder:
                 attention_mask = create_causal_mask(
                     config=self.config,
@@ -1267,7 +1253,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
                     attention_mask,
                     embedding_output,
                 )
-        elif attention_mask.dim() == 3:
+        elif attention_mask is not None and attention_mask.dim() == 3:
             if self.config._attn_implementation in ["flash_attention_2", "flex_attention"]:
                 raise ValueError(
                     "Passing attention mask with a 3D/4D shape does not work with type "
@@ -1310,6 +1296,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            position_ids=position_ids,
             **kwargs,
         )
         sequence_output = encoder_outputs[0]

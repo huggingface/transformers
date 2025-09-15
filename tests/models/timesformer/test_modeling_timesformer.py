@@ -15,6 +15,7 @@
 
 import copy
 import unittest
+from functools import cached_property
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -22,7 +23,7 @@ from huggingface_hub import hf_hub_download
 from transformers import TimesformerConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -353,7 +354,7 @@ class TimesformerModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-0.3016, -0.7713, -0.4205],
-                ("cuda", 8): [-0.3004, -0.7708, -0.4205],
+                ("cuda", 8): [-0.3016, -0.7713, -0.4205],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

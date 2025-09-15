@@ -355,17 +355,54 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
         self.penalty = penalty
         self.prompt_ignore_length = prompt_ignore_length
+        self.logits_indices = None
+        self.cu_seq_lens_q = None
+
+    def set_continuous_batching_context(self, logits_indices: torch.Tensor, cu_seq_lens_q: torch.Tensor):
+        self.logits_indices = logits_indices
+        self.cu_seq_lens_q = cu_seq_lens_q
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if self.prompt_ignore_length:
             input_ids = input_ids[:, self.prompt_ignore_length :]
 
-        score = torch.gather(scores, 1, input_ids)
+        if scores.dim() == 3:
+            if self.logits_indices is not None and self.cu_seq_lens_q is not None:
+                batch_size, seq_len, vocab_size = scores.shape
+                last_positions = self.logits_indices
+                last_scores = scores[0, last_positions, :]
 
+                # Prepare token mask
+                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+                cu_seq_lens = self.cu_seq_lens_q
+                lengths = cu_seq_lens[1:] - cu_seq_lens[:-1]
+                seq_indices = torch.repeat_interleave(torch.arange(len(lengths), device=input_ids.device), lengths)
+                token_mask[seq_indices, input_ids] = True
+
+                # Apply penalty
+                penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+                scores[0, last_positions, :] = torch.where(token_mask, penalty_scores, last_scores)
+            else:
+                batch_size, seq_len, vocab_size = scores.shape
+                last_scores = scores[:, -1, :]
+                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+                if input_ids.dim() == 1:
+                    unique_tokens = torch.unique(input_ids)
+                    token_mask.scatter_(1, unique_tokens.unsqueeze(0), True)
+                else:
+                    token_mask.scatter_(1, input_ids, True)
+                # if last_scores < 0 then repetition penalty has to be multiplied to reduce the token probabilities
+                penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
+                scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
+            return scores
+
+        if input_ids.dim() == 1:
+            input_ids = input_ids.unsqueeze(1)
+
+        score = torch.gather(scores, 1, input_ids)
         # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
-
         scores_processed = scores.scatter(1, input_ids, score)
         return scores_processed
 
@@ -963,12 +1000,12 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
 
     >>> output = model.generate(**inputs)
     >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
-    Today I’m not sure if I’m going to be able to do it.
+    Today I'm not sure if I'm going to be able to do it.
 
-    >>> # Now let's add ngram size using `no_repeat_ngram_size`. This stops the repetitions ("I’m") in the output.
+    >>> # Now let's add ngram size using `no_repeat_ngram_size`. This stops the repetitions ("I'm") in the output.
     >>> output = model.generate(**inputs, no_repeat_ngram_size=2)
     >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
-    Today I’m not sure if I can get a better understanding of the nature of this issue
+    Today I'm not sure if I can get a better understanding of the nature of this issue
     ```
     """
 
@@ -1185,10 +1222,16 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         # Precompute the bias tensors to be applied. Sequences of length 1 are kept separately, as they can be applied
         # with simpler logic.
         self.length_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float, device=scores.device)
+        # Extract single-token sequences and their biases
+        single_token_ids = []
+        single_token_biases = []
         for sequence_ids, bias in self.sequence_bias.items():
             if len(sequence_ids) == 1:
-                self.length_1_bias[sequence_ids[-1]] = bias
+                single_token_ids.append(sequence_ids[0])
+                single_token_biases.append(bias)
 
+        if single_token_ids:  # Only if we have any single-token sequences
+            self.length_1_bias[single_token_ids] = torch.tensor(single_token_biases, device=scores.device)
         self.prepared_bias_variables = True
 
     def _validate_arguments(self):
@@ -1198,13 +1241,13 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 f"`sequence_bias` has to be a non-empty dictionary, or non-empty list of lists but is {sequence_bias}."
             )
         if isinstance(sequence_bias, dict) and any(
-            not isinstance(sequence_ids, tuple) for sequence_ids in sequence_bias.keys()
+            not isinstance(sequence_ids, tuple) for sequence_ids in sequence_bias
         ):
             raise ValueError(f"`sequence_bias` has to be a dict with tuples as keys, but is {sequence_bias}.")
         if isinstance(sequence_bias, dict) and any(
             any((not isinstance(token_id, (int, np.integer)) or token_id < 0) for token_id in sequence_ids)
             or len(sequence_ids) == 0
-            for sequence_ids in sequence_bias.keys()
+            for sequence_ids in sequence_bias
         ):
             raise ValueError(
                 f"Each key in `sequence_bias` has to be a non-empty tuple of positive integers, but is "
@@ -1303,10 +1346,10 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
                     eos_token_id = [eos_token_id]
                 eos_token_id = torch.tensor(eos_token_id)
 
+            eos_token_id_list = eos_token_id.tolist()  # convert to python list before
             bad_words_ids = list(
-                filter(lambda bad_token_seq: all(bad_token_seq != [i] for i in eos_token_id), bad_words_ids)
+                filter(lambda bad_token_seq: all(bad_token_seq != [i] for i in eos_token_id_list), bad_words_ids)
             )
-
         # Forbidding a sequence is equivalent to setting its bias to -inf
         sequence_bias = {tuple(sequence): float("-inf") for sequence in bad_words_ids}
         super().__init__(sequence_bias=sequence_bias)
@@ -1401,15 +1444,12 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces diverse beam search.
-
     Note that this logits processor is only effective for [`PreTrainedModel.group_beam_search`]. See [Diverse Beam
     Search: Decoding Diverse Solutions from Neural Sequence Models](https://huggingface.co/papers/1610.02424) for more
     details.
-
     Traditional beam search often generates very similar sequences across different beams.
     `HammingDiversityLogitsProcessor` addresses this by penalizing beams that generate tokens already chosen by other
     beams in the same time step.
-
     Args:
         diversity_penalty (`float`):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
@@ -1420,17 +1460,13 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
         num_beam_groups (`int`):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             [this paper](https://huggingface.co/papers/1610.02424) for more details.
-
     Examples:
-
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
     >>> import torch
-
     >>> # Initialize the model and tokenizer
     >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
     >>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
-
     >>> # A long text about the solar system
     >>> text = (
     ...     "The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, "
@@ -1440,7 +1476,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     ...     "interstellar molecular cloud."
     ... )
     >>> inputs = tokenizer("summarize: " + text, return_tensors="pt")
-
     >>> # Generate diverse summary
     >>> outputs_diverse = model.generate(
     ...     **inputs,
@@ -1451,7 +1486,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     ...     num_return_sequences=2,
     ... )
     >>> summaries_diverse = tokenizer.batch_decode(outputs_diverse, skip_special_tokens=True)
-
     >>> # Generate non-diverse summary
     >>> outputs_non_diverse = model.generate(
     ...     **inputs,
@@ -1460,12 +1494,10 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     ...     num_return_sequences=2,
     ... )
     >>> summary_non_diverse = tokenizer.batch_decode(outputs_non_diverse, skip_special_tokens=True)
-
     >>> # With `diversity_penalty`, the resulting beams are much more diverse
     >>> print(summary_non_diverse)
     ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
     'the Solar System formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.']
-
     >>> print(summaries_diverse)
     ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
     'the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets. the rest of the objects are smaller objects, such as the five dwarf planets and small solar system bodies.']
@@ -1473,6 +1505,9 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, diversity_penalty: float, num_beams: int, num_beam_groups: int):
+        logger.warning_once(
+            "`HammingDiversityLogitsProcessor` is deprecated and will be removed in v4.62.0, as constrained beam search has been moved to the Hub: https://hf.co/transformers-community/constrained-beam-search."
+        )
         if not isinstance(diversity_penalty, float) or (not diversity_penalty > 0.0):
             raise ValueError("`diversity_penalty` should be a float strictly larger than 0.")
         self._diversity_penalty = diversity_penalty
@@ -1504,7 +1539,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
                 beam groups in the current generation step.
             beam_group_idx (`int`):
                 The index of the beam group currently being processed.
-
         Return:
             `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`:
                 The processed prediction scores.

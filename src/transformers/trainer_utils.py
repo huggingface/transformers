@@ -288,9 +288,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
     speed_metrics = [
-        m
-        for m in metrics.keys()
-        if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
+        m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
     ]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
@@ -423,16 +421,17 @@ class SchedulerType(ExplicitEnum):
     Scheduler names for the parameter `lr_scheduler_type` in [`TrainingArguments`].
     By default, it uses "linear". Internally, this retrieves `get_linear_schedule_with_warmup` scheduler from [`Trainer`].
     Scheduler types:
-       - "linear" = get_linear_schedule_with_warmup
-       - "cosine" = get_cosine_schedule_with_warmup
-       - "cosine_with_restarts" = get_cosine_with_hard_restarts_schedule_with_warmup
-       - "polynomial" = get_polynomial_decay_schedule_with_warmup
-       - "constant" =  get_constant_schedule
-       - "constant_with_warmup" = get_constant_schedule_with_warmup
-       - "inverse_sqrt" = get_inverse_sqrt_schedule
-       - "reduce_lr_on_plateau" = get_reduce_on_plateau_schedule
-       - "cosine_with_min_lr" = get_cosine_with_min_lr_schedule_with_warmup
-       - "warmup_stable_decay" = get_wsd_schedule
+       - "linear" = [`get_linear_schedule_with_warmup`]
+       - "cosine" = [`get_cosine_schedule_with_warmup`]
+       - "cosine_with_restarts" = [`get_cosine_with_hard_restarts_schedule_with_warmup`]
+       - "polynomial" = [`get_polynomial_decay_schedule_with_warmup`]
+       - "constant" =  [`get_constant_schedule`]
+       - "constant_with_warmup" = [`get_constant_schedule_with_warmup`]
+       - "inverse_sqrt" = [`get_inverse_sqrt_schedule`]
+       - "reduce_lr_on_plateau" = [`get_reduce_on_plateau_schedule`]
+       - "cosine_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup`]
+       - "cosine_warmup_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup_lr_rate`]
+       - "warmup_stable_decay" = [`get_wsd_schedule`]
     """
 
     LINEAR = "linear"
@@ -444,6 +443,7 @@ class SchedulerType(ExplicitEnum):
     INVERSE_SQRT = "inverse_sqrt"
     REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
+    COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
 
 
@@ -798,7 +798,7 @@ def find_executable_batch_size(
     """
     Args:
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
-    CUDNN, the batch size is cut in half and passed to `function`. `function` must take in a `batch_size` parameter as
+    CUDNN, the batch size is multiplied by 0.9 and passed to `function`. `function` must take in a `batch_size` parameter as
     its first argument.
         function (`callable`, *optional*)
             A function to wrap
@@ -895,7 +895,7 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
 
     if isinstance(optim_target_modules, str):
         target_module_found = bool(re.fullmatch(optim_target_modules, key))
-        is_regex = True if not optim_target_modules == key else False
+        is_regex = optim_target_modules != key
     elif key in optim_target_modules:  # from here, target_module_found must be a list of str
         # this module is specified directly in target_modules
         target_module_found = True

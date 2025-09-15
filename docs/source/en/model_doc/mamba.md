@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-12-01 and added to Hugging Face Transformers on 2024-03-05.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -28,6 +29,7 @@ You can find all the original Mamba checkpoints under the [State Space Models](h
 
 
 > [!TIP]
+> This model was contributed by [Molbap](https://huggingface.co/Molbap) and [AntonV](https://huggingface.co/AntonV).
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
@@ -42,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="state-spaces/mamba-130m-hf",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -56,8 +58,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer  
 
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
-model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float16, device_map="auto",)  
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")  
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", dtype=torch.float16, device_map="auto",)  
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)  
 
 output = model.generate(**input_ids)  
 print(tokenizer.decode(output[0], skip_special_tokens=True)
@@ -85,8 +87,8 @@ from torchao.quantization import Int4WeightOnlyConfig
 quantization_config = Int4WeightOnlyConfig(group_size=128)
 quantization_config = TorchAoConfig(quant_type=quant_config)
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-2.8b-hf")
-model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", torch_dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto",)
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto",)
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -114,6 +116,13 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
   )
   trainer.train()
    ```
+
+## MambaCache
+
+[[autodoc]] MambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
 
 ## MambaConfig
 

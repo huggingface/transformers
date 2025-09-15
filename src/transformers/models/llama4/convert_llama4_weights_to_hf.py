@@ -224,7 +224,7 @@ def write_model(
         params = json.load(f)
 
     params = params.get("model", params)
-    torch_dtype = "bfloat16"
+    dtype = "bfloat16"
 
     # ------------------------------------------------------------
     # Text model params and config
@@ -267,7 +267,7 @@ def write_model(
 
     num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
 
-    if hasattr(params, "moe_args"):
+    if params.get("moe_args", False):
         num_experts = params["moe_args"]["num_experts"]
         interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
     else:
@@ -303,7 +303,7 @@ def write_model(
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
         tie_word_embeddings=False,  # Constant set to False
-        torch_dtype=torch_dtype,
+        dtype=dtype,
         for_llm_compressor=_OFFLINE_QUANT_COMPATIBLE,
         **config_kwargs,
     )
@@ -527,7 +527,7 @@ def write_model(
     with torch.no_grad():
         # TODO test if we can do `tp_plan="auto"``
         model = Llama4ForConditionalGeneration.from_pretrained(
-            model_path, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="eager"
+            model_path, dtype=torch.bfloat16, device_map="auto", attn_implementation="eager"
         )
 
         model.generation_config.top_p = 0.9

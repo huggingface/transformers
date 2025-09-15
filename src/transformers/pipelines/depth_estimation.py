@@ -47,6 +47,11 @@ class DepthEstimationPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=depth-estimation).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
@@ -112,7 +117,7 @@ class DepthEstimationPipeline(Pipeline):
         image = load_image(image, timeout)
         model_inputs = self.image_processor(images=image, return_tensors=self.framework)
         if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+            model_inputs = model_inputs.to(self.dtype)
         model_inputs["target_size"] = image.size[::-1]
         return model_inputs
 

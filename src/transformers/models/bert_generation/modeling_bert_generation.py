@@ -27,8 +27,10 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     is_torch_flex_attn_available,
     logging,
@@ -69,7 +71,7 @@ def eager_attention_forward(
     dropout: float = 0.0,
     head_mask: Optional[torch.Tensor] = None,
     use_cache: Optional[bool] = None,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
@@ -156,7 +158,7 @@ class BertGenerationSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
         bsz, tgt_len = hidden_states.shape[:-1]
@@ -255,7 +257,7 @@ class BertGenerationCrossAttention(nn.Module):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[EncoderDecoderCache] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
         bsz, tgt_len = hidden_states.shape[:-1]
@@ -270,8 +272,8 @@ class BertGenerationCrossAttention(nn.Module):
         is_updated = past_key_value.is_updated.get(self.layer_idx) if past_key_value is not None else False
         if past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value.cross_attention_cache.key_cache[self.layer_idx]
-            value_layer = past_key_value.cross_attention_cache.value_cache[self.layer_idx]
+            key_layer = past_key_value.cross_attention_cache.layers[self.layer_idx].keys
+            value_layer = past_key_value.cross_attention_cache.layers[self.layer_idx].values
         else:
             key_layer = self.key(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
             value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
@@ -279,9 +281,7 @@ class BertGenerationCrossAttention(nn.Module):
             if past_key_value is not None:
                 # save all states to the cache
                 key_layer, value_layer = past_key_value.cross_attention_cache.update(
-                    key_layer,
-                    value_layer,
-                    self.layer_idx,
+                    key_layer, value_layer, self.layer_idx
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 past_key_value.is_updated[self.layer_idx] = True
@@ -359,7 +359,7 @@ class BertGenerationAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         if self.is_cross_attention:
             self_outputs = self.self(
@@ -446,7 +446,7 @@ class BertGenerationLayer(GradientCheckpointingLayer):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
@@ -520,7 +520,7 @@ class BertEncoder(nn.Module):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -705,6 +705,10 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
     config_class = BertGenerationConfig
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -788,7 +792,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -842,15 +846,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
-        if attention_mask is None:
-            # required mask seq length can be calculated via length of past cache
-            mask_seq_length = past_key_values_length + seq_length
-            attention_mask = torch.ones(batch_size, mask_seq_length, device=device)
-
-        if self.config.is_decoder and encoder_hidden_states is not None and encoder_attention_mask is None:
-            encoder_attention_mask = torch.ones(encoder_hidden_states.shape[:2], device=device)
-
-        if attention_mask.dim() == 2:
+        if attention_mask is not None and attention_mask.dim() == 2:
             if self.config.is_decoder:
                 attention_mask = create_causal_mask(
                     config=self.config,
@@ -864,7 +860,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
                     attention_mask,
                     embedding_output,
                 )
-        elif attention_mask.dim() == 3:
+        elif attention_mask is not None and attention_mask.dim() == 3:
             if self.config._attn_implementation in ["flash_attention_2", "flex_attention"]:
                 raise ValueError(
                     "Passing attention mask with a 3D/4D shape does not work with type "
@@ -907,6 +903,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            position_ids=position_ids,
             **kwargs,
         )
         sequence_output = encoder_outputs[0]
@@ -1049,7 +1046,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1120,14 +1117,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = [

@@ -156,6 +156,11 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
     supplied arguments.
     """
 
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
     def normalize(self, item):
         if isinstance(item, SquadExample):
             return item
@@ -519,7 +524,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
         # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
         model_forward = self.model.forward if self.framework == "pt" else self.model.call
-        if "use_cache" in inspect.signature(model_forward).parameters.keys():
+        if "use_cache" in inspect.signature(model_forward).parameters:
             model_inputs["use_cache"] = False
         output = self.model(**model_inputs)
         if isinstance(output, dict):
@@ -551,8 +556,18 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 output["attention_mask"].numpy() if output.get("attention_mask", None) is not None else None
             )
 
+            pre_topk = (
+                top_k * 2 + 10 if align_to_words else top_k
+            )  # Some candidates may be deleted if we align to words
             starts, ends, scores, min_null_score = select_starts_ends(
-                start_, end_, p_mask, attention_mask, min_null_score, top_k, handle_impossible_answer, max_answer_len
+                start_,
+                end_,
+                p_mask,
+                attention_mask,
+                min_null_score,
+                pre_topk,
+                handle_impossible_answer,
+                max_answer_len,
             )
 
             if not self.tokenizer.is_fast:
@@ -579,7 +594,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 # Start: Index of the first character of the answer in the context string
                 # End: Index of the character following the last character of the answer in the context string
                 # Answer: Plain text of the answer
-                question_first = bool(self.tokenizer.padding_side == "right")
+                question_first = self.tokenizer.padding_side == "right"
                 enc = output["encoding"]
 
                 # Encoding was *not* padded, input_ids *might*.

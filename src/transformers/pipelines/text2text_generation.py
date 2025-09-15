@@ -68,6 +68,10 @@ class Text2TextGenerationPipeline(Pipeline):
     ```"""
 
     _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
     # Make sure the docstring is updated when the default generation config is changed (in all pipelines in this file)
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
@@ -146,7 +150,7 @@ class Text2TextGenerationPipeline(Pipeline):
             args = (prefix + args[0],)
             padding = False
         else:
-            raise ValueError(
+            raise TypeError(
                 f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
             )
         inputs = self.tokenizer(*args, padding=padding, truncation=truncation, return_tensors=self.framework)

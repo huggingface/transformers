@@ -24,10 +24,9 @@ import math
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Optional, Union
 
-from transformers.image_processing_base import BatchFeature
-from transformers.image_transforms import group_images_by_shape, reorder_images
-
+from ...image_processing_base import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -36,9 +35,6 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     is_torch_tensor,
-    make_list_of_images,
-    pil_torch_interpolation_mapping,
-    validate_kwargs,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -66,7 +62,7 @@ elif is_torchvision_available():
 class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     ensure_multiple_of (`int`, *optional*, defaults to 1):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
         by `ensure_multiple_of` in `preprocess`.
     do_pad (`bool`, *optional*, defaults to `False`):
         Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
@@ -76,7 +72,7 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         DINOv2 paper, which uses the model in combination with DPT.
     keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
         If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-        be overidden by `keep_aspect_ratio` in `preprocess`.
+        be overridden by `keep_aspect_ratio` in `preprocess`.
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
         Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
         is used for background, and background itself is not included in all classes of a dataset (e.g.
@@ -162,6 +158,55 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
 
         return label
 
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
+        **kwargs: Unpack[DPTFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        """
+        return super().preprocess(images, segmentation_maps, **kwargs)
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput],
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[DPTFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        """
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        images_kwargs = kwargs.copy()
+        images_kwargs["do_reduce_labels"] = False
+        batch_feature = self._preprocess(images, **images_kwargs)
+
+        if segmentation_maps is not None:
+            processed_segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+
+            segmentation_maps_kwargs = kwargs.copy()
+            segmentation_maps_kwargs.update({"do_normalize": False, "do_rescale": False})
+            processed_segmentation_maps = self._preprocess(
+                images=processed_segmentation_maps, **segmentation_maps_kwargs
+            ).pixel_values
+            batch_feature["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
+
+        return batch_feature
+
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -219,105 +264,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return processed_images
-
-    def _preprocess_images(
-        self,
-        images,
-        **kwargs,
-    ):
-        """Preprocesses images."""
-        kwargs["do_reduce_labels"] = False
-        processed_images = self._preprocess(images=images, **kwargs)
-        return processed_images
-
-    def _preprocess_segmentation_maps(
-        self,
-        segmentation_maps,
-        **kwargs,
-    ):
-        """Preprocesses segmentation maps."""
-        processed_segmentation_maps = []
-        for segmentation_map in segmentation_maps:
-            segmentation_map = self._process_image(
-                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
-            )
-
-            if segmentation_map.ndim == 2:
-                segmentation_map = segmentation_map[None, ...]
-
-            processed_segmentation_maps.append(segmentation_map)
-
-        kwargs["do_normalize"] = False
-        kwargs["do_rescale"] = False
-        kwargs["input_data_format"] = ChannelDimension.FIRST
-        processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
-
-        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
-
-        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
-        return processed_segmentation_maps
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[DPTFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        segmentation_maps (`ImageInput`, *optional*):
-            The segmentation maps to preprocess.
-        """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-
-        # Prepare segmentation maps
-        if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # torch resize uses interpolation instead of resample
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-
-        images = self._preprocess_images(
-            images=images,
-            **kwargs,
-        )
-        data = {"pixel_values": images}
-
-        if segmentation_maps is not None:
-            segmentation_maps = self._preprocess_segmentation_maps(
-                segmentation_maps=segmentation_maps,
-                **kwargs,
-            )
-            data["labels"] = segmentation_maps
-
-        return BatchFeature(data=data)
+        return BatchFeature(data={"pixel_values": processed_images})
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
@@ -366,7 +313,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         ensure_multiple_of: Optional[int] = 1,
         keep_aspect_ratio: bool = False,

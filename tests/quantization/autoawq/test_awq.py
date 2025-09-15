@@ -196,9 +196,7 @@ class AwqTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.bfloat16).to(torch_device)
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_BF16)
@@ -338,7 +336,7 @@ class AwqFusedTest(unittest.TestCase):
 
     def test_fused_modules_to_not_convert(self):
         """
-        Test if fused + modules to_not_covnert work as expected
+        Test if fused + modules to_not_convert work as expected
         """
         model_id = "hf-internal-testing/Mixtral-tiny-AWQ"
 
@@ -512,7 +510,7 @@ class AwqScaleTest(unittest.TestCase):
         Simple test that checks if the scales have been replaced in the quantized model
         """
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            "TechxGenus/starcoder2-3b-AWQ", torch_dtype=torch.float16, device_map=torch_device
+            "TechxGenus/starcoder2-3b-AWQ", dtype=torch.float16, device_map=torch_device
         )
         self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))
 

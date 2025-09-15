@@ -131,9 +131,6 @@ generation_output[:2]
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] HammingDiversityLogitsProcessor
-    - __call__
-
 [[autodoc]] InfNanRemoveLogitsProcessor
     - __call__
 
@@ -308,32 +305,6 @@ generation_output[:2]
 [[autodoc]] EosTokenCriteria
     - __call__
 
-## Constraint [[transformers.Constraint]]
-
-[`Constraint`]는 생성 출력에 특정 토큰이나 시퀀스를 강제로 포함시키는 데 사용됩니다. 이 기능은 PyTorch 구현에만 제공됩니다.
-
-[[autodoc]] Constraint
-
-[[autodoc]] PhrasalConstraint
-
-[[autodoc]] DisjunctiveConstraint
-
-[[autodoc]] ConstraintListState
-
-## 빔 검색 (BeamSearch) [[transformers.BeamScorer]]
-
-[[autodoc]] BeamScorer
-    - process
-    - finalize
-
-[[autodoc]] BeamSearchScorer
-    - process
-    - finalize
-
-[[autodoc]] ConstrainedBeamSearchScorer
-    - process
-    - finalize
-
 ## 스트리머 (Streamers) [[transformers.TextStreamer]]
 
 [[autodoc]] TextStreamer
@@ -342,65 +313,68 @@ generation_output[:2]
 
 ## 캐시 (Caches) [[transformers.Cache]]
 
-[[autodoc]] Cache
-    - update
-
-[[autodoc]] CacheConfig
-    - update
-
-[[autodoc]] QuantizedCacheConfig
-    - validate
-
-[[autodoc]] DynamicCache
+[[autodoc]] CacheLayerMixin
     - update
     - get_seq_length
+    - get_mask_sizes
+    - get_max_cache_shape
+    - reset
     - reorder_cache
+
+[[autodoc]] DynamicLayer
+    - update
+    - crop
+    - batch_repeat_interleave
+    - batch_select_indices
+
+[[autodoc]] StaticLayer
+    - update
+
+[[autodoc]] SlidingWindowLayer
+    - update
+
+[[autodoc]] QuantoQuantizedLayer
+    - update
+
+[[autodoc]] HQQQuantizedLayer
+    - update
+
+[[autodoc]] Cache
+    - update
+    - get_seq_length
+    - get_mask_sizes
+    - get_max_cache_shape
+    - reset
+    - reorder_cache
+    - crop
+    - batch_repeat_interleave
+    - batch_select_indices
+
+[[autodoc]] DynamicCache
     - to_legacy_cache
     - from_legacy_cache
 
 [[autodoc]] QuantizedCache
-    - update
-    - get_seq_length
 
 [[autodoc]] QuantoQuantizedCache
 
 [[autodoc]] HQQQuantizedCache
 
 [[autodoc]] OffloadedCache
-    - update
-    - prefetch_layer
-    - evict_previous_layer
 
 [[autodoc]] StaticCache
-    - update
-    - get_seq_length
-    - reset
 
 [[autodoc]] OffloadedStaticCache
-    - update
-    - get_seq_length
-    - reset
 
 [[autodoc]] HybridCache
-    - update
-    - get_seq_length
-    - reset
+
+[[autodoc]] HybridChunkedCache
 
 [[autodoc]] SlidingWindowCache
-    - update
-    - reset
 
 [[autodoc]] EncoderDecoderCache
-    - get_seq_length
     - to_legacy_cache
     - from_legacy_cache
-    - reset
-    - reorder_cache
-
-[[autodoc]] MambaCache
-    - update_conv_state
-    - update_ssm_state
-    - reset
 
 ## 워터마크 유틸리티 (Watermark Utils) [[transformers.WatermarkDetector]]
 

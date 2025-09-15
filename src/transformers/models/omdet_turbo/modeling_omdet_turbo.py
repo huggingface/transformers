@@ -59,7 +59,7 @@ class OmDetTurboEncoderOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
-    extracted_states: tuple[torch.FloatTensor] = None
+    extracted_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -92,7 +92,7 @@ class OmDetTurboDecoderOutput(ModelOutput):
     decoder_coords: Optional[torch.FloatTensor] = None
     decoder_classes: Optional[torch.FloatTensor] = None
     encoder_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_class_logits: tuple[torch.FloatTensor] = None
+    encoder_class_logits: Optional[tuple[torch.FloatTensor]] = None
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: tuple[tuple[torch.FloatTensor]] = None
 
@@ -147,7 +147,7 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[tuple[tuple[torch.FloatTensor]]] = None
     encoder_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_class_logits: tuple[torch.FloatTensor] = None
+    encoder_class_logits: Optional[tuple[torch.FloatTensor]] = None
     encoder_extracted_states: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
@@ -494,11 +494,6 @@ class OmDetTurboMultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(dropout)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         queries: torch.Tensor,
@@ -507,9 +502,18 @@ class OmDetTurboMultiheadAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        query_layer = self.transpose_for_scores(self.query(queries))
-        key_layer = self.transpose_for_scores(self.key(keys))
-        value_layer = self.transpose_for_scores(self.value(values))
+        batch_size, seq_length, _ = queries.shape
+        query_layer = (
+            self.query(queries)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(keys).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
+        value_layer = (
+            self.value(values).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -978,7 +982,7 @@ class OmDetTurboDeformableTransformerDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class OmDetTurboPreTrainedModel(PreTrainedModel):
-    config_class = OmDetTurboConfig
+    config: OmDetTurboConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 
@@ -1008,11 +1012,11 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 nn.init.xavier_uniform_(layer[0].weight)
         elif isinstance(module, OmDetTurboLanguageBackbone):
             nn.init.normal_(module.text_projection, std=self.config.text_projection_in_dim**-0.5)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
 

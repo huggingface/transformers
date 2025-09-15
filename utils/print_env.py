@@ -81,5 +81,5 @@ try:
     print("FFmpeg version:", versions["ffmpeg_version"])
 except ImportError:
     print("FFmpeg version:", None)
-except (AttributeError, KeyError):
+except (AttributeError, KeyError, RuntimeError):
     print("Failed to get FFmpeg version")

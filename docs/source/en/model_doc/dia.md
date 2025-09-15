@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-21 and added to Hugging Face Transformers on 2025-06-26.*
 
 # Dia
 
@@ -26,14 +27,14 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Dia is an opensource text-to-speech (TTS) model (1.6B parameters) developed by [Nari Labs](https://huggingface.co/nari-labs).
-It can generate highly realistic dialogue from transcript including nonverbal communications such as laughter and coughing.
+[Dia](https://github.com/nari-labs/dia) is an open-source text-to-speech (TTS) model (1.6B parameters) developed by [Nari Labs](https://huggingface.co/nari-labs).
+It can generate highly realistic dialogue from transcript including non-verbal communications such as laughter and coughing.
 Furthermore, emotion and tone control is also possible via audio conditioning (voice cloning).
 
 **Model Architecture:**
 Dia is an encoder-decoder transformer based on the original transformer architecture. However, some more modern features such as
 rotational positional embeddings (RoPE) are also included. For its text portion (encoder), a byte tokenizer is utilized while
-for the audio portion (decoder), a pretrained codec model [DAC](./dac.md) is used - DAC encodes speech into discrete codebook
+for the audio portion (decoder), a pretrained codec model [DAC](./dac) is used - DAC encodes speech into discrete codebook
 tokens and decodes them back into audio.
 
 ## Usage Tips
@@ -41,9 +42,9 @@ tokens and decodes them back into audio.
 ### Generation with Text
 
 ```python
-from transformers import AutoProcessor, DiaForConditionalGeneration
+from transformers import AutoProcessor, DiaForConditionalGeneration, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
@@ -63,9 +64,9 @@ processor.save_audio(outputs, "example.wav")
 
 ```python
 from datasets import load_dataset, Audio
-from transformers import AutoProcessor, DiaForConditionalGeneration
+from transformers import AutoProcessor, DiaForConditionalGeneration, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -90,9 +91,9 @@ processor.save_audio(outputs, "example_with_audio.wav")
 
 ```python
 from datasets import load_dataset, Audio
-from transformers import AutoProcessor, DiaForConditionalGeneration
+from transformers import AutoProcessor, DiaForConditionalGeneration, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")

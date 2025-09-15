@@ -16,6 +16,7 @@ import argparse
 import fnmatch
 import re
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -33,7 +34,7 @@ from transformers import (
 # python3 -m dac download --model_type 44khz # downloads the 44kHz variant
 # python3 -m dac download --model_type 24khz # downloads the 24kHz variant
 # python3 -m dac download --model_type 16khz # downloads the 16kHz variant
-# More informations: https://github.com/descriptinc/descript-audio-codec/tree/main
+# More information: https://github.com/descriptinc/descript-audio-codec/tree/main
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.dac")
@@ -240,6 +241,7 @@ def convert_checkpoint(
     config.upsampling_ratios = metadata["decoder_rates"]
     config.quantizer_dropout = float(metadata["quantizer_dropout"])
     config.sampling_rate = sample_rate
+    config.hop_length = int(np.prod(config.downsampling_ratios))
 
     model = DacModel(config)
     feature_extractor = DacFeatureExtractor()

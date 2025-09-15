@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...generation.logits_process import (
     AlternatingCodebooksLogitsProcessor,
@@ -66,7 +67,7 @@ class BarkSelfAttention(nn.Module):
     # adapted from GPTNeoSelfAttention and Bark code
     # BarkSelfAttention can have two attention type, i.e full attention or causal attention
 
-    def __init__(self, config, is_causal=False):
+    def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
 
         # regularization
@@ -90,6 +91,7 @@ class BarkSelfAttention(nn.Module):
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.bias)
 
         self.is_causal = is_causal
+        self.layer_idx = layer_idx
         if is_causal:
             block_size = config.block_size
             bias = torch.tril(torch.ones((block_size, block_size), dtype=bool)).view(1, 1, block_size, block_size)
@@ -155,6 +157,7 @@ class BarkSelfAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        cache_position=None,
     ):
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         query, key, value = self.att_proj(hidden_states).split(self.embed_dim, dim=2)
@@ -164,15 +167,7 @@ class BarkSelfAttention(nn.Module):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if past_key_values is not None:
-            past_key = past_key_values[0]
-            past_value = past_key_values[1]
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
-
-        if use_cache is True:
-            present = (key, value)
-        else:
-            present = None
+            key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
 
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
@@ -180,11 +175,7 @@ class BarkSelfAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        outputs = (attn_output, present)
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return attn_output, attn_weights
 
 
 class BarkSelfFlashAttention2(BarkSelfAttention):
@@ -229,6 +220,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        cache_position=None,
     ):
         batch_size, query_len, _ = hidden_states.size()
 
@@ -240,18 +232,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if past_key_values is not None:
-            # (batch, head, seq_length, head_features) -> (batch, seq_length, head, head_features)
-            past_key = past_key_values[0].transpose(1, 2)
-            past_value = past_key_values[1].transpose(1, 2)
-            # and merge on seq_length
-            key = torch.cat((past_key, key), dim=1)
-            value = torch.cat((past_value, value), dim=1)
-
-        if use_cache is True:
-            #  (batch, head, seq_length, head_features)
-            present = (key.transpose(1, 2), value.transpose(1, 2))
-        else:
-            present = None
+            key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
 
         attn_output = _flash_attention_forward(
             query,
@@ -268,12 +249,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        outputs = (attn_output, present)
-        if output_attentions:
-            attn_weights = None
-            outputs += (attn_weights,)
-
-        return outputs
+        return attn_output, None
 
 
 BARK_ATTENTION_CLASSES = {
@@ -299,7 +275,7 @@ class BarkMLP(nn.Module):
 
 
 class BarkBlock(GradientCheckpointingLayer):
-    def __init__(self, config, is_causal=False):
+    def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
 
         if is_causal:
@@ -311,7 +287,9 @@ class BarkBlock(GradientCheckpointingLayer):
             self.layernorm_1 = nn.LayerNorm(config.hidden_size)
             self.layernorm_2 = nn.LayerNorm(config.hidden_size)
 
-        self.attn = BARK_ATTENTION_CLASSES[config._attn_implementation](config, is_causal=is_causal)
+        self.attn = BARK_ATTENTION_CLASSES[config._attn_implementation](
+            config, is_causal=is_causal, layer_idx=layer_idx
+        )
 
         self.mlp = BarkMLP(config)
 
@@ -323,6 +301,7 @@ class BarkBlock(GradientCheckpointingLayer):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        cache_position=None,
     ):
         intermediary_hidden_states = self.layernorm_1(hidden_states)
 
@@ -333,6 +312,7 @@ class BarkBlock(GradientCheckpointingLayer):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            cache_position=cache_position,
         )
 
         attn_output = attn_outputs[0]  # output_attn: output, present_key_values, (attn_weights)
@@ -343,20 +323,14 @@ class BarkBlock(GradientCheckpointingLayer):
             self.layernorm_2(intermediary_hidden_states)
         )
 
-        if use_cache:
-            outputs = (intermediary_hidden_states,) + outputs
-        else:
-            outputs = (intermediary_hidden_states,) + outputs[1:]
-
-        return outputs  # hidden_states, ((present), attentions)
+        return (intermediary_hidden_states,) + outputs
 
 
 @auto_docstring
 class BarkPreTrainedModel(PreTrainedModel):
-    config_class = BarkConfig
+    config: BarkConfig
     supports_gradient_checkpointing = False
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -400,7 +374,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 
 # GPT2-like autoregressive model
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
-    config_class = BarkSubModelConfig
+    config: BarkSubModelConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -412,8 +386,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         self.drop = nn.Dropout(config.dropout)
 
-        self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self.layers = nn.ModuleList([BarkBlock(config, is_causal=True, layer_idx=i) for i in range(config.num_layers)])
 
         self.layernorm_final = nn.LayerNorm(config.hidden_size, bias=config.bias)
 
@@ -423,79 +396,48 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_output_embeddings(self):
+        # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
+        # See e.g. https://github.com/huggingface/transformers/pull/39339#discussion_r2219126400
+        return None
+
     def get_input_embeddings(self):
         return self.input_embeds_layer
 
     def set_input_embeddings(self, new_embeddings):
         self.input_embeds_layer = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
-        # Overwritten -- bark has a model-specific hack
-        input_embeds = kwargs.get("input_embeds", None)
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        attention_mask=None,
+        input_embeds=None,
+        past_key_values=None,
+        position_ids=None,
+        use_cache=None,
+        cache_position=None,
+        **kwargs,
+    ):
+        # Overwritten -- bark uses `input_embeds` not `inputS_embeds`
 
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        if past_key_values is not None:
-            # Omit tokens covered by past_key_values
-            seq_len = input_ids.shape[1]
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-            # input_embeds have already been used and is not required anymore
-            input_embeds = None
-        else:
-            if input_embeds is not None and kwargs.get("use_cache"):
-                seq_len = input_embeds.shape[1]
-            else:
-                seq_len = input_ids.shape[1]
-
-        # ensure that attention_mask and position_ids shapes are aligned with the weird Bark hack of reducing
-        # sequence length on the first forward pass
-        if attention_mask is not None:
-            attention_mask = attention_mask[:, :seq_len]
-        if position_ids is not None:
-            position_ids = position_ids[:, :seq_len]
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-        else:
-            position_ids = None
-
-        if input_embeds is not None and kwargs.get("use_cache"):
-            return {
-                "input_ids": None,
-                "input_embeds": input_embeds,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "position_ids": position_ids,
-                "attention_mask": attention_mask,
-            }
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-        }
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            attention_mask=attention_mask,
+            inputs_embeds=input_embeds,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        model_inputs["input_embeds"] = model_inputs.pop("inputs_embeds", None)
+        return model_inputs
 
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -505,6 +447,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
         input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
@@ -547,11 +490,24 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         device = input_ids.device if input_ids is not None else input_embeds.device
 
-        if past_key_values is None:
-            past_length = 0
-            past_key_values = tuple([None] * len(self.layers))
-        else:
-            past_length = past_key_values[0][0].size(-2)
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+        if use_cache and isinstance(past_key_values, tuple):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `DynamicCache` instead, e.g. "
+                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
+            )
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if position_ids is None:
             position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
@@ -563,7 +519,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            if self._use_flash_attention_2:
+            if self.config._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 attention_mask = attention_mask.view(batch_size, -1)
@@ -580,37 +536,27 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        present_key_values = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
-        for i, (block, past_layer_key_values) in enumerate(zip(self.layers, past_key_values)):
+        for i, block in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             outputs = block(
                 hidden_states,
-                past_key_values=past_layer_key_values,
+                past_key_values=past_key_values,
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
                 use_cache=use_cache,
                 output_attentions=output_attentions,
+                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
 
-            if use_cache:
-                present_key_values = present_key_values + (outputs[1],)
-
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
 
         hidden_states = self.layernorm_final(hidden_states)
 
@@ -624,30 +570,15 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         if not return_dict:
             return tuple(
-                v for v in [None, logits, present_key_values, all_hidden_states, all_self_attentions] if v is not None
+                v for v in [None, logits, past_key_values, all_hidden_states, all_self_attentions] if v is not None
             )
 
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=present_key_values,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-        )
-
-    @staticmethod
-    def _reorder_cache(
-        past_key_values: tuple[tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> tuple[tuple[torch.Tensor]]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-        """
-        # Necessary for beam_search
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past_key_values
         )
 
 
@@ -659,7 +590,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 )
 class BarkSemanticModel(BarkCausalModel):
     base_model_prefix = "semantic"
-    config_class = BarkSemanticConfig
+    config: BarkSemanticConfig
 
     def generate(
         self,
@@ -770,7 +701,7 @@ class BarkSemanticModel(BarkCausalModel):
 )
 class BarkCoarseModel(BarkCausalModel):
     base_model_prefix = "coarse_acoustics"
-    config_class = BarkCoarseConfig
+    config: BarkCoarseConfig
 
     def preprocess_histories(
         self,
@@ -991,7 +922,7 @@ class BarkCoarseModel(BarkCausalModel):
 )
 class BarkFineModel(BarkPreTrainedModel):
     base_model_prefix = "fine_acoustics"
-    config_class = BarkFineConfig
+    config: BarkFineConfig
     main_input_name = "codebook_idx"
 
     def __init__(self, config):
@@ -1008,8 +939,9 @@ class BarkFineModel(BarkPreTrainedModel):
 
         self.drop = nn.Dropout(config.dropout)
 
-        self.layers = nn.ModuleList([BarkBlock(config, is_causal=False) for _ in range(config.num_layers)])
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self.layers = nn.ModuleList(
+            [BarkBlock(config, is_causal=False, layer_idx=i) for i in range(config.num_layers)]
+        )
 
         self.layernorm_final = nn.LayerNorm(config.hidden_size)
 
@@ -1130,16 +1062,6 @@ class BarkFineModel(BarkPreTrainedModel):
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
         """
-        if getattr(self.config, "tie_word_embeddings", True):
-            self._tied_weights_keys = []
-            output_embeddings = self.get_output_embeddings()
-            input_embeddings = self.get_input_embeddings()
-
-            for i in range(self.config.n_codes_total - self.config.n_codes_given):
-                # self.input_embeds_layers[i + 1].weight = self.lm_heads[i].weight
-                self._tie_or_clone_weights(output_embeddings[i], input_embeddings[i + 1])
-                self._tied_weights_keys.append(f"lm_heads.{i}.weight")
-
         for module in self.modules():
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
@@ -1216,7 +1138,7 @@ class BarkFineModel(BarkPreTrainedModel):
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            if self._use_flash_attention_2:
+            if self.config._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
@@ -1423,7 +1345,7 @@ class BarkFineModel(BarkPreTrainedModel):
     """
 )
 class BarkModel(BarkPreTrainedModel):
-    config_class = BarkConfig
+    config: BarkConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -1684,41 +1606,16 @@ class BarkModel(BarkPreTrainedModel):
 
         return audio
 
-    @classmethod
-    def _check_and_enable_flash_attn_2(
-        cls,
-        config,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, dict[str, int]]] = None,
-        hard_check_only: bool = False,
-        check_device_map: bool = False,
-    ):
+    def tie_weights(self):
         """
-        `_check_and_enable_flash_attn_2` originally don't expand flash attention enabling to the model
-        sub-configurations. We override the original method to make sure that Bark sub-models are using Flash Attention
-        if necessary.
+        Tie the weights between the input embeddings list and the output embeddings list.
 
-        If you don't know about Flash Attention, check out the official repository of flash attention:
-        https://github.com/Dao-AILab/flash-attention
-
-        For using Flash Attention 1.0 you can do it directly via the `BetterTransformer` API, have a look at this
-        specific section of the documentation to learn more about it:
-        https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#decoder-models
-
-        The method checks if the current setup is compatible with Flash Attention as it requires the model to be in
-        half precision and not ran on CPU.
-
-        If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "flash_attention_2" so that the model
-        can initialize the correct attention module
+        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
+        weights instead.
         """
-        config = super()._check_and_enable_flash_attn_2(
-            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
-        )
-
-        config.semantic_config._attn_implementation = config._attn_implementation
-        config.coarse_acoustics_config._attn_implementation = config._attn_implementation
-        config.fine_acoustics_config._attn_implementation = config._attn_implementation
-        return config
+        for module in self.modules():
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
 
 
 __all__ = [

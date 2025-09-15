@@ -417,7 +417,7 @@ class SqueezeBertOnlyMLMHead(nn.Module):
 
 @auto_docstring
 class SqueezeBertPreTrainedModel(PreTrainedModel):
-    config_class = SqueezeBertConfig
+    config: SqueezeBertConfig
     base_model_prefix = "transformer"
 
     def _init_weights(self, module):

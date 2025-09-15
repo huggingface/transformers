@@ -18,13 +18,9 @@ import math
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Optional, Union
 
-from transformers.image_processing_base import BatchFeature
-from transformers.image_transforms import group_images_by_shape, reorder_images
-from transformers.models.beit.image_processing_beit_fast import BeitImageProcessorFast
-
-from ...image_processing_utils_fast import (
-    DefaultFastImageProcessorKwargs,
-)
+from ...image_processing_base import BatchFeature
+from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -39,6 +35,7 @@ from ...utils import (
     is_torchvision_v2_available,
     requires_backends,
 )
+from ..beit.image_processing_beit_fast import BeitImageProcessorFast
 
 
 if TYPE_CHECKING:
@@ -95,7 +92,7 @@ def get_resize_output_image_size(
 class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     ensure_multiple_of (`int`, *optional*, defaults to 1):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
         by `ensure_multiple_of` in `preprocess`.
     do_pad (`bool`, *optional*, defaults to `False`):
         Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
@@ -105,7 +102,7 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         DINOv2 paper, which uses the model in combination with DPT.
     keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
         If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-        be overidden by `keep_aspect_ratio` in `preprocess`.
+        be overridden by `keep_aspect_ratio` in `preprocess`.
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
         Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
         is used for background, and background itself is not included in all classes of a dataset (e.g.
@@ -139,14 +136,11 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
 
     valid_kwargs = DPTFastImageProcessorKwargs
 
-    def from_dict():
-        raise NotImplementedError("No need to override this method")
-
     def resize(
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         ensure_multiple_of: Optional[int] = 1,
         keep_aspect_ratio: bool = False,
@@ -180,7 +174,9 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
             keep_aspect_ratio=keep_aspect_ratio,
             multiple=ensure_multiple_of,
         )
-        return BeitImageProcessorFast().resize(image, output_size, interpolation=interpolation, antialias=antialias)
+        return BaseImageProcessorFast.resize(
+            self, image, output_size, interpolation=interpolation, antialias=antialias
+        )
 
     def pad_image(
         self,
@@ -267,7 +263,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return processed_images
+        return BatchFeature(data={"pixel_values": processed_images})
 
     def post_process_depth_estimation(
         self,

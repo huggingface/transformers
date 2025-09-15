@@ -51,7 +51,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         pipe = ImageToTextPipeline(
             model=model,
@@ -59,7 +59,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             max_new_tokens=20,
         )
         examples = [

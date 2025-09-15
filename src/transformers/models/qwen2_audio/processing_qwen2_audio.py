@@ -16,7 +16,6 @@
 Processor class for Qwen2Audio.
 """
 
-import warnings
 from typing import Union
 
 import numpy as np
@@ -24,7 +23,6 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils.deprecation import deprecate_kwarg
 
 
 class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
@@ -80,18 +78,16 @@ class Qwen2AudioProcessor(ProcessorMixin):
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-    @deprecate_kwarg("audios", version="4.54.0", new_name="audio")
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio: Union[np.ndarray, list[np.ndarray]] = None,
-        audios=None,  # kept for BC
         **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
+        the text. To prepare the audio(s), this method forwards the `audios` and `kwargs` arguments to
         WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -103,16 +99,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
             audio (`np.ndarray`, `list[np.ndarray]`):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array.
         """
-
-        # Handle BC when user passes deprecated keyword argument
-        if audios is not None and audio is None:
-            audio = audios
-            warnings.warn(
-                "You may have used the keyword argument for the `audio` inputs. It is strongly recommended to pass inputs with keyword arguments "
-                "with keys `audio` and `text`. From transformers v4.55 `audio` will be the only acceptable keyword argument.",
-                FutureWarning,
-            )
-
         if text is None:
             raise ValueError("You need to specify `text` input to process.")
         elif isinstance(text, str):
@@ -187,20 +173,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
             inputs.update(audio_inputs)
 
         return BatchFeature(data={**inputs}, tensor_type=return_tensors)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
     @property
     def model_input_names(self):

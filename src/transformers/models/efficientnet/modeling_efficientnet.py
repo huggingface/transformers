@@ -20,7 +20,6 @@ from typing import Optional, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -300,7 +299,7 @@ class EfficientNetBlock(nn.Module):
     ):
         super().__init__()
         self.expand_ratio = expand_ratio
-        self.expand = True if self.expand_ratio != 1 else False
+        self.expand = self.expand_ratio != 1
         expand_in_dim = in_dim * expand_ratio
 
         if self.expand:
@@ -371,10 +370,10 @@ class EfficientNetEncoder(nn.Module):
             expand_ratio = config.expand_ratios[i]
 
             for j in range(round_repeats(config.num_block_repeats[i])):
-                id_skip = True if j == 0 else False
+                id_skip = j == 0
                 stride = 1 if j > 0 else stride
                 in_dim = out_dim if j > 0 else in_dim
-                adjust_padding = False if curr_block_num in config.depthwise_padding else True
+                adjust_padding = curr_block_num not in config.depthwise_padding
                 drop_rate = config.drop_connect_rate * curr_block_num / num_blocks
 
                 block = EfficientNetBlock(
@@ -432,22 +431,19 @@ class EfficientNetEncoder(nn.Module):
 
 @auto_docstring
 class EfficientNetPreTrainedModel(PreTrainedModel):
-    config_class = EfficientNetConfig
+    config: EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
     _no_split_modules = []
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 @auto_docstring
@@ -550,26 +546,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]

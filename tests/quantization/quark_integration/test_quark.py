@@ -36,7 +36,7 @@ if is_quark_available():
 
 @require_quark
 class QuarkConfigTest(unittest.TestCase):
-    def test_commmon_args(self):
+    def test_common_args(self):
         config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
         QuarkConfig(**config.quantization_config)
 
@@ -66,7 +66,7 @@ class QuarkTest(unittest.TestCase):
         Setup reference & quantized model
         """
         cls.model_fp16 = AutoModelForCausalLM.from_pretrained(
-            cls.reference_model_name, torch_dtype=torch.float16, device_map=cls.device_map
+            cls.reference_model_name, dtype=torch.float16, device_map=cls.device_map
         )
         cls.mem_fp16 = cls.model_fp16.get_memory_footprint()
 
@@ -74,7 +74,7 @@ class QuarkTest(unittest.TestCase):
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.quantized_model_name,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map=cls.device_map,
         )
 

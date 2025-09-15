@@ -99,14 +99,14 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if (
             device_map is not None
             and isinstance(device_map, dict)
             and not self.quantization_config.llm_int8_enable_fp32_cpu_offload
         ):
             device_map_without_lm_head = {
-                key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
+                key: device_map[key] for key in device_map if key not in self.modules_to_not_convert
             }
             if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
                 pass
@@ -131,18 +131,18 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
             # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
             logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.float16` due to "
+                "Overriding dtype=%s with `dtype=torch.float16` due to "
                 "requirements of `bitsandbytes` to enable model loading in 8-bit or 4-bit. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                " torch_dtype=torch.float16 to remove this warning.",
-                torch_dtype,
+                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
+                " dtype=torch.float16 to remove this warning.",
+                dtype,
             )
-            torch_dtype = torch.float16
-        return torch_dtype
+            dtype = torch.float16
+        return dtype
 
     def update_device_map(self, device_map):
         if device_map is None:
@@ -177,7 +177,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Int8Params):
             if self.pre_quantized:
-                if param_name.replace("weight", "SCB") not in state_dict.keys():
+                if param_name.replace("weight", "SCB") not in state_dict:
                     raise ValueError("Missing quantization component `SCB`")
                 if param_value.dtype != torch.int8:
                     raise ValueError(
@@ -204,8 +204,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         fp16_statistics_key = param_name.replace("weight", "SCB")
         fp16_weights_format_key = param_name.replace("weight", "weight_format")
 
-        fp16_statistics = state_dict.get(fp16_statistics_key, None)
-        fp16_weights_format = state_dict.get(fp16_weights_format_key, None)
+        fp16_statistics = state_dict.get(fp16_statistics_key)
+        fp16_weights_format = state_dict.get(fp16_weights_format_key)
 
         module, tensor_name = get_module_from_name(model, param_name)
         if tensor_name not in module._parameters:
@@ -214,7 +214,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         old_value = getattr(module, tensor_name)
 
         if not isinstance(module._parameters[tensor_name], bnb.nn.Int8Params):
-            raise ValueError(f"Parameter `{tensor_name}` should only be a `bnb.nn.Int8Params` instance.")
+            raise TypeError(f"Parameter `{tensor_name}` should only be a `bnb.nn.Int8Params` instance.")
         if (
             old_value.device == torch.device("meta")
             and target_device not in ["meta", torch.device("meta")]

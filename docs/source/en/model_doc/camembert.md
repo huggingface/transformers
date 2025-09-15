@@ -13,50 +13,106 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-11-10 and added to Hugging Face Transformers on 2020-11-16.*
+
+<div style="float: right;">
+	<div class="flex flex-wrap space-x-1">
+		<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+	</div>
+</div>
 
 # CamemBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[CamemBERT](https://huggingface.co/papers/1911.03894) is a language model based on [RoBERTa](./roberta), but trained specifically on French text from the OSCAR dataset, making it more effective for French language tasks.
 
-## Overview
+What sets CamemBERT apart is that it learned from a huge, high quality collection of French data, as opposed to mixing lots of languages. This helps it really understand French better than many multilingual models.
 
-The CamemBERT model was proposed in [CamemBERT: a Tasty French Language Model](https://huggingface.co/papers/1911.03894) by
-[Louis Martin](https://huggingface.co/louismartin), [Benjamin Muller](https://huggingface.co/benjamin-mlr), [Pedro Javier Ortiz Suárez](https://huggingface.co/pjox), Yoann Dupont, Laurent Romary, Éric Villemonte de la
-Clergerie, [Djamé Seddah](https://huggingface.co/Djame), and [Benoît Sagot](https://huggingface.co/sagot). It is based on Facebook's RoBERTa model released in 2019. It is a model
-trained on 138GB of French text.
+Common applications of CamemBERT include masked language modeling (Fill-mask prediction), text classification (sentiment analysis), token classification (entity recognition) and sentence pair classification (entailment tasks).
 
-The abstract from the paper is the following:
+You can find all the original CamemBERT checkpoints under the [ALMAnaCH](https://huggingface.co/almanach/models?search=camembert) organization.
 
-*Pretrained language models are now ubiquitous in Natural Language Processing. Despite their success, most available
-models have either been trained on English data or on the concatenation of data in multiple languages. This makes
-practical use of such models --in all languages except English-- very limited. Aiming to address this issue for French,
-we release CamemBERT, a French version of the Bi-directional Encoders for Transformers (BERT). We measure the
-performance of CamemBERT compared to multilingual models in multiple downstream tasks, namely part-of-speech tagging,
-dependency parsing, named-entity recognition, and natural language inference. CamemBERT improves the state of the art
-for most of the tasks considered. We release the pretrained model for CamemBERT hoping to foster research and
-downstream applications for French NLP.*
+> [!TIP]
+> This model was contributed by the [ALMAnaCH (Inria)](https://huggingface.co/almanach) team.
+>
+> Click on the CamemBERT models in the right sidebar for more examples of how to apply CamemBERT to different NLP tasks.
 
-This model was contributed by [the ALMAnaCH team (Inria)](https://huggingface.co/almanach). The original code can be found [here](https://camembert-model.fr/).
+The examples below demonstrate how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
-<Tip>
+<hfoptions id="usage">
 
-This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples as well 
-as the information relative to the inputs and outputs.
+<hfoption id="Pipeline">
 
-</Tip>
+```python
+import torch
+from transformers import pipeline
 
-## Resources
+pipeline = pipeline("fill-mask", model="camembert-base", dtype=torch.float16, device=0)
+pipeline("Le camembert est un délicieux fromage <mask>.")
+```
+</hfoption>
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+<hfoption id="AutoModel">
+
+```python
+import torch
+from transformers import AutoTokenizer, AutoModelForMaskedLM
+
+tokenizer = AutoTokenizer.from_pretrained("camembert-base")
+model = AutoModelForMaskedLM.from_pretrained("camembert-base", dtype="auto", device_map="auto", attn_implementation="sdpa")
+inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
+
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
+```
+</hfoption>
+
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Le camembert est un délicieux fromage <mask>." | transformers run --task fill-mask --model camembert-base --device 0
+```
+
+</hfoption>
+
+</hfoptions>
+
+
+Quantization reduces the memory burden of large models by representing weights in lower precision. Refer to the [Quantization](../quantization/overview) overview for available options.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) quantization to quantize the weights to 8-bits.
+
+```python
+from transformers import AutoTokenizer, AutoModelForMaskedLM, BitsAndBytesConfig
+import torch
+
+quant_config = BitsAndBytesConfig(load_in_8bit=True)
+model = AutoModelForMaskedLM.from_pretrained(
+    "almanach/camembert-large",
+    quantization_config=quant_config,
+    device_map="auto"
+)
+tokenizer = AutoTokenizer.from_pretrained("almanach/camembert-large")
+
+inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
+
+masked_index = torch.where(inputs["input_ids"] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
+```
 
 ## CamembertConfig
 
@@ -73,9 +129,6 @@ as the information relative to the inputs and outputs.
 ## CamembertTokenizerFast
 
 [[autodoc]] CamembertTokenizerFast
-
-<frameworkcontent>
-<pt>
 
 ## CamembertModel
 
@@ -104,38 +157,3 @@ as the information relative to the inputs and outputs.
 ## CamembertForQuestionAnswering
 
 [[autodoc]] CamembertForQuestionAnswering
-
-</pt>
-<tf>
-
-## TFCamembertModel
-
-[[autodoc]] TFCamembertModel
-
-## TFCamembertForCausalLM
-
-[[autodoc]] TFCamembertForCausalLM
-
-## TFCamembertForMaskedLM
-
-[[autodoc]] TFCamembertForMaskedLM
-
-## TFCamembertForSequenceClassification
-
-[[autodoc]] TFCamembertForSequenceClassification
-
-## TFCamembertForMultipleChoice
-
-[[autodoc]] TFCamembertForMultipleChoice
-
-## TFCamembertForTokenClassification
-
-[[autodoc]] TFCamembertForTokenClassification
-
-## TFCamembertForQuestionAnswering
-
-[[autodoc]] TFCamembertForQuestionAnswering
-
-</tf>
-</frameworkcontent>
-

@@ -278,7 +278,7 @@ accordingly be called `adapter.{<target_language}.safetensors`.
 
 Let's run an example script. Make sure to be logged in so that your model can be directly uploaded to the Hub.
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Now, let's run an example and upload it to the Hub under `wav2vec2-common_voice-tr-mms-demo`.
@@ -448,7 +448,7 @@ By pairing a pretrained speech model with a pretrained text model, the warm-star
 As an example, let's instantiate a *Wav2Vec2-2-Bart* model with the `SpeechEncoderDecoderModel` framework. First create an empty repo on `hf.co`:
 
 ```bash
-huggingface-cli repo create wav2vec2-2-bart-base
+hf repo create wav2vec2-2-bart-base
 git clone https://huggingface.co/<your-user-name>/wav2vec2-2-bart-base
 cd wav2vec2-2-bart-base
 ```

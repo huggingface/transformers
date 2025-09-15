@@ -19,8 +19,10 @@ import pathlib
 import tempfile
 import time
 import warnings
+from copy import deepcopy
 
 import numpy as np
+import pytest
 import requests
 from packaging import version
 
@@ -35,7 +37,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+
+
+if is_torchvision_available():
+    from transformers.image_processing_utils_fast import BaseImageProcessorFast
 
 
 if is_torch_available():
@@ -239,6 +245,16 @@ class ImageProcessingTestMixin:
         slow_time = measure_time(image_processor_slow, dummy_images)
 
         self.assertLessEqual(fast_time, slow_time)
+
+    def test_is_fast(self):
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+
+            # Check is_fast is set correctly
+            if is_torchvision_available() and issubclass(image_processing_class, BaseImageProcessorFast):
+                self.assertTrue(image_processor.is_fast)
+            else:
+                self.assertFalse(image_processor.is_fast)
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processor_list:
@@ -559,9 +575,47 @@ class ImageProcessingTestMixin:
         if not is_tested:
             self.skipTest(reason="No validation found for `preprocess` method")
 
+    def test_override_instance_attributes_does_not_affect_other_instances(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest(
+                "Only testing fast image processor, as most slow processors break this test and are to be deprecated"
+            )
+
+        image_processing_class = self.fast_image_processing_class
+        image_processor_1 = image_processing_class()
+        image_processor_2 = image_processing_class()
+        if not (hasattr(image_processor_1, "size") and isinstance(image_processor_1.size, dict)) or not (
+            hasattr(image_processor_1, "image_mean") and isinstance(image_processor_1.image_mean, list)
+        ):
+            self.skipTest(
+                reason="Skipping test as the image processor does not have dict size or list image_mean attributes"
+            )
+
+        original_size_2 = deepcopy(image_processor_2.size)
+        for key in image_processor_1.size:
+            image_processor_1.size[key] = -1
+        modified_copied_size_1 = deepcopy(image_processor_1.size)
+
+        original_image_mean_2 = deepcopy(image_processor_2.image_mean)
+        image_processor_1.image_mean[0] = -1
+        modified_copied_image_mean_1 = deepcopy(image_processor_1.image_mean)
+
+        # check that the original attributes of the second instance are not affected
+        self.assertEqual(image_processor_2.size, original_size_2)
+        self.assertEqual(image_processor_2.image_mean, original_image_mean_2)
+
+        for key in image_processor_2.size:
+            image_processor_2.size[key] = -2
+        image_processor_2.image_mean[0] = -2
+
+        # check that the modified attributes of the first instance are not affected by the second instance
+        self.assertEqual(image_processor_1.size, modified_copied_size_1)
+        self.assertEqual(image_processor_1.image_mean, modified_copied_image_mean_1)
+
     @slow
     @require_torch_accelerator
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")
@@ -575,7 +629,6 @@ class ImageProcessingTestMixin:
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
-        print(output_eager.pixel_values.dtype, output_compiled.pixel_values.dtype)
         self._assert_slow_fast_tensors_equivalence(
             output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )

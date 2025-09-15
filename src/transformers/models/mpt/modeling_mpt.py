@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -35,6 +36,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_mpt import MptConfig
 
 
@@ -69,7 +71,7 @@ class MptAttention(nn.Module):
     Using torch or triton attention implementation enables user to also use additive bias.
     """
 
-    def __init__(self, config: MptConfig):
+    def __init__(self, config: MptConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.n_heads = config.n_heads
@@ -83,13 +85,16 @@ class MptAttention(nn.Module):
         self.clip_qkv = config.attn_config.clip_qkv
         self.Wqkv = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=False)
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_bias: torch.Tensor,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
@@ -102,17 +107,12 @@ class MptAttention(nn.Module):
         key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
 
-        if past_key_value is not None:
-            if len(past_key_value) != 0:
-                key_states = torch.cat([past_key_value[0], key_states], dim=2)
-                value_states = torch.cat([past_key_value[1], value_states], dim=2)
-            past_key_value = (key_states, value_states)
-        else:
-            past_key_value = (key_states, value_states)
+        if past_key_values is not None:
+            cache_kwargs = {"cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2)) * self.softmax_scale
-
-        query_length = seq_length if past_key_value is None else seq_length + past_key_value[0].shape[2]
+        query_length = seq_length if past_key_values is None else seq_length + past_key_values.get_seq_length()
 
         if position_bias is not None:
             if len(position_bias.shape) != 3:
@@ -137,7 +137,7 @@ class MptAttention(nn.Module):
         context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
         attn_output = self.out_proj(context_states)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class MptMLP(nn.Module):
@@ -162,7 +162,7 @@ class MptMLP(nn.Module):
 
 
 class MptBlock(GradientCheckpointingLayer):
-    def __init__(self, config: MptConfig):
+    def __init__(self, config: MptConfig, layer_idx: Optional[int] = None):
         super().__init__()
         hidden_size = config.hidden_size
 
@@ -171,7 +171,7 @@ class MptBlock(GradientCheckpointingLayer):
         self.norm_1.bias = None
 
         self.num_heads = config.n_heads
-        self.attn = MptAttention(config)
+        self.attn = MptAttention(config, layer_idx)
 
         self.norm_2 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         # backward compatibility with weights on the Hub
@@ -187,9 +187,10 @@ class MptBlock(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         position_bias: torch.Tensor,
         attention_mask: torch.Tensor,
-        layer_past: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        layer_past: Optional[Cache] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
+        cache_position: Optional[torch.Tensor] = None,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
         # Layer norm at the beginning of the transformer layer.
@@ -198,11 +199,12 @@ class MptBlock(GradientCheckpointingLayer):
         residual = hidden_states
 
         # Self attention.
-        attn_outputs, attn_weights, past_key_value = self.attn(
+        attn_outputs, attn_weights = self.attn(
             layernorm_output,
             position_bias=position_bias,
             attention_mask=attention_mask,
-            past_key_value=layer_past,
+            past_key_values=layer_past,
+            cache_position=cache_position,
         )
 
         hidden_states = self.resid_attn_dropout(attn_outputs) + residual
@@ -214,20 +216,12 @@ class MptBlock(GradientCheckpointingLayer):
 
         # MLP.
         output = self.ffn(layernorm_output, residual)
-        outputs = (output,)
-
-        if use_cache:
-            outputs += (past_key_value,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs  # hidden_states, present, attentions
+        return output, attn_weights
 
 
 @auto_docstring
 class MptPreTrainedModel(PreTrainedModel):
-    config_class = MptConfig
+    config: MptConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MptBlock"]
@@ -254,13 +248,14 @@ class MptPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     @staticmethod
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def _convert_to_mpt_cache(
-        past_key_value: tuple[tuple[torch.Tensor, torch.Tensor]],
+        past_key_values: tuple[tuple[torch.Tensor, torch.Tensor]],
     ) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """
         Converts the cache to the format expected by Mpt, i.e. to tuple(tuple([batch_size * num_heads, ...]))
         """
-        batch_size, num_heads, head_dim, seq_length = past_key_value[0][0].shape
+        batch_size, num_heads, head_dim, seq_length = past_key_values[0][0].shape
         batch_size_times_num_heads = batch_size * num_heads
         # key:  [batch_size, num_heads, head_dim, seq_length] -> [batch_size * num_heads, head_dim, seq_length]
         # value: [batch_size, num_heads, seq_length, head_dim] -> [batch_size * num_heads, seq_length, head_dim]
@@ -269,7 +264,7 @@ class MptPreTrainedModel(PreTrainedModel):
                 layer_past[0].reshape(batch_size_times_num_heads, head_dim, seq_length),
                 layer_past[1].reshape(batch_size_times_num_heads, seq_length, head_dim),
             )
-            for layer_past in past_key_value
+            for layer_past in past_key_values
         )
 
 
@@ -285,7 +280,7 @@ class MptModel(MptPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.hidden_size)
 
         # Transformer blocks
-        self.blocks = nn.ModuleList([MptBlock(config) for _ in range(config.n_layers)])
+        self.blocks = nn.ModuleList([MptBlock(config, layer_idx=i) for i in range(config.n_layers)])
 
         # Final Layer Norm
         self.norm_f = LayerNorm(self.hidden_size, eps=config.layer_norm_epsilon)
@@ -310,18 +305,19 @@ class MptModel(MptPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> Union[tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0][0].shape[2]`
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
             (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -348,18 +344,6 @@ class MptModel(MptPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if past_key_values is None:
-            past_key_values = tuple([None] * len(self.blocks))
-
-        if inputs_embeds is None:
-            inputs_embeds = self.wte(input_ids)
-
-        hidden_states = inputs_embeds
-
-        presents = () if use_cache else None
-        all_self_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
-
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -367,12 +351,27 @@ class MptModel(MptPreTrainedModel):
                 )
                 use_cache = False
 
+        if inputs_embeds is None:
+            inputs_embeds = self.wte(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+        if use_cache and isinstance(past_key_values, tuple):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `DynamicCache` instead, e.g. "
+                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
+            )
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+
+        hidden_states = inputs_embeds
+
+        all_self_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
+
         # Compute alibi tensor: check build_alibi_tensor documentation
-        seq_length_with_past = seq_length
-        past_key_values_length = 0
-        if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        seq_length_with_past = seq_length + past_key_values_length
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
         else:
@@ -385,25 +384,23 @@ class MptModel(MptPreTrainedModel):
         )
         causal_mask = causal_mask.bool()
 
-        for block, layer_past in zip(self.blocks, past_key_values):
+        for block in self.blocks:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             outputs = block(
                 hidden_states,
-                layer_past=layer_past,
+                layer_past=past_key_values,
                 attention_mask=causal_mask,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 position_bias=alibi,
+                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
-            if use_cache is True:
-                presents = presents + (outputs[1],)
-
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (outputs[1],)
 
         # Add last hidden state
         hidden_states = self.norm_f(hidden_states)
@@ -412,11 +409,13 @@ class MptModel(MptPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions] if v is not None
+            )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=presents,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
@@ -439,9 +438,6 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
     def set_output_embeddings(self, new_embeddings: torch.Tensor):
         self.lm_head = new_embeddings
 
@@ -449,7 +445,7 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -457,11 +453,12 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0][0].shape[2]`
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
             (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -487,6 +484,7 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
         hidden_states = transformer_outputs[0]
 
@@ -515,29 +513,6 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-
-    def _reorder_cache(
-        self, past: tuple[tuple[torch.Tensor, torch.Tensor], ...], beam_idx: torch.LongTensor
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], ...]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-
-        Output shares the same memory storage as `past`.
-        """
-        # Get a copy of `beam_idx` on all the devices where we need those indices.
-        device_to_beam_idx = {
-            past_state.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
-        }
-        reordered_past = tuple(
-            (
-                layer_past[0].index_select(0, device_to_beam_idx[layer_past[0].device]),
-                layer_past[1].index_select(0, device_to_beam_idx[layer_past[0].device]),
-            )
-            for layer_past in past
-        )
-        return reordered_past
 
 
 @auto_docstring(
@@ -568,7 +543,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -579,7 +554,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0][0].shape[2]`
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
             (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -691,7 +666,7 @@ class MptForTokenClassification(MptPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -703,7 +678,7 @@ class MptForTokenClassification(MptPreTrainedModel):
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0][0].shape[2]`
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
             (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -781,7 +756,7 @@ class MptForQuestionAnswering(MptPreTrainedModel):
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values[0][0].shape[2]`
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
             (`sequence_length` of input past key value states). Indices of input sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as

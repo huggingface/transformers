@@ -31,9 +31,7 @@ def make_atom14_masks(protein: dict[str, torch.Tensor]) -> dict[str, torch.Tenso
         atom_names = rc.restype_name_to_atom14_names[rc.restype_1to3[rt]]
         restype_atom14_to_atom37_list.append([(rc.atom_order[name] if name else 0) for name in atom_names])
         atom_name_to_idx14 = {name: i for i, name in enumerate(atom_names)}
-        restype_atom37_to_atom14_list.append(
-            [(atom_name_to_idx14[name] if name in atom_name_to_idx14 else 0) for name in rc.atom_types]
-        )
+        restype_atom37_to_atom14_list.append([(atom_name_to_idx14.get(name, 0)) for name in rc.atom_types])
 
         restype_atom14_mask_list.append([(1.0 if name else 0.0) for name in atom_names])
 

@@ -18,12 +18,12 @@ import operator
 import os
 import re
 from functools import partial, reduce
-from typing import Optional, Union
 
 import torch
 import torch.distributed as dist
 from torch import nn
 
+from ..distributed import DistributedConfig
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.generic import GeneralInterface
 
@@ -40,7 +40,7 @@ if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
 
 def initialize_tensor_parallelism(tp_plan, tp_size=None):
     r"""
-    Sets up the device mesh and initilized the backend for tensor parallelism.
+    Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
     """
     if tp_plan is None:
@@ -60,7 +60,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
 
             backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
             backend = backend_map.get(device_type)
-            if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", 0)):
+            if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", "0")):
                 backend = "ccl"
             if device_type == "xpu" and not is_torch_greater_or_equal("2.8", accept_dev=True):
                 backend = "ccl"
@@ -91,10 +91,10 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
     device_map = tp_device
     tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
     device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
-    return tp_device, device_map, device_mesh
+    return tp_device, device_map, device_mesh, tp_size
 
 
-def _blocks_to_block_sizes(total_size: int, blocks: Union[int, list[int]]) -> list[int]:
+def _blocks_to_block_sizes(total_size: int, blocks: int | list[int]) -> list[int]:
     """
     Convert block count or proportions to block sizes.
 
@@ -120,23 +120,25 @@ def _blocks_to_block_sizes(total_size: int, blocks: Union[int, list[int]]) -> li
         return [single_size] * blocks
 
 
-def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str]) -> Optional[str]:
+def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weight=True) -> str | None:
     """
     Get the TP style for a parameter from the TP plan.
 
     The TP plan is a dictionary that maps parameter names to TP styles.
     The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
+
+    The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
+    not parent classes for `post_init` calls
     """
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
     if generic_param_name in tp_plan:
         return tp_plan[generic_param_name]
-    elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan:
+    elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan and is_weight:
         return tp_plan[generic_param_name.rsplit(".", 1)[0]]
-    else:
-        return None
+    return None
 
 
-str_to_torch_dtype = {
+str_to_dtype = {
     "BOOL": torch.bool,
     "U8": torch.uint8,
     "I8": torch.int8,
@@ -199,8 +201,10 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     slice_dtype = slice_.get_dtype()
     # Handle F8_E4M3 dtype by converting to float16 before slicing
     # Without upcasting, the slicing causes : RuntimeError: "index_cpu" not implemented for 'Float8_e4m3fn'
-    if slice_dtype == "F8_E4M3":
+    casted = False
+    if slice_dtype == "F8_E4M3" or slice_dtype == "F8_E5M2":
         slice_ = slice_[...].to(torch.float16)
+        casted = True
 
     if dim == 0:
         tensor = slice_[tensors_slices, ...]
@@ -210,7 +214,11 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
         tensor = slice_[..., tensors_slices]
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
-    return tensor.to(str_to_torch_dtype[slice_dtype])
+
+    if casted:
+        return tensor
+    else:
+        return tensor.to(str_to_dtype[slice_dtype])
 
 
 def repack_weights(
@@ -412,8 +420,8 @@ class GatherParallel(TensorParallelLayer):
     def __init__(
         self,
         *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
+        input_layouts: Placement | None = None,
+        output_layouts: Placement | None = None,
         use_local_output: bool = True,
     ):
         super().__init__()
@@ -424,15 +432,26 @@ class GatherParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        mod.expert_parallel_group = device_mesh.get_group()
         if inputs and isinstance(inputs[0], DTensor):
             inputs = inputs[0].to_local()
         return inputs
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        # this op cannot be async, otherwise it completely breaks the outputs of models
-        torch.distributed.all_reduce(outputs[0], op=torch.distributed.ReduceOp.SUM, async_op=False)
+        if isinstance(outputs, torch.Tensor):
+            dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False)
+        else:
+            dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False)
         return outputs
+
+    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+        distribute_module(
+            module,
+            device_mesh,
+            partial(self._prepare_input_fn, None, None),
+            partial(self._prepare_output_fn, None, None),
+        )
 
 
 class IsolatedParallel(TensorParallelLayer):
@@ -453,6 +472,14 @@ class IsolatedParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh=None):
         # TODO: figure out dynamo support for instance method and switch this to instance method
         return outputs
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        param = param[...].to(param_casting_dtype)
+        if to_contiguous:
+            param = param.contiguous()
+        param = param / device_mesh.size()  # TODO should be optionable
+        # TODO: assumes parent module will allreduce the output afterwards (e.g rowlinear bias is IsolatedParallel and parent module is GatherParallel)
+        return param
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
@@ -488,7 +515,7 @@ class ReplicateParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        return outputs.to_local() if use_local_output else outputs
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         param = param[...].to(param_casting_dtype)
@@ -506,8 +533,8 @@ class ColwiseParallel(TensorParallelLayer):
     def __init__(
         self,
         *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
+        input_layouts: Placement | None = None,
+        output_layouts: Placement | None = None,
         use_local_output: bool = True,
         use_dtensor=True,
     ):
@@ -557,7 +584,7 @@ class ColwiseParallel(TensorParallelLayer):
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=False)
         # back to local tensor
-        return outputs.to_local() if use_local_output else outputs
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
 
 class PackedColwiseParallel(ColwiseParallel):
@@ -596,8 +623,8 @@ class RowwiseParallel(TensorParallelLayer):
     def __init__(
         self,
         *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
+        input_layouts: Placement | None = None,
+        output_layouts: Placement | None = None,
         use_local_output: bool = True,
         use_dtensor=True,
     ):
@@ -630,7 +657,7 @@ class RowwiseParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         if hasattr(mod, "bias") and mod.bias is not None:
-            mod._bias = mod.bias
+            mod._bias = mod.bias.to_local()
             mod.bias = None
 
         input_tensor = inputs[0]
@@ -648,10 +675,11 @@ class RowwiseParallel(TensorParallelLayer):
         # 2. to shard -> reduce_scatter
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+        outputs = outputs.to_local()  # otherwise the `+=` op will gather
         if hasattr(mod, "_bias"):
-            outputs += mod._bias
+            outputs = outputs + mod._bias
         # back to local tensor if use_local_output is True
-        return outputs.to_local() if use_local_output else outputs
+        return outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
@@ -774,6 +802,118 @@ class SequenceParallel(TensorParallelLayer):
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
+class GroupedGemmParallel(TensorParallelLayer):
+    """
+    Applies Expert Parallelism to MoE experts by loading the correct experts on each device.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.use_dtensor = False
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        ep_rank = rank
+        global_num_experts = empty_param.shape[0]
+        if global_num_experts % device_mesh.size() != 0:
+            raise ValueError(
+                f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
+            )
+        local_num_experts = global_num_experts // device_mesh.size()
+        param = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
+        if to_contiguous:
+            param = param.contiguous()
+        return param
+
+
+class RouterParallel(TensorParallelLayer):
+    """
+    Allows to reshape the router scores to support running expert parallel.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.use_dtensor = False
+
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        input_tensor = inputs[0]
+        if isinstance(input_tensor, DTensor):
+            raise NotImplementedError("RouterParallel does not support DTensor input for now")
+        return input_tensor
+
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        """
+        Imagine if you had 4 tokens, top_k = 4, and 128experts.
+        With EP = 8. The num_local_expert should be 128/8 = 16
+        Imagine router_indices being:
+        [ 52,  42, 119,  67],
+        [102,  89,  61,  40],
+        [ 82, 103,   4,  34],
+        [ 93,  23, 109,  11],
+
+        then you can map which rank should be getting which values
+
+        [3, 2, 7, 4],
+        [6, 5, 3, 2],
+        [5, 6, 0, 2],
+        [5, 1, 6, 0],
+
+        Thus for say rank 0, you fill with 16 (num_local_expert) the index tensor
+
+        [ 16, 16, 16, 16],
+        [ 16, 16, 16, 16],
+        [ 16, 16, 4, 16],
+        [ 16, 16, 16, 11],
+
+        This works well. For another rank you need to make sure you round to num_local_expert
+        because the next operation will one hot encode the router index vector.
+
+        This allows us to know directly which local expert is hit.
+        Similarly the scores are indexed with something created form
+        router_indices.
+
+        The kinda naive training loop that we use for device_map "auto" uses a similar logic.
+        Here we are just making each rank believe that he is alone, and he computes his part of the hiddenstates.
+        Mask invalid indices with num_local_expert for one-hot encoding, so the computes will skip the masking index.
+        """
+        ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
+        if mod.num_experts % ep_size != 0:
+            raise ValueError(
+                f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
+            )
+        num_local_experts = mod.num_experts // ep_size
+        router_scores, router_indices = outputs
+        router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
+        router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
+        # As -1 % 1 is 0, we can only use mask fill when num_local_experts is 1
+        if num_local_experts > 1:
+            router_indices = torch.fmod(router_indices, num_local_experts)
+        else:
+            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
+        router_indices = router_indices.masked_fill(
+            router_indices == -1, num_local_experts
+        )  # masking class for one hot
+        return router_scores, router_indices
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        # TODO: i'd like for this to be the default
+        param = param[...].to(param_casting_dtype)
+        if to_contiguous:
+            param = param.contiguous()
+        return param
+
+    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+        # TODO: need an abstract Parallel class that is different from TensorParallelLayer
+        distribute_module(
+            module,
+            device_mesh,
+            partial(self._prepare_input_fn, None, None),
+            partial(self._prepare_output_fn, None, None),
+        )
+
+
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given entry)
@@ -790,6 +930,8 @@ class ParallelInterface(GeneralInterface):
             "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
             "sequence_parallel": SequenceParallel(),
             "replicate": ReplicateParallel(),
+            "grouped_gemm": GroupedGemmParallel(),
+            "ep_router": RouterParallel(),
         }
         if is_torch_greater_or_equal("2.5") and _torch_distributed_available
         else {}
@@ -842,25 +984,17 @@ def replace_state_dict_local_with_dtensor(
     return state_dict
 
 
-def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, current_module_plan, device_mesh):
-    """
-    Add hooks to the module holding the layer. Meaning:
-    ```
-    class MyModel(nn.Module):
-        def __init__(self):
-            self.layer = nn.Linear(10, 10)
-    ```
-    has state_dict like:
-    ```
-    {
-        "layer.weight": torch.Tensor,
-        "layer.bias": torch.Tensor
-    }
-    ```
-    we add hooks to `MyModel` as well as `layer` to make sure that the tensors are correctly sharded and gathered.
-    """
+def add_tensor_parallel_hooks_to_module(
+    model, module, tp_plan, layer_name, current_module_plan, device_mesh, parameter_name=None
+):
+    r"""
+    This function is called in `PretrainedModel.post_init()`. It is responsible of adding hooks
+    to the modules of the `model`, based on the `PretrainedModel._tp_plan`.
 
-    # 1. We add hooks to the layer being loaded:
+    This is the place where we add the `pre_forward` and `post_forwards` hooks. These are defined
+    for each `TensorParallelLayer` as `_prepare_input_fn` and `_prepare_output_fn`.
+
+    """
     if current_module_plan is not None:
         tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
         try:
@@ -869,26 +1003,19 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
             print(
                 f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
             )
+
         module._hf_tp_plan = current_module_plan
         module.__repr__ = lambda: f"{module.__repr__()}\nTP Plan: {current_module_plan}"
 
-    # 2. We add hooks to the parent module if needed
-    if "." in layer_name:
-        parent_layer_name = layer_name.rsplit(".", 1)[0]
-        generic_name = re.sub(r"\d+", "*", parent_layer_name)
-        # The module itself needs hooks
-        if module_plan := tp_plan.get(generic_name, False):
-            tp_layer = ALL_PARALLEL_STYLES[module_plan]
-            module_to_tp_ = model.get_submodule(parent_layer_name)
-            tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
-            module_to_tp_._hf_tp_plan = current_module_plan
-            module_to_tp_.__repr__ = lambda: f"{module_to_tp_.__repr__()}\nTP Plan: {current_module_plan}"
-
 
 def shard_and_distribute_module(
-    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh
-):
+    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh, set_param=True
+):  # TODO: rename to shard_and_distribute_param
     r"""
+    This function is called in `from_pretrained` when loading a model's checkpoints.
+    It receives the pointer to the parameter (or the parameter itself) and takes care of "sharding".
+    All process run this function, so they just load the partition of the tensor that they require.
+
     Main uses cases:
     - column / rowise parallelism, you just shard all the weights of the layer (weight and bias)
     - packed layers: you slice the weights, then shard like above
@@ -898,46 +1025,40 @@ def shard_and_distribute_module(
 
     """
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
-    tp_plan = model._tp_plan
-    module_to_tp = model.get_submodule(param_name)
+    tp_plan = model.tp_plan or {}
+    module_to_tp = model.get_submodule(param_name)  # TODO: can i loop over modules?
     rank = int(rank)
+    current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
 
-    current_module_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
+    if dist.get_rank() == 0:
+        if current_shard_plan is None:
+            logger.info(f"Tensor sharding plan for {param_name} not found, using default 'replicate' plan.")
+        else:
+            logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
 
-    if current_module_plan is None:
-        current_module_plan = "replicate"
-        if dist.get_rank() == 0:
-            logger.info(f"Tensor parallel plan for {param_name} not found, using default 'replicate' plan.")
+    if current_shard_plan is not None:
+        try:
+            tp_layer = ALL_PARALLEL_STYLES[current_shard_plan]
+            param = tp_layer.partition_tensor(
+                param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
+            )
+        except NotImplementedError as e:
+            print(
+                f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
+            )
     else:
-        if dist.get_rank() == 0:
-            logger.info(f"Tensor parallel plan for {param_name}: {current_module_plan}")
-
-    # Add hooks to the module if not done yet
-    # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
-    if not getattr(module_to_tp, "_is_hooked", False):
-        add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
-        module_to_tp._is_hooked = True
-
-    try:
-        tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
-        param = tp_layer.partition_tensor(
-            param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
-        )
-    except NotImplementedError as e:
-        print(
-            f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
-        )
+        param = param[:].to(param_casting_dtype)
 
     # SUPER IMPORTANT we have to use setattr
     # otherwise loading is crazy slow
     if not isinstance(param, torch.nn.Parameter):
-        param = torch.nn.Parameter(param, requires_grad=param.is_floating_point())
+        param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
     setattr(module_to_tp, param_type, param)
     # module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
     return param
 
 
-def verify_tp_plan(expected_keys: list[str], tp_plan: Optional[dict[str, str]]):
+def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     """
     Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
     """
@@ -966,3 +1087,32 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: Optional[dict[str, str]]):
         logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
     if len(unsharded_layers) > 0:
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
+
+
+def distribute_model(model, distributed_config, device_mesh, tp_size):
+    model._tp_size = tp_size
+    model._device_mesh = device_mesh
+    if distributed_config is not None:
+        if isinstance(distributed_config, dict):
+            distributed_config = DistributedConfig.from_dict(distributed_config)
+        model.config.distributed_config = distributed_config
+    model_plan = model.tp_plan
+    if model_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+        for v in model_plan.values():
+            if v not in ALL_PARALLEL_STYLES:
+                raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")
+        for name, module in model.named_modules():
+            if not getattr(module, "_is_hooked", False):
+                from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
+
+                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model_plan, is_weight=False)
+                add_tensor_parallel_hooks_to_module(
+                    model=model,
+                    module=module,
+                    tp_plan=model_plan,
+                    layer_name="",
+                    current_module_plan=plan,
+                    device_mesh=device_mesh,
+                )
+            module._is_hooked = True
+    return model

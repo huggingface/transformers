@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import tensorflow as tf
@@ -63,7 +63,7 @@ def _sample_without_replacement(distribution, num_samples):
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2._scatter_values_on_batch_indices
 def _scatter_values_on_batch_indices(values, batch_indices, output_shape):
     """
-    Scatter function as in PyTorch with indices in format (batch_dim, indixes)
+    Scatter function as in PyTorch with indices in format (batch_dim, indices)
     """
     indices_shape = shape_list(batch_indices)
     # broadcast batch dim to indices_shape
@@ -152,7 +152,7 @@ def _compute_mask_indices(
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+def _expand_mask(mask: tf.Tensor, tgt_len: int | None = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -701,7 +701,7 @@ class TFHubertAttention(keras.layers.Layer):
         past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
-        training: Optional[bool] = False,
+        training: bool | None = False,
     ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -896,7 +896,7 @@ class TFHubertEncoderLayer(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool | None = False,
         training: bool = False,
     ) -> tuple[tf.Tensor]:
         attn_residual = hidden_states
@@ -956,7 +956,7 @@ class TFHubertEncoderLayerStableLayerNorm(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool | None = False,
         training: bool = False,
     ) -> tuple[tf.Tensor]:
         attn_residual = hidden_states
@@ -1007,11 +1007,11 @@ class TFHubertEncoder(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
+        output_attentions: bool | None = False,
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+        training: bool | None = False,
+    ) -> TFBaseModelOutput | tuple[tf.Tensor]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -1090,11 +1090,11 @@ class TFHubertEncoderStableLayerNorm(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
+        output_attentions: bool | None = False,
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+        training: bool | None = False,
+    ) -> TFBaseModelOutput | tuple[tf.Tensor]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -1260,7 +1260,7 @@ class TFHubertMainLayer(keras.layers.Layer):
         inputs_embeds: tf.Tensor | None = None,
         output_attentions: tf.Tensor | None = None,
         output_hidden_states: tf.Tensor | None = None,
-        return_dict: Optional[bool] = None,
+        return_dict: bool | None = None,
         training: bool = False,
         **kwargs: Any,
     ):
@@ -1276,7 +1276,7 @@ class TFHubertMainLayer(keras.layers.Layer):
 
         hidden_states = self.feature_projection(hidden_states, training=training)
 
-        mask_time_indices = kwargs.get("mask_time_indices", None)
+        mask_time_indices = kwargs.get("mask_time_indices")
         if training:
             hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 
@@ -1445,11 +1445,11 @@ class TFHubertModel(TFHubertPreTrainedModel):
         position_ids: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutput | tuple[tf.Tensor]:
         """
 
         Returns:
@@ -1549,12 +1549,12 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         position_ids: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
+        output_attentions: bool | None = None,
         labels: tf.Tensor | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFCausalLMOutput, tuple[tf.Tensor]]:
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> TFCausalLMOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,

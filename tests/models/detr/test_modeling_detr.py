@@ -16,10 +16,10 @@
 import inspect
 import math
 import unittest
+from functools import cached_property
 
 from transformers import DetrConfig, ResNetConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property
+from transformers.testing_utils import Expectations, require_timm, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
@@ -585,13 +585,23 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
 
         expected_shape = torch.Size((1, 100, 256))
         assert outputs.last_hidden_state.shape == expected_shape
-        expected_slice = torch.tensor(
-            [
-                [0.0622, -0.5142, -0.4034],
-                [-0.7628, -0.4935, -1.7153],
-                [-0.4751, -0.6386, -0.7818],
-            ]
-        ).to(torch_device)
+        expected_slices = Expectations(
+            {
+                (None, None):
+                    [
+                        [0.0616, -0.5146, -0.4032],
+                        [-0.7629, -0.4934, -1.7153],
+                        [-0.4768, -0.6403, -0.7826],
+                    ],
+                ("rocm", (9, 5)):
+                    [
+                        [ 0.0616, -0.5146, -0.4032],
+                        [-0.7629, -0.4934, -1.7153],
+                        [-0.4768, -0.6403, -0.7826],
+                    ],
+            }
+        )  # fmt: skip
+        expected_slice = torch.tensor(expected_slices.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     def test_inference_object_detection_head(self):
@@ -609,13 +619,23 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         # verify outputs
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        expected_slice_logits = torch.tensor(
-            [
-                [-19.1211, -0.0881, -11.0188],
-                [-17.3641, -1.8045, -14.0229],
-                [-20.0415, -0.5833, -11.1005],
-            ]
-        ).to(torch_device)
+        expected_slices = Expectations(
+            {
+                (None, None):
+                    [
+                        [-19.1194, -0.0893, -11.0154],
+                        [-17.3640, -1.8035, -14.0219],
+                        [-20.0461, -0.5837, -11.1060],
+                    ],
+                ("rocm", (9, 5)):
+                    [
+                        [-19.1194,  -0.0893, -11.0154],
+                        [-17.3640,  -1.8035, -14.0219],
+                        [-20.0461,  -0.5837, -11.1060],
+                    ],
+            }
+        )  # fmt: skip
+        expected_slice_logits = torch.tensor(expected_slices.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, rtol=2e-4, atol=2e-4)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
@@ -657,27 +677,65 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         # verify outputs
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        expected_slice_logits = torch.tensor(
-            [
-                [-18.1523, -1.7592, -13.5019],
-                [-16.8866, -1.4139, -14.1025],
-                [-17.5735, -2.5090, -11.8666],
-            ]
-        ).to(torch_device)
+        expected_slices = Expectations(
+            {
+                (None, None):
+                    [
+                        [-18.1565, -1.7568, -13.5029],
+                        [-16.8888, -1.4138, -14.1028],
+                        [-17.5709, -2.5080, -11.8654],
+                    ],
+                ("rocm", (9, 5)):
+                    [
+                        [-18.1565,  -1.7568, -13.5029],
+                        [-16.8888,  -1.4138, -14.1028],
+                        [-17.5709,  -2.5080, -11.8654],
+                    ],
+            }
+        )  # fmt: skip
+        expected_slice_logits = torch.tensor(expected_slices.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, rtol=2e-4, atol=2e-4)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        expected_slice_boxes = torch.tensor(
-            [[0.5344, 0.1790, 0.9284], [0.4421, 0.0571, 0.0875], [0.6632, 0.6886, 0.1015]]
-        ).to(torch_device)
+        expected_slices = Expectations(
+            {
+                (None, None):
+                    [
+                        [0.5344, 0.1789, 0.9285],
+                        [0.4420, 0.0572, 0.0875],
+                        [0.6630, 0.6887, 0.1017],
+                    ],
+                ("rocm", (9, 5)):
+                    [
+                        [0.5344, 0.1789, 0.9285],
+                        [0.4420, 0.0572, 0.0875],
+                        [0.6630, 0.6887, 0.1017],
+                    ],
+            }
+        )  # fmt: skip
+        expected_slice_boxes = torch.tensor(expected_slices.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=2e-4, atol=2e-4)
 
         expected_shape_masks = torch.Size((1, model.config.num_queries, 200, 267))
         self.assertEqual(outputs.pred_masks.shape, expected_shape_masks)
-        expected_slice_masks = torch.tensor(
-            [[-7.8408, -11.0104, -12.1279], [-12.0299, -16.6498, -17.9806], [-14.8995, -19.9940, -20.5646]]
-        ).to(torch_device)
+        expected_slices = Expectations(
+            {
+                (None, None):
+                    [
+                        [-7.7557, -10.8788, -11.9797],
+                        [-11.8880, -16.4328, -17.7450],
+                        [-14.7315, -19.7382, -20.3003],
+                    ],
+                ("rocm", (9, 5)):
+                    [
+                        [ -7.7558, -10.8789, -11.9798],
+                        [-11.8882, -16.4330, -17.7452],
+                        [-14.7317, -19.7384, -20.3005],
+                    ],
+            }
+        )  # fmt: skip
+        expected_slice_masks = torch.tensor(expected_slices.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.pred_masks[0, 0, :3, :3], expected_slice_masks, rtol=2e-3, atol=2e-3)
 
         # verify postprocessing
@@ -731,11 +789,21 @@ class DetrModelIntegrationTests(unittest.TestCase):
 
         expected_shape = torch.Size((1, 100, 256))
         assert outputs.last_hidden_state.shape == expected_shape
-        expected_slice = torch.tensor(
-            [
-                [0.0622, -0.5142, -0.4034],
-                [-0.7628, -0.4935, -1.7153],
-                [-0.4751, -0.6386, -0.7818],
-            ]
-        ).to(torch_device)
+        expected_slices = Expectations(
+            {
+                (None, None):
+                    [
+                        [0.0616, -0.5146, -0.4032],
+                        [-0.7629, -0.4934, -1.7153],
+                        [-0.4768, -0.6403, -0.7826],
+                    ],
+                ("rocm", (9, 5)):
+                    [
+                        [ 0.0616, -0.5146, -0.4032],
+                        [-0.7629, -0.4934, -1.7153],
+                        [-0.4768, -0.6403, -0.7826]
+                    ],
+            }
+        )  # fmt: skip
+        expected_slice = torch.tensor(expected_slices.get_expectation(), device=torch_device)
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

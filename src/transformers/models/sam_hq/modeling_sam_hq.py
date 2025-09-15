@@ -21,7 +21,7 @@
 # limitations under the License.
 import collections
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -34,7 +34,7 @@ from transformers.utils.generic import OutputRecorder, TransformersKwargs, check
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
@@ -418,6 +418,26 @@ class SamHQVisionLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
+class SamHQPreTrainedModel(PreTrainedModel):
+    config: SamHQConfig
+    base_model_prefix = "sam_hq"
+    main_input_name = "pixel_values"
+    _no_split_modules = ["SamHQVisionAttention"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+        if isinstance(module, SamHQVisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
+        elif isinstance(module, SamHQVisionEncoder):
+            if self.config.use_abs_pos:
+                module.pos_embed.data.zero_()
+
+
 class SamHQPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -471,37 +491,6 @@ class SamHQVisionNeck(nn.Module):
         hidden_states = self.conv2(hidden_states)
         hidden_states = self.layer_norm2(hidden_states)
         return hidden_states
-
-
-@auto_docstring
-class SamHQPreTrainedModel(PreTrainedModel):
-    config_class = SamHQConfig
-    base_model_prefix = "sam_hq"
-    main_input_name = "pixel_values"
-    _no_split_modules = ["SamHQVisionAttention"]
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (SamHQLayerNorm, nn.LayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, SamHQVisionAttention):
-            if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
-        if isinstance(module, SamHQVisionEncoder):
-            if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
 
 
 class SamHQVisionEncoder(SamHQPreTrainedModel):
@@ -571,34 +560,52 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
         )
 
 
-class SamHQLayerNorm(nn.Module):
+class SamHQLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 class SamHQAttention(nn.Module):
@@ -609,6 +616,7 @@ class SamHQAttention(nn.Module):
 
     def __init__(self, config, downsample_rate=None):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
 
         downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
@@ -617,11 +625,14 @@ class SamHQAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         if self.internal_dim % config.num_attention_heads != 0:
             raise ValueError("num_attention_heads must divide hidden_size.")
+        self.scaling = (self.internal_dim // config.num_attention_heads) ** -0.5
 
         self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
+
+        self.is_causal = False
 
     def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
         batch, point_batch_size, n_tokens, channel = hidden_states.shape
@@ -630,12 +641,16 @@ class SamHQAttention(nn.Module):
         return hidden_states.transpose(1, 2)
 
     def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_heads, n_tokens, c_per_head = hidden_states.shape
-        hidden_states = hidden_states.transpose(1, 2)
+        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
     def forward(
-        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        attention_similarity: Optional[Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Tensor:
         # Input projections
         query = self.q_proj(query)
@@ -649,64 +664,26 @@ class SamHQAttention(nn.Module):
         value = self._separate_heads(value, self.num_attention_heads)
 
         # SamHQAttention
-        _, _, _, c_per_head = query.shape
-        attn = query @ key.permute(0, 1, 3, 2)  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
-        attn = attn / (c_per_head**0.5)
-        attn = torch.softmax(attn, dim=-1)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if attention_similarity is not None:
-            attn = attn + attention_similarity
-            attn = torch.softmax(attn, dim=-1)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=attention_similarity,
+            dropout=0.0,
+            scaling=self.scaling,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
 
-        # Get output
-        out = attn @ value
-        out = self._recombine_heads(out, point_batch_size)
-        out = self.out_proj(out)
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
 
-        return out
-
-
-class SamHQSdpaAttention(SamHQAttention):
-    """
-    SAM_HQ's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
-    values. Using SDPA instead of the default attention.
-    """
-
-    def __init__(self, config, downsample_rate=None):
-        super().__init__(config, downsample_rate)
-
-    def forward(
-        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None
-    ) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # Scaled dot product attention
-        attn_mask = None
-        if attention_similarity is not None:
-            attn_mask = attention_similarity.unsqueeze(1).expand(-1, self.num_attention_heads, -1, -1)
-
-        out = F.scaled_dot_product_attention(query, key, value, attn_mask=attn_mask)
-
-        # Get output
-        out = self._recombine_heads(out, point_batch_size)
-        out = self.out_proj(out)
-
-        return out
-
-
-SAM_HQ_ATTENTION_CLASSES = {
-    "eager": SamHQAttention,
-    "sdpa": SamHQSdpaAttention,
-}
+        return attn_output, attn_weights
 
 
 class SamHQTwoWayAttentionBlock(nn.Module):
@@ -729,21 +706,17 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         self.hidden_size = config.hidden_size
         self.layer_norm_eps = config.layer_norm_eps
 
-        self.self_attn = SAM_HQ_ATTENTION_CLASSES[config._attn_implementation](config, downsample_rate=1)
+        self.self_attn = SamHQAttention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
-        self.cross_attn_token_to_image = SAM_HQ_ATTENTION_CLASSES[config._attn_implementation](
-            config, downsample_rate=attention_downsample_rate
-        )
+        self.cross_attn_token_to_image = SamHQAttention(config, downsample_rate=attention_downsample_rate)
         self.layer_norm2 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.mlp = SamHQMLPBlock(config)
         self.layer_norm3 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.layer_norm4 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
-        self.cross_attn_image_to_token = SAM_HQ_ATTENTION_CLASSES[config._attn_implementation](
-            config, downsample_rate=attention_downsample_rate
-        )
+        self.cross_attn_image_to_token = SamHQAttention(config, downsample_rate=attention_downsample_rate)
         self.skip_first_layer_pe = skip_first_layer_pe
 
     def forward(
@@ -753,13 +726,14 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         query_point_embedding: Tensor,
         key_point_embedding: Tensor,
         attention_similarity: Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         # Self attention block
         if self.skip_first_layer_pe:
-            queries = self.self_attn(query=queries, key=queries, value=queries)
+            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
         else:
             query = queries + query_point_embedding
-            attn_out = self.self_attn(query=query, key=query, value=queries)
+            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
             queries = queries + attn_out
         queries = self.layer_norm1(queries)
 
@@ -767,7 +741,7 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_token_to_image(
+        attn_out, _ = self.cross_attn_token_to_image(
             query=query, key=key, value=keys, attention_similarity=attention_similarity
         )
         queries = queries + attn_out
@@ -783,7 +757,7 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         query = queries + query_point_embedding
         key = keys + key_point_embedding
 
-        attn_out = self.cross_attn_image_to_token(query=key, key=query, value=queries)
+        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
         keys = keys + attn_out
 
         keys = self.layer_norm4(keys)
@@ -801,7 +775,7 @@ class SamHQTwoWayTransformer(nn.Module):
         for i in range(self.num_hidden_layers):
             self.layers.append(SamHQTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0)))
 
-        self.final_attn_token_to_image = SAM_HQ_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.final_attn_token_to_image = SamHQAttention(config)
         self.layer_norm_final_attn = nn.LayerNorm(config.hidden_size)
 
     def forward(
@@ -811,6 +785,7 @@ class SamHQTwoWayTransformer(nn.Module):
         image_positional_embeddings: Tensor,
         attention_similarity: Tensor,
         target_embedding=None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
@@ -833,12 +808,13 @@ class SamHQTwoWayTransformer(nn.Module):
                 query_point_embedding=point_embeddings,
                 key_point_embedding=image_positional_embeddings,
                 attention_similarity=attention_similarity,
+                **kwargs,
             )
-        # Apply the final attenion layer from the points to the image
+        # Apply the final attention layer from the points to the image
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 
-        attn_out = self.final_attn_token_to_image(query=query, key=key, value=keys)
+        attn_out, _ = self.final_attn_token_to_image(query=query, key=key, value=keys)
 
         queries = queries + attn_out
         queries = self.layer_norm_final_attn(queries)
@@ -957,7 +933,7 @@ class SamHQMaskDecoder(nn.Module):
                 - (Optional) A tuple containing attention tensors if output_attentions is True.
         """
         batch_size, num_channels, height, width = image_embeddings.shape
-        point_batch_size = sparse_prompt_embeddings.shape[1]
+        point_batch_size = sparse_prompt_embeddings.shape[1] if sparse_prompt_embeddings is not None else 1
 
         has_intermediate = intermediate_embeddings is not None and len(intermediate_embeddings) > 0
 
@@ -980,7 +956,7 @@ class SamHQMaskDecoder(nn.Module):
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.hq_token.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
-        if torch.any(sparse_prompt_embeddings != 0):
+        if sparse_prompt_embeddings is not None:
             tokens = torch.cat([output_tokens, sparse_prompt_embeddings], dim=2)
         else:
             tokens = output_tokens
@@ -1076,7 +1052,7 @@ class SamHQMaskDecoder(nn.Module):
     """
 )
 class SamHQVisionModel(SamHQPreTrainedModel):
-    config_class = SamHQVisionConfig
+    config: SamHQVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: SamHQVisionConfig):
@@ -1147,7 +1123,7 @@ class SamHQMaskEmbedding(nn.Module):
 
 
 class SamHQPromptEncoder(nn.Module):
-    def __init__(self, config: SamHQPromptEncoderConfig):
+    def __init__(self, config: SamHQConfig):
         super().__init__()
         self.shared_embedding = SamHQPositionalEmbedding(config.vision_config)
         config = config.prompt_encoder_config
@@ -1181,11 +1157,7 @@ class SamHQPromptEncoder(nn.Module):
 
         # This is required for the ONNX export. The dtype, device need to be explicitly
         # specified as otherwise torch.onnx.export interprets as double
-        point_embedding = torch.where(
-            labels[..., None] != -10,
-            point_embedding,
-            torch.tensor(0.0, dtype=point_embedding.dtype, device=point_embedding.device),
-        )
+        point_embedding = torch.where(labels[..., None] != -10, point_embedding, torch.zeros_like(point_embedding))
 
         point_embedding = torch.where(
             (labels == 0)[:, :, :, None],
@@ -1232,9 +1204,8 @@ class SamHQPromptEncoder(nn.Module):
         """
         sparse_embeddings = None
         batch_size = 1
-        target_device = self.shared_embedding.positional_embedding.device
         if input_points is not None:
-            batch_size, point_batch_size = input_points.shape[:2]
+            batch_size = input_points.shape[0]
             if input_labels is None:
                 raise ValueError("If points are provided, labels must also be provided.")
             point_embeddings = self._embed_points(input_points, input_labels, pad=(input_boxes is None))
@@ -1252,9 +1223,6 @@ class SamHQPromptEncoder(nn.Module):
             dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
                 batch_size, -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
-
-        if sparse_embeddings is None:
-            sparse_embeddings = torch.zeros((batch_size, 1, 1, self.hidden_size), device=target_device)
 
         return sparse_embeddings, dense_embeddings
 
@@ -1274,6 +1242,8 @@ class SamHQModel(SamHQPreTrainedModel):
         self.shared_image_embedding = SamHQPositionalEmbedding(config.vision_config)
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
         self.prompt_encoder = SamHQPromptEncoder(config)
+        # The module using it is not a PreTrainedModel subclass so we need this
+        config.mask_decoder_config._attn_implementation = config._attn_implementation
 
         self.mask_decoder = SamHQMaskDecoder(config.mask_decoder_config)
 
@@ -1515,8 +1485,8 @@ class SamHQModel(SamHQPreTrainedModel):
         return SamHQImageSegmentationOutput(
             iou_scores=mask_decoder_output[1],
             pred_masks=mask_decoder_output[0],
-            vision_hidden_states=vision_outputs.hidden_states,
-            vision_attentions=vision_outputs.attentions,
+            vision_hidden_states=vision_outputs.hidden_states if pixel_values is not None else None,
+            vision_attentions=vision_outputs.attentions if pixel_values is not None else None,
         )
 
 

@@ -16,10 +16,10 @@
 import inspect
 import math
 import unittest
+from functools import cached_property
 
 from transformers import DabDetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
@@ -788,9 +788,9 @@ class DabDetrModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
         expected_slice = torch.tensor(
             [
-                [-0.4878, -0.2593, 0.4521],
-                [-0.4999, -0.4257, 0.4326],
-                [-0.8220, -0.4997, 0.0578],
+                [-0.4879, -0.2594, 0.4524],
+                [-0.4997, -0.4258, 0.4329],
+                [-0.8220, -0.4996, 0.0577],
             ]
         ).to(torch_device)
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4, rtol=2e-4)

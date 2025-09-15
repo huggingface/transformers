@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
-
 import numpy as np
 import tensorflow as tf
 
@@ -279,7 +277,7 @@ class TFConvNextV2Stage(keras.layers.Layer):
         kernel_size: int = 2,
         stride: int = 2,
         depth: int = 2,
-        drop_path_rates: Optional[list[float]] = None,
+        drop_path_rates: list[float] | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -367,9 +365,9 @@ class TFConvNextV2Encoder(keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[tuple, TFBaseModelOutputWithNoAttention]:
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+    ) -> tuple | TFBaseModelOutputWithNoAttention:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.stages):
@@ -411,10 +409,10 @@ class TFConvNextV2MainLayer(keras.layers.Layer):
     def call(
         self,
         pixel_values: TFModelInputType | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutputWithPooling | tuple[tf.Tensor]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -441,7 +439,7 @@ class TFConvNextV2MainLayer(keras.layers.Layer):
 
         # Change the other hidden state outputs to NCHW as well
         if output_hidden_states:
-            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
+            hidden_states = tuple(tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1])
 
         if not return_dict:
             hidden_states = hidden_states if output_hidden_states else ()
@@ -557,10 +555,10 @@ class TFConvNextV2Model(TFConvNextV2PreTrainedModel):
     def call(
         self,
         pixel_values: TFModelInputType | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndNoAttention, tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutputWithPoolingAndNoAttention | tuple[tf.Tensor]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -627,11 +625,11 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
     def call(
         self,
         pixel_values: TFModelInputType | None = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFImageClassifierOutputWithNoAttention, tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFImageClassifierOutputWithNoAttention | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

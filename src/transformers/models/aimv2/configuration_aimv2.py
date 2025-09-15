@@ -280,17 +280,5 @@ class Aimv2Config(PretrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
         self.max_logit_scale = 100.0
 
-    @classmethod
-    def from_text_vision_configs(cls, text_config: Aimv2TextConfig, vision_config: Aimv2VisionConfig, **kwargs):
-        r"""
-        Instantiate a [`Aimv2Config`] (or a derived class) from aimv2 text model configuration and aimv2 vision
-        model configuration.
-
-        Returns:
-            [`Aimv2Config`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
 
 __all__ = ["Aimv2Config", "Aimv2VisionConfig", "Aimv2TextConfig"]

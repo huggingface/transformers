@@ -191,7 +191,7 @@ class WavLMAttention(nn.Module):
         attention_mask: Union[torch.LongTensor, torch.BoolTensor],
         gated_position_bias: torch.FloatTensor,
         output_attentions: bool,
-    ) -> (torch.FloatTensor, torch.FloatTensor):
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         """simple wrapper around torch's multi_head_attention_forward function"""
         # self-attention assumes q = k = v
         query = key = value = hidden_states.transpose(0, 1)
@@ -594,12 +594,11 @@ class WavLMGumbelVectorQuantizer(nn.Module):
 
 @auto_docstring
 class WavLMPreTrainedModel(PreTrainedModel):
-    config_class = WavLMConfig
+    config: WavLMConfig
     base_model_prefix = "wavlm"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = False
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
 

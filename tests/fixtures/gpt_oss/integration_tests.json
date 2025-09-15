@@ -1,0 +1,122 @@
+{
+  "quantized=true|model=120b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Roses are red, violets are blue, I am a language model, and I can help you too!\n\nSure! Here",
+    "How are you? Tell me the name of the president of the United\n\nHello! As of my last update in November 2023, the President of the"
+  ],
+  "quantized=true|model=120b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Roses are red, violets are blue, I am a language model, and I can help you too!\n\nSure! Here",
+    "How are you? Tell me the name of the president of the United\n\nHello! As of my last update in November 2023, the President of the"
+  ],
+  "quantized=true|model=120b|kernels=true|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Did not work"
+  ],
+  "quantized=true|model=120b|kernels=true|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Did not work"
+  ],
+  "quantized=true|model=120b|kernels=false|attn_impl=eager|mode=eval": [
+    "Roses are red, violets are blue, I am a language model, and I can help you too!\n\nSure! Here",
+    "How are you? Tell me the name of the president of the United\n\nHello! As of my last update in November 2023, the President of the"
+  ],
+  "quantized=true|model=120b|kernels=false|attn_impl=eager|mode=train": [
+    "Roses are red, violets are blue, I am a language model, and I can help you too!\n\nSure! Here",
+    "How are you? Tell me the name of the president of the United\n\nHello! As of my last update in November 2023, the President of the"
+  ],
+  "quantized=true|model=120b|kernels=true|attn_impl=eager|mode=eval": [
+    "Did not work"
+  ],
+  "quantized=true|model=120b|kernels=true|attn_impl=eager|mode=train": [
+    "Did not work"
+  ],
+  "quantized=true|model=20b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Roses are red, violets are blue, I love you, and I love you too.\nIt sounds like you're looking for",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "quantized=true|model=20b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Roses are red, violets are blue, I love you, and I love you too.\n\nIt sounds like you're looking for",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "quantized=true|model=20b|kernels=true|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Did not work"
+  ],
+  "quantized=true|model=20b|kernels=true|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Did not work"
+  ],
+  "quantized=true|model=20b|kernels=false|attn_impl=eager|mode=eval": [
+    "Roses are red, violets are blue, I love you, and I love you too.\n\nIt sounds like you're expressing a",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "quantized=true|model=20b|kernels=false|attn_impl=eager|mode=train": [
+    "Roses are red, violets are blue, I love you, and I love you too.\n\nIt sounds like you're expressing a",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "quantized=true|model=20b|kernels=true|attn_impl=eager|mode=eval": [
+    "Did not work"
+  ],
+  "quantized=true|model=20b|kernels=true|attn_impl=eager|mode=train": [
+    "Did not work"
+  ],
+  "quantized=false|model=120b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United Kingdom?\n\nThe United Kingdom does not have a president. The head of state is the"
+  ],
+  "quantized=false|model=120b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Roses are red, violets are blue, I am a language model trained by OpenAI.\n\nI am a large language model",
+    "How are you? Tell me the name of the president of the United\n\nHello! I'm an AI language model, so I don't have feelings, but I'm here"
+  ],
+  "quantized=false|model=120b|kernels=true|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United Kingdom?\n\nThe United Kingdom does not have a president. The head of state is the"
+  ],
+  "quantized=false|model=120b|kernels=true|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Roses are red, violets are blue, I am a language model trained by OpenAI.\n\nI am a large language model",
+    "How are you? Tell me the name of the president of the United\n\nHello! I'm an AI language model, so I don't have feelings, but I'm here"
+  ],
+  "quantized=false|model=120b|kernels=false|attn_impl=eager|mode=eval": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United States?\n\nAs an AI language model, I do not have personal feelings or emotions,"
+  ],
+  "quantized=false|model=120b|kernels=false|attn_impl=eager|mode=train": [
+    "Roses are red, violets are blue, I am a language model, and I can help you with your request.\n\nSure",
+    "How are you? Tell me the name of the president of the United\n\nHello! I'm an AI language model, so I don't have feelings, but I'm here"
+  ],
+  "quantized=false|model=120b|kernels=true|attn_impl=eager|mode=eval": [
+    "Roses are red, violets are blue,\nI am a language model, not a human being.\n```\n\nThis poem is a",
+    "How are you? Tell me the name of the president of the United States?\n\nAs an AI language model, I do not have personal feelings or emotions,"
+  ],
+  "quantized=false|model=120b|kernels=true|attn_impl=eager|mode=train": [
+    "Roses are red, violets are blue, I am a language model, and I can help you with your request.\n\nSure",
+    "How are you? Tell me the name of the president of the United\n\nHello! I'm an AI language model, so I don't have feelings, but I'm here"
+  ],
+  "quantized=false|model=20b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "quantized=false|model=20b|kernels=false|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Roses are red, violets are blue\" (makes sense). But the phrase \"the answer is 3\" is not a",
+    "How are you? Tell me the name of the president of the United States.\" The answer to that is \"Joe Biden.\" The user is asking for the name"
+  ],
+  "quantized=false|model=20b|kernels=true|attn_impl=kernels-community/vllm-flash-attn3|mode=eval": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "quantized=false|model=20b|kernels=true|attn_impl=kernels-community/vllm-flash-attn3|mode=train": [
+    "Roses are red, violets are blue\" (makes sense). But the phrase \"the answer is 3\" is not a",
+    "How are you? Tell me the name of the president of the United States.\" The answer to that is \"Joe Biden.\" The user is asking for the name"
+  ],
+  "quantized=false|model=20b|kernels=false|attn_impl=eager|mode=eval": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "quantized=false|model=20b|kernels=false|attn_impl=eager|mode=train": [
+    "Roses are red, violets are blue.\" -> from which we can derive a rule: if we have a red object that is",
+    "How are you? Tell me the name of the president of the United States.\n\nI am an AI language model and I do not have a personal life or"
+  ],
+  "quantized=false|model=20b|kernels=true|attn_impl=eager|mode=eval": [
+    "Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+    "How are you? Tell me the name of the president of the United States.\" The assistant should respond with the name of the president. The user is asking for"
+  ],
+  "quantized=false|model=20b|kernels=true|attn_impl=eager|mode=train": [
+    "Roses are red, violets are blue.\" -> from which we can derive a rule: if we have a red object that is",
+    "How are you? Tell me the name of the president of the United States.\n\nI am an AI language model and I do not have a personal life or"
+  ]
+}

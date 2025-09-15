@@ -20,13 +20,11 @@ import pathlib
 import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
-from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
 from ...image_utils import AnnotationFormat, ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available
-from ...utils.deprecation import deprecate_kwarg
 
 
 if is_torch_available():
@@ -145,16 +143,15 @@ class GroundingDinoProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "GroundingDinoImageProcessor"
     tokenizer_class = "AutoTokenizer"
+    valid_processor_kwargs = GroundingDinoProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[GroundingDinoProcessorKwargs],
     ) -> BatchEncoding:
         """
@@ -171,33 +168,9 @@ class GroundingDinoProcessor(ProcessorMixin):
                 - A merged candidate labels string to be detected on the image, separated by "." (e.g. "a cat. a dog.").
                 - A batch of merged candidate labels text to be detected on the batch of images (e.g. ["a cat. a dog.", "a car. a person."]).
         """
-        if images is None and text is None:
-            raise ValueError("You must specify either text or images.")
-
-        output_kwargs = self._merge_kwargs(
-            GroundingDinoProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        # Get only text
-        if images is not None:
-            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
-        else:
-            encoding_image_processor = BatchFeature()
-
         if text is not None:
             text = self._preprocess_input_text(text)
-            text_encoding = self.tokenizer(
-                text=text,
-                **output_kwargs["text_kwargs"],
-            )
-        else:
-            text_encoding = BatchEncoding()
-
-        text_encoding.update(encoding_image_processor)
-
-        return text_encoding
+        return super().__call__(images=images, text=text, **kwargs)
 
     def _preprocess_input_text(self, text):
         """
@@ -216,30 +189,6 @@ class GroundingDinoProcessor(ProcessorMixin):
 
         return text
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-    @deprecate_kwarg("box_threshold", new_name="threshold", version="4.51.0")
     def post_process_grounded_object_detection(
         self,
         outputs: "GroundingDinoObjectDetectionOutput",

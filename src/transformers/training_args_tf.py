@@ -14,10 +14,11 @@
 
 import warnings
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Optional
 
 from .training_args import TrainingArguments
-from .utils import cached_property, is_tf_available, logging, requires_backends
+from .utils import is_tf_available, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -160,7 +161,7 @@ class TFTrainingArguments(TrainingArguments):
             Google Cloud Project name for the Cloud TPU-enabled project. If not specified, we will attempt to
             automatically detect from metadata.
         run_name (`str`, *optional*):
-            A descriptor for the run. Notably used for wandb, mlflow, comet and swanlab logging.
+            A descriptor for the run. Notably used for trackio, wandb, mlflow, comet and swanlab logging.
         xla (`bool`, *optional*):
             Whether to activate the XLA compilation or not.
     """

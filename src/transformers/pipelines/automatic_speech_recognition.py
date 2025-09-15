@@ -176,13 +176,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         device (Union[`int`, `torch.device`], *optional*):
             Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
             model on the associated CUDA device id.
-        torch_dtype (Union[`int`, `torch.dtype`], *optional*):
-            The data-type (dtype) of the computation. Setting this to `None` will use float32 precision. Set to
-            `torch.float16` or `torch.bfloat16` to use half-precision in the respective dtypes.
-
     """
 
     _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = True
+    _load_tokenizer = True
     # Make sure the docstring is updated when the default generation config is changed
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
@@ -192,11 +192,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def __init__(
         self,
         model: "PreTrainedModel",
-        feature_extractor: Union["SequenceFeatureExtractor", str] = None,
+        feature_extractor: Optional[Union["SequenceFeatureExtractor", str]] = None,
         tokenizer: Optional[PreTrainedTokenizer] = None,
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
-        device: Union[int, "torch.device"] = None,
-        torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
+        device: Optional[Union[int, "torch.device"]] = None,
         **kwargs,
     ):
         # set the model type so we can check we have the right pre- and post-processing parameters
@@ -214,7 +213,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         else:
             self.type = "ctc"
 
-        super().__init__(model, tokenizer, feature_extractor, device=device, torch_dtype=torch_dtype, **kwargs)
+        super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
 
     def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
         """
@@ -283,10 +282,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         decoder_kwargs=None,
         return_timestamps=None,
         return_language=None,
-        generate_kwargs=None,
+        **generate_kwargs,
     ):
-        # No parameters on this pipeline right now
         preprocess_params = {}
+        forward_params = {}
+        postprocess_params = {}
+
+        # Preprocess params
         if chunk_length_s is not None:
             if self.type in ["seq2seq", "seq2seq_whisper"] and not ignore_warning:
                 type_warning = (
@@ -306,14 +308,28 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if stride_length_s is not None:
             preprocess_params["stride_length_s"] = stride_length_s
 
-        forward_params = defaultdict(dict)
-        if generate_kwargs is not None:
-            forward_params.update(generate_kwargs)
+        # Forward params
+        # BC: accept a dictionary of generation kwargs (as opposed to **generate_kwargs)
+        if "generate_kwargs" in generate_kwargs:
+            forward_params.update(generate_kwargs.pop("generate_kwargs"))
+        # Default use for kwargs: they are generation-time kwargs
+        forward_params.update(generate_kwargs)
 
-        postprocess_params = {}
+        if getattr(self, "assistant_model", None) is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if getattr(self, "assistant_tokenizer", None) is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
+        # Postprocess params
         if decoder_kwargs is not None:
             postprocess_params["decoder_kwargs"] = decoder_kwargs
+        if return_language is not None:
+            if self.type != "seq2seq_whisper":
+                raise ValueError("Only Whisper can return language for now.")
+            postprocess_params["return_language"] = return_language
 
+        # Parameter used in more than one place
         # in some models like whisper, the generation config has a `return_timestamps` key
         if hasattr(self, "generation_config") and hasattr(self.generation_config, "return_timestamps"):
             return_timestamps = return_timestamps or self.generation_config.return_timestamps
@@ -336,16 +352,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 )
             forward_params["return_timestamps"] = return_timestamps
             postprocess_params["return_timestamps"] = return_timestamps
-        if return_language is not None:
-            if self.type != "seq2seq_whisper":
-                raise ValueError("Only Whisper can return language for now.")
-            postprocess_params["return_language"] = return_language
-
-        if getattr(self, "assistant_model", None) is not None:
-            forward_params["assistant_model"] = self.assistant_model
-        if getattr(self, "assistant_tokenizer", None) is not None:
-            forward_params["tokenizer"] = self.tokenizer
-            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -376,7 +382,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             if isinstance(inputs, torchcodec.decoders.AudioDecoder):
                 _audio_samples = inputs.get_all_samples()
+
+                # torchcodec always returns (num_channels, num_samples)
+                # while before (datasets < 4.0) we had (2, num_samples) if stereo, (num_samples,) if mono
                 _array = _audio_samples.data
+                _array = _array[0] if _array.ndim == 2 and _array.shape[0] == 1 else _array
                 inputs = {"array": _array, "sampling_rate": _audio_samples.sample_rate}
 
         if isinstance(inputs, dict):
@@ -425,10 +435,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # can add extra data in the inputs, so we need to keep track
                 # of the original length in the stride so we can cut properly.
                 stride = (inputs.shape[0], int(round(stride[0] * ratio)), int(round(stride[1] * ratio)))
-        if not isinstance(inputs, np.ndarray):
+        if not isinstance(inputs, (np.ndarray, torch.Tensor)):
             raise TypeError(f"We expect a numpy ndarray or torch tensor as input, got `{type(inputs)}`")
-        if len(inputs.shape) != 1:
-            raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
+        if inputs.ndim != 1:
+            logger.warning(
+                f"We expect a single channel audio input for AutomaticSpeechRecognitionPipeline, got {inputs.ndim}. Taking the mean of the channels for mono conversion."
+            )
+            inputs = inputs.mean(axis=0)
 
         if chunk_length_s:
             if stride_length_s is None:
@@ -448,9 +461,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
 
-            for item in chunk_iter(
-                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.torch_dtype
-            ):
+            for item in chunk_iter(inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.dtype):
                 yield {**item, **extra}
         else:
             if self.type == "seq2seq_whisper" and inputs.shape[0] > self.feature_extractor.n_samples:
@@ -479,8 +490,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         return_tensors="pt",
                         return_attention_mask=True,
                     )
-            if self.torch_dtype is not None:
-                processed = processed.to(dtype=self.torch_dtype)
+            if self.dtype is not None:
+                processed = processed.to(dtype=self.dtype)
             if stride is not None:
                 if self.type == "seq2seq":
                     raise ValueError("Stride is only usable with CTC models, try removing it !")

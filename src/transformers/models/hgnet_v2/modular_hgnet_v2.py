@@ -19,7 +19,6 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
@@ -165,20 +164,10 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
 
 @auto_docstring
 class HGNetV2PreTrainedModel(PreTrainedModel):
-    config_class = HGNetV2Config
+    config: HGNetV2Config
     base_model_prefix = "hgnetv2"
     main_input_name = "pixel_values"
     _no_split_modules = ["HGNetV2BasicLayer"]
-
-    def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.BatchNorm2d):
-            module.weight.data.fill_(1.0)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
 
 class HGNetV2LearnableAffineBlock(nn.Module):
@@ -417,7 +406,7 @@ class HGNetV2Stage(nn.Module):
                     mid_channels,
                     out_channels,
                     num_layers,
-                    residual=False if i == 0 else True,
+                    residual=(i != 0),
                     kernel_size=kernel_size,
                     light_block=light_block,
                     drop_path=drop_path,
@@ -465,6 +454,8 @@ class HGNetV2Encoder(nn.Module):
 
 
 class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config: HGNetV2Config):
         super().__init__(config)
         super()._init_backbone(config)
@@ -484,11 +475,11 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
         Examples:
 
         ```python
-        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
+        >>> from transformers import HGNetV2Config, HGNetV2Backbone
         >>> import torch
 
-        >>> config = RTDetrResNetConfig()
-        >>> model = RTDetrResNetBackbone(config)
+        >>> config = HGNetV2Config()
+        >>> model = HGNetV2Backbone(config)
 
         >>> pixel_values = torch.randn(1, 3, 224, 224)
 
@@ -596,25 +587,7 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         loss = None
 
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]

@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import functional as F
 
+from ....cache_utils import Cache
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_utils import PreTrainedModel
 from ....utils import (
@@ -142,7 +143,7 @@ class TrajectoryTransformerOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -153,7 +154,7 @@ class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = TrajectoryTransformerConfig
+    config: TrajectoryTransformerConfig
     load_tf_weights = load_tf_weights_in_trajectory_transformer
     base_model_prefix = "trajectory_transformer"
     main_input_name = "trajectories"
@@ -464,7 +465,7 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
     def forward(
         self,
         trajectories: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         targets: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,

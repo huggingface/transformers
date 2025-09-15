@@ -18,9 +18,9 @@ r"""Utility to convert Gemma models from Orbax to HF Transformers checkpoint.
 
 python src/transformers/models/gemma3n/convert_gemma3n_weights.py \
     --variant='gemma3n_e4b' \
-    --tokenizer_path="$HOME/nano3/checkpoints/tokenizer/gemma-3n-tokenizer.model" \
-    --checkpoint_path="$HOME/nano3/checkpoints/g251_orbax/" \
-    --output_path="$HOME/nano3/checkpoints/g251_vision_encoder/"
+    --tokenizer_path="$HOME/tokenizers/gemma-3n-tokenizer.model" \
+    --checkpoint_path="$HOME/checkpoints/gemma-3n-orbax/" \
+    --output_path="$HOME/checkpoints/gemma-3n-safetensors/"
 """
 
 import json
@@ -519,7 +519,7 @@ def convert_vision_weights(
     weights: np.ndarray,
 ) -> Iterable[tuple[str, np.ndarray]]:
     def generate_base_path(path: str, block_type: str) -> tuple[str, tuple[int, int]]:
-        re_str = r"{}(\d+)/".format(block_type)
+        re_str = rf"{block_type}(\d+)/"
         re_pattern = re.compile(re_str)
         match = re.search(re_pattern, path).group(1)
         idx = abs(int(match)) - 1
@@ -552,8 +552,9 @@ def convert_vision_weights(
             converted_weight = weights
     elif _MOBILE_NET_CONV in path:
         if "Conv_0" in path:
-            converted_path = "conv_stem.conv.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_path = ("conv_stem.conv.weight", "conv_stem.conv.bias")
+            converted_weight = weights.transpose(3, 2, 0, 1)
+            converted_weight = (converted_weight, np.zeros(converted_weight.shape[0]))
         elif "Normalize_0" in path:
             converted_path = "conv_stem.bn.weight"
             converted_weight = weights
@@ -567,7 +568,7 @@ def convert_vision_weights(
             converted_weight = weights
         elif "expand_conv" in path:
             converted_path += ".conv_exp.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_weight = weights.transpose(3, 2, 0, 1)
         else:
             converted_path += ".conv_pwl.weight"
             converted_weight = weights.transpose()[:, :, None, None]
@@ -588,7 +589,7 @@ def convert_vision_weights(
             converted_weight = weights
         elif "key_dwconv" in path:
             converted_path += ".attn.key.down_conv.weight"
-            converted_weight = weights.transpose()
+            converted_weight = weights.transpose(3, 2, 0, 1)
         elif "key_proj" in path:
             converted_path += ".attn.key.proj.weight"
             converted_weight = weights.transpose()[:, :, None, None]
@@ -600,7 +601,7 @@ def convert_vision_weights(
             converted_weight = weights.transpose()[:, :, None, None]
         elif "value_dwconv" in path:
             converted_path += ".attn.value.down_conv.weight"
-            converted_weight = weights.transpose()
+            converted_weight = weights.transpose(3, 2, 0, 1)
         elif "value_proj" in path:
             converted_path += ".attn.value.proj.weight"
             converted_weight = weights.transpose()[:, :, None, None]
@@ -630,15 +631,18 @@ def convert_vision_weights(
             converted_weight = weights.transpose()[:, :, None, None]
         elif "middle_dwconv" in path:
             converted_path += ".dw_mid.conv.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_weight = weights.transpose(3, 2, 0, 1)
         elif "project" in path:
             converted_path += ".pw_proj.conv.weight"
             converted_weight = weights.transpose()[:, :, None, None]
         elif "start_dwconv" in path:
             converted_path += ".dw_start.conv.weight"
-            converted_weight = weights.transpose(3, 2, 1, 0)
+            converted_weight = weights.transpose(3, 2, 0, 1)
 
-    return [(converted_path, converted_weight)]
+    if isinstance(converted_path, (tuple, list)):
+        return zip(converted_path, converted_weight)
+    else:
+        return [(converted_path, converted_weight)]
 
 
 def convert(checkpoint_path: str, config: Gemma3nConfig) -> dict[str, torch.Tensor]:
@@ -659,36 +663,34 @@ def convert(checkpoint_path: str, config: Gemma3nConfig) -> dict[str, torch.Tens
 
     for (path, param), value in tree.flatten_with_path(ckpt):
         if param == "audio_input_embedding_extra":
-            update_tree("model.embed_audio.embedding.weight", value, config.audio_config.torch_dtype)
+            update_tree("model.embed_audio.embedding.weight", value, config.audio_config.dtype)
         elif path.endswith("audio_embedding_norm"):
-            update_tree("model.embed_audio.hard_embedding_norm.weight", value, config.audio_config.torch_dtype)
+            update_tree("model.embed_audio.hard_embedding_norm.weight", value, config.audio_config.dtype)
         elif path.endswith("audio_input_projection"):
-            update_tree(
-                "model.embed_audio.embedding_projection.weight", value.transpose(), config.audio_config.torch_dtype
-            )
+            update_tree("model.embed_audio.embedding_projection.weight", value.transpose(), config.audio_config.dtype)
         elif path.endswith("audio_soft_embedding_norm"):
-            update_tree("model.embed_audio.soft_embedding_norm.weight", value, config.audio_config.torch_dtype)
+            update_tree("model.embed_audio.soft_embedding_norm.weight", value, config.audio_config.dtype)
         elif param == "mm_input_embedding_extra":
-            update_tree("model.embed_vision.embedding.weight", value, config.vision_config.torch_dtype)
+            update_tree("model.embed_vision.embedding.weight", value, config.vision_config.dtype)
         elif path.endswith("mm_hard_embedding_norm"):
-            update_tree("model.embed_vision.hard_embedding_norm.weight", value, config.vision_config.torch_dtype)
+            update_tree("model.embed_vision.hard_embedding_norm.weight", value, config.vision_config.dtype)
         elif path.endswith("mm_input_projection"):
             update_tree(
-                "model.embed_vision.embedding_projection.weight", value.transpose(), config.vision_config.torch_dtype
+                "model.embed_vision.embedding_projection.weight", value.transpose(), config.vision_config.dtype
             )
         elif path.endswith("mm_soft_embedding_norm"):
-            update_tree("model.embed_vision.soft_embedding_norm.weight", value, config.vision_config.torch_dtype)
+            update_tree("model.embed_vision.soft_embedding_norm.weight", value, config.vision_config.dtype)
         elif path.startswith(_TRANSFORMER_PARAMETER):
             for path, weights in convert_transformer_weights(config.text_config, path, param, value):
-                update_tree(f"model.language_model.{path}", weights, config.text_config.torch_dtype)
+                update_tree(f"model.language_model.{path}", weights, config.text_config.dtype)
         elif _MOBILE_NET_PREFIX in path:
             mobilenet_prefix_idx = path.index(_MOBILE_NET_PREFIX)
             path = path[mobilenet_prefix_idx:]
             for path, weights in convert_vision_weights(config.vision_config, path, param, value):
-                update_tree(f"model.vision_tower.timm_model.{path}", weights, config.vision_config.torch_dtype)
+                update_tree(f"model.vision_tower.timm_model.{path}", weights, config.vision_config.dtype)
         elif path.startswith(_AUDIO_ENCODER_PARAMETER):
             for path, weights in convert_audio_encoder_weights(config.audio_config, path, param, value):
-                update_tree(f"model.audio_tower.{path}", weights, config.audio_config.torch_dtype)
+                update_tree(f"model.audio_tower.{path}", weights, config.audio_config.dtype)
 
     hf_tree["lm_head.weight"] = hf_tree["model.language_model.embed_tokens.weight"]
 
@@ -702,9 +704,9 @@ def main(*args):
     variant = _VARIANT.value
 
     config = _VARIANTS[variant]
-    config.audio_config.torch_dtype = getattr(torch, _AUDIO_DTYPE.value)
-    config.text_config.torch_dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
-    config.vision_config.torch_dtype = getattr(torch, _VISION_DTYPE.value)
+    config.audio_config.dtype = getattr(torch, _AUDIO_DTYPE.value)
+    config.text_config.dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
+    config.vision_config.dtype = getattr(torch, _VISION_DTYPE.value)
     if _INCLUDE_CHAT_TEMPLATE.value:
         # Chat template is included for instruction tuned models, which treat
         # both "<eos>" and "<end_of_turn>" as generation stoppers.

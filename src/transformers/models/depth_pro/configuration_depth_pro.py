@@ -158,7 +158,7 @@ class DepthProConfig(PretrainedConfig):
         self.patch_model_config = patch_model_config
         self.fov_model_config = fov_model_config
 
-        for sub_config_key in self.sub_configs.keys():
+        for sub_config_key in self.sub_configs:
             sub_config = getattr(self, sub_config_key)
 
             if sub_config is None:

@@ -435,9 +435,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         # create banned_tokens boolean mask
         banned_tokens_indices_mask = []
         for banned_tokens_slice in banned_tokens:
-            banned_tokens_indices_mask.append(
-                [True if token in banned_tokens_slice else False for token in range(vocab_size)]
-            )
+            banned_tokens_indices_mask.append([token in banned_tokens_slice for token in range(vocab_size)])
 
         scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
 

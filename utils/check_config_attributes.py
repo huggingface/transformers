@@ -32,6 +32,9 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
+    "Ernie4_5Config": ["tie_word_embeddings"],
+    "Ernie4_5_MoeConfig": ["tie_word_embeddings"],
     "Lfm2Config": ["full_attn_idxs", "tie_word_embeddings"],
     # used internally during generation to provide the custom logit processors with their necessary information
     "DiaConfig": [
@@ -66,6 +69,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "Phi3Config": ["embd_pdrop"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
+    # used to compute `frame_rate`
+    "XcodecConfig": ["sample_rate", "audio_channels"],
     # used to compute the property `self.layers_block_type`
     "RecurrentGemmaConfig": ["block_types"],
     # used as in the config to define `intermediate_size`
@@ -218,6 +223,14 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
     ],
+    "MMGroundingDinoConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
     "RTDetrConfig": [
         "eos_coefficient",
         "focal_loss_alpha",
@@ -277,11 +290,22 @@ SPECIAL_CASES_TO_ALLOW = {
         "attention_chunk_size",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
-    # position_embedding_type not used and deprecated. Should be deleted in v4.55
-    "LayoutLMConfig": ["position_embedding_type"],
-    "MarkupLMConfig": ["position_embedding_type"],
+    "ModernBertDecoderConfig": [
+        "embedding_dropout",
+        "hidden_activation",
+        "initializer_cutoff_factor",
+        "intermediate_size",
+        "max_position_embeddings",
+        "mlp_bias",
+        "mlp_dropout",
+        "classifier_activation",
+        "global_attn_every_n_layers",
+        "local_attention",
+        "local_rope_theta",
+    ],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
+    "VaultGemmaConfig": ["tie_word_embeddings"],
 }
 
 
@@ -321,6 +345,8 @@ SPECIAL_CASES_TO_ALLOW.update(
         "IdeficsConfig": True,
         "IdeficsVisionConfig": True,
         "IdeficsPerceiverConfig": True,
+        # TODO: @Arthur/Joao (`hidden_act` unused)
+        "GptOssConfig": True,
     }
 )
 

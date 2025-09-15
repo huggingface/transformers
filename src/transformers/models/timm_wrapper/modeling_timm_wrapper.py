@@ -18,7 +18,6 @@ from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -59,7 +58,7 @@ class TimmWrapperModelOutput(ModelOutput):
 @auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = TimmWrapperConfig
+    config: TimmWrapperConfig
     _no_split_modules = []
     model_tags = ["timm"]
 
@@ -69,6 +68,10 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision", "timm"])
         super().__init__(*args, **kwargs)
+
+    def post_init(self):
+        self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
+        super().post_init()
 
     @staticmethod
     def _fix_state_dict_key_on_load(key) -> tuple[str, bool]:
@@ -106,6 +109,24 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
+
+    def _timm_model_supports_gradient_checkpointing(self):
+        """
+        Check if the timm model supports gradient checkpointing by checking if the `set_grad_checkpointing` method is available.
+        Some timm models will have the method but will raise an AssertionError when called so in this case we return False.
+        """
+        if not hasattr(self.timm_model, "set_grad_checkpointing"):
+            return False
+
+        try:
+            self.timm_model.set_grad_checkpointing(enable=True)
+            self.timm_model.set_grad_checkpointing(enable=False)
+            return True
+        except Exception:
+            return False
+
+    def _set_gradient_checkpointing(self, enable: bool = True, *args, **kwargs):
+        self.timm_model.set_grad_checkpointing(enable)
 
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
@@ -322,25 +343,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             outputs = (loss, logits, hidden_states)

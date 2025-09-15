@@ -32,7 +32,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
     >>> extractor = pipeline(model="google/vit-base-patch16-224", task="image-feature-extraction")
     >>> result = extractor("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", return_tensors=True)
-    >>> result.shape  # This is a tensor of shape [1, sequence_lenth, hidden_dimension] representing the input image.
+    >>> result.shape  # This is a tensor of shape [1, sequence_length, hidden_dimension] representing the input image.
     torch.Size([1, 197, 768])
     ```
 
@@ -44,6 +44,11 @@ class ImageFeatureExtractionPipeline(Pipeline):
     All vision models may be used for this pipeline. See a list of all models, including community-contributed models on
     [huggingface.co/models](https://huggingface.co/models).
     """
+
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
 
     def _sanitize_parameters(self, image_processor_kwargs=None, return_tensors=None, pool=None, **kwargs):
         preprocess_params = {} if image_processor_kwargs is None else image_processor_kwargs
@@ -63,7 +68,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(image, return_tensors=self.framework, **image_processor_kwargs)
         if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+            model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):

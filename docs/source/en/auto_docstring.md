@@ -64,9 +64,9 @@ Arguments can also be passed directly to `@auto_docstring` for more control. Use
     It builds upon the standard Transformer architecture with unique modifications.""",
     custom_args="""
     custom_parameter (`type`, *optional*, defaults to `default_value`):
-        A concise description for custom_parameter if not defined or overriding the description in `args_doc.py`.
+        A concise description for custom_parameter if not defined or overriding the description in `auto_docstring.py`.
     internal_helper_arg (`type`, *optional*, defaults to `default_value`):
-        A concise description for internal_helper_arg if not defined or overriding the description in `args_doc.py`.
+        A concise description for internal_helper_arg if not defined or overriding the description in `auto_docstring.py`.
     """
 )
 class MySpecialModel(PreTrainedModel):
@@ -85,11 +85,38 @@ class MySpecialModel(PreTrainedModel):
     def __init__(self, config: ConfigType, custom_parameter: "type" = "default_value", internal_helper_arg=None):
         r"""
         custom_parameter (`type`, *optional*, defaults to `default_value`):
-            A concise description for custom_parameter if not defined or overriding the description in `args_doc.py`.
+            A concise description for custom_parameter if not defined or overriding the description in `auto_docstring.py`.
         internal_helper_arg (`type`, *optional*, defaults to `default_value`):
-            A concise description for internal_helper_arg if not defined or overriding the description in `args_doc.py`.
+            A concise description for internal_helper_arg if not defined or overriding the description in `auto_docstring.py`.
         """
         # ...
+```
+
+You should also use the `@auto_docstring` decorator for classes that inherit from [`~utils.ModelOutput`].
+
+```python
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Custom model outputs with additional fields.
+    """
+)
+class MyModelOutput(ImageClassifierOutput):
+    r"""
+    loss (`torch.FloatTensor`, *optional*):
+        The loss of the model.
+    custom_field (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+        A custom output field specific to this model.
+    """
+
+    # Standard fields like hidden_states, logits, attentions etc. can be automatically documented if the description is the same as the standard arguments.
+    # However, given that the loss docstring is often different per model, you should document it in the docstring above.
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    # Custom fields need to be documented in the docstring above
+    custom_field: Optional[torch.FloatTensor] = None
 ```
 
 </hfoption>
@@ -171,7 +198,7 @@ class MyModel(PreTrainedModel):
 
 There are some rules for documenting different types of arguments and they're listed below.
 
-- Standard arguments (`input_ids`, `attention_mask`, `pixel_values`, etc.) are defined and retrieved from `args_doc.py`. It is the single source of truth for standard arguments and should not be redefined locally if an argument's description and shape is the same as an argument in `args_doc.py`.
+- Standard arguments (`input_ids`, `attention_mask`, `pixel_values`, etc.) are defined and retrieved from `auto_docstring.py`. It is the single source of truth for standard arguments and should not be redefined locally if an argument's description and shape is the same as an argument in `auto_docstring.py`.
 
     If a standard argument behaves differently in your model, then you can override it locally in a `r""" """` block. This local definition has a higher priority. For example, the `labels` argument is often customized per model and typically requires overriding.
 
@@ -245,7 +272,7 @@ When working with modular files (`modular_model.py`), follow the guidelines belo
 The `@auto_docstring` decorator automatically generates docstrings by:
 
 1. Inspecting the signature (arguments, types, defaults) of the decorated class' `__init__` method or the decorated function.
-2. Retrieving the predefined docstrings for common arguments (`input_ids`, `attention_mask`, etc.) from internal library sources like [`ModelArgs`], [`ImageProcessorArgs`], and the `args_doc.py` file.
+2. Retrieving the predefined docstrings for common arguments (`input_ids`, `attention_mask`, etc.) from internal library sources like [`ModelArgs`], [`ImageProcessorArgs`], and the `auto_docstring.py` file.
 3. Adding argument descriptions in one of two ways as shown below.
 
     | method | description | usage |
@@ -253,7 +280,7 @@ The `@auto_docstring` decorator automatically generates docstrings by:
     | `r""" """` | add custom docstring content directly to a method signature or within the `__init__` docstring | document new arguments or override standard descriptions |
     | `custom_args` | add custom docstrings for specific arguments directly in `@auto_docstring` | define docstring for new arguments once if they're repeated in multiple places in the modeling file |
 
-4. Adding class and function descriptions. For model classes with standard naming patterns, like `ModelForCausalLM`, or if it belongs to a pipeline, `@auto_docstring` automatically generates the appropriate descriptions with `ClassDocstring` from `args_doc.py`.
+4. Adding class and function descriptions. For model classes with standard naming patterns, like `ModelForCausalLM`, or if it belongs to a pipeline, `@auto_docstring` automatically generates the appropriate descriptions with `ClassDocstring` from `auto_docstring.py`.
 
     `@auto_docstring` also accepts the `custom_intro` argument to describe a class or function.
 
@@ -263,7 +290,7 @@ The `@auto_docstring` decorator automatically generates docstrings by:
 
 7. Adding return values to the docstring. For methods like `forward`, the decorator automatically generates the `Returns` field in the docstring based on the method's return type annotation.
 
-    For example, if a method returns a [`~transformers.utils.ModelOutput`] subclass, `@auto_docstring` extracts the field descriptions from the class' docstring to create a comprehensive return value description. You can also manually specifiy a custom `Returns` field in a functions docstring.
+    For example, if a method returns a [`~transformers.utils.ModelOutput`] subclass, `@auto_docstring` extracts the field descriptions from the class' docstring to create a comprehensive return value description. You can also manually specify a custom `Returns` field in a functions docstring.
 
 8. Unrolling kwargs typed with the unpack operator. For specific methods (defined in `UNROLL_KWARGS_METHODS`) or classes (defined in `UNROLL_KWARGS_CLASSES`), the decorator processes `**kwargs` parameters that are typed with `Unpack[KwargsTypedDict]`. It extracts the documentations from the `TypedDict` and adds each parameter to the function's docstring.
 

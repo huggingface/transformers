@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-10-07 and added to Hugging Face Transformers on 2023-03-22.*
 
 # Pix2Struct
 

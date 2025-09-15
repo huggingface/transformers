@@ -14,9 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch ConversationalSpeechModel model."""
 
-import collections
 import copy
-import re
 import unittest
 
 import pytest
@@ -51,8 +49,6 @@ if is_datasets_available():
 
 if is_torch_available():
     import torch
-
-    from transformers.pytorch_utils import id_tensor_storage
 
 
 class CsmModelTester:
@@ -252,11 +248,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support Dola decoding.")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @pytest.mark.generate
     @unittest.skip(reason="CSM does not support beam search.")
     def test_beam_sample_generate(self):
         pass
@@ -279,41 +270,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     @pytest.mark.generate
     @unittest.skip(reason="CSM does not support beam search.")
     def test_beam_sample_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support group beam search.")
-    def test_group_beam_search_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support group beam search.")
-    def test_group_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support constrained beam search.")
-    def test_constrained_beam_search_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support constrained beam search.")
-    def test_constrained_beam_search_generate_dict_output(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support contrastive search.")
-    def test_contrastive_generate_low_memory(self):
         pass
 
     @pytest.mark.generate
@@ -344,38 +300,9 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_model_parallel_beam_search(self):
         pass
 
+    @unittest.skip(reason="CSM has special embeddings that can never be tied")
     def test_tied_weights_keys(self):
-        """
-        Overrides [ModelTesterMixin.test_tied_weights_keys] to not test for text config (not applicable to CSM).
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model_tied = model_class(config)
-
-            ptrs = collections.defaultdict(list)
-            for name, tensor in model_tied.state_dict().items():
-                ptrs[id_tensor_storage(tensor)].append(name)
-
-            # These are all the pointers of shared tensors.
-            tied_params = [names for _, names in ptrs.items() if len(names) > 1]
-
-            tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
-            # Detect we get a hit for each key
-            for key in tied_weight_keys:
-                is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
-                self.assertTrue(is_tied_key, f"{key} is not a tied weight key for {model_class}.")
-
-            # Removed tied weights found from tied params -> there should only be one left after
-            for key in tied_weight_keys:
-                for i in range(len(tied_params)):
-                    tied_params[i] = [p for p in tied_params[i] if re.search(key, p) is None]
-
-            tied_params = [group for group in tied_params if len(group) > 1]
-            self.assertListEqual(
-                tied_params,
-                [],
-                f"Missing `_tied_weights_keys` for {model_class}: add all of {tied_params} except one.",
-            )
+        pass
 
     def _get_custom_4d_mask_test_data(self):
         """

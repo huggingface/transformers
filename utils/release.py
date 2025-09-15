@@ -59,6 +59,14 @@ REPLACE_PATTERNS = {
     "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
     "init": (re.compile(r'^__version__\s+=\s+"([^"]+)"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
     "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), r'\1version="VERSION",'),
+    "uv_script_release": (
+        re.compile(r'^#     "transformers(\[.+\])?.*$', re.MULTILINE),
+        r'#     "transformers\g<1>==VERSION",',
+    ),
+    "uv_script_dev": (
+        re.compile(r'^#     "transformers(\[.+\])?.*$', re.MULTILINE),
+        r'#     "transformers\g<1> @ git+https://github.com/huggingface/transformers.git",',
+    ),
 }
 # This maps a type of file to its path in Transformers
 REPLACE_FILES = {
@@ -66,6 +74,7 @@ REPLACE_FILES = {
     "setup": "setup.py",
 }
 README_FILE = "README.md"
+UV_SCRIPT_MARKER = "# /// script"
 
 
 def update_version_in_file(fname: str, version: str, file_type: str):
@@ -86,12 +95,13 @@ def update_version_in_file(fname: str, version: str, file_type: str):
         f.write(code)
 
 
-def update_version_in_examples(version: str):
+def update_version_in_examples(version: str, patch: bool = False):
     """
     Update the version in all examples files.
 
     Args:
         version (`str`): The new version to set in the examples.
+        patch (`bool`, *optional*, defaults to `False`): Whether or not this is a patch release.
     """
     for folder, directories, fnames in os.walk(PATH_TO_EXAMPLES):
         # Removing some of the folders with non-actively maintained examples from the walk
@@ -99,7 +109,13 @@ def update_version_in_examples(version: str):
             directories.remove("legacy")
         for fname in fnames:
             if fname.endswith(".py"):
-                update_version_in_file(os.path.join(folder, fname), version, file_type="examples")
+                if UV_SCRIPT_MARKER in Path(folder, fname).read_text():
+                    # Update the dependencies in UV scripts
+                    uv_script_file_type = "uv_script_dev" if ".dev" in version else "uv_script_release"
+                    update_version_in_file(os.path.join(folder, fname), version, file_type=uv_script_file_type)
+                if not patch:
+                    # We don't update the version in the examples for patch releases.
+                    update_version_in_file(os.path.join(folder, fname), version, file_type="examples")
 
 
 def global_version_update(version: str, patch: bool = False):
@@ -112,9 +128,7 @@ def global_version_update(version: str, patch: bool = False):
     """
     for pattern, fname in REPLACE_FILES.items():
         update_version_in_file(fname, version, pattern)
-    if not patch:
-        # We don't update the version in the examples for patch releases.
-        update_version_in_examples(version)
+    update_version_in_examples(version, patch=patch)
 
 
 def remove_conversion_scripts():

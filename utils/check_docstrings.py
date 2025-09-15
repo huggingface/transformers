@@ -49,7 +49,7 @@ from check_repo import ignore_undocumented
 from git import Repo
 
 from transformers.utils import direct_transformers_import
-from transformers.utils.args_doc import (
+from transformers.utils.auto_docstring import (
     ImageProcessorArgs,
     ModelArgs,
     ModelOutputArgs,
@@ -75,10 +75,13 @@ _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
 # Args that are always overridden in the docstring, for clarity we don't want to remove them from the docstring
 ALWAYS_OVERRIDE = ["labels"]
 
-# This is a temporary list of objects to ignore while we progressively fix them. Do not add anything here, fix the
+# This is a temporary set of objects to ignore while we progressively fix them. Do not add anything here, fix the
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
-OBJECTS_TO_IGNORE = [
+OBJECTS_TO_IGNORE = {
+    "ApertusConfig",
+    "Mxfp4Config",
+    "Exaone4Config",
     "SmolLM3Config",
     "Gemma3nVisionConfig",
     "Llama4Processor",
@@ -167,6 +170,8 @@ OBJECTS_TO_IGNORE = [
     "DetrConfig",
     "DetrImageProcessor",
     "DinatModel",
+    "DINOv3ConvNextConfig",
+    "DINOv3ViTConfig",
     "DistilBertConfig",
     "DistilBertTokenizerFast",
     "DocumentQuestionAnsweringPipeline",
@@ -183,128 +188,6 @@ OBJECTS_TO_IGNORE = [
     "ErnieMTokenizer",
     "EsmConfig",
     "EsmModel",
-    "FlaxAlbertForMaskedLM",
-    "FlaxAlbertForMultipleChoice",
-    "FlaxAlbertForPreTraining",
-    "FlaxAlbertForQuestionAnswering",
-    "FlaxAlbertForSequenceClassification",
-    "FlaxAlbertForTokenClassification",
-    "FlaxAlbertModel",
-    "FlaxBartForCausalLM",
-    "FlaxBartForConditionalGeneration",
-    "FlaxBartForQuestionAnswering",
-    "FlaxBartForSequenceClassification",
-    "FlaxBartModel",
-    "FlaxBeitForImageClassification",
-    "FlaxBeitForMaskedImageModeling",
-    "FlaxBeitModel",
-    "FlaxBertForCausalLM",
-    "FlaxBertForMaskedLM",
-    "FlaxBertForMultipleChoice",
-    "FlaxBertForNextSentencePrediction",
-    "FlaxBertForPreTraining",
-    "FlaxBertForQuestionAnswering",
-    "FlaxBertForSequenceClassification",
-    "FlaxBertForTokenClassification",
-    "FlaxBertModel",
-    "FlaxBigBirdForCausalLM",
-    "FlaxBigBirdForMaskedLM",
-    "FlaxBigBirdForMultipleChoice",
-    "FlaxBigBirdForPreTraining",
-    "FlaxBigBirdForQuestionAnswering",
-    "FlaxBigBirdForSequenceClassification",
-    "FlaxBigBirdForTokenClassification",
-    "FlaxBigBirdModel",
-    "FlaxBlenderbotForConditionalGeneration",
-    "FlaxBlenderbotModel",
-    "FlaxBlenderbotSmallForConditionalGeneration",
-    "FlaxBlenderbotSmallModel",
-    "FlaxBloomForCausalLM",
-    "FlaxBloomModel",
-    "FlaxCLIPModel",
-    "FlaxDinov2ForImageClassification",
-    "FlaxDinov2Model",
-    "FlaxDistilBertForMaskedLM",
-    "FlaxDistilBertForMultipleChoice",
-    "FlaxDistilBertForQuestionAnswering",
-    "FlaxDistilBertForSequenceClassification",
-    "FlaxDistilBertForTokenClassification",
-    "FlaxDistilBertModel",
-    "FlaxElectraForCausalLM",
-    "FlaxElectraForMaskedLM",
-    "FlaxElectraForMultipleChoice",
-    "FlaxElectraForPreTraining",
-    "FlaxElectraForQuestionAnswering",
-    "FlaxElectraForSequenceClassification",
-    "FlaxElectraForTokenClassification",
-    "FlaxElectraModel",
-    "FlaxEncoderDecoderModel",
-    "FlaxGPT2LMHeadModel",
-    "FlaxGPT2Model",
-    "FlaxGPTJForCausalLM",
-    "FlaxGPTJModel",
-    "FlaxGPTNeoForCausalLM",
-    "FlaxGPTNeoModel",
-    "FlaxLlamaForCausalLM",
-    "FlaxLlamaModel",
-    "FlaxGemmaForCausalLM",
-    "FlaxGemmaModel",
-    "FlaxMBartForConditionalGeneration",
-    "FlaxMBartForQuestionAnswering",
-    "FlaxMBartForSequenceClassification",
-    "FlaxMBartModel",
-    "FlaxMarianMTModel",
-    "FlaxMarianModel",
-    "FlaxMistralForCausalLM",
-    "FlaxMistralModel",
-    "FlaxOPTForCausalLM",
-    "FlaxPegasusForConditionalGeneration",
-    "FlaxPegasusModel",
-    "FlaxRegNetForImageClassification",
-    "FlaxRegNetModel",
-    "FlaxResNetForImageClassification",
-    "FlaxResNetModel",
-    "FlaxRoFormerForMaskedLM",
-    "FlaxRoFormerForMultipleChoice",
-    "FlaxRoFormerForQuestionAnswering",
-    "FlaxRoFormerForSequenceClassification",
-    "FlaxRoFormerForTokenClassification",
-    "FlaxRoFormerModel",
-    "FlaxRobertaForCausalLM",
-    "FlaxRobertaForMaskedLM",
-    "FlaxRobertaForMultipleChoice",
-    "FlaxRobertaForQuestionAnswering",
-    "FlaxRobertaForSequenceClassification",
-    "FlaxRobertaForTokenClassification",
-    "FlaxRobertaModel",
-    "FlaxRobertaPreLayerNormForCausalLM",
-    "FlaxRobertaPreLayerNormForMaskedLM",
-    "FlaxRobertaPreLayerNormForMultipleChoice",
-    "FlaxRobertaPreLayerNormForQuestionAnswering",
-    "FlaxRobertaPreLayerNormForSequenceClassification",
-    "FlaxRobertaPreLayerNormForTokenClassification",
-    "FlaxRobertaPreLayerNormModel",
-    "FlaxSpeechEncoderDecoderModel",
-    "FlaxViTForImageClassification",
-    "FlaxViTModel",
-    "FlaxVisionEncoderDecoderModel",
-    "FlaxVisionTextDualEncoderModel",
-    "FlaxWav2Vec2ForCTC",
-    "FlaxWav2Vec2ForPreTraining",
-    "FlaxWav2Vec2Model",
-    "FlaxWhisperForAudioClassification",
-    "FlaxWhisperForConditionalGeneration",
-    "FlaxWhisperModel",
-    "FlaxWhisperTimeStampLogitsProcessor",
-    "FlaxXGLMForCausalLM",
-    "FlaxXGLMModel",
-    "FlaxXLMRobertaForCausalLM",
-    "FlaxXLMRobertaForMaskedLM",
-    "FlaxXLMRobertaForMultipleChoice",
-    "FlaxXLMRobertaForQuestionAnswering",
-    "FlaxXLMRobertaForSequenceClassification",
-    "FlaxXLMRobertaForTokenClassification",
-    "FlaxXLMRobertaModel",
     "FNetConfig",
     "FNetModel",
     "FNetTokenizerFast",
@@ -513,26 +396,6 @@ OBJECTS_TO_IGNORE = [
     "Text2TextGenerationPipeline",
     "TextClassificationPipeline",
     "TextGenerationPipeline",
-    "TFBartForConditionalGeneration",
-    "TFBartForSequenceClassification",
-    "TFBartModel",
-    "TFBertModel",
-    "TFConvNextModel",
-    "TFData2VecVisionModel",
-    "TFDeiTModel",
-    "TFEncoderDecoderModel",
-    "TFEsmModel",
-    "TFMobileViTModel",
-    "TFRagModel",
-    "TFRagSequenceForGeneration",
-    "TFRagTokenForGeneration",
-    "TFRepetitionPenaltyLogitsProcessor",
-    "TFSwinModel",
-    "TFViTModel",
-    "TFVisionEncoderDecoderModel",
-    "TFVisionTextDualEncoderModel",
-    "TFXGLMForCausalLM",
-    "TFXGLMModel",
     "TimeSeriesTransformerConfig",
     "TokenClassificationPipeline",
     "TrOCRConfig",
@@ -597,6 +460,13 @@ OBJECTS_TO_IGNORE = [
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
     "Llama4TextConfig",
+}
+# In addition to the objects above, we also ignore objects with certain prefixes. If you add an item to the list
+# below, make sure to add a comment explaining why.
+OBJECT_TO_IGNORE_PREFIXES = [
+    "_",  # Private objects are not documented
+    "TF",  # TensorFlow objects are scheduled to be removed in the future
+    "Flax",  # Flax objects are scheduled to be removed in the future
 ]
 
 # Supported math operations when interpreting the value of defaults.
@@ -681,8 +551,8 @@ def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
 
 
 def eval_node(node):
-    if isinstance(node, ast.Num):  # <number>
-        return node.n
+    if isinstance(node, ast.Constant) and type(node.value) in (int, float, complex):
+        return node.value
     elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
         return MATH_OPERATORS[type(node.op)](eval_node(node.left), eval_node(node.right))
     elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
@@ -821,6 +691,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
     except OSError:
         source = []
 
+    # Find the line where the docstring starts
     idx = 0
     while idx < len(source) and '"""' not in source[idx]:
         idx += 1
@@ -828,9 +699,11 @@ def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
     ignore_order = False
     if idx < len(source):
         line_before_docstring = source[idx - 1]
+        # Match '# no-format' (allowing surrounding whitespaces)
         if re.search(r"^\s*#\s*no-format\s*$", line_before_docstring):
-            # This object is ignored
+            # This object is ignored by the auto-docstring tool
             return
+        # Match '# ignore-order' (allowing surrounding whitespaces)
         elif re.search(r"^\s*#\s*ignore-order\s*$", line_before_docstring):
             ignore_order = True
 
@@ -912,7 +785,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
         missing = set(signature.keys()) - set(old_arguments)
         new_param_docs.extend([arguments[name] for name in missing if len(arguments[name]) > 0])
     else:
-        new_param_docs = [arguments[name] for name in signature.keys() if len(arguments[name]) > 0]
+        new_param_docs = [arguments[name] for name in signature if len(arguments[name]) > 0]
     new_doc_arg = "\n".join(new_param_docs)
 
     return old_doc_arg, new_doc_arg
@@ -941,7 +814,8 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         idx += 1
 
     if idx == len(source):
-        # Args are not defined in the docstring of this object
+        # Args are not defined in the docstring of this object. This can happen when the docstring is inherited.
+        # In this case, we are not trying to fix it on the child object.
         return
 
     # Get to the line where we stop documenting arguments
@@ -956,9 +830,24 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         idx -= 1
     idx += 1
 
-    if "".join(source[start_idx:idx])[:-1] != old_doc_args:
+    # `old_doc_args` is built from `obj.__doc__`, which may have
+    # different indentation than the raw source from `inspect.getsourcelines`.
+    # We use `inspect.cleandoc` to remove indentation uniformly from both
+    # strings before comparing them.
+    source_args_as_str = "".join(source[start_idx:idx])
+    if inspect.cleandoc(source_args_as_str) != inspect.cleandoc(old_doc_args):
         # Args are not fully defined in the docstring of this object
-        return
+        obj_file = find_source_file(obj)
+        actual_args_section = source_args_as_str.rstrip()
+        raise ValueError(
+            f"Cannot fix docstring of {obj.__name__} in {obj_file} because the argument section in the source code "
+            f"does not match the expected format. This usually happens when:\n"
+            f"1. The argument section is not properly indented\n"
+            f"2. The argument section contains unexpected formatting\n"
+            f"3. The docstring parsing failed to correctly identify the argument boundaries\n\n"
+            f"Expected argument section:\n{repr(old_doc_args)}\n\n"
+            f"Actual argument section found:\n{repr(actual_args_section)}\n\n"
+        )
 
     obj_file = find_source_file(obj)
     with open(obj_file, "r", encoding="utf-8") as f:
@@ -966,6 +855,10 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
     # Replace content
     lines = content.split("\n")
+    prev_line_indentation = find_indent(lines[line_number + start_idx - 2])
+    # Now increase the indentation of every line in new_doc_args by prev_line_indentation
+    new_doc_args = "\n".join([f"{' ' * prev_line_indentation}{line}" for line in new_doc_args.split("\n")])
+
     lines = lines[: line_number + start_idx - 1] + [new_doc_args] + lines[line_number + idx - 1 :]
 
     print(f"Fixing the docstring of {obj.__name__} in {obj_file}.")
@@ -1472,7 +1365,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         if docstring_args_ro_remove_warnings:
             if not overwrite:
                 print(
-                    "Some docstrings are redundant with the ones in `args_doc.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
+                    "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
                 )
             print(f"🚨 Redundant docstring for the following arguments in {candidate_file}:")
             for warning in docstring_args_ro_remove_warnings:
@@ -1515,7 +1408,11 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
     to_clean = []
     for name in dir(transformers):
         # Skip objects that are private or not documented.
-        if name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE:
+        if (
+            any(name.startswith(prefix) for prefix in OBJECT_TO_IGNORE_PREFIXES)
+            or ignore_undocumented(name)
+            or name in OBJECTS_TO_IGNORE
+        ):
             continue
 
         obj = getattr(transformers, name)

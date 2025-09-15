@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
+from ....cache_utils import Cache
 from ....modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -41,6 +42,7 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
+from ....utils.deprecation import deprecate_kwarg
 from .configuration_mega import MegaConfig
 
 
@@ -624,7 +626,7 @@ class MegaGatedCrossAttention(nn.Module):
         key: Optional[torch.Tensor],
         value: Optional[torch.Tensor],
         key_padding_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -909,7 +911,7 @@ class MegaMovingAverageGatedAttention(nn.Module):
         input,
         padding_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions=False,
         use_cache=False,
     ):
@@ -1173,6 +1175,7 @@ class MegaBlock(nn.Module):
         else:
             self.cross_attn = None
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1180,7 +1183,7 @@ class MegaBlock(nn.Module):
         causal_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: bool = False,
     ) -> tuple[torch.Tensor]:
@@ -1202,14 +1205,14 @@ class MegaBlock(nn.Module):
             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, source_sequence_length)`, *optional*):
                 Indicates which entries in the cross/source sequence are to be ignored (mostly due to padding), where
                 elements are either 1 for *not masked* or 0 for *masked*.
-            past_key_value (`tuple(torch.Tensor)`, *optional*):
+            past_key_values (`tuple(torch.Tensor)`, *optional*):
                 The hidden states returned from the previous timestep during incremental decoding; expects that
                 self-attention key, value, and EMA states are the first 3 entries in the tuple, and (if doing
                 cross-attention) cross-attention key and value are the last 2 entries in the tuple
             output_attentions (`bool`, default `False`):
                 Whether to return self-attention weights
             use_cache (`bool`, default `False`):
-                Whether to perform incremental decoding; uses `past_key_value` as prior state, and returns the updated
+                Whether to perform incremental decoding; uses `past_key_values` as prior state, and returns the updated
                 states for use in the next step
 
         Returns:
@@ -1244,7 +1247,7 @@ class MegaBlock(nn.Module):
         # sequence length as the input tensor; if we're caching incremental states, we assume the input
         # sequence length is 1 (Mega will break otherwise), so we take the padding mask for the final
         # token in the input (mask is received as [batch X sequence length])
-        if use_cache and (past_key_value is not None) and (attention_mask is not None):
+        if use_cache and (past_key_values is not None) and (attention_mask is not None):
             mega_padding_mask = attention_mask[:, -1].unsqueeze(-1)
         else:
             mega_padding_mask = attention_mask
@@ -1253,7 +1256,7 @@ class MegaBlock(nn.Module):
             input=hidden_states,
             padding_mask=mega_padding_mask,
             causal_mask=causal_mask,
-            past_key_values=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
@@ -1272,7 +1275,7 @@ class MegaBlock(nn.Module):
                 key=encoder_hidden_states,
                 value=encoder_hidden_states,
                 key_padding_mask=encoder_attention_mask,
-                past_key_values=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
             )
@@ -1329,7 +1332,7 @@ class MegaPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = MegaConfig
+    config: MegaConfig
     base_model_prefix = "mega"
     supports_gradient_checkpointing = False
     _no_split_modules = ["MegaMovingAverageGatedAttention"]
@@ -1488,7 +1491,7 @@ class MegaModel(MegaPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1592,7 +1595,7 @@ class MegaModel(MegaPreTrainedModel):
                 causal_mask=causal_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_value=current_decoder_cache,
+                past_key_values=current_decoder_cache,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
             )
@@ -1662,12 +1665,6 @@ class MegaForCausalLM(MegaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     @add_start_docstrings_to_model_forward(MEGA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1679,7 +1676,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

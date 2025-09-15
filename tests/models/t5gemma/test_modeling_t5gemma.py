@@ -25,11 +25,10 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_sdpa,
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -46,7 +45,6 @@ if is_torch_available():
         T5GemmaForTokenClassification,
         T5GemmaModel,
     )
-    from transformers.cache_utils import Cache
 
 
 class T5GemmaModelTester:
@@ -203,6 +201,15 @@ class T5GemmaModelTester:
         input_ids = torch.where(input_ids == self.bos_token_id, 42, input_ids)
         decoder_input_ids = torch.where(decoder_input_ids == self.bos_token_id, 42, decoder_input_ids)
 
+        # Avoid leading PAD tokens from inputs.
+        # `T5GemmaForTokenClassification` and `T5GemmaForSequenceClassification` specify `use_cache=False` when
+        # calling `self.model`. For `self.use_attention_mask=False` case below, the model goes through
+        # `make_default_2d_attention_mask`. When there are some pad tokens at the beginning of a sequence, it can't
+        # attend to any place, and the computed mask `[-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38]`
+        # causes larger differences in some equivalence tests.
+        # Let's avoid such leading PAD tokens.
+        decoder_input_ids[:, 0] = self.pad_token_id + 1
+
         attention_mask = None
         decoder_attention_mask = None
         if self.use_attention_mask:
@@ -271,7 +278,7 @@ class T5GemmaModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertIsNotNone(decoder_past)
         self.parent.assertEqual(len(decoder_past.self_attention_cache), config.decoder.num_hidden_layers)
-        self.parent.assertEqual(len(decoder_past.cross_attention_cache.key_cache), config.decoder.num_hidden_layers)
+        self.parent.assertEqual(len(decoder_past.cross_attention_cache), config.decoder.num_hidden_layers)
 
     def check_prepare_lm_labels_via_shift_left(
         self,
@@ -311,7 +318,7 @@ class T5GemmaModelTester:
             decoder_attention_mask=decoder_attention_mask,
             labels=lm_labels,
         )
-        self.parent.assertEqual(len(outputs), 4)
+        self.parent.assertEqual(len(outputs), 5)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
@@ -590,7 +597,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_pruning = False
     _is_stateful = True
     is_encoder_decoder = True
-    model_split_percents = [0.5, 0.6]
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = T5GemmaForConditionalGeneration if is_torch_available() else None
@@ -829,7 +835,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_sdpa_equivalence
     # Add decoder_input_ids and adjust hidden states.
-    @require_torch_sdpa
+
     @require_torch_accelerator
     def test_sdpa_equivalence(self):
         for model_class in self.all_model_classes:
@@ -984,128 +990,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
-    # Based on tests.generation.test_utils.GenerationTesterMixin.test_past_key_values_format
-    # Adjust encoder attention number for cross-attention caching and update attention head dimension
-    @pytest.mark.generate
-    def test_past_key_values_format(self, custom_all_cache_shapes=None):
-        """
-        Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test, or pass the
-        expected cache shapes.
-        Having a standard KV cache format is important for a consistent API (and for advanced generation methods).
-        """
-        for model_class in self.all_generative_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-            # 1. If it doesn't support cache, skip the test
-            if not hasattr(config.get_text_config(), "use_cache"):
-                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
-
-            model = model_class(config).to(torch_device)
-            model = model.eval()
-            if "use_cache" not in inputs:
-                inputs["use_cache"] = True
-            outputs = model(**inputs)
-
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
-
-            # 2. retrieve the KV cache and compute its default expected shapes (if no custom shapes are provided)
-            past_kv = outputs["past_key_values"]
-            is_legacy_cache = not isinstance(past_kv, Cache)
-
-            text_config = config.get_text_config().decoder
-            num_decoder_layers = text_config.num_hidden_layers
-
-            if custom_all_cache_shapes is None:
-                num_query_attention_heads = getattr(
-                    text_config, "decoder_attention_heads", text_config.num_attention_heads
-                )
-                per_head_embed_dim = text_config.head_dim
-                num_key_value_heads = (
-                    text_config.num_key_value_heads
-                    if getattr(text_config, "num_key_value_heads", None) is not None
-                    else num_query_attention_heads
-                )
-                if config.is_encoder_decoder:
-                    encoder_num_attention_heads = num_key_value_heads
-                    encoder_per_head_embed_dim = per_head_embed_dim
-                    batch_size, seq_length = inputs["decoder_input_ids"].shape[:2]
-                    # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
-                    # autoregressive generation, we're keeping the test general and not checking the 3rd dim
-                    default_cross_attention_shape = (
-                        batch_size,
-                        encoder_num_attention_heads,
-                        encoder_per_head_embed_dim,
-                    )
-                    default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
-                    all_cache_shapes = [
-                        [
-                            default_self_attention_shape,
-                            default_self_attention_shape,
-                            default_cross_attention_shape,
-                            default_cross_attention_shape,
-                        ]
-                        for _ in range(num_decoder_layers)
-                    ]
-                else:
-                    batch_size, seq_length = inputs["input_ids"].shape[:2]
-                    default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
-                    all_cache_shapes = [
-                        [default_self_attention_shape, default_self_attention_shape] for _ in range(num_decoder_layers)
-                    ]
-
-            else:
-                all_cache_shapes = custom_all_cache_shapes
-
-            # 3. Check cache shapes
-            # 3.1. Encoder-Decoder checks
-            if config.is_encoder_decoder:
-                num_cache_decoder_layers = (
-                    len(past_kv) if is_legacy_cache else len(past_kv.self_attention_cache.key_cache)
-                )
-                self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
-
-                for i in range(num_decoder_layers):
-                    if is_legacy_cache:
-                        self.assertEqual(len(past_kv[0]), 4)  # legacy check: confirm number of elements in tuple
-
-                    # Self attention
-                    self_attention_layer_key_cache = (
-                        past_kv[i][0] if is_legacy_cache else past_kv.self_attention_cache.key_cache[i]
-                    )
-                    self_attention_layer_value_cache = (
-                        past_kv[i][1] if is_legacy_cache else past_kv.self_attention_cache.value_cache[i]
-                    )
-                    self.assertEqual(self_attention_layer_key_cache.shape, all_cache_shapes[i][0])
-                    self.assertEqual(self_attention_layer_value_cache.shape, all_cache_shapes[i][1])
-
-                    # Cross attention (ignore 3rd dim, see default shape preparation)
-                    cross_attention_layer_key_cache = (
-                        past_kv[i][2] if is_legacy_cache else past_kv.cross_attention_cache.key_cache[i]
-                    )
-                    cross_attention_layer_value_cache = (
-                        past_kv[i][3] if is_legacy_cache else past_kv.cross_attention_cache.value_cache[i]
-                    )
-                    cross_attention_layer_key_cache = cross_attention_layer_key_cache[:, :, 0, :]
-                    cross_attention_layer_value_cache = cross_attention_layer_value_cache[:, :, 0, :]
-                    self.assertEqual(cross_attention_layer_key_cache.shape, all_cache_shapes[i][2])
-                    self.assertEqual(cross_attention_layer_value_cache.shape, all_cache_shapes[i][3])
-
-            # 3.2. Decoder-only checks
-            else:
-                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv.key_cache)
-                self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
-
-                for i in range(num_decoder_layers):
-                    if is_legacy_cache:
-                        self.assertEqual(len(past_kv[0]), 2)  # legacy check: confirm number of elements in tuple
-
-                    # Self attention
-                    self_attention_layer_key_cache = past_kv[i][0] if is_legacy_cache else past_kv.key_cache[i]
-                    self_attention_layer_value_cache = past_kv[i][1] if is_legacy_cache else past_kv.value_cache[i]
-                    self.assertEqual(self_attention_layer_key_cache.shape, all_cache_shapes[i][0])
-                    self.assertEqual(self_attention_layer_value_cache.shape, all_cache_shapes[i][1])
-
     @unittest.skip("Mismatch issue doesn't exist in T5Gemma.")
     def test_load_with_mismatched_shapes(self):
         pass
@@ -1198,7 +1082,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self._check_similar_generate_outputs(outputs, outputs_cached)
+            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
             for layer_idx in range(len(outputs_cached.past_key_values)):
                 for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
                     self.assertTrue(
@@ -1388,10 +1272,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
 
-    @unittest.skip("EncoderDecoderCache can't be gathered because it is not iterable.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 class T5GemmaEncoderOnlyModelTester:
     config_class = T5GemmaConfig
@@ -1579,7 +1459,6 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     _is_stateful = True
     is_encoder_decoder = False
-    model_split_percents = [0.4, 0.5]
 
     # won't fix
     test_torchscript = False
@@ -1687,7 +1566,7 @@ class TestAsymmetricT5Gemma(unittest.TestCase):
             labels=lm_labels,
         )
         # outputs = model(*inputs)
-        assert len(outputs) == 4
+        assert len(outputs) == 5
         assert outputs["logits"].size() == (tester.batch_size, tester.seq_length, tester.vocab_size)
         assert outputs["loss"].size() == ()
         return model.model
