@@ -104,7 +104,7 @@ def byte_group_hash_function(
 def compute_hash_embeddings(
     local_encoder_tokens: torch.Tensor,
     local_encoder,
-    encoder_hash_tok_embedding: nn.ModuleList,
+    encoder_hash_tok_embedding: nn.Embedding,
     encoder_hash_byte_group_nb_functions: int,
     encoder_hash_byte_group_size: list,
     encoder_hash_byte_group_vocab: int,
@@ -131,7 +131,9 @@ def compute_hash_embeddings(
         prime = primes[func_nb % len(primes)]  # Cycle through primes if more functions than primes
         for group_size in encoder_hash_byte_group_size:
             hash_ids = byte_group_hash_function(local_encoder_tokens, group_size, prime, encoder_hash_byte_group_vocab)
-            embeddings += encoder_hash_tok_embedding[embedding_idx](hash_ids)
+            # Apply offset to get the correct slice of the fused embedding
+            offset_hash_ids = hash_ids + embedding_idx * encoder_hash_byte_group_vocab
+            embeddings += encoder_hash_tok_embedding(offset_hash_ids)
             embedding_idx += 1
 
     return embeddings
@@ -730,7 +732,6 @@ class BltPatcher(BltPreTrainedModel):
         Computes patch lengths from token entropies.
 
         Depending on whether a threshold is provided, the function uses either:
-        - Top-k selection based on entropy (when `threshold` is None), or
         - Thresholding the entropy values (when `threshold` is set).
         """
 
@@ -745,29 +746,23 @@ class BltPatcher(BltPreTrainedModel):
         # Ignore first token entropy (BOS)
         entropies = entropies[:, 1:]
 
-        if threshold is None:
-            # Use top-k entropy values to define patch start points
-            num_patches = sequence_length // patch_size
-            topk_indices = entropies.topk(num_patches - 2, dim=1).indices
-            patch_starts = topk_indices.sort(dim=1).values
-        else:
-            # Threshold the entropy values to define patch start points
-            patch_mask = entropies > threshold
+        # Threshold the entropy values to define patch start points
+        patch_mask = entropies > threshold
 
-            seq_len = patch_mask.shape[1]
+        seq_len = patch_mask.shape[1]
 
-            # Create patch IDs (token indices), and add a sentinel to ensure alignment
-            token_indices = torch.arange(seq_len, device=entropies.device).unsqueeze(0).expand(batch_size, -1)
-            sentinel = torch.full_like(token_indices, seq_len)
-            padded_indices = torch.cat([token_indices, sentinel], dim=1)
+        # Create patch IDs (token indices), and add a sentinel to ensure alignment
+        token_indices = torch.arange(seq_len, device=entropies.device).unsqueeze(0).expand(batch_size, -1)
+        sentinel = torch.full_like(token_indices, seq_len)
+        padded_indices = torch.cat([token_indices, sentinel], dim=1)
 
-            # Pad mask with inverse to align sentinel correctly
-            padded_mask = torch.cat([patch_mask, ~patch_mask], dim=1)
+        # Pad mask with inverse to align sentinel correctly
+        padded_mask = torch.cat([patch_mask, ~patch_mask], dim=1)
 
-            # Select indices where mask is True
-            patch_starts = padded_indices[padded_mask].reshape(batch_size, seq_len)
-            max_valid_patches = patch_mask.sum(dim=1).max()
-            patch_starts = patch_starts[:, :max_valid_patches]
+        # Select indices where mask is True
+        patch_starts = padded_indices[padded_mask].reshape(batch_size, seq_len)
+        max_valid_patches = patch_mask.sum(dim=1).max()
+        patch_starts = patch_starts[:, :max_valid_patches]
 
         # Offset patch starts to account for the two initial tokens
         patch_start_ids = torch.cat((init_tokens, patch_starts + offset), dim=1)
@@ -791,11 +786,8 @@ class BltModel(BltPreTrainedModel):
         self.global_transformer = BltGlobalTransformer(config.global_config)
         self.local_decoder = BltLocalDecoder(config.decoder_config)
         num_embeddings = config.encoder_hash_byte_group_nb_functions * len(config.encoder_hash_byte_group_size)
-        embeddings = [
-            nn.Embedding(config.encoder_hash_byte_group_vocab, config.encoder_config.hidden_size)
-            for _ in range(num_embeddings)
-        ]
-        self.encoder_hash_tok_embedding = nn.ModuleList(embeddings)
+        total_vocab_size = config.encoder_hash_byte_group_vocab * num_embeddings
+        self.encoder_hash_tok_embedding = nn.Embedding(total_vocab_size, config.encoder_config.hidden_size)
         if self.config.patch_in_forward:
             self.patcher = BltPatcher(config.patcher_config)
             self.patcher.eval()

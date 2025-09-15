@@ -100,7 +100,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str
         "vocab_size": unified_config.get("vocab_size", 256),
         "cross_attn_all_layers": unified_config.get("cross_attn_all_layers_decoder", False),
         "cross_attn_k": unified_config.get("cross_attn_k", 2),
-        "hidden_size_global": unified_config.get("hidden_size_global", 2048),
+        "hidden_size_global": unified_config.get("dim_global", 2048),
         "hidden_size": decoder_hidden_size,
         "num_attention_heads": unified_config.get("n_heads_local_decoder", 16),
         "num_key_value_heads": unified_config.get("n_kv_heads"),
@@ -203,6 +203,39 @@ def apply_weight_mapping(state_dict: dict[str, torch.Tensor]) -> dict[str, torch
     return new_state_dict
 
 
+def convert_hash_embeddings_to_fused(
+    unified_weights: dict[str, torch.Tensor], config: dict[str, Any]
+) -> dict[str, torch.Tensor]:
+    """Convert ModuleList hash embeddings to nn.embedding format"""
+    original_keys_format = [
+        key
+        for key in unified_weights.keys()
+        if "encoder_hash_tok_embedding." in key and ".weight" in key and key.split(".")[-2].isdigit()
+    ]
+
+    num_embeddings = config.get("encoder_hash_byte_group_nb_functions", 1) * len(
+        config.get("encoder_hash_byte_group_size", [3, 4, 5, 6, 7, 8])
+    )
+    vocab_size = config.get("encoder_hash_byte_group_vocab", 500002)
+    hidden_size = config.get("encoder_config", {}).get("hidden_size", 1024)
+
+    fused_weight = torch.zeros(vocab_size * num_embeddings, hidden_size)
+
+    sorted_keys = sorted(original_keys_format, key=lambda k: int(k.split(".")[-2]))
+
+    for i, old_key in enumerate(sorted_keys):
+        start_idx = i * vocab_size
+        end_idx = (i + 1) * vocab_size
+        fused_weight[start_idx:end_idx] = unified_weights[old_key]
+        logger.info(f"Copied {old_key} to indices {start_idx}:{end_idx}")
+        del unified_weights[old_key]
+
+    fused_key = "model.encoder_hash_tok_embedding.weight"
+    unified_weights[fused_key] = fused_weight
+
+    return unified_weights
+
+
 def merge_weights(weights_path: str, entropy_weights_path: str) -> dict[str, torch.Tensor]:
     main_weights = load_file(weights_path)
 
@@ -301,6 +334,8 @@ def convert_hf_blt_to_unified(
     unified_config = merge_configurations(config_path, entropy_params_path)
     unified_weights = merge_weights(weights_path, entropy_weights_path)
 
+    unified_weights = convert_hash_embeddings_to_fused(unified_weights, unified_config)
+
     os.makedirs(output_dir, exist_ok=True)
 
     config_path = os.path.join(output_dir, config_name)
@@ -336,7 +371,7 @@ def main():
     parser.add_argument(
         "--model_id",
         type=str,
-        default="facebook/blt-1b",
+        default="facebook/blt-7b",
     )
     parser.add_argument(
         "--output_dir",
