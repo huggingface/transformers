@@ -787,7 +787,9 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
     ):
         early_stops_indices = torch.stack(early_stops_indices)
         # Rearrange tensors to have the same order as the input batch
-        early_stops_indices = early_stops_indices[early_stops_indices[torch.arange(early_stops_indices.shape[0])]]
+        ids = torch.arange(early_stops_indices.shape[0])
+        order_indices = early_stops_indices[ids]
+        early_stops_indices = early_stops_indices[order_indices]
         matches, final_pruned_keypoints_indices = (
             pad_sequence(tensor, batch_first=True, padding_value=-1)
             for tensor in [matches, final_pruned_keypoints_indices]
