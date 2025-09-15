@@ -378,14 +378,15 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         Returns:
             `list[Inion[str, np.ndarray]]`: The decoded text or generated audio.
         """
-        if generation_mode == "text":
+        if generation_mode is None or generation_mode == "text":
             return self.post_process_image_text_to_text(
                 generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
             )
 
         elif generation_mode == "audio":
+            # model supports only bs=1, so we will never get several audio outputs
             audio = generated_outputs[1].reshape(-1).detach().cpu().numpy()
-            return audio
+            return [audio]
 
         else:
             raise ValueError(

@@ -186,7 +186,7 @@ class MultimodalGenerationPipeline(Pipeline):
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
 
         # Postprocess params
-        if not (generation_mode is None or generation_mode == "text") and return_type is not None:
+        if generation_mode not in [None, "text"] and return_type is not None:
             raise ValueError(
                 f"`return_type` cannot be set to {return_type} when generation_mode={generation_mode}. "
                 "Set `return_type=None` or generation_mode='text'"
@@ -202,6 +202,10 @@ class MultimodalGenerationPipeline(Pipeline):
             return_type = ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
         elif return_tensors is not None and return_type is None:
             return_type = ReturnType.TENSORS
+        # We don't want to set the global default to FULLTEXT at init time. That is why
+        # `_postprocess_params` is checked before setting the default value
+        elif return_type is None and generation_mode in [None, "text"] and hasattr(self, "_postprocess_params"):
+            return_type = ReturnType.FULL_TEXT
 
         if return_type is not None:
             postprocess_params["return_type"] = return_type
@@ -365,7 +369,7 @@ class MultimodalGenerationPipeline(Pipeline):
     def postprocess(
         self,
         model_outputs,
-        return_type=ReturnType.FULL_TEXT,
+        return_type=None,
         continue_final_message=None,
         skip_special_tokens=None,
         **postprocess_kwargs,
@@ -383,11 +387,11 @@ class MultimodalGenerationPipeline(Pipeline):
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
         generation_mode = postprocess_kwargs["generation_mode"]
+        if generation_mode == "image" and hasattr(self.model, "decode_image_tokens"):
+            generated_sequence = self.model.decode_image_tokens(generated_sequence.to(self.model.device))
         generated_outputs = self.processor.post_process_multimodal_output(
             generated_sequence, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
         )
-        if generation_mode == "image" and hasattr(self.model, "decode_image_tokens"):
-            generated_outputs = self.model.decode_image_tokens(generated_outputs)
 
         # Force consistent behavior for including the input text in the output
         if return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:

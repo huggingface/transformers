@@ -46,7 +46,6 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from .any_to_any import MultimodalGenerationPipeline
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -73,6 +72,7 @@ from .image_to_image import ImageToImagePipeline
 from .image_to_text import ImageToTextPipeline
 from .keypoint_matching import KeypointMatchingPipeline
 from .mask_generation import MaskGenerationPipeline
+from .multimodal_generation import MultimodalGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline

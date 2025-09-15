@@ -3784,6 +3784,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         return model
 
     @torch.no_grad()
+    @deprecate_kwarg("return_audio", version="v5", new_name="generation_mode")
     # TODO: raushan, defaults should be saved in generation config
     def generate(
         self,
@@ -3799,6 +3800,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_temperature: float = 0.9,
         talker_eos_token_id: list[int] = [8292, 8294],
         talker_repetition_penalty: float = 1.05,
+        generation_mode=None,
         **kwargs,
     ):
         r"""

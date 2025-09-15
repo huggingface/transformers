@@ -1755,7 +1755,7 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `list[str]`: The decoded text.
         """
-        if generation_mode != "text":
+        if generation_mode is not None and generation_mode != "text":
             raise ValueError(
                 f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only [`text`]"
             )

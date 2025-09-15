@@ -265,7 +265,7 @@ class Emu3Processor(ProcessorMixin):
         Returns:
             `list[Union[str, PIL.Image.Image]]`: The decoded text or generated image.
         """
-        if generation_mode == "text":
+        if generation_mode is None or generation_mode == "text":
             return self.post_process_image_text_to_text(
                 generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
             )

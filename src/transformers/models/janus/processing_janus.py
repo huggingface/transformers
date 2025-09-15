@@ -181,12 +181,13 @@ class JanusProcessor(ProcessorMixin):
         Returns:
             `list[Union[str, PIL.Image.Image]]`: The decoded text or generated image.
         """
-        if generation_mode == "text":
+        if generation_mode is None or generation_mode == "text":
             return self.post_process_image_text_to_text(
                 generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
             )
 
         elif generation_mode == "image":
+            generated_outputs = list(generated_outputs.float())
             images = self.postprocess(generated_outputs, return_tensors="PIL.Image.Image")
             return images["pixel_values"]
 
