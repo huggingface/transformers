@@ -57,8 +57,7 @@ def sdpa_attention_paged_forward(
         attn_mask=causal_mask,
         dropout_p=dropout,
         scale=scaling,
-        # It is assume that either the caller specifies `attention_mask` or in otherwise non-causal context.
-        # See discussions in https://github.com/huggingface/transformers/pull/40838
+        # Packed sequence format is used for input, so that it can never be causal.
         is_causal=False,
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
