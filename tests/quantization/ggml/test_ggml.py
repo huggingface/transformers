@@ -1100,7 +1100,6 @@ class GgufModelTests(unittest.TestCase):
         self.assertEqual(model.config.model_type, "umt5")
         self.assertIn("UMT5EncoderModel", getattr(model.config, "architectures", []))
 
-        # --- Smoke: tiny forward pass to ensure weights/tensor mapping are valid ---
         input_ids = torch.tensor([[1, 2, 3, 4]], dtype=torch.long).to(torch_device)
         with torch.no_grad():
             outputs = model(input_ids=input_ids)
