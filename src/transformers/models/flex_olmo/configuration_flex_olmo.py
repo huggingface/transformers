@@ -28,23 +28,23 @@ class FlexOlmoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlexOlmoModel`]. It is used to instantiate an FlexOlmo
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [allenai/FlexOlmo-1B-7B-0924](https://huggingface.co/allenai/FlexOlmo-1B-7B-0924).
+    defaults will yield a similar configuration to that of the [allenai/FlexOlmo-7x7B-1T](https://huggingface.co/allenai/FlexOlmo-7x7B-1T).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50304):
+        vocab_size (`int`, *optional*, defaults to 100352):
             Vocabulary size of the FlexOlmo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`FlexOlmoModel`]
-        hidden_size (`int`, *optional*, defaults to 2048):
+        hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 2048):
+        intermediate_size (`int`, *optional*, defaults to 11008):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 16):
+        num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
@@ -60,20 +60,20 @@ class FlexOlmoConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 1):
+        pad_token_id (`int`, *optional*, defaults to 100277):
             Padding token id.
         bos_token_id (`int`, *optional*):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 50279):
+        eos_token_id (`int`, *optional*, defaults to 100257):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
+        rope_theta (`float`, *optional*, defaults to 500000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
@@ -87,12 +87,9 @@ class FlexOlmoConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        clip_qkv (`float`, *optional*):
-            If not `None`, elements of query, key and value attention states are clipped so that their
-            absolute value does not exceed this value.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
+        num_experts_per_tok (`int`, *optional*, defaults to 5):
             Number of selected experts.
-        num_experts (`int`, *optional*, defaults to 64):
+        num_experts (`int`, *optional*, defaults to 7):
             Number of routed experts.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
@@ -105,10 +102,10 @@ class FlexOlmoConfig(PretrainedConfig):
     ```python
     >>> from transformers import FlexOlmoModel, FlexOlmoConfig
 
-    >>> # Initializing a FlexOlmo 7B A1B style configuration
+    >>> # Initializing a FlexOlmo style configuration
     >>> configuration = FlexOlmoConfig()
 
-    >>> # Initializing a model from the FlexOlmo 7B A1B style configuration
+    >>> # Initializing a model from the FlexOlmo style configuration
     >>> model = FlexOlmoModel(configuration)
 
     >>> # Accessing the model configuration
@@ -117,36 +114,56 @@ class FlexOlmoConfig(PretrainedConfig):
 
     model_type = "flex_olmo"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
-        vocab_size=50304,
-        hidden_size=2048,
-        intermediate_size=2048,
-        num_hidden_layers=16,
-        num_attention_heads=16,
+        vocab_size=100352,
+        hidden_size=4096,
+        intermediate_size=11008,
+        num_hidden_layers=32,
+        num_attention_heads=32,
         num_key_value_heads=None,
         hidden_act="silu",
         max_position_embeddings=4096,
         initializer_range=0.02,
-        rms_norm_eps=1e-05,
+        rms_norm_eps=1e-06,
         use_cache=True,
-        pad_token_id=1,
+        pad_token_id=100277,
         bos_token_id=None,
-        eos_token_id=50279,
+        eos_token_id=100257,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
+        rope_theta=500000.0,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        clip_qkv=None,
-        num_experts_per_tok=8,
-        num_experts=64,
+        num_experts_per_tok=5,
+        num_experts=7,
         output_router_logits=False,
         router_aux_loss_coef=0.01,
         norm_topk_prob=False,
         **kwargs,
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -167,7 +184,6 @@ class FlexOlmoConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.clip_qkv = clip_qkv
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.output_router_logits = output_router_logits
@@ -179,13 +195,8 @@ class FlexOlmoConfig(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        # Set this to None because it is needed by MixtralModel
+        self.sliding_window = None
 
 
 __all__ = ["FlexOlmoConfig"]
