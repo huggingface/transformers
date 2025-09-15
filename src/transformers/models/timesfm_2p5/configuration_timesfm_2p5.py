@@ -34,10 +34,28 @@ class Timesfm2P5Config(PretrainedConfig):
     documentation from [`TimesFmConfig`] for more information.
 
     Args:
-        use_rotary_position_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to use rotary positional embeddings instead of traditional sinusoidal embeddings.
-        use_revin_normalization (`bool`, *optional*, defaults to `True`):
-            Whether to use reversible instance normalization (RevIN) for input preprocessing.
+            patch_length (`int`, *optional*, defaults to 32): <fill_docstring>
+            context_length (`int`, *optional*, defaults to 512): <fill_docstring>
+            horizon_length (`int`, *optional*, defaults to 128): <fill_docstring>
+            freq_size (`int`, *optional*, defaults to 3): <fill_docstring>
+            num_hidden_layers (`int`, *optional*, defaults to 50): <fill_docstring>
+            hidden_size (`int`, *optional*, defaults to 1280): <fill_docstring>
+            intermediate_size (`int`, *optional*, defaults to 1280): <fill_docstring>
+            head_dim (`int`, *optional*, defaults to 80): <fill_docstring>
+            num_attention_heads (`int`, *optional*, defaults to 16): <fill_docstring>
+            tolerance (`float`, *optional*, defaults to 1e-06): <fill_docstring>
+            rms_norm_eps (`float`, *optional*, defaults to 1e-06): <fill_docstring>
+            quantiles (`list`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`): <fill_docstring>
+            pad_val (`float`, *optional*, defaults to 1123581321.0): <fill_docstring>
+            attention_dropout (`float`, *optional*, defaults to 0.0): <fill_docstring>
+            use_positional_embedding (`bool`, *optional*, defaults to `False`): <fill_docstring>
+            initializer_range (`float`, *optional*, defaults to 0.02): <fill_docstring>
+            min_timescale (`int`, *optional*, defaults to 1): <fill_docstring>
+            max_timescale (`int`, *optional*, defaults to 10000): <fill_docstring>
+            use_rotary_position_embeddings (`bool`, *optional*, defaults to `True`):
+                Whether to use rotary positional embeddings instead of traditional sinusoidal embeddings.
+            use_revin_normalization (`bool`, *optional*, defaults to `True`):
+                Whether to use reversible instance normalization (RevIN) for input preprocessing.
     """
 
     model_type = "timesfm_2p5"
