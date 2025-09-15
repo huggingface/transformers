@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 
 from ....activations import ACT2FN
+from ....cache_utils import Cache
 from ....modeling_outputs import MoECausalLMOutputWithPast, MoEModelOutputWithPastAndCrossAttentions
 from ....modeling_utils import PreTrainedModel
 from ....utils import (
@@ -383,7 +384,7 @@ class GPTSanJapaneseAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -519,7 +520,7 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
@@ -601,7 +602,7 @@ class GPTSanJapaneseBlock(nn.Module):
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
@@ -885,7 +886,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1111,7 +1112,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1268,7 +1269,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         attention_mask: torch.FloatTensor,
         token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[Union[list, torch.FloatTensor]] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         **kwargs,
     ):
         if isinstance(spout, list):
