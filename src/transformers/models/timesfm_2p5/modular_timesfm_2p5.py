@@ -64,7 +64,6 @@ def revin(
         return (x - mu) / torch.where(sigma < _TOLERANCE, 1.0, sigma)
 
 
-
 class Timesfm2P5Config(TimesFmConfig, PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Timesfm2P5ModelForPrediction`]. It is used to
