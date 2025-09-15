@@ -158,9 +158,11 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
         prompt_depth = np.random.random((192, 256))
 
         size = {"height": 756, "width": 756}
-        image_processor_slow = self.image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+        image_processor_slow = self.image_processing_class(
+            size=size, keep_aspect_ratio=True, ensure_multiple_of=32, do_pad=True, size_divisor=51
+        )
         image_processor_fast = self.fast_image_processing_class(
-            size=size, keep_aspect_ratio=True, ensure_multiple_of=32
+            size=size, keep_aspect_ratio=True, ensure_multiple_of=32, do_pad=True, size_divisor=51
         )
 
         encoding_slow = image_processor_slow(image, prompt_depth=prompt_depth, return_tensors="pt")

@@ -263,11 +263,11 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(image, input_data_format)
 
-        pad_size_left, pad_size_right = _get_pad(height, size_divisor)
-        pad_size_top, pad_size_bottom = _get_pad(width, size_divisor)
+        pad_size_top, pad_size_bottom = _get_pad(height, size_divisor)
+        pad_size_left, pad_size_right = _get_pad(width, size_divisor)
 
         padded_image = pad(
-            image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format
+            image, ((pad_size_top, pad_size_bottom), (pad_size_left, pad_size_right)), data_format=data_format
         )
         return padded_image
 
