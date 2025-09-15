@@ -46,6 +46,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -186,7 +187,7 @@ class Qwen2VLVisionText2TextModelTester:
 
 
 @require_torch
-class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Model tester for `Qwen2VLForConditionalGeneration`.
     """

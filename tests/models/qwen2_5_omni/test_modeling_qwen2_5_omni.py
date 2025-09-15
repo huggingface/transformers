@@ -49,6 +49,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -249,7 +250,9 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
 
 
 @require_torch
-class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `Qwen2_5OmniThinkerForConditionalGeneration`.
     """
@@ -258,7 +261,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     all_generative_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "multimodal-generation": Qwen2_5OmniThinkerForConditionalGeneration,
+            "multimodal-generation": Qwen2_5OmniForConditionalGeneration,
             "image-text-to-text": Qwen2_5OmniThinkerForConditionalGeneration,
         }
         if is_torch_available()

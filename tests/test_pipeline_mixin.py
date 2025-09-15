@@ -603,6 +603,18 @@ class PipelineTesterMixin:
 
     @is_pipeline_test
     @require_vision
+    @require_torch
+    def test_pipeline_any_to_any(self):
+        self.run_task_tests(task="multimodal-generation")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_any_to_any_fp16(self):
+        self.run_task_tests(task="multimodal-generation", dtype="float16")
+
+    @is_pipeline_test
+    @require_vision
     def test_pipeline_image_to_text(self):
         self.run_task_tests(task="image-to-text")
 

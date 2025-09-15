@@ -39,6 +39,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -160,7 +161,7 @@ class Ovis2VisionText2TextModelTester:
 
 
 @require_torch
-class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Model tester for `Ovis2ForConditionalGeneration`.
     """

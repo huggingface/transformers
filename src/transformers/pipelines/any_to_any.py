@@ -405,7 +405,7 @@ class AnyToAnyPipeline(Pipeline):
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        generation_mode = postprocess_kwargs["generation_mode"]
+        generation_mode = postprocess_kwargs["generation_mode"] or "text"
         if generation_mode == "image" and hasattr(self.model, "decode_image_tokens"):
             generated_sequence = self.model.decode_image_tokens(generated_sequence.to(self.model.device))
         generated_outputs = self.processor.post_process_multimodal_output(

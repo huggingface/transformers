@@ -107,7 +107,8 @@ class AnyToAnyPipelineTests(unittest.TestCase):
 
         return pipe, examples
 
-    def run_pipeline_test_single(self, pipe, examples):
+    def run_pipeline_test(self, pipe, examples):
+        # Single
         outputs = pipe(examples[0])
         self.assertEqual(
             outputs,
@@ -116,7 +117,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             ],
         )
 
-    def run_pipeline_test_batched(self, pipe, examples):
+        # Batched
         outputs = pipe(examples)
         self.assertEqual(
             outputs,
@@ -125,7 +126,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             ],
         )
 
-    def run_pipeline_test_generation_mode(self, pipe, examples):
+        # `generation_mode` raises errors when dosn't match with other params
         with self.assertRaises(ValueError):
             pipe(examples, generation_mode="video")
 
@@ -135,31 +136,28 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pipe(examples, generation_mode="image", return_type=1)
 
-    def run_pipeline_test_chat_template(self, pipe, examples):
-        if getattr(pipeline.processor, "chat_template", None) is None:
-            self.skipTest("The current model has no chat template defined in its processor.")
+        # Chat template
+        if getattr(pipeline.processor, "chat_template", None) is not None:
+            pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+            messages = []
+            for example in examples:
+                example.pop("text")
+                modality_type, modality_data = list(example.items())[0]
+                message = {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "This is a "},
+                        {"type": modality_type, "path": modality_data},
+                    ],
+                }
+                messages.append(message)
+            outputs = pipe(messages, return_full_text=True, max_new_tokens=10)
 
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
-
-        messages = []
-        for example in examples:
-            example.pop("text")
-            modality_type, modality_data = list(example.items())[0]
-            message = {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "This is a "},
-                    {"type": modality_type, "path": modality_data},
-                ],
-            }
-            messages.append(message)
-        outputs = pipe(messages, return_full_text=True, max_new_tokens=10)
-
-        self.assertEqual(len(outputs), len(messages))
-        self.assertIsInstance(outputs[0], dict)
-        for out in outputs:
-            self.assertTrue("input_text" in out)
-            self.assertTrue("generated_text" in out)
+            self.assertEqual(len(outputs), len(messages))
+            self.assertIsInstance(outputs[0], dict)
+            for out in outputs:
+                self.assertTrue("input_text" in out)
+                self.assertTrue("generated_text" in out)
 
     @slow
     def test_small_model_pt_token_text_only(self):
