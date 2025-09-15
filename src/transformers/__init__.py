@@ -166,7 +166,7 @@ _import_structure = {
         "JsonPipelineDataFormat",
         "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
-        "MultimodalGenerationPipeline",
+        "AnyToAnyPipeline",
         "NerPipeline",
         "ObjectDetectionPipeline",
         "PipedPipelineDataFormat",
