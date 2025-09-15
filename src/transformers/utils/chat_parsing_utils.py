@@ -54,23 +54,6 @@ def recursive_parse(
     if node_content is None:
         return None
 
-    # Next, if the node has a parser we can just use that and ignore everything else.
-    if "x-parser" in node_schema:
-        parser = node_schema["x-parser"]
-        if parser == "json":
-            parser_args = node_schema.get("x-parser-args", {})
-            try:
-                parsed_json = json.loads(node_content)
-            except json.JSONDecodeError as e:
-                raise ValueError(
-                    f"Node has JSON parser but could not parse its contents as JSON: {node_content}\nError: {e}"
-                )
-            if "transform" in parser_args:
-                parsed_json = jmespath.search(parser_args["transform"], parsed_json)
-            node_content = parsed_json
-        else:
-            raise ValueError(f"Unknown parser {parser} for schema node: {node_schema}")
-
     # If not, we have to do a little parsing. First, set some vars and do basic validation
     node_type = node_schema["type"]
     has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema or "x-regex-to-dict" in node_schema
@@ -111,6 +94,28 @@ def recursive_parse(
         if not node_content:
             return None
 
+    # Next, if the node has a parser, apply it. We do this after regexes so that the regex can extract
+    # a substring to parse, if needed.
+    if "x-parser" in node_schema:
+        parser = node_schema["x-parser"]
+        if parser == "json":
+            if not isinstance(node_content, str):
+                raise TypeError(
+                    f"Node has JSON parser but got non-string input: {node_content}\nSchema: {node_schema}"
+                )
+            parser_args = node_schema.get("x-parser-args", {})
+            try:
+                parsed_json = json.loads(node_content)
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Node has JSON parser but could not parse its contents as JSON: {node_content}\nError: {e}"
+                )
+            if "transform" in parser_args:
+                parsed_json = jmespath.search(parser_args["transform"], parsed_json)
+            node_content = parsed_json
+        else:
+            raise ValueError(f"Unknown parser {parser} for schema node: {node_schema}")
+
     # If there's a mapping, apply it now
     if "x-mapping" in node_schema:
         if not isinstance(node_content, str):
@@ -136,8 +141,6 @@ def recursive_parse(
 
     # Finally, handle parsed content based on schema type and recurse if required
     if node_type == "object":
-        if not isinstance(node_content, (dict, str)):
-            raise TypeError(f"Expected a dict or str for schema node with type object, got {node_content}")
         parsed_schema = {}
         if isinstance(node_content, str):
             # This means we don't have a regex at this level, so all of our child nodes need to parse the whole
@@ -149,22 +152,28 @@ def recursive_parse(
                     f"Schema: {node_schema}"
                 )
             for key, child_node in node_schema["properties"].items():
-                parsed_schema[key] = recursive_parse(node_content, node_schema["properties"][key])
+                child_node_content = recursive_parse(node_content, node_schema["properties"][key])
+                if child_node_content is not None:
+                    parsed_schema[key] = child_node_content
             return parsed_schema
-        for key, child_node in node_schema.get("properties", {}).items():
-            # TODO Error if required keys are not present
-            if key in node_content:
-                parsed_schema[key] = recursive_parse(node_content[key], child_node)
-            elif "default" in child_node:
-                # TODO Do I want to allow defaults?
-                parsed_schema[key] = child_node["default"]
-            else:
-                pass  # TODO Add an error for required keys not present
-        if "additionalProperties" in node_schema:
-            for key, value in node_content.items():
-                if key not in node_schema.get("properties", {}):
-                    parsed_schema[key] = recursive_parse(value, node_schema["additionalProperties"])
-        return parsed_schema
+        elif isinstance(node_content, dict):
+            for key, child_node in node_schema.get("properties", {}).items():
+                # TODO Error if required keys are not present
+                if key in node_content:
+                    parsed_schema[key] = recursive_parse(node_content[key], child_node)
+                elif "default" in child_node:
+                    # TODO Do I want to allow defaults?
+                    parsed_schema[key] = child_node["default"]
+                else:
+                    pass  # TODO Add an error for required keys not present
+            if "additionalProperties" in node_schema:
+                for key, value in node_content.items():
+                    if key not in node_schema.get("properties", {}):
+                        parsed_schema[key] = recursive_parse(value, node_schema["additionalProperties"])
+            return parsed_schema
+        else:
+            breakpoint()
+            raise TypeError(f"Expected a dict or str for schema node with type object, got {node_content}")
     elif node_type == "array":
         if not node_content:
             return []
