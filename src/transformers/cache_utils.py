@@ -431,7 +431,7 @@ class SlidingWindowLayer(StaticLayer):
                 full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
                 full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
         # Not yet full, but becoming full on this update
-        elif not is_full and cumulative_length + key_states.shape[2] > self.max_cache_len:
+        elif cumulative_length + key_states.shape[2] > self.max_cache_len:
             # Fast prefill path, no need to cat() in this case, as the cache is currently empty
             if cumulative_length == 0:
                 full_key_states = key_states
@@ -459,17 +459,16 @@ class SlidingWindowLayer(StaticLayer):
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
         query_length = cache_position.shape[0]
-        first_cache_position = cache_position[0]
         sliding_window = self.max_cache_len
+        is_full = self.cumulative_length >= self.max_cache_len
 
-        kv_offset = torch.clamp(first_cache_position - sliding_window + 1, min=0)
-        # This is the true general case for any Cache using local attention (sliding or chunked)
-        if first_cache_position >= sliding_window:
-            # Here the Cache is already full
+        kv_offset = max(self.cumulative_length - sliding_window + 1, 0)
+        # The cache is already full
+        if is_full:
             kv_length = sliding_window + query_length - 1
-        elif first_cache_position < sliding_window and first_cache_position + query_length > sliding_window:
-            # Here the Cache becomes full with the new input
-            kv_length = first_cache_position + query_length
+        # Not yet full, but becoming full on this update
+        elif self.cumulative_length + query_length > sliding_window:
+            kv_length = self.cumulative_length + query_length
         else:
             # Here the Cache is still smaller than the local size, but we return the local size as it's static
             kv_length = sliding_window
