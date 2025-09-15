@@ -180,17 +180,6 @@ class AnyToAnyPipeline(Pipeline):
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
 
-        # Postprocess params
-        if generation_mode not in [None, "text"] and return_type is not None:
-            raise ValueError(
-                f"`return_type` cannot be set to {return_type} when generation_mode={generation_mode}. "
-                "Set `return_type=None` or generation_mode='text'"
-            )
-        if generation_mode not in [None, "text", "image", "audio"]:
-            raise ValueError(
-                f"`generation_mode` can be only one of the `text`, `audio`, `image` but got generation_mode[={generation_mode}]"
-            )
-
         if return_full_text is not None and return_type is None:
             if return_tensors is not None:
                 raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
@@ -201,6 +190,17 @@ class AnyToAnyPipeline(Pipeline):
         # `_postprocess_params` is checked before setting the default value
         elif return_type is None and generation_mode in [None, "text"] and hasattr(self, "_postprocess_params"):
             return_type = ReturnType.FULL_TEXT
+
+        # Postprocess params
+        if generation_mode not in [None, "text"] and return_type is not None:
+            raise ValueError(
+                f"`return_type` cannot be set to {return_type} when generation_mode={generation_mode}. "
+                "Set `return_type=None` or generation_mode='text'"
+            )
+        if generation_mode not in [None, "text", "image", "audio"]:
+            raise ValueError(
+                f"`generation_mode` can be only one of the `text`, `audio`, `image` but got generation_mode[={generation_mode}]"
+            )
 
         if return_type is not None:
             postprocess_params["return_type"] = return_type

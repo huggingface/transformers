@@ -118,11 +118,16 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         )
 
         # Batched but limit to last 2 examples
-        outputs = pipe(examples[-2:])
+        outputs = pipe(examples[:2])
         self.assertEqual(
             outputs,
             [
-                {"input_text": ANY(str), "generated_text": ANY(str)},
+                [
+                    {"input_text": ANY(str), "generated_text": ANY(str)},
+                ],
+                [
+                    {"input_text": ANY(str), "generated_text": ANY(str)},
+                ],
             ],
         )
 
@@ -137,10 +142,9 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             pipe(examples, generation_mode="image", return_type=1)
 
         # Chat template
-        if getattr(pipeline.processor, "chat_template", None) is not None:
-            pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        if getattr(pipe.processor, "chat_template", None) is not None:
             messages = []
-            for example in examples:
+            for example in examples[:2]:
                 example.pop("text")
                 modality_type, modality_data = list(example.items())[0]
                 message = {
@@ -150,14 +154,20 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                         {"type": modality_type, "path": modality_data},
                     ],
                 }
-                messages.append(message)
+                messages.append([message])
             outputs = pipe(messages, return_full_text=True, max_new_tokens=10)
 
-            self.assertEqual(len(outputs), len(messages))
-            self.assertIsInstance(outputs[0], dict)
-            for out in outputs:
-                self.assertTrue("input_text" in out)
-                self.assertTrue("generated_text" in out)
+            self.assertEqual(
+                outputs,
+                [
+                    [
+                        {"input_text": ANY(str), "generated_text": ANY(str)},
+                    ],
+                    [
+                        {"input_text": ANY(str), "generated_text": ANY(str)},
+                    ],
+                ],
+            )
 
     @slow
     def test_small_model_pt_token_text_only(self):
