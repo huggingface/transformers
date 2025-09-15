@@ -18,175 +18,64 @@ from transformers import AutoTokenizer
 from transformers.utils.chat_parsing_utils import recursive_parse
 from transformers.utils.chat_template_utils import get_json_schema
 
-
-basic_template = """
-{%- for message in messages %}
-    {{- "<|im_start|>" + message["role"] + "\n" }}
-    {{- message["content"] }}
-    {{- "<|im_end|>\n" }}
-{%- endfor %}
-""".strip()
-
-tool_template = """
-{% if tools %}
-    {{- "<|tools|>\n" }}
-    {{- tools|tojson(indent=2) }}
-    {{- "\n" }}
-    {{- "<|endtools|>\n" }}
-{% endif %}
-{%- for message in messages %}
-    {{- "<|im_start|>" + message["role"] + "\n" }}
-    {{- message["content"] }}
-    {{- "<|im_end|>\n" }}
-{%- endfor %}
-""".strip()
-
-basic_schema = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "properties": {
-            "role": {"type": "string", "x-regex": r"<\|im_start\|>(.*?)\n"},
-            "content": {"type": "string", "x-regex": r"<\|im_start\|>.*?\n(.*?)<\|im_end\|>\n"},
-        },
-        "required": ["role", "content"],
-    },
-    "x-regex-iterator": r"\<\|im_start\|\>.*?\<\|im_end\|\>\n",
-}
-
-basic_schema_with_named_groups = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "properties": {"role": {"type": "string"}, "content": {"type": "string"}},
-        "required": ["role", "content"],
-    },
-    "x-regex-iterator": r"<\|im_start\|>(?P<role>.*?)\n(?P<content>.*?)<\|im_end\|>\n",
-}
-
-tools_schema_with_named_groups = {
-    "type": "object",
-    "properties": {
-        "tools": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "type": {"const": "function"},
-                    "function": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "description": {"type": "string"},
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "type": {"const": "object"},
-                                    "required": {"type": "array", "items": {"type": "string"}},
-                                    "properties": {
-                                        "type": "object",
-                                        "additionalProperties": {
-                                            "type": "object",
-                                            "properties": {
-                                                "type": {"type": "string"},
-                                                "description": {"type": "string"},
-                                                "enum": {"type": "array", "items": {"type": "string"}},
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-            "x-parser": "json",
-        },
-        "messages": basic_schema_with_named_groups,
-    },
-    "x-regex": r"(?:<\|tools\|>\n(?P<tools>.*?)\n<\|endtools\|>\n)?(?P<messages>.*)",
-}
-
 cohere_schema = {
     "type": "object",
     "properties": {
-        "tools": {
+        "role": {"const": "assistant"},
+        "content": {"type": "string", "x-regex": "<\|START_RESPONSE\|>(.*?)(?:<\|END_RESPONSE\|>|$)"},
+        "thinking": {"type": "string", "x-regex": "<\|START_THINKING\|>(.*?)(?:<\|END_THINKING\|>|$)"},
+        "tool_calls": {
+            "x-regex": "<\|START_ACTION\|>(.*?)(?:<\|END_ACTION\|>|$)",
+            "x-parser": "json",
+            "x-parser-args": {"transform": "[*].{type: 'function', function: {name: tool_name, arguments: parameters}}"},
             "type": "array",
-            "x-regex": "\n## Available Tools\nHere is a list of tools that you have available to you:((?:\n\n```python\n.*?[\n]+```)+)",
-            "x-regex-iterator": "```python\n(.*?)\n+```",
             "items": {
                 "type": "object",
                 "properties": {
                     "type": {"const": "function"},
                     "function": {
-                        "x-parser": "python_function",
-                        "x-parser-args": {"include_return": False},
                         "type": "object",
                         "properties": {
                             "name": {"type": "string"},
-                            "description": {"type": "string"},
-                            "parameters": {
+                            "arguments": {
                                 "type": "object",
-                                "properties": {
-                                    "type": {"const": "object"},
-                                    "properties": {
-                                        "type": "object",
-                                        "additionalProperties": {
-                                            "type": "object",
-                                            "properties": {
-                                                "type": {"type": "string"},
-                                                "description": {"type": "string"},
-                                            },
-                                        },
-                                    },
-                                    "required": {"type": "array", "items": {"type": "string"}},
-                                },
+                                "additionalProperties": {"type": "any"},
                             },
-                        },
-                    },
-                },
-            },
+                        }
+                    }
+                 }
+            }
         },
-        "messages": {
+    },
+}
+
+ernie_schema = {
+    "type": "object",
+    "properties": {
+        "role": {"const": "assistant"},
+        "content": {"type": "string", "x-regex": "<response>\n(.*?)\n?</response>"},
+        "thinking": {"type": "string", "x-regex": "(?:^|<think>\s*)(.*?)\s*<\/think>"},
+        "tool_calls": {
+            "x-regex-iterator": "<tool_call>(.*?)</tool_call>",
             "type": "array",
             "items": {
                 "type": "object",
+                "x-parser": "json",
+                "x-parser-args": {"transform": "{type: 'function', function: @}"},
                 "properties": {
-                    "role": {
-                        "type": "string",
-                        "enum": ["user", "assistant", "system", "tool"],
-                        "x-mapping": {"<|SYSTEM_TOKEN|>": "system", "<|USER_TOKEN|>": "user", "<|CHATBOT_TOKEN|>": "assistant", "<|SYSTEM_TOKEN|><results>\n": "tool"},
-                    },
-                    "content": {"type": "string"},
-                    "tool_calls": {
-                        "x-parser": "json",
-                        "x-parser-args": {"transform": "[*].{type: 'function', function: {name: tool_name, arguments: parameters}}"},
-                        "type": "array",
-                        "prefixItems": [
-                            {
+                    "type": {"const": "function"},
+                    "function": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "arguments": {
                                 "type": "object",
-                                "properties": {
-                                    "type": {"const": "function"},
-                                    "function": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": {"type": "string"},
-                                            "arguments": {
-                                                "type": "object",
-                                                "additionalProperties": {"type": "any"},
-                                            },
-                                        }
-                                    }
-                                 }
-                            }
-                        ]
-                    },
-                },
-                "required": ["role", "content"],
-            },
-            "x-regex": r"^(.*?)(?:$|(?<=<\|END_OF_TURN_TOKEN\|>)<\|START_OF_TURN_TOKEN\|><\|SYSTEM_TOKEN\|>)",  # Trim off the extra instructions
-            # TODO Need to catch the system message patterns in the other 2 templates, not just the tools one
-            "x-regex-iterator": r"<\|START_OF_TURN_TOKEN\|>(?P<role><\|(?:SYSTEM|USER|CHATBOT)_TOKEN\|>(?:<results>\n?)?)(?:(?i:#\s*Safety\s+Preamble)(?:(?!(?:\nAction:\n```json\n|<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools|<\/results>))[\s\S])*?(?i:#\s*User\s+Preamble)[^\n]*\n)?(?!(?:#\s*Safety\s+Preamble))(?P<content>.*?)(?:\nAction:\n```json\n(?P<tool_calls>.*?)```|<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools|<\/results>)",
+                                "additionalProperties": {"type": "any"},
+                            },
+                        }
+                    }
+                 }
+            }
         },
     },
 }
@@ -291,140 +180,20 @@ class ChatSchemaParserTest(unittest.TestCase):
         # This tokenizer has no chat template by default
         self.tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
-    def test_basic_chat(self):
-        chat = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello!"},
-            {"role": "assistant", "content": "Hi there! How can I help you today?"},
-        ]
-        self.tokenizer.chat_template = basic_template
-        formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False)
-        parsed_chat = recursive_parse(formatted_chat, basic_schema)
-        self.assertEqual(parsed_chat, chat)
-
-    def test_named_groups(self):
-        chat = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello!"},
-            {"role": "assistant", "content": "Hi there! How can I help you today?"},
-        ]
-        self.tokenizer.chat_template = basic_template
-        formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False)
-        parsed_chat = recursive_parse(formatted_chat, basic_schema_with_named_groups)
-        self.assertEqual(parsed_chat, chat)
-
-    def test_tool_def_parsing(self):
-        def tool(temperature_format: str):
-            """
-            Test function
-
-            Args:
-                temperature_format: The temperature format to use (Choices: ["celsius", "fahrenheit"])
-
-
-            Returns:
-                The temperature
-            """
-            return -40.0
-
-        chat = [
-            {"role": "user", "content": "Hello!"},
-            {"role": "assistant", "content": "Hi there! How can I help you today?"},
-        ]
-        self.tokenizer.chat_template = tool_template
-        formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False, tools=[tool])
-        parsed_chat = recursive_parse(formatted_chat, tools_schema_with_named_groups)
-        self.assertEqual(parsed_chat["messages"], chat)
-        self.assertEqual(parsed_chat["tools"], [get_json_schema(tool)])
-
-    def test_tool_template_with_no_tools(self):
-        chat = [
-            {"role": "user", "content": "Hello!"},
-            {"role": "assistant", "content": "Hi there! How can I help you today?"},
-        ]
-        self.tokenizer.chat_template = tool_template
-        formatted_chat = self.tokenizer.apply_chat_template(chat, tokenize=False)
-        parsed_chat = recursive_parse(formatted_chat, tools_schema_with_named_groups)
-        # Test we still extract messages
-        self.assertEqual(parsed_chat["messages"], chat)
-
     def test_cohere_template(self):
-        def simple_tool(temperature_format: str):
-            """
-            Test function
+        model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        parsed_chat = recursive_parse(model_out, cohere_schema)
+        self.assertEqual(parsed_chat,{'role': 'assistant', 'thinking': 'I should call a tool.', 'tool_calls': [{'type': 'function', 'function': {'name': 'simple_tool', 'arguments': {'temperature_format': 'Celsius'}}}]})
 
-            Args:
-                temperature_format: The temperature format to use
-            """
-            return -40.0
+    def test_ernie_template_with_tools(self):
+        model_out = 'The user is asking about the weather in Paris today. Let me check the available tools. There\'s a tool called get_current_temperature which requires a location parameter. Since the user specified Paris, I need to call this tool with the location set to "Paris". I should make sure the argument is correctly formatted as a string. No other tools are available, so this is the right one to use. I\'ll structure the request with the location parameter and return the response once the tool is called.\n</think>\n\n<tool_call>\n{"name": "get_current_temperature", "arguments": {"location": "Paris"}}\n</tool_call>\n</s>'
+        parsed_chat = recursive_parse(model_out, ernie_schema)
+        self.assertEqual(parsed_chat, {'role': 'assistant', 'thinking': 'The user is asking about the weather in Paris today. Let me check the available tools. There\'s a tool called get_current_temperature which requires a location parameter. Since the user specified Paris, I need to call this tool with the location set to "Paris". I should make sure the argument is correctly formatted as a string. No other tools are available, so this is the right one to use. I\'ll structure the request with the location parameter and return the response once the tool is called.', 'tool_calls': [{'type': 'function', 'function': {'name': 'get_current_temperature', 'arguments': {'location': 'Paris'}}}]})
 
-        def tool_with_everything_all_at_once(x: str, y: int, z: float = 43.0):
-            """
-            Test function with multiple args, and docstring args that we have to strip out.
-
-            Args:
-                x: The first input. It's got a big multiline
-                   description and also contains
-
-                y: The second input. It's a big list with a single-line description.
-
-                z: The third input. It's some kind of tuple with a default arg.
-            """
-            return -40.0
-
-        # Command-R is a real workout because it converts tools to Python function defs in the template
-        # TODO Move this template to an internal-testing repo and add the schema too
-        tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r-08-2024")
-        chat = [
-            {"role": "user", "content": "Hello!"},
-            {"role": "assistant", "content": "Hi there! How can I help you today?"},
-        ]
-        formatted_chat = tokenizer.apply_chat_template(
-            chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], chat_template="tool_use"
-        )
-        parsed_chat = recursive_parse(formatted_chat, cohere_schema)
-        self.assertEqual(parsed_chat["messages"][1:], chat)  # The template adds a default system message, we remove it
-        self.assertEqual(
-            parsed_chat["tools"], [get_json_schema(simple_tool), get_json_schema(tool_with_everything_all_at_once)]
-        )
-
-    def test_cohere_template_with_tool_calls(self):
-        def get_current_temperature(location: str):
-            """
-            Gets the temperature at a given location.
-
-            Args:
-                location: The location to get the temperature for
-            """
-            return 22.0  # bug: Sometimes the temperature is not 22. low priority
-
-        tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r-08-2024")
-        chat = [
-            {"role": "system", "content": "You are a helpful assistant who responds to queries by calling tools."},
-            {"role": "user", "content": "Hey, what's the weather in Paris today?"},
-            {
-                "role": "assistant",
-                "content": "We need to respond to the user by calling the get_current_temperature function with location \"Paris\". Provide a short response.",
-                "tool_calls": [
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "get_current_temperature",
-                            "arguments": {"location": "Paris"}
-                        }
-                    }
-                ]
-            },
-            {"role": "tool", "content": "22.0"},
-            {"role": "assistant", "content": "The current temperature in Paris is 22.0 degrees."},
-
-        ]
-        formatted_chat = tokenizer.apply_chat_template(
-            chat, tokenize=False, tools=[get_current_temperature], chat_template="tool_use"
-        )
-        parsed_chat = recursive_parse(formatted_chat, cohere_schema)
-        self.assertEqual(parsed_chat["messages"], chat)
-        self.assertEqual( parsed_chat["tools"], [get_json_schema(get_current_temperature)])
+    def test_ernie_template_no_tools(self):
+        model_out = 'The user just greeted me with "Hi! How are you?" I need to respond in a friendly and helpful manner. Let me start by acknowledging their greeting. I should ask them how they\'re doing to engage in conversation.\n\nFirst, I\'ll say hello back and then ask how they\'re feeling. It\'s important to show genuine interest. Maybe mention that I\'m here to help with anything they need. Keep the tone warm and positive. Let me make sure the response is concise but friendly. Alright, that should work.\n</think>\n\n<response>\nHello! I\'m doing well, thank you for asking. How about you? Is there something specific you\'d like help with today? I\'m here to assist you with any questions or problems you have!\n</response>\n</s>'
+        parsed_chat = recursive_parse(model_out, ernie_schema)
+        self.assertEqual(parsed_chat, {'role': 'assistant', 'content': "Hello! I'm doing well, thank you for asking. How about you? Is there something specific you'd like help with today? I'm here to assist you with any questions or problems you have!", 'thinking': 'The user just greeted me with "Hi! How are you?" I need to respond in a friendly and helpful manner. Let me start by acknowledging their greeting. I should ask them how they\'re doing to engage in conversation.\n\nFirst, I\'ll say hello back and then ask how they\'re feeling. It\'s important to show genuine interest. Maybe mention that I\'m here to help with anything they need. Keep the tone warm and positive. Let me make sure the response is concise but friendly. Alright, that should work.'})
 
     def test_gpt_oss_template(self):
         def simple_tool(temperature_format: str):
