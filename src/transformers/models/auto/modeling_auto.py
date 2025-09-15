@@ -744,7 +744,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetLMHeadModel"),
         ("xlstm", "xLSTMForCausalLM"),
         ("xmod", "XmodForCausalLM"),
-        ("Zagros_next", "ZagrosNextForCausalLM"),
+        ("zagros_next", "ZagrosNextForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
     ]
