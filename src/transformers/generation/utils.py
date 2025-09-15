@@ -1036,8 +1036,10 @@ class GenerationMixin(ContinuousMixin):
             candidate_generator = PromptLookupCandidateGenerator(
                 eos_token_id=generation_config._eos_token_tensor,
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
-                max_matching_ngram_size=generation_config.max_matching_ngram_size,
+                max_matching_ngram_size=generation_config.max_matching_ngram_size or 2,
                 max_length=generation_config.max_length,
+                logits_processor=logits_processor,
+                vocab_size=self.config.get_text_config().vocab_size,
             )
         elif different_tokenizers:
             if generation_config.do_sample is True:
@@ -1865,7 +1867,7 @@ class GenerationMixin(ContinuousMixin):
             self._cache = StaticCache(**self_attention_cache_kwargs)
             if requires_cross_attention_cache:
                 cross_attention_cache_kwargs = {
-                    "config": self.config.get_text_config(encoder=True),
+                    "config": self.config.get_text_config(decoder=True),
                     "max_cache_len": model_kwargs["encoder_outputs"][0].shape[1],
                     "offloading": offload_cache,
                 }
@@ -1970,7 +1972,7 @@ class GenerationMixin(ContinuousMixin):
         ):
             dynamic_cache_kwargs = {}
         else:
-            dynamic_cache_kwargs = {"config": self.config}
+            dynamic_cache_kwargs = {"config": self.config.get_text_config(decoder=True)}
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
                 if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
@@ -3158,6 +3160,8 @@ class GenerationMixin(ContinuousMixin):
             vocab_size = self.config.audio_vocab_size
         elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
             vocab_size = self.get_output_embeddings().out_features
+        elif self.__class__.__name__ == "BarkSemanticModel":
+            vocab_size = self.config.output_vocab_size
         else:
             vocab_size = self.config.get_text_config().vocab_size
         decoder_prompt_len = cur_len

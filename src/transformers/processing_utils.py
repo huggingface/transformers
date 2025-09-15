@@ -31,12 +31,12 @@ import numpy as np
 import typing_extensions
 from huggingface_hub.errors import EntryNotFoundError
 
-from .audio_utils import load_audio
+from .audio_utils import AudioInput, load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, is_vision_available
+from .image_utils import ChannelDimension, ImageInput, is_vision_available
 from .utils.chat_template_utils import render_jinja_template
-from .video_utils import VideoMetadata
+from .video_utils import VideoInput, VideoMetadata
 
 
 if is_vision_available():
@@ -335,7 +335,8 @@ class CommonKwargs(TypedDict, total=False):
 class ProcessingKwargs(TypedDict, total=False):
     """
     Base class for kwargs passing to processors.
-    A model should have its own `ModelProcessorKwargs` class that inherits from `ProcessingKwargs` to provide:
+    In case a model has specific kwargs that are not present in the base class or default values for existing keys,
+    it should have its own `ModelProcessorKwargs` class that inherits from `ProcessingKwargs` to provide:
         1) Additional typed keys and that this model requires to process inputs.
         2) Default values for existing keys under a `_defaults` attribute.
     New keys have to be defined as follows to ensure type hinting is done correctly.
@@ -369,6 +370,8 @@ class ProcessingKwargs(TypedDict, total=False):
     ```python
 
     """
+
+    _defaults = {}
 
     common_kwargs: CommonKwargs = {
         **CommonKwargs.__annotations__,
@@ -499,6 +502,7 @@ class ProcessorMixin(PushToHubMixin):
     feature_extractor_class = None
     tokenizer_class = None
     _auto_class = None
+    valid_processor_kwargs = ProcessingKwargs
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -538,6 +542,68 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name, arg in kwargs.items():
             self.check_argument_for_proper_class(attribute_name, arg)
             setattr(self, attribute_name, arg)
+
+    def __call__(
+        self,
+        images: Optional[ImageInput] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        videos: Optional[VideoInput] = None,
+        audio: Optional[AudioInput] = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        """
+        Main method to prepare for model inputs. This method forwards the each modality argument to its own processor
+        along with `kwargs`. Please refer to the docstring of the each processor attributes for more information.
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The video or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
+                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The audio or batch of audio to be prepared. Each audio can be a NumPy array or PyTorch
+                tensor.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format.
+        """
+        if images is None and text is None and videos is None and audio is None:
+            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
+        kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
+            **kwargs,
+        )
+
+        attribute_to_kwargs = {
+            "tokenizer": (text, "text_kwargs"),
+            "image_processor": (images, "images_kwargs"),
+            "video_processor": (videos, "videos_kwargs"),
+            "feature_extractor": (audio, "audio_kwargs"),
+        }
+        outputs = {}
+        for attribute_name in self.attributes:
+            attribute = getattr(self, attribute_name, None)
+            input_data, input_kwargs = attribute_to_kwargs[attribute_name]
+            if input_data is not None and attribute is not None:
+                attribute_output = attribute(input_data, **kwargs[input_kwargs])
+                outputs.update(attribute_output)
+
+        return BatchFeature(outputs)
 
     def check_argument_for_proper_class(self, argument_name, argument):
         """
@@ -1621,7 +1687,7 @@ class ProcessorMixin(PushToHubMixin):
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
                 kwargs["add_special_tokens"] = False
 
-            # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`video_fps`
+            # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`fps`
             # sampling should not done for BC.
             if "do_sample_frames" not in kwargs and (
                 kwargs.get("fps") is not None or kwargs.get("num_frames") is not None
