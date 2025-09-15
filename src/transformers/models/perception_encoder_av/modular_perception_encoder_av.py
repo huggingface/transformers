@@ -11,7 +11,10 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ..dac.configuration_dac import DacConfig
 from ..dac.modeling_dac import DacEncoder
+
+# from ..modernbert.modeling_modernbert import ModernBertModel
 from ..modernbert import ModernBertModel
+from ..modernbert.configuration_modernbert import ModernBertConfig
 
 
 class NormalizeTypeConfig(str, enum.Enum):
@@ -48,23 +51,8 @@ class TransformerConfig(Config):
     patch_size: int = 1
 
 
-@dataclass(frozen=True, kw_only=True)
-class TextEncoderConfig(Config):
-    dim: int
-
-
-@dataclass(frozen=True, kw_only=True)
-class PETextEncoder(TextEncoderConfig):
-    dim: int = 1024
-
-
-@dataclass(frozen=True, kw_only=True)
-class ModernBERTConfig(TextEncoderConfig):
-    model_id: str = "answerdotai/ModernBERT-base"
-    pad_mode: str = "longest"
-    max_length: int = 1024
-    dim: int = 768
-    nth_layer: Optional[int] = None
+class PerceptionEncoderAVModernBertConfig(ModernBertConfig):
+    nth_layer: Optional[int] = 22
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -113,7 +101,7 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         self.audio_codec = DACVAEConfig(**audio_codec)
         self.audio_encoder = TransformerConfig.from_dict(audio_encoder)
         self.audio_video_encoder = TransformerConfig.from_dict(audio_video_encoder)
-        self.text_encoder = ModernBERTConfig.from_dict(text_encoder)
+        self.text_encoder = PerceptionEncoderAVModernBertConfig(**text_encoder)
         self.separate_text_heads = separate_text_heads
         self.output_dim = output_dim
         self.contrastive_head_norm_type = contrastive_head_norm_type
@@ -276,13 +264,15 @@ class Patcher(torch.nn.Module):
         return x
 
 
+# class PerceptionEncoderAVModernBertModel(ModernBertModel): ...
+
+
 ## Text Encoder
-class ModernBERTEncoder(torch.nn.Module):
-    def __init__(self, cfg: ModernBERTConfig):
+class PerceptionEncoderAVTextEncoderModernBertModel(torch.nn.Module):
+    def __init__(self, config: PerceptionEncoderAVModernBertConfig):
         super().__init__()
-        self.cfg = cfg
-        self.model = ModernBertModel.from_config(cfg.model_id)
-        self.nth_layer = cfg.nth_layer
+        self.nth_layer = config.nth_layer
+        self.model = ModernBertModel(config)
 
     def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         output = self.model(
@@ -1003,11 +993,11 @@ class PerceptionEncoderAVModel(PreTrainedModel):
         self.video_encoder = VideoEncoder(cfg.video_encoder)
         self.ouptut_dim = cfg.output_dim
         self.av_dim = self.audio_video_encoder.dim
-        self.text_dim = cfg.text_encoder.dim
+        self.text_dim = cfg.text_encoder.hidden_size
         self.context_length = self.video_encoder.backbone.context_length
         self.image_size = self.video_encoder.backbone.image_size
         self.fixed_len_video = cfg.fixed_len_video
-        self.text_encoder = ModernBERTEncoder(cfg.text_encoder)
+        self.text_encoder = PerceptionEncoderAVTextEncoderModernBertModel(cfg.text_encoder)
 
         heads = ["video", "audio", "audio_visual"]
         if cfg.separate_text_heads:
@@ -1066,5 +1056,13 @@ class PerceptionEncoderAVModel(PreTrainedModel):
             audio_video_embedding=audio_video_emb,
         )
 
+    @classmethod
+    def _load_pretrained_model(cls, *args, **kwargs):
+        res = super()._load_pretrained_model(*args, **kwargs)
+        model = res[0]
+        # Otherwise, the rope `freqs` will still be on `meta` device
+        model.video_encoder.backbone.visual.rope.init_tensors()
+        return res
 
-__all__ = ["PerceptionEncoderAVModel"]
+
+__all__ = ["PerceptionEncoderAVModel", "PerceptionEncoderAVConfig"]

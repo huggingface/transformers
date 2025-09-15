@@ -15,20 +15,16 @@ import torch.nn.functional as F
 from einops import rearrange
 
 from ...modeling_utils import PreTrainedModel
+
+# from ..modernbert.modeling_modernbert import ModernBertModel
 from ..modernbert import ModernBertModel
 from .configuration_perception_encoder_av import (
     DACVAEConfig,
-    ModernBERTConfig,
     NormalizeTypeConfig,
     PerceptionEncoderAVConfig,
-    TextEncoderConfig,
+    PerceptionEncoderAVModernBertConfig,
     VideoEncoderConfig,
 )
-
-
-@dataclass(frozen=True, kw_only=True)
-class PETextEncoder(TextEncoderConfig):
-    dim: int = 1024
 
 
 ## Patcher
@@ -182,15 +178,15 @@ class Patcher(torch.nn.Module):
         return x
 
 
+# class PerceptionEncoderAVModernBertModel(ModernBertModel): ...
+
+
 ## Text Encoder
-
-
-class ModernBERTEncoder(torch.nn.Module):
-    def __init__(self, cfg: ModernBERTConfig):
+class PerceptionEncoderAVTextEncoderModernBertModel(torch.nn.Module):
+    def __init__(self, config: PerceptionEncoderAVModernBertConfig):
         super().__init__()
-        self.cfg = cfg
-        self.model = ModernBertModel.from_pretrained(cfg.model_id)
-        self.nth_layer = cfg.nth_layer
+        self.nth_layer = config.nth_layer
+        self.model = ModernBertModel(config)
 
     def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         output = self.model(
@@ -975,11 +971,11 @@ class PerceptionEncoderAVModel(PreTrainedModel):
         self.video_encoder = VideoEncoder(cfg.video_encoder)
         self.ouptut_dim = cfg.output_dim
         self.av_dim = self.audio_video_encoder.dim
-        self.text_dim = cfg.text_encoder.dim
+        self.text_dim = cfg.text_encoder.hidden_size
         self.context_length = self.video_encoder.backbone.context_length
         self.image_size = self.video_encoder.backbone.image_size
         self.fixed_len_video = cfg.fixed_len_video
-        self.text_encoder = ModernBERTEncoder(cfg.text_encoder)
+        self.text_encoder = PerceptionEncoderAVTextEncoderModernBertModel(cfg.text_encoder)
 
         heads = ["video", "audio", "audio_visual"]
         if cfg.separate_text_heads:
@@ -1037,6 +1033,14 @@ class PerceptionEncoderAVModel(PreTrainedModel):
             video_embedding=video_emb,
             audio_video_embedding=audio_video_emb,
         )
+
+    @classmethod
+    def _load_pretrained_model(cls, *args, **kwargs):
+        res = super()._load_pretrained_model(*args, **kwargs)
+        model = res[0]
+        # Otherwise, the rope `freqs` will still be on `meta` device
+        model.video_encoder.backbone.visual.rope.init_tensors()
+        return res
 
 
 __all__ = ["PerceptionEncoderAVModel"]

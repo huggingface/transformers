@@ -7,12 +7,12 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ..perception_encoder_av.configuration_perception_encoder_av import (
     DACVAEConfig,
-    ModernBERTConfig,
+    PerceptionEncoderAVModernBertConfig,
     TransformerConfig,
 )
 from ..perception_encoder_av.modeling_perception_encoder_av import (
     DACVAE,
-    ModernBERTEncoder,
+    PerceptionEncoderAVTextEncoderModernBertModel,
     Transformer,
 )
 
@@ -20,20 +20,22 @@ from ..perception_encoder_av.modeling_perception_encoder_av import (
 EMPTY_DICT = {}
 
 
-class TransformerConfig(TransformerConfig): ...
+class FlClapTransformerConfig(TransformerConfig): ...
 
 
+# NOTE: rename `DACVAEConfig` to `FlClapDACVAEConfig` causes import errors
+# The generated DAC encoder layers have a `DACVAEConfig` type annotation which doesn't exist
+# If we rename this to something else...
 class DACVAEConfig(DACVAEConfig): ...
 
 
-class ModernBERTConfig(ModernBERTConfig): ...
+class FlClapModernBertConfig(PerceptionEncoderAVModernBertConfig): ...
 
 
 class FLCLAPConfig(PretrainedConfig):
     audio_codec: DACVAEConfig
-    audio_encoder: TransformerConfig
-    finetune_encoder: TransformerConfig
-    text_encoder: ModernBERTConfig
+    audio_encoder: FlClapTransformerConfig
+    text_encoder: FlClapModernBertConfig
 
     def __init__(
         self,
@@ -44,8 +46,8 @@ class FLCLAPConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.audio_codec = DACVAEConfig(**audio_codec)
-        self.audio_encoder = TransformerConfig.from_dict(audio_encoder)
-        self.text_encoder = ModernBERTConfig.from_dict(text_encoder)
+        self.audio_encoder = FlClapTransformerConfig.from_dict(audio_encoder)
+        self.text_encoder = FlClapModernBertConfig(**text_encoder)
 
     def to_dict(self):
         output = super().to_dict()
@@ -53,13 +55,15 @@ class FLCLAPConfig(PretrainedConfig):
         return {k: asdict(v) if is_dataclass(v) else v for k, v in output.items()}
 
 
-class FLCLAPDACVAE(DACVAE): ...
+class FlClapDACVAE(DACVAE):
+    def __init__(self, config: DACVAEConfig):
+        super().__init__(config)
 
 
-class FLCLAPTransformer(Transformer): ...
+class FlClapTransformer(Transformer): ...
 
 
-class FLCLAPModernBERTEncoder(ModernBERTEncoder): ...
+class FlClapModernBertModel(PerceptionEncoderAVTextEncoderModernBertModel): ...
 
 
 @dataclass
@@ -92,12 +96,12 @@ class FLCLAPModel(PreTrainedModel):
     def __init__(self, cfg: FLCLAPConfig):
         super().__init__(cfg)
         self.cfg = cfg
-        self.text_encoder = FLCLAPModernBERTEncoder(cfg.text_encoder)
-        self.audio_encoder = FLCLAPTransformer(**asdict(cfg.audio_encoder))
-        self.audio_codec = FLCLAPDACVAE(cfg.audio_codec)
+        self.text_encoder = FlClapModernBertModel(cfg.text_encoder)
+        self.audio_encoder = FlClapTransformer(**asdict(cfg.audio_encoder))
+        self.audio_codec = FlClapDACVAE(cfg.audio_codec)
 
         self.audio_head = ContrastiveHead(cfg.audio_encoder.dim, cfg.out_dim)
-        self.text_head = ContrastiveHead(cfg.text_encoder.dim, cfg.out_dim)
+        self.text_head = ContrastiveHead(cfg.text_encoder.hidden_size, cfg.out_dim)
 
     @property
     def sample_rate(self):

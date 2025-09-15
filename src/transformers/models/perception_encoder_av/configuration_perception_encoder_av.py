@@ -7,7 +7,7 @@
 import enum
 import math
 from dataclasses import asdict, dataclass, field, is_dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 
@@ -48,18 +48,202 @@ class TransformerConfig(Config):
     patch_size: int = 1
 
 
-@dataclass(frozen=True, kw_only=True)
-class TextEncoderConfig(Config):
-    dim: int
+class PerceptionEncoderAVModernBertConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`PerceptionEncoderAVModernBertModel`]. It is used to instantiate an PerceptionEncoderAVModernBert
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the PerceptionEncoderAVModernBert-base.
+    e.g. [answerdotai/PerceptionEncoderAVModernBert-base](https://huggingface.co/answerdotai/PerceptionEncoderAVModernBert-base)
 
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
-@dataclass(frozen=True, kw_only=True)
-class ModernBERTConfig(TextEncoderConfig):
-    model_id: str = "answerdotai/ModernBERT-base"
-    pad_mode: str = "longest"
-    max_length: int = 1024
-    dim: int = 768
-    nth_layer: Optional[int] = None
+    Args:
+        vocab_size (`int`, *optional*, defaults to 50368):
+            Vocabulary size of the PerceptionEncoderAVModernBert model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`PerceptionEncoderAVModernBertModel`]
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 1152):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 22):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the decoder. Will default to `"gelu"`
+            if not specified.
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
+            The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+        norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        norm_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 50283):
+            Padding token id.
+        eos_token_id (`int`, *optional*, defaults to 50282):
+            End of stream token id.
+        bos_token_id (`int`, *optional*, defaults to 50281):
+            Beginning of stream token id.
+        cls_token_id (`int`, *optional*, defaults to 50281):
+            Classification token id.
+        sep_token_id (`int`, *optional*, defaults to 50282):
+            Separation token id.
+        global_rope_theta (`float`, *optional*, defaults to 160000.0):
+            The base period of the global RoPE embeddings.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        global_attn_every_n_layers (`int`, *optional*, defaults to 3):
+            The number of layers between global attention layers.
+        local_attention (`int`, *optional*, defaults to 128):
+            The window size for local attention.
+        local_rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the local RoPE embeddings.
+        embedding_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the embeddings.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the MLP layers.
+        mlp_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the MLP layers.
+        decoder_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the decoder layers.
+        classifier_pooling (`str`, *optional*, defaults to `"cls"`):
+            The pooling method for the classifier. Should be either `"cls"` or `"mean"`. In local attention layers, the
+            CLS token doesn't attend to all tokens on long sequences.
+        classifier_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the classifier.
+        classifier_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the classifier.
+        classifier_activation (`str`, *optional*, defaults to `"gelu"`):
+            The activation function for the classifier.
+        deterministic_flash_attn (`bool`, *optional*, defaults to `False`):
+            Whether to use deterministic flash attention. If `False`, inference will be faster but not deterministic.
+        sparse_prediction (`bool`, *optional*, defaults to `False`):
+            Whether to use sparse prediction for the masked language model instead of returning the full dense logits.
+        sparse_pred_ignore_index (`int`, *optional*, defaults to -100):
+            The index to ignore for the sparse prediction.
+        reference_compile (`bool`, *optional*):
+            Whether to compile the layers of the model which were compiled during pretraining. If `None`, then parts of
+            the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
+            shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
+            be faster in some scenarios.
+        repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
+            When True, PerceptionEncoderAVModernBertForMaskedLM keeps track of the logits' gradient when repadding for output. This only
+            applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
+
+    Examples:
+
+    ```python
+    >>> from transformers import PerceptionEncoderAVModernBertModel, PerceptionEncoderAVModernBertConfig
+
+    >>> # Initializing a PerceptionEncoderAVModernBert style configuration
+    >>> configuration = PerceptionEncoderAVModernBertConfig()
+
+    >>> # Initializing a model from the perception_encoder_a_v_modern_bert-base style configuration
+    >>> model = PerceptionEncoderAVModernBertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "perception_encoder_a_v_modern_bert"
+    attribute_map = {"rope_theta": "global_rope_theta"}
+    keys_to_ignore_at_inference = ["past_key_values"]
+    nth_layer: Optional[int] = 22
+
+    def __init__(
+        self,
+        vocab_size=50368,
+        hidden_size=768,
+        intermediate_size=1152,
+        num_hidden_layers=22,
+        num_attention_heads=12,
+        hidden_activation="gelu",
+        max_position_embeddings=8192,
+        initializer_range=0.02,
+        initializer_cutoff_factor=2.0,
+        norm_eps=1e-5,
+        norm_bias=False,
+        pad_token_id=50283,
+        eos_token_id=50282,
+        bos_token_id=50281,
+        cls_token_id=50281,
+        sep_token_id=50282,
+        global_rope_theta=160000.0,
+        attention_bias=False,
+        attention_dropout=0.0,
+        global_attn_every_n_layers=3,
+        local_attention=128,
+        local_rope_theta=10000.0,
+        embedding_dropout=0.0,
+        mlp_bias=False,
+        mlp_dropout=0.0,
+        decoder_bias=True,
+        classifier_pooling: Literal["cls", "mean"] = "cls",
+        classifier_dropout=0.0,
+        classifier_bias=False,
+        classifier_activation="gelu",
+        deterministic_flash_attn=False,
+        sparse_prediction=False,
+        sparse_pred_ignore_index=-100,
+        reference_compile=None,
+        repad_logits_with_grad=False,
+        **kwargs,
+    ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            cls_token_id=cls_token_id,
+            sep_token_id=sep_token_id,
+            **kwargs,
+        )
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.initializer_range = initializer_range
+        self.initializer_cutoff_factor = initializer_cutoff_factor
+        self.norm_eps = norm_eps
+        self.norm_bias = norm_bias
+        self.global_rope_theta = global_rope_theta
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.hidden_activation = hidden_activation
+        self.global_attn_every_n_layers = global_attn_every_n_layers
+        self.local_attention = local_attention
+        self.local_rope_theta = local_rope_theta
+        self.embedding_dropout = embedding_dropout
+        self.mlp_bias = mlp_bias
+        self.mlp_dropout = mlp_dropout
+        self.decoder_bias = decoder_bias
+        self.classifier_pooling = classifier_pooling
+        self.classifier_dropout = classifier_dropout
+        self.classifier_bias = classifier_bias
+        self.classifier_activation = classifier_activation
+        self.deterministic_flash_attn = deterministic_flash_attn
+        self.sparse_prediction = sparse_prediction
+        self.sparse_pred_ignore_index = sparse_pred_ignore_index
+        self.reference_compile = reference_compile
+        self.repad_logits_with_grad = repad_logits_with_grad
+
+        if self.classifier_pooling not in ["cls", "mean"]:
+            raise ValueError(
+                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
+            )
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("reference_compile", None)
+        return output
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -191,7 +375,7 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         self.audio_codec = DACVAEConfig(**audio_codec)
         self.audio_encoder = TransformerConfig.from_dict(audio_encoder)
         self.audio_video_encoder = TransformerConfig.from_dict(audio_video_encoder)
-        self.text_encoder = ModernBERTConfig.from_dict(text_encoder)
+        self.text_encoder = PerceptionEncoderAVModernBertConfig(**text_encoder)
         self.separate_text_heads = separate_text_heads
         self.output_dim = output_dim
         self.contrastive_head_norm_type = contrastive_head_norm_type
@@ -201,3 +385,6 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         output = super().to_dict()
         # convert any sub-configs that weren't converted by `super().to_dict()`
         return {k: asdict(v) if is_dataclass(v) else v for k, v in output.items()}
+
+
+__all__ = ["PerceptionEncoderAVConfig"]

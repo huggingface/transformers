@@ -4,20 +4,15 @@ import torch
 
 from ...processing_utils import ProcessorMixin
 from ...utils import is_vision_available
-from ...video_processing_utils import BaseVideoProcessor, VideoMetadata, VideosKwargs
+from ...video_processing_utils import BaseVideoProcessor, VideoMetadata
 
 
 if is_vision_available():
     from ...image_utils import PILImageResampling
 
 
-class PEAVVideoKwargs(VideosKwargs):
-    resample: PILImageResampling
-
-
 class PerceptionEncoderAVVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
-    valid_kwargs = PEAVVideoKwargs
 
     def sample_frames(
         self,
@@ -37,9 +32,10 @@ class PerceptionEncoderAVVideoProcessor(BaseVideoProcessor):
 
 
 class PerceptionEncoderAVProcessor(ProcessorMixin):
-    attributes = ["video_processor", "tokenizer"]
+    attributes = ["video_processor", "tokenizer", "feature_extractor"]
     video_processor_class = "PerceptionEncoderAVVideoProcessor"
     tokenizer_class = "AutoTokenizer"
+    feature_extractor_class = "PerceptionEncoderAVFeatureExtractor"
 
 
 __all__ = ["PerceptionEncoderAVProcessor", "PerceptionEncoderAVVideoProcessor"]

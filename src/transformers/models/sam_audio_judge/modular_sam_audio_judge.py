@@ -8,12 +8,12 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ..perception_encoder_av.configuration_perception_encoder_av import (
     DACVAEConfig,
-    ModernBERTConfig,
+    PerceptionEncoderAVModernBertConfig,
     TransformerConfig,
 )
 from ..perception_encoder_av.modeling_perception_encoder_av import (
     DACVAE,
-    ModernBERTEncoder,
+    PerceptionEncoderAVTextEncoderModernBertModel,
     Transformer,
 )
 
@@ -31,20 +31,23 @@ def mask_from_sizes(sizes: torch.Tensor) -> torch.Tensor:
 EMPTY_DICT = {}
 
 
-class TransformerConfig(TransformerConfig): ...
+class SamAudioJudgeTransformerConfig(TransformerConfig): ...
 
 
+# NOTE: rename `DACVAEConfig` to `SamAudioJudgeDACVAEConfig` causes import errors
+# The generated DAC encoder layers have a `DACVAEConfig` type annotation which doesn't exist
+# If we rename this to something else...
 class DACVAEConfig(DACVAEConfig): ...
 
 
-class ModernBERTConfig(ModernBERTConfig): ...
+class SamAudioJudgeModernBertConfig(PerceptionEncoderAVModernBertConfig): ...
 
 
-class SAMAudioJudgeConfig(PretrainedConfig):
+class SamAudioJudgeConfig(PretrainedConfig):
     audio_codec: DACVAEConfig
-    audio_encoder: TransformerConfig
-    finetune_encoder: TransformerConfig
-    text_encoder: ModernBERTConfig
+    audio_encoder: SamAudioJudgeTransformerConfig
+    finetune_encoder: SamAudioJudgeTransformerConfig
+    text_encoder: SamAudioJudgeModernBertConfig
 
     def __init__(
         self,
@@ -56,9 +59,9 @@ class SAMAudioJudgeConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.audio_codec = DACVAEConfig(**audio_codec)
-        self.audio_encoder = TransformerConfig.from_dict(audio_encoder)
-        self.finetune_encoder = TransformerConfig.from_dict(finetune_encoder)
-        self.text_encoder = ModernBERTConfig.from_dict(text_encoder)
+        self.audio_encoder = SamAudioJudgeTransformerConfig.from_dict(audio_encoder)
+        self.finetune_encoder = SamAudioJudgeTransformerConfig.from_dict(finetune_encoder)
+        self.text_encoder = SamAudioJudgeModernBertConfig.from_dict(text_encoder)
 
     def to_dict(self):
         output = super().to_dict()
@@ -66,13 +69,13 @@ class SAMAudioJudgeConfig(PretrainedConfig):
         return {k: asdict(v) if is_dataclass(v) else v for k, v in output.items()}
 
 
-class SAMAudioJudgeDACVAE(DACVAE): ...
+class SamAudioJudgeDACVAE(DACVAE): ...
 
 
-class SAMAudioJudgeTransformer(Transformer): ...
+class SamAudioJudgeTransformer(Transformer): ...
 
 
-class SAMAudioJudgeModernBERTEncoder(ModernBERTEncoder): ...
+class SamAudioJudgeModernBertModel(PerceptionEncoderAVTextEncoderModernBertModel): ...
 
 
 class AlignModalities(torch.nn.Module):
@@ -145,17 +148,17 @@ class JudgeOutput:
     faithfulness: torch.Tensor
 
 
-class SAMAudioJudgeModel(PreTrainedModel):
-    config: SAMAudioJudgeConfig
+class SamAudioJudgeModel(PreTrainedModel):
+    config: SamAudioJudgeConfig
 
-    def __init__(self, cfg: SAMAudioJudgeConfig):
+    def __init__(self, cfg: SamAudioJudgeConfig):
         super().__init__(cfg)
         self.cfg = cfg
-        self.audio_codec = SAMAudioJudgeDACVAE(cfg.audio_codec)
-        self.text_encoder = SAMAudioJudgeModernBERTEncoder(cfg.text_encoder)
-        self.audio_encoder = SAMAudioJudgeTransformer(**asdict(cfg.audio_encoder))
-        self.finetune_encoder = SAMAudioJudgeTransformer(**asdict(cfg.finetune_encoder))
-        self.text_proj = torch.nn.Linear(cfg.text_encoder.dim, cfg.audio_encoder.dim, bias=False)
+        self.audio_codec = SamAudioJudgeDACVAE(cfg.audio_codec)
+        self.text_encoder = SamAudioJudgeModernBertModel(cfg.text_encoder)
+        self.audio_encoder = SamAudioJudgeTransformer(**asdict(cfg.audio_encoder))
+        self.finetune_encoder = SamAudioJudgeTransformer(**asdict(cfg.finetune_encoder))
+        self.text_proj = torch.nn.Linear(cfg.text_encoder.hidden_size, cfg.audio_encoder.dim, bias=False)
         self.cat_audio_proj = torch.nn.Linear(2 * cfg.audio_encoder.dim, cfg.finetune_encoder.in_channels)
         self.aligner = AlignModalities(cfg.audio_encoder.dim, cfg.finetune_encoder.in_channels, with_gate=False)
         self.cat_aligned = torch.nn.Linear(2 * cfg.finetune_encoder.in_channels, cfg.finetune_encoder.in_channels)
@@ -196,4 +199,4 @@ class SAMAudioJudgeModel(PreTrainedModel):
         return JudgeOutput(*de_normalized.chunk(4, dim=1))
 
 
-__all__ = ["SAMAudioJudgeModel", "SAMAudioJudgeConfig", "JudgeOutput"]
+__all__ = ["SamAudioJudgeModel", "SamAudioJudgeConfig", "JudgeOutput"]

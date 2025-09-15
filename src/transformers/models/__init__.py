@@ -253,7 +253,6 @@ if TYPE_CHECKING:
     from .pegasus import *
     from .pegasus_x import *
     from .perceiver import *
-    from .perception_encoder_av import *
     from .perception_lm import *
     from .persimmon import *
     from .phi import *

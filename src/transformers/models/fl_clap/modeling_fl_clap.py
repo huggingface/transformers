@@ -14,8 +14,10 @@ import torch.nn.functional as F
 from einops import rearrange
 
 from ...modeling_utils import PreTrainedModel
+
+# from ..modernbert.modeling_modernbert import ModernBertModel
 from ..modernbert import ModernBertModel
-from .configuration_fl_clap import DACVAEConfig, FLCLAPConfig, ModernBERTConfig
+from .configuration_fl_clap import DACVAEConfig, FLCLAPConfig, FlClapModernBertConfig
 
 
 ## Patcher
@@ -206,7 +208,7 @@ class DACVAEEncoder(nn.Module):
         return hidden_state
 
 
-class FLCLAPDACVAE(torch.nn.Module):
+class FlClapDACVAE(torch.nn.Module):
     def __init__(self, config: DACVAEConfig) -> None:
         super().__init__()
         self.encoder = DACVAEEncoder(config)
@@ -667,7 +669,7 @@ class TransformerBlock(torch.nn.Module):
         return out
 
 
-class FLCLAPTransformer(torch.nn.Module):
+class FlClapTransformer(torch.nn.Module):
     def __init__(
         self,
         in_channels: int,
@@ -710,7 +712,7 @@ class FLCLAPTransformer(torch.nn.Module):
             )
             self.rope_embeddings.reset_parameters()
 
-        # f_l_c_l_a_p_transformer blocks
+        # fl_clap_transformer blocks
         self.layers = torch.nn.ModuleList()
         for _ in range(n_layers):
             layer = TransformerBlock(
@@ -786,15 +788,15 @@ class FLCLAPTransformer(torch.nn.Module):
         return output[:, 1:], output[:, 0]
 
 
+# class FlClapModernBertModel(ModernBertModel): ...
+
+
 ## Text Encoder
-
-
-class FLCLAPModernBERTEncoder(torch.nn.Module):
-    def __init__(self, cfg: ModernBERTConfig):
+class FlClapModernBertModel(torch.nn.Module):
+    def __init__(self, config: FlClapModernBertConfig):
         super().__init__()
-        self.cfg = cfg
-        self.model = ModernBertModel.from_pretrained(cfg.model_id)
-        self.nth_layer = cfg.nth_layer
+        self.nth_layer = config.nth_layer
+        self.model = ModernBertModel(config)
 
     def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         output = self.model(
@@ -839,12 +841,12 @@ class FLCLAPModel(PreTrainedModel):
     def __init__(self, cfg: FLCLAPConfig):
         super().__init__(cfg)
         self.cfg = cfg
-        self.text_encoder = FLCLAPModernBERTEncoder(cfg.text_encoder)
-        self.audio_encoder = FLCLAPTransformer(**asdict(cfg.audio_encoder))
-        self.audio_codec = FLCLAPDACVAE(cfg.audio_codec)
+        self.text_encoder = FlClapModernBertModel(cfg.text_encoder)
+        self.audio_encoder = FlClapTransformer(**asdict(cfg.audio_encoder))
+        self.audio_codec = FlClapDACVAE(cfg.audio_codec)
 
         self.audio_head = ContrastiveHead(cfg.audio_encoder.dim, cfg.out_dim)
-        self.text_head = ContrastiveHead(cfg.text_encoder.dim, cfg.out_dim)
+        self.text_head = ContrastiveHead(cfg.text_encoder.hidden_size, cfg.out_dim)
 
     @property
     def sample_rate(self):
