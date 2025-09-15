@@ -184,12 +184,10 @@ class JetMoeIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("jetmoe/jetmoe-8b", use_fast=False)
         model = JetMoeForCausalLM.from_pretrained("jetmoe/jetmoe-8b")
         input_ids = tokenizer(prompt, return_tensors="pt", padding=True).to(model.model.embed_tokens.weight.device)
-        print(input_ids)
 
         # greedy generation outputs
         generated_ids = model.generate(**input_ids, max_new_tokens=10, temperature=0)
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        print(text)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
         del model
