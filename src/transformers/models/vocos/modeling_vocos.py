@@ -79,6 +79,10 @@ def _vocos_inverse_stft(spectrogram, padding, n_fft, hop_length, win_length, win
 
 
 class VocosAdaptiveLayerNorm(nn.Module):
+    """
+    Weight and bias parameters come from a lookup table based on the target bandwidth.
+    """
+
     def __init__(self, config: VocosConfig):
         super().__init__()
         self.eps = config.layer_norm_eps
@@ -87,13 +91,7 @@ class VocosAdaptiveLayerNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(adanorm_num_embeddings, config.hidden_dim))
         self.bias = nn.Parameter(torch.zeros(adanorm_num_embeddings, config.hidden_dim))
 
-    def forward(self, hidden_states: torch.Tensor, cond_embedding_id: torch.LongTensor = None):
-        if cond_embedding_id is None:
-            # the index used to select the target bandwidth is used to index into Adaptive Normalization lookup table (adanorm_num_embeddings, hidden_dim)
-            raise ValueError(
-                "Adaptive LayerNorm is enabled because `use_adaptive_norm=True`, but no `bandwidth` was provided, `bandwidth` to derive the cond_embedding_id."
-            )
-
+    def forward(self, hidden_states: torch.Tensor, cond_embedding_id: torch.LongTensor):
         hidden_states = F.layer_norm(hidden_states, (self.hidden_dim,), weight=None, bias=None, eps=self.eps)
         return hidden_states * self.weight[cond_embedding_id].unsqueeze(0) + self.bias[cond_embedding_id].unsqueeze(0)
 
@@ -266,7 +264,7 @@ class VocosModel(VocosPreTrainedModel):
                             or from raw audio via `processor(audio=waveform, bandwidth=1.5)`, you need to provide bandwidth for both.
 
         bandwidth (`float`, *optional*):
-            Target bandwidth for EnCodec quantizer [1.5, 3, 6, 12] kbps respectively, `None` for Mel-spectrogram features.
+            Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, or `None` for Mel-spectrogram features.
 
         Returns:
             `torch.FloatTensor` of shape (batch_size, time): Reconstructed audio waveform .
@@ -277,8 +275,8 @@ class VocosModel(VocosPreTrainedModel):
         >>> from datasets import load_dataset, Audio
         >>> from transformers import VocosProcessor, VocosModel
 
-        >>> processor = VocosProcessor.from_pretrained("idk/vocos-mel-24khz")
-        >>> model = VocosModel.from_pretrained("idk/vocos-mel-24khz")
+        >>> processor = VocosProcessor.from_pretrained("Manel/vocos-mel-24khz")
+        >>> model = VocosModel.from_pretrained("Manel/vocos-mel-24khz")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
@@ -290,9 +288,10 @@ class VocosModel(VocosPreTrainedModel):
 
 
         >>> # Encode audio using EnCodec neural codec and reconstruct from audio from that
-        >>> processor = VocosProcessor.from_pretrained("idk/vocos-encodec-24khz")
-        >>> model = VocosModel.from_pretrained("idk/vocos-encodec-24khz")
+        >>> processor = VocosProcessor.from_pretrained("Manel/vocos-encodec-24khz")
+        >>> model = VocosModel.from_pretrained("Manel/vocos-encodec-24khz")
 
+        >>> bandwidth = 6.0
         >>> inputs = processor(audio=audio_sample, bandwidth=bandwidth)
         >>> reconstructed_audio = model(**inputs)
 

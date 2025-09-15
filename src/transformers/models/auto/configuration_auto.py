@@ -858,7 +858,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("vivit", "ViViT"),
         ("vjepa2", "VJEPA2Model"),
         ("vocos", "Vocos"),
-        ("vocos_with_encodec", "VocosWithEncodec"),
         ("voxtral", "Voxtral"),
         ("voxtral_encoder", "Voxtral Encoder"),
         ("wav2vec2", "Wav2Vec2"),

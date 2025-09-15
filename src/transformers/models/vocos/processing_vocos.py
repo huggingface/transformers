@@ -63,6 +63,7 @@ class VocosProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor, audio_tokenizer):
         super().__init__(feature_extractor=feature_extractor, audio_tokenizer=audio_tokenizer)
+        self.audio_tokenizer.eval()
 
     def __call__(
         self,
@@ -74,10 +75,11 @@ class VocosProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare inputs for the Vocos model, it supports two processing workflows:
-        - Using processor for the Mel-spectrogram variant:  extracts mel-spectrogram features from raw audio, the `audio` argument (used when no
-            `bandwidth` is provided) is forwarded to the VocosFeatureExtractor's [`~VocosFeatureExtractor.__call__`] inside `_process_mel_path`.
-        - Using processor for the EnCodec variant: extracts embeddings neural audio codec EnCodec [`EncodecModel`]  either from raw audio or pre-computed codes
-            with bandwidth conditioning (when `bandwidth` is given).
+        - Mel-spectrogram variant (only `audio` provided): extracts mel-spectrogram features from raw audio, by passing
+        it to VocosFeatureExtractor [`~VocosFeatureExtractor.__call__`].
+        - EnCodec variant (`codes` or `bandwidth` provided): if `audio` provided and `codes` not provided, embeddings
+        are computed with the neural audio codec EnCodec [`EncodecModel`] with the given `bandwidth`; if `codes` are
+        provided, the corresponding embeddings are computed for the target bandwidth.
 
         Args:
             audio (`np.ndarray`, `torch.Tensor`, *optional*):
@@ -103,70 +105,56 @@ class VocosProcessor(ProcessorMixin):
 
         self.sampling_rate = audio_kwargs["sampling_rate"]
         self.bandwidths = audio_kwargs["bandwidths"]
+        if bandwidth is not None and bandwidth not in self.bandwidths:
+            raise ValueError(f"bandwidth {bandwidth} is not supported, supported bandwidths are {self.bandwidths}")
 
-        if codes is None and audio is None:
-            raise ValueError("Either 'codes' or 'audio' must be provided")
+        features = None
+        if audio is not None:
+            if bandwidth is not None:
+                # encode audio as in:
+                # https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L79
+                if isinstance(audio, np.ndarray):
+                    audio = torch.from_numpy(audio)
+                if audio.dim() == 1:
+                    audio = audio.unsqueeze(0).unsqueeze(1)
+                elif audio.dim() == 2:
+                    audio = audio.unsqueeze(1)
+                with torch.no_grad():
+                    encoded_frames = self.audio_tokenizer.encoder(audio)
+                    codes = self.audio_tokenizer.quantizer.encode(encoded_frames, bandwidth=bandwidth)
+            else:
+                # mel spectrogram path, TODO allow tensor input for feature extractor
+                if isinstance(audio, torch.Tensor):
+                    audio = audio.numpy()
+                features = self.feature_extractor(audio, **audio_kwargs).input_features
 
         if codes is not None:
             if codes.ndim not in (2, 3):
                 raise ValueError(
                     f"`codes` must have shape (num_codebooks, sequence_length) or (num_codebooks, batch_size, sequence_length), but got {codes.shape}."
                 )
-            return self._get_encodec_features(codes, bandwidth, return_tensors)
+            if codes.dim() == 2:
+                # add batch dimension
+                codes = codes.unsqueeze(1)
 
-        elif audio is not None:
-            if bandwidth is not None:
-                if bandwidth not in self.bandwidths:
-                    raise ValueError(
-                        f"bandwidth {bandwidth} is not supported, supported bandwidths are {self.bandwidths}"
-                    )
-                # encode audio
-                codes = self._encode_audio(audio, self.sampling_rate, bandwidth)
-                return self._get_encodec_features(codes, bandwidth, return_tensors)
-            else:
-                # mel spectrogram path
-                return self._process_mel_path(audio, self.sampling_rate, return_tensors, **kwargs)
+            # Extract codebook weights: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L71
+            num_quantizers = self.audio_tokenizer.quantizer.get_num_quantizers_for_bandwidth(max(self.bandwidths))
+            codebook_weights = torch.cat(
+                [layer.codebook.embed for layer in self.audio_tokenizer.quantizer.layers[:num_quantizers]], dim=0
+            )
+            num_bins = self.audio_tokenizer.quantizer.codebook_size
+            # Embed with position https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/pretrained.py#L117
+            offsets = torch.arange(0, num_bins * len(codes), num_bins, device=codes.device).reshape(-1, 1, 1)
+            embeddings_idxs = codes + offsets
+            features = F.embedding(embeddings_idxs, codebook_weights).sum(dim=0).transpose(1, 2)
 
-    def _encode_audio(self, audio, sampling_rate, bandwidth):
-        """Encode audio to codes"""
-        if isinstance(audio, np.ndarray):
-            audio = torch.from_numpy(audio)
-        if audio.dim() == 1:
-            audio = audio.unsqueeze(0).unsqueeze(1)
-        elif audio.dim() == 2:
-            audio = audio.unsqueeze(1)
+        if features is None:
+            raise ValueError("Either 'codes' or 'audio' must be provided to compute features.")
 
-        with torch.no_grad():
-            encoded_frames = self.audio_tokenizer.encoder(audio)
-            self.audio_tokenizer.eval()
-            codes = self.audio_tokenizer.quantizer.encode(encoded_frames, bandwidth=bandwidth)
-        return codes
-
-    def _process_mel_path(self, audio, sampling_rate, return_tensors, **kwargs):
-        """Process audio through mel spectrogram path"""
-        if isinstance(audio, torch.Tensor):
-            audio = audio.numpy()
-        inputs = self.feature_extractor(audio, sampling_rate=sampling_rate, return_tensors="pt", **kwargs)
-        return BatchFeature({"features": inputs.input_features}, tensor_type=return_tensors)
-
-    def _get_encodec_features(self, codes, bandwidth, return_tensors):
-        """Convert codes to features for model input"""
-        features = self._audio_codes_to_features(codes)
-        return BatchFeature({"features": features, "bandwidth": float(bandwidth)}, tensor_type=return_tensors)
-
-    def _audio_codes_to_features(self, codes):
-        """Convert audio codes to embedding features"""
-        if codes.dim() == 2:
-            codes = codes.unsqueeze(1)
-        num_quantizers = self.audio_tokenizer.quantizer.get_num_quantizers_for_bandwidth(max(self.bandwidths))
-        codebook_weights = torch.cat(
-            [layer.codebook.embed for layer in self.audio_tokenizer.quantizer.layers[:num_quantizers]], dim=0
-        )
-        num_bins = self.audio_tokenizer.quantizer.codebook_size
-        offsets = torch.arange(0, num_bins * len(codes), num_bins, device=codes.device).reshape(-1, 1, 1)
-        embeddings_idxs = codes + offsets
-        features = F.embedding(embeddings_idxs, codebook_weights).sum(dim=0)
-        return features.transpose(1, 2)
+        data = {"features": features}
+        if bandwidth is not None:
+            data["bandwidth"] = float(bandwidth)
+        return BatchFeature(data, tensor_type=return_tensors)
 
 
 __all__ = ["VocosProcessor"]

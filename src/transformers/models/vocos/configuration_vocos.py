@@ -14,9 +14,6 @@
 # limitations under the License.
 """Vocos model configuration"""
 
-from collections.abc import Sequence
-from typing import Literal
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -29,18 +26,18 @@ class VocosConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`VocosModel`]. It is used to
     instantiate a Vocos vocoder model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    [Manel/Vocos](https://huggingface.co/Manel/Vocos) architecture.
+    [Manel/vocos-mel-24khz](https://huggingface.co/Manel/vocos-mel-24khz) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
     outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
     Args:
         input_channels (`int`, *optional*, defaults to 100):
-            Number of mel‐spectrogram input channels (i.e. number of mel filter bins).
+            Number of mel-spectrogram input channels (i.e. number of mel filter bins).
         hidden_dim (`int`, *optional*, defaults to 512):
             Hidden dimension for the ConvNeXt backbone.
         intermediate_dim (`int`, *optional*, defaults to 1536):
-            Dimension of the feed‐forward layers inside each ConvNeXt block.
+            Dimension of the feed-forward layers inside each ConvNeXt block.
         num_layers (`int`, *optional*, defaults to 8):
             Number of ConvNeXt blocks to stack.
         kernel_size (`int`, *optional*, defaults to 7):
@@ -48,21 +45,22 @@ class VocosConfig(PretrainedConfig):
         padding (`int`, *optional*, defaults to 3):
             Padding applied to those convolutions.
         layer_scale_init_value (`float`, *optional*, defaults to `1/8`):
-            Initial value for layer‐scale (if >0, enables per‐block scaling).
+            Initial value for layer-scale (if >0, enables per-block scaling).
         use_adaptive_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use adaptive layer normalization .
+            Whether to use adaptive layer normalization.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for all LayerNorm operations.
         n_fft (`int`, *optional*, defaults to 1024):
-            FFT size for STFT/ISTFT used in VocosISTFT head.
+            FFT size for STFT/ISTFT used in `VocosISTFTHead`.
         hop_length (`int`, *optional*, defaults to 256):
-            Hop length between STFT frames used in VocosISTFT head.
+            Hop length between STFT frames used in `VocosISTFTHead`.
         spec_padding (`str`, *optional*, defaults to `"center"`):
             Padding mode for spectrogram inversion (`"center"` or `"same"`).
-        bandwidths (`Sequence[float]`, *optional*, defaults to `(1.5, 3.0, 6.0, 12.0)`):
-            Supported target bandwidths in kbps, This determines
-            the number of quantizers/codebooksused in RVQ part
-            of Encodec [2, 4, 6, 8].
+        bandwidths (`List[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0]`):
+            Supported target bandwidths in kbps, This determines the number of quantizers/codebooks used in RVQ part of
+            EnCodec, namely [2, 4, 6, 8].
+        sampling_rate (`int`, *optional*, defaults to 24000):
+            The sampling rate at which the audio waveform should be digitalized expressed in Hertz (Hz).
 
     Example:
 
@@ -77,19 +75,20 @@ class VocosConfig(PretrainedConfig):
 
     def __init__(
         self,
-        input_channels: int = 100,
-        hidden_dim: int = 512,
-        intermediate_dim: int = 1536,
-        num_layers: int = 8,
-        kernel_size: int = 7,
-        padding: int = 3,
-        layer_scale_init_value: float = 1 / 8,
-        use_adaptive_norm: bool = False,
-        layer_norm_eps: float = 1e-6,
-        n_fft: int = 1024,
-        hop_length: int = 256,
-        spec_padding: Literal["center", "same"] = "center",
-        bandwidths: Sequence[float] = (1.5, 3.0, 6.0, 12.0),
+        input_channels=100,
+        hidden_dim=512,
+        intermediate_dim=1536,
+        num_layers=8,
+        kernel_size=7,
+        padding=3,
+        layer_scale_init_value=1 / 8,
+        use_adaptive_norm=False,
+        layer_norm_eps=1e-6,
+        n_fft=1024,
+        hop_length=256,
+        spec_padding="center",
+        bandwidths=[1.5, 3.0, 6.0, 12.0],
+        sampling_rate=24000,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -106,6 +105,7 @@ class VocosConfig(PretrainedConfig):
         self.hop_length = hop_length
         self.spec_padding = spec_padding
         self.bandwidths = list(bandwidths)
+        self.sampling_rate = sampling_rate
 
 
 __all__ = ["VocosConfig"]
