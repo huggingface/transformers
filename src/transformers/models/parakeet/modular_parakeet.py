@@ -75,9 +75,9 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
 class ParakeetEncoderFeedForward(nn.Module):
     def __init__(self, config: ParakeetEncoderConfig):
         super().__init__()
-        self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
+        self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.attention_bias)
         self.activation = ACT2FN[config.hidden_act]
-        self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
+        self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.attention_bias)
         self.activation_dropout = config.activation_dropout
 
     def forward(self, hidden_states):
