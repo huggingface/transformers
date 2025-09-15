@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The zagros team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Qwen3-Next model configuration"""
+"""zagros-maxNext model configuration"""
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
@@ -25,9 +25,9 @@ logger = logging.get_logger(__name__)
 class ZagrosNextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ZagrosNextModel`]. It is used to instantiate a
-    Qwen3-Next model according to the specified arguments, defining the model architecture.
+    zagros-maxNext model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of
-    Qwen3-Next-80B-A3B-Instruct [Qwen/Qwen3-Next-80B-A3B-Instruct](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Instruct).
+    zagros-maxNext-80B-A3B-Instruct [zagros/zagros-maxNext-80B-A3B-Instruct](https://huggingface.co/zagros/zagros-maxNext-80B-A3B-Instruct).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -152,7 +152,7 @@ class ZagrosNextConfig(PretrainedConfig):
     >>> # Initializing a ZagrosNext style configuration
     >>> configuration =  ZagrosNextConfig()
 
-    >>> # Initializing a model from the Qwen3-Next-80B-A3B style configuration
+    >>> # Initializing a model from the zagros-maxNext-80B-A3B style configuration
     >>> model = ZagrosNextModel(configuration)
 
     >>> # Accessing the model configuration

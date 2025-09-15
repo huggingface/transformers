@@ -5,7 +5,7 @@
 #                          modular_zagros_next.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The Zagros team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1191,8 +1191,8 @@ class ZagrosNextForCausalLM(ZagrosNextPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, ZagrosNextForCausalLM
 
-        >>> model = ZagrosNextForCausalLM.from_pretrained("Qwen/Qwen3-Next-80B-A3B-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-Next-80B-A3B-Instruct")
+        >>> model = ZagrosNextForCausalLM.from_pretrained("nebularesearchtrain/zagros-max")
+        >>> tokenizer = AutoTokenizer.from_pretrained("nebularesearchtrain/zagros-max")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
