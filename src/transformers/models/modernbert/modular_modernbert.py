@@ -802,17 +802,9 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             init_weight(module.Wo, stds["out"])
         elif isinstance(module, ModernBertPredictionHead):
             init_weight(module.dense, stds["out"])
-        elif isinstance(module, ModernBertForMaskedLM):
+        elif isinstance(module, PreTrainedModel) and hasattr(module, "decoder"):
             init_weight(module.decoder, stds["out"])
-        elif isinstance(
-            module,
-            (
-                ModernBertForSequenceClassification,
-                ModernBertForMultipleChoice,
-                ModernBertForTokenClassification,
-                ModernBertForQuestionAnswering,
-            ),
-        ):
+        elif isinstance(module, PreTrainedModel) and hasattr(module, "classifier"):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)
