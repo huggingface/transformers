@@ -319,6 +319,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3", "Qwen3Model"),
         ("qwen3_moe", "Qwen3MoeModel"),
         ("qwen3_next", "Qwen3NextModel"),
+        ("zagros_next", "ZagrosNextModel"),
         ("recurrent_gemma", "RecurrentGemmaModel"),
         ("reformer", "ReformerModel"),
         ("regnet", "RegNetModel"),
