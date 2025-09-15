@@ -240,7 +240,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
             )
         else:
             self.gate_proj = nn.Parameter(
-                torch.randn(
+                torch.empty(
                     self.num_experts,
                     config.moe_intermediate_size,
                     config.hidden_size,
@@ -248,7 +248,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
                 requires_grad=True,
             )
             self.up_proj = nn.Parameter(
-                torch.randn(
+                torch.empty(
                     self.num_experts,
                     config.moe_intermediate_size,
                     config.hidden_size,
@@ -256,7 +256,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
                 requires_grad=True,
             )
             self.down_proj = nn.Parameter(
-                torch.randn(
+                torch.empty(
                     self.num_experts,
                     config.hidden_size,
                     config.moe_intermediate_size,
@@ -334,8 +334,15 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         return permuted_indices, m_sizes
 
     def moe_forward(self, x, num_tokens_per_expert):
-        experts_per_ep_rank = self.num_experts
-        num_ep_ranks = 1
+        num_ep_ranks = int(os.environ.get("EP_SIZE", 1))
+        experts_per_ep_rank = self.num_experts // num_ep_ranks
+
+        gate_proj, up_proj, down_proj = self.gate_proj, self.up_proj, self.down_proj
+
+        if isinstance(self.gate_proj, torch.distributed.tensor.DTensor):
+            gate_proj = self.gate_proj.to_local()
+            up_proj = self.up_proj.to_local()
+            down_proj = self.down_proj.to_local()
 
         with torch.no_grad():
             permuted_indices, num_tokens_per_expert = self._generate_permute_indices(
@@ -350,11 +357,11 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         x = x[permuted_indices, :]
 
         offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
-        g = self.act_fn(torch._grouped_mm(x.bfloat16(), self.gate_proj.bfloat16().transpose(-2, -1), offs=offsets))
+        g = self.act_fn(torch._grouped_mm(x.bfloat16(), gate_proj.bfloat16().transpose(-2, -1), offs=offsets))
 
-        g2 = g * torch._grouped_mm(x.bfloat16(), self.up_proj.bfloat16().transpose(-2, -1), offs=offsets)
+        g2 = g * torch._grouped_mm(x.bfloat16(), up_proj.bfloat16().transpose(-2, -1), offs=offsets)
 
-        out = torch._grouped_mm(g2, self.down_proj.bfloat16().transpose(-2, -1), offs=offsets).type_as(x)
+        out = torch._grouped_mm(g2, down_proj.bfloat16().transpose(-2, -1), offs=offsets).type_as(x)
 
         out_unpermuted = out.new_empty(input_shape)
         out_unpermuted[permuted_indices, :] = out
@@ -453,6 +460,7 @@ class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
         ):
+            self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
             self.mlp = Qwen3MoeSparseMoeBlock(config)
         else:
             self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
