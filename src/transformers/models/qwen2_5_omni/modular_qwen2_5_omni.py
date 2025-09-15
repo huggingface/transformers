@@ -54,6 +54,7 @@ from ...utils import (
     check_torch_load_is_safe,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.hub import cached_file
 
 
@@ -4083,13 +4084,13 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         return model
 
     @torch.no_grad()
+    @deprecate_kwarg("return_audio", version="v5", new_name="generation_mode")
     # TODO: raushan, defaults should be saved in generation config
     def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
         speaker: str = "Chelsie",
         use_audio_in_video: bool = False,
-        return_audio: Optional[bool] = None,
         thinker_max_new_tokens: int = 1024,
         talker_max_new_tokens: int = 4096,
         talker_do_sample: bool = True,
@@ -4110,8 +4111,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 Which speaker should be used in audio response.
             use_audio_in_video (`bool`, defaults to False):
                 Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
-            return_audio (`Optional[bool]`, *optional*):
-                Whether or not return response in audio format. When `return_audio=None`, this parameter is same as `config.enable_audio_output`.
+            generation_mode (`Optional[str]`, *optional*):
+                Whether or not return response in audio format. When `generation_mode="audio"`, this parameter is same as `config.enable_audio_output`.
             kwargs (*optional*):
                 - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model.
                 - With a *thinker_*, *talker_*, *token2wav_* prefix, they will be input for the `generate` method of the
@@ -4123,6 +4124,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 - **Text** (`torch.Tensor`): Generated text token sequence.
                 - **Audio waveform** (`torch.Tensor`): Generated audio waveform.
         """
+        # check `False` on purpose because the paramter can be `str/bool`. This is needed for BC
+        return_audio = kwargs.get("generation_mode") != "text" and kwargs.get("generation_mode") is not False
+
         if speaker not in self.speaker_map:
             raise ValueError(f"{speaker} is not available, available speakers: {self.speaker_map.keys()}")
         if return_audio and not self.has_talker:

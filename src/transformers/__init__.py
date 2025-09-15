@@ -819,6 +819,7 @@ if TYPE_CHECKING:
     from .optimization_tf import GradientAccumulator as GradientAccumulator
     from .optimization_tf import WarmUp as WarmUp
     from .optimization_tf import create_optimizer as create_optimizer
+    from .pipelines import AnyToAnyPipeline as AnyToAnyPipeline
 
     # Pipelines
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
@@ -837,7 +838,6 @@ if TYPE_CHECKING:
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
     from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
-    from .pipelines import MultimodalGenerationPipeline as MultimodalGenerationPipeline
     from .pipelines import NerPipeline as NerPipeline
     from .pipelines import ObjectDetectionPipeline as ObjectDetectionPipeline
     from .pipelines import PipedPipelineDataFormat as PipedPipelineDataFormat

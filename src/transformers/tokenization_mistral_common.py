@@ -1447,12 +1447,12 @@ class MistralCommonTokenizer(PushToHubMixin):
         def _maybe_adapt_message(message: dict[str, Any]) -> None:
             """Adapt message to `mistral-common` format and leave validation to `mistral-common`."""
             if not isinstance(message, dict):
-                return
+                return message
             maybe_list_content: Optional[Union[str, list[dict[str, Union[str, dict[str, Any]]]]]] = message.get(
                 "content"
             )
             if not maybe_list_content or isinstance(maybe_list_content, str):
-                return
+                return message
 
             normalized_content: list[dict[str, Union[str, dict[str, Any]]]] = []
             message = message.copy()

@@ -61,7 +61,7 @@ class Chat:
 
 
 @add_end_docstrings(build_pipeline_init_args(has_processor=True))
-class MultimodalGenerationPipeline(Pipeline):
+class AnyToAnyPipeline(Pipeline):
     """
     Multimodal Generation pipeline using an `AutoModelForMultimodalLM`. This pipeline generates text given any
     combination of multimodal data and text.When the underlying model is a conversational model, it can also
@@ -78,7 +78,7 @@ class MultimodalGenerationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> pipe = pipeline(task="multimodal-generation", model="google/gemma-3n-E4B-it")
+    >>> pipe = pipeline(task="any-to-any", model="google/gemma-3n-E4B-it")
     >>> pipe("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", text="A photo of")
     [{'generated_text': 'a photo of two birds'}]
     ```
@@ -86,7 +86,7 @@ class MultimodalGenerationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> pipe = pipeline("multimodal-generation", model="google/gemma-3n-E4B-it")
+    >>> pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
     >>> messages = [
     >>>     {
     >>>         "role": "user",
@@ -229,22 +229,21 @@ class MultimodalGenerationPipeline(Pipeline):
                 ImageInput,
             ]
         ] = None,
-        videos: Optional[VideoInput] = None,
-        audio: Optional[AudioInput] = None,
+        videos: Optional[Union[str, list[str], VideoInput]] = None,
+        audio: Optional[Union[str, list[str], AudioInput]] = None,
         **kwargs,
     ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Generate a text given text and optionally multimodal data passed as inputs.
 
         Args:
-            text (str, list[str], `list[dict[str, Union[str, PIL.Image]]]`):
+            text (str, list[str], `list[dict]`):
                 The text to be used for generation. If a list of strings is passed, the length of the list should be
                 the same as the number of images. Text can also follow the chat format: a list of dictionaries where
                 each dictionary represents a message in a conversation. Each dictionary should have two keys: 'role'
                 and 'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a list of
-                dictionary containing the text of the message and the type of the message. The type of the message
-                can be either 'text' or 'image'. If the type is 'image', no text is needed.
-            images (`str`, `list[str]`, `PIL.Image, `list[PIL.Image]`, `list[dict[str, Union[str, PIL.Image]]]`):
+                dictionary containing the text of the message and the type of the message.
+            images (`str`, `list[str]`, `ImageInput`):
                 The pipeline handles three types of images:
 
                 - A string containing a HTTP(s) link pointing to an image
@@ -253,6 +252,24 @@ class MultimodalGenerationPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Finally, this pipeline also supports
                 the chat format (see `text`) containing images and text in this argument.
+            videos (`str`, `list[str]`, `VideoInput`):
+                The pipeline handles three types of videos:
+
+                - A string containing a HTTP(s) link pointing to a video
+                - A string containing a local path to a video
+                - A video loaded and decoded to array format
+
+                The pipeline accepts either a single video or a batch of videos. Finally, this pipeline also supports
+                the chat format (see `text`) containing videos and text in this argument.
+            audio (`str`, `list[str]`, `AudioInput`):
+                The pipeline handles three types of audios:
+
+                - A string containing a HTTP(s) link pointing to an audio
+                - A string containing a local path to an audio
+                - An audio loaded in PIL directly
+
+                The pipeline accepts either a single audios or a batch of audios. Finally, this pipeline also supports
+                the chat format (see `text`) containing audios and text in this argument.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Returns the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
@@ -272,8 +289,10 @@ class MultimodalGenerationPipeline(Pipeline):
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key (cannot
             return a combination of both `generated_text` and `generated_token_ids`):
 
-            - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
-            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The token
+            - **generated_text** (`str`, present when `return_text=True` and `generation_mode="text") -- The generated text.
+            - **generated_audio** (`np.ndarray`, present when `generation_mode="audio") -- The generated audio.
+            - **generated_image** (`PIL.Image.Image`, present when `generation_mode="image") -- The generated image.
+            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True` and `generation_mode="text") -- The token
                 ids of the generated text.
             - **input_text** (`str`) -- The input text.
         """
