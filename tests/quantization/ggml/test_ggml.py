@@ -1095,11 +1095,9 @@ class GgufModelTests(unittest.TestCase):
         )
         model.eval()
 
-        # --- Assert: correct class + correct config type and fields ---
         self.assertIsInstance(model, UMT5EncoderModel)
         self.assertIsInstance(model.config, UMT5Config)
         self.assertEqual(model.config.model_type, "umt5")
-        # architectures should reflect the encoder variant
         self.assertIn("UMT5EncoderModel", getattr(model.config, "architectures", []))
 
         # --- Smoke: tiny forward pass to ensure weights/tensor mapping are valid ---
