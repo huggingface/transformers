@@ -21,13 +21,11 @@ from transformers import (
     Qwen3VLForConditionalGeneration,
     Qwen3VLModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     require_torch,
     torch_device,
 )
-from transformers.utils import is_cv2_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -38,14 +36,8 @@ from ...test_modeling_common import (
 )
 
 
-if is_cv2_available():
-    pass
-
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class Qwen3VLVisionText2TextModelTester:

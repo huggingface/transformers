@@ -27,10 +27,9 @@ from ...test_video_processing_common import VideoProcessingTestMixin, prepare_vi
 if is_torch_available():
     from PIL import Image
 
-if is_vision_available():
-    if is_torchvision_available():
-        from transformers import Qwen3VLVideoProcessor
-        from transformers.models.qwen3_vl.video_processing_qwen3_vl import smart_resize
+if is_vision_available() and is_torchvision_available():
+    from transformers import Qwen3VLVideoProcessor
+    from transformers.models.qwen3_vl.video_processing_qwen3_vl import smart_resize
 
 
 class Qwen3VLVideoProcessingTester:
