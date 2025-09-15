@@ -14,6 +14,8 @@
 # limitations under the License.
 """Tokenization classes for Blt."""
 
+import json
+import os
 from typing import Optional
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -22,7 +24,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {}  # Blt doesn't require external vocab files
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 
 class BltTokenizer(PreTrainedTokenizer):
@@ -107,7 +109,6 @@ class BltTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         """Returns vocab size"""
-        # Account for byte tokens plus special tokens
         return self._utf_vocab_size + self.offset
 
     def get_vocab(self):
@@ -117,7 +118,7 @@ class BltTokenizer(PreTrainedTokenizer):
         return vocab
 
     def _convert_token_to_id(self, token: str) -> int:
-        """Converts a token (str) to an id using the vocab."""
+        """Converts a token (str) in an id using the vocab."""
         if token in self.added_tokens_encoder:
             return self.added_tokens_encoder[token]
 
@@ -132,7 +133,7 @@ class BltTokenizer(PreTrainedTokenizer):
         return self.unk_token_id
 
     def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (integer) to a token (str) using the vocab."""
+        """Converts an index (integer) in a token (str) using the vocab."""
         for token, token_id in self.added_tokens_encoder.items():
             if token_id == index:
                 return token
@@ -144,25 +145,32 @@ class BltTokenizer(PreTrainedTokenizer):
         return str(self.unk_token)
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
-        """Converts a sequence of tokens to a single string."""
+        """Converts a sequence of tokens (string) in a single string."""
         byte_values = []
 
         for token in tokens:
-            # Skip special tokens by checking if they're in added_tokens_encoder
-            if token in self.added_tokens_encoder:
-                continue
-
-            try:
-                byte_val = int(token)
-                if 0 <= byte_val <= 255:
-                    byte_values.append(byte_val)
-            except ValueError:
-                continue
+            if token in self.added_tokens_decoder:
+                tok_string = self.added_tokens_decoder[token].encode("utf-8")
+                byte_values.extend(tok_string)
+            elif token in self.added_tokens_encoder:
+                tok_string = token.encode("utf-8")
+                byte_values.extend(tok_string)
+            else:
+                try:
+                    byte_val = int(token)
+                    if 0 <= byte_val <= 255:
+                        byte_values.append(byte_val)
+                except ValueError:
+                    continue
 
         return bytes(byte_values).decode("utf-8", errors="ignore")
 
     def _tokenize(self, text: str, **kwargs) -> list[str]:
-        """Converts a string to a list of tokens. For Blt, we work directly with byte values."""
+        """
+        Args:
+            text: TextInput
+        Returns a tokenized string. For Blt, we work directly with byte values.
+        """
         return [str(byte_val) for byte_val in text.encode("utf-8", errors="ignore")]
 
     def build_inputs_with_special_tokens(
@@ -176,13 +184,13 @@ class BltTokenizer(PreTrainedTokenizer):
         - pair of sequences: `<s> A </s> B </s>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         bos = [self.bos_token_id] if self.add_bos_token else []
         eos = [self.eos_token_id] if self.add_eos_token else []
@@ -199,15 +207,15 @@ class BltTokenizer(PreTrainedTokenizer):
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -221,13 +229,33 @@ class BltTokenizer(PreTrainedTokenizer):
             return bos_token_id + ([0] * len(token_ids_0)) + eos_token_id
         return bos_token_id + ([0] * len(token_ids_0)) + eos_token_id + ([0] * len(token_ids_1)) + eos_token_id
 
-    def get_vocab_size(self) -> int:
-        """Get vocab size like the original tokenizer."""
-        return self.vocab_size
-
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        # Blt doesn't require external vocabulary files since it uses byte-level tokenization
-        return ()
+        """
+        Save the vocabulary and special tokens file to a directory.
+
+        Args:
+            save_directory (`str`):
+                The directory in which to save the vocabulary.
+            filename_prefix (`str`, *optional*):
+                An optional prefix to add to the vocabulary file name.
+
+        Returns:
+            `tuple[str]`: Paths to the files saved.
+        """
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return ()
+
+        vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        vocab = self.get_vocab()
+
+        with open(vocab_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+
+        return (vocab_file,)
 
 
 __all__ = ["BltTokenizer"]

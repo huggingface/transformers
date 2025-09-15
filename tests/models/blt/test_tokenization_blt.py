@@ -14,9 +14,8 @@
 
 import unittest
 
-from transformers import BltTokenizer
+from transformers import BltTokenizer, BltTokenizerFast
 from transformers.testing_utils import require_tokenizers
-from transformers.tokenization_utils import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -25,9 +24,9 @@ from ...test_tokenization_common import TokenizerTesterMixin
 class BltTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = []
     tokenizer_class = BltTokenizer
-    rust_tokenizer_class = None
+    rust_tokenizer_class = BltTokenizerFast
 
-    test_rust_tokenizer = False
+    test_rust_tokenizer = True
     test_sentencepiece = False
     test_slow_tokenizer = True
     from_pretrained_kwargs = {}
@@ -43,170 +42,133 @@ class BltTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs.update({"add_bos_token": True, "add_eos_token": False})
         return super().get_tokenizers(**kwargs)
 
-    def test_simple_encode_decode(self):
-        tokenizer = BltTokenizer(add_bos_token=False, add_eos_token=False)
-
-        text = "Hello"
-        encoded = tokenizer.encode(text, add_special_tokens=False)
-
-        # "Hello" in UTF-8 bytes: [72, 101, 108, 108, 111]
-        # With offset +4: [76, 105, 112, 112, 115]
-        expected = [76, 105, 112, 112, 115]
-        self.assertEqual(encoded, expected)
-
-        decoded = tokenizer.decode(encoded)
-        self.assertEqual(decoded, text)
-
-    def test_special_tokens_encoding(self):
-        tokenizer = BltTokenizer(add_bos_token=True, add_eos_token=True)
-
-        text = "Hi"
-        encoded = tokenizer.encode(text, add_special_tokens=True)
-
-        # "Hi" in UTF-8 bytes: [72, 105] -> with offset: [76, 109]
-        # With BOS (1) and EOS (2): [1, 76, 109, 2]
-        expected = [1, 76, 109, 2]
-        self.assertEqual(encoded, expected)
-
-    def test_tokenize_method(self):
-        tokenizer = BltTokenizer()
-
-        text = "ABC"
-        tokens = tokenizer._tokenize(text)
-
-        # "ABC" in UTF-8 bytes: [65, 66, 67]
-        expected = ["65", "66", "67"]
-        self.assertEqual(tokens, expected)
-
-    def test_token_conversion(self):
-        """Test token to ID and ID to token conversion"""
-        tokenizer = BltTokenizer()
-
-        # Test byte token conversion
-        token = "65"  # Byte value for 'A'
-        token_id = tokenizer._convert_token_to_id(token)
-        self.assertEqual(token_id, 69)  # 65 + 4 offset
-
-        converted_token = tokenizer._convert_id_to_token(token_id)
-        self.assertEqual(converted_token, token)
-
-        bos_id = tokenizer._convert_token_to_id(str(tokenizer.bos_token))
-        self.assertEqual(bos_id, 1)
-
-        bos_token = tokenizer._convert_id_to_token(1)
-        self.assertEqual(bos_token, str(tokenizer.bos_token))
-
-    def test_convert_tokens_to_string(self):
-        tokenizer = BltTokenizer()
-
-        tokens = ["72", "101", "108", "108", "111"]  # "Hello" in bytes
-        result = tokenizer.convert_tokens_to_string(tokens)
-        self.assertEqual(result, "Hello")
-
-        # Test with special tokens mixed in (should be ignored)
-        tokens_with_special = [str(tokenizer.bos_token), "72", "105", str(tokenizer.eos_token)]
-        result = tokenizer.convert_tokens_to_string(tokens_with_special)
-        self.assertEqual(result, "Hi")
-
     def test_unicode_handling(self):
         tokenizer = BltTokenizer(add_bos_token=False, add_eos_token=False)
 
         # Test Unicode character (é)
         text = "café"
         encoded = tokenizer.encode(text, add_special_tokens=False)
+        # "café" in UTF-8 bytes: [99, 97, 102, 195, 169] (é = 195, 169)
+        expected = [byte_val + tokenizer.offset for byte_val in [99, 97, 102, 195, 169]]
+        self.assertEqual(encoded, expected)
         decoded = tokenizer.decode(encoded)
         self.assertEqual(decoded, text)
 
         # Test emoji
         text = "Hello 👋"
         encoded = tokenizer.encode(text, add_special_tokens=False)
+        # "Hello 👋" in UTF-8 bytes: [72, 101, 108, 108, 111, 32, 240, 159, 145, 139] (👋 = 240, 159, 145, 139)
+        expected = [byte_val + tokenizer.offset for byte_val in [72, 101, 108, 108, 111, 32, 240, 159, 145, 139]]
+        self.assertEqual(encoded, expected)
+        decoded = tokenizer.decode(encoded)
+        self.assertEqual(decoded, text)
+
+    def test_special_characters_and_unicode(self):
+        tokenizer = BltTokenizer(add_bos_token=False, add_eos_token=False)
+
+        # Test special characters with unicode
+        text = "Hello, 世界! 🌍"
+        encoded = tokenizer.encode(text, add_special_tokens=False)
+        expected = [
+            byte_val + tokenizer.offset
+            for byte_val in [72, 101, 108, 108, 111, 44, 32, 228, 184, 150, 231, 149, 140, 33, 32, 240, 159, 140, 141]
+        ]
+        self.assertEqual(encoded, expected)
+        decoded = tokenizer.decode(encoded)
+        self.assertEqual(decoded, text)
+
+        # Test mixed special characters, numbers, and unicode
+        text = "Price: $100.50 €75.25 🎉"
+        encoded = tokenizer.encode(text, add_special_tokens=False)
+        expected = [
+            byte_val + tokenizer.offset
+            for byte_val in [
+                80,
+                114,
+                105,
+                99,
+                101,
+                58,
+                32,
+                36,
+                49,
+                48,
+                48,
+                46,
+                53,
+                48,
+                32,
+                226,
+                130,
+                172,
+                55,
+                53,
+                46,
+                50,
+                53,
+                32,
+                240,
+                159,
+                142,
+                137,
+            ]
+        ]
+        self.assertEqual(encoded, expected)
+        decoded = tokenizer.decode(encoded)
+        self.assertEqual(decoded, text)
+
+        # Test control characters with unicode
+        text = "Line1\nLine2\tTabbed 中文"
+        encoded = tokenizer.encode(text, add_special_tokens=False)
+        expected = [
+            byte_val + tokenizer.offset
+            for byte_val in [
+                76,
+                105,
+                110,
+                101,
+                49,
+                10,
+                76,
+                105,
+                110,
+                101,
+                50,
+                9,
+                84,
+                97,
+                98,
+                98,
+                101,
+                100,
+                32,
+                228,
+                184,
+                173,
+                230,
+                150,
+                135,
+            ]
+        ]
+        self.assertEqual(encoded, expected)
         decoded = tokenizer.decode(encoded)
         self.assertEqual(decoded, text)
 
     def test_empty_and_whitespace(self):
         tokenizer = BltTokenizer(add_bos_token=False, add_eos_token=False)
 
-        # Test empty string
         encoded = tokenizer.encode("", add_special_tokens=False)
         self.assertEqual(encoded, [])
         decoded = tokenizer.decode(encoded)
         self.assertEqual(decoded, "")
 
-        # Test single space
         encoded = tokenizer.encode(" ", add_special_tokens=False)
-        self.assertEqual(encoded, [36])  # 32 (space) + 4 offset
+        self.assertEqual(encoded, [32 + tokenizer.offset])  # space + offset
         decoded = tokenizer.decode(encoded)
         self.assertEqual(decoded, " ")
 
-    def test_build_inputs_with_special_tokens(self):
-        tokenizer = BltTokenizer(add_bos_token=True, add_eos_token=True)
-
-        # Single sequence
-        token_ids = [76, 109]  # "Hi" encoded (H=72+4=76, i=105+4=109)
-        result = tokenizer.build_inputs_with_special_tokens(token_ids)
-        expected = [1, 76, 109, 2]  # BOS + tokens + EOS
-        self.assertEqual(result, expected)
-
-        # Pair of sequences
-        token_ids_1 = [76, 109]  # "Hi"
-        token_ids_2 = [66, 121, 101]  # "Bye"
-        result = tokenizer.build_inputs_with_special_tokens(token_ids_1, token_ids_2)
-        expected = [1, 76, 109, 2, 66, 121, 101, 2]  # BOS + seq1 + EOS + seq2 + EOS
-        self.assertEqual(result, expected)
-
-    def test_special_tokens_mask(self):
-        tokenizer = BltTokenizer(add_bos_token=True, add_eos_token=True)
-
-        token_ids = [76, 109]  # "Hi" encoded (H=72+4=76, i=105+4=109)
-        mask = tokenizer.get_special_tokens_mask(token_ids)
-        expected = [1, 0, 0, 1]  # BOS=1, content=0, content=0, EOS=1
-        self.assertEqual(mask, expected)
-
-    def test_add_special_tokens_flags(self):
-        tokenizer1 = BltTokenizer(add_bos_token=True, add_eos_token=True)
-        encoded1 = tokenizer1.encode("Hi", add_special_tokens=True)
-        self.assertEqual(encoded1[0], 1)  # BOS
-        self.assertEqual(encoded1[-1], 2)  # EOS
-
-        tokenizer2 = BltTokenizer(add_bos_token=False, add_eos_token=False)
-        encoded2 = tokenizer2.encode("Hi", add_special_tokens=True)
-        self.assertNotEqual(encoded2[0], 1)  # No BOS
-        self.assertNotEqual(encoded2[-1], 2)  # No EOS
-
-        # Test with only BOS
-        tokenizer3 = BltTokenizer(add_bos_token=True, add_eos_token=False)
-        encoded3 = tokenizer3.encode("Hi", add_special_tokens=True)
-        self.assertEqual(encoded3[0], 1)  # BOS
-        self.assertNotEqual(encoded3[-1], 2)  # No EOS
-
-    def test_added_tokens(self):
-        tokenizer = BltTokenizer()
-
-        custom_token = AddedToken("<custom>", normalized=False, special=True)
-        tokenizer.add_tokens([custom_token])
-
-        self.assertIn("<custom>", tokenizer.get_vocab())
-
-        token_id = tokenizer._convert_token_to_id("<custom>")
-        self.assertIsInstance(token_id, int)
-
-        back_token = tokenizer._convert_id_to_token(token_id)
-        self.assertEqual(back_token, "<custom>")
-
-    @unittest.skip("Blt is byte-level, special tokens are encoded as bytes")
-    def test_add_special_tokens(self):
-        pass
-
     @unittest.skip("Blt byte-level tokenization doesn't handle pretokenized inputs the same way")
     def test_pretokenized_inputs(self):
-        pass
-
-    @unittest.skip("Blt encodes added tokens as bytes, not single tokens")
-    def test_add_tokens_tokenizer(self):
-        pass
-
-    @unittest.skip("Blt tokenizer serialization needs additional work for added tokens")
-    def test_save_and_load_tokenizer(self):
         pass
 
 

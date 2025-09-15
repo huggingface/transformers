@@ -316,7 +316,7 @@ class BltIntegrationTest(unittest.TestCase):
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, use_cache=False
         )
 
-        output_text = tokenizer.decode(generated_ids[0])
+        output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @slow
@@ -422,7 +422,7 @@ class BltIntegrationTest(unittest.TestCase):
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, use_cache=False
         )
 
-        output_text = tokenizer.decode(generated_ids[0])
+        output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @slow
@@ -530,7 +530,7 @@ class BltIntegrationTest(unittest.TestCase):
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, use_cache=False
         )
 
-        output_text = tokenizer.decode(generated_ids[0])
+        output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @slow
@@ -557,5 +557,5 @@ class BltIntegrationTest(unittest.TestCase):
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, use_cache=False
         )
 
-        output_text = tokenizer.decode(generated_ids[0])
+        output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXT)
