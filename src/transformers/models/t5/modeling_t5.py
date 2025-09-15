@@ -1884,8 +1884,18 @@ class T5EncoderForSequenceClassification(T5PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            if self.config.num_labels > 0 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                self.config.problem_type = "single_label_classification"
+            else:
+                self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                batch_size, _ = input_ids.shape
+                loss = loss_fct(logits.view(batch_size, self.num_labels), labels.view(batch_size, self.num_labels))
 
         if not return_dict:
             output = (logits,) + outputs
