@@ -319,7 +319,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3", "Qwen3Model"),
         ("qwen3_moe", "Qwen3MoeModel"),
         ("qwen3_next", "Qwen3NextModel"),
-        ("zagros_next", "ZagrosNextModel"),
         ("recurrent_gemma", "RecurrentGemmaModel"),
         ("reformer", "ReformerModel"),
         ("regnet", "RegNetModel"),
@@ -419,6 +418,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
+        ("zagros_next", "ZagrosNextModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
     ]
@@ -744,6 +744,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetLMHeadModel"),
         ("xlstm", "xLSTMForCausalLM"),
         ("xmod", "XmodForCausalLM"),
+        ("Zagros_next", "ZagrosNextForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
     ]
@@ -1294,6 +1295,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetForSequenceClassification"),
         ("xmod", "XmodForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
+        ("zagros_next", "ZagrosNextForSequenceClassification"),
         ("zamba", "ZambaForSequenceClassification"),
         ("zamba2", "Zamba2ForSequenceClassification"),
     ]
@@ -1381,6 +1383,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetForQuestionAnsweringSimple"),
         ("xmod", "XmodForQuestionAnswering"),
         ("yoso", "YosoForQuestionAnswering"),
+        ("zagros_next", "ZagrosNextForQuestionAnswering"),
     ]
 )
 
@@ -1499,6 +1502,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetForTokenClassification"),
         ("xmod", "XmodForTokenClassification"),
         ("yoso", "YosoForTokenClassification"),
+        ("zagros_next", "ZagrosNextForTokenClassification"),
     ]
 )
 

@@ -583,13 +583,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "Qwen2TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
-        (
-            "zagros_next",
-            (
-                "Qwen2Tokenizer",
-                "Qwen2TokenizerFast" if is_tokenizers_available() else None,
-            ),
-        ),
         ("rag", ("RagTokenizer", None)),
         ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
         (
@@ -764,6 +757,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             (
                 "AlbertTokenizer" if is_sentencepiece_available() else None,
                 "AlbertTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "zagros_next",
+            (
+                "Qwen2Tokenizer",
+                "Qwen2TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
         (
