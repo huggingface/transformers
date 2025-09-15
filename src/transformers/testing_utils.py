@@ -45,7 +45,7 @@ from unittest.mock import patch
 
 import httpx
 import urllib3
-from huggingface_hub import delete_repo
+from huggingface_hub import delete_repo, create_repo
 from packaging import version
 
 from transformers import Trainer
@@ -1933,7 +1933,7 @@ class TemporaryHubRepo:
             repo_id = Path(tmp_dir).name
             if namespace is not None:
                 repo_id = f"{namespace}/{repo_id}"
-            self.repo_url = huggingface_hub.create_repo(repo_id, token=self.token)
+            self.repo_url = create_repo(repo_id, token=self.token)
 
     def __enter__(self):
         return self.repo_url

@@ -13,9 +13,6 @@
 # limitations under the License.
 
 import copy
-import os
-import os.path
-import shutil
 import sys
 import tempfile
 import unittest
@@ -41,7 +38,6 @@ from ..bert.test_modeling_bert import BertModelTester
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
-from utils.fetch_hub_objects_for_ci import url_to_local_path
 
 
 if is_torch_available():
