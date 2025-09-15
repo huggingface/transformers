@@ -17,19 +17,24 @@ from typing import Optional, Union
 import numpy as np
 import torch
 
-from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_librosa_available, logging
+from ...utils.import_utils import requires
 
 
-EPSILON = 1e-10
+if is_librosa_available():
+    import librosa
+
+
+EPSILON = 1e-5
 LOG_ZERO_GUARD_VALUE = 2**-24
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch", "librosa"))
 class ParakeetFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Parakeet feature extractor.
@@ -84,22 +89,23 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         self.win_length = win_length
         self.preemphasis = preemphasis
 
-        self.mel_filters = mel_filter_bank(
-            num_frequency_bins=n_fft // 2 + 1,
-            num_mel_filters=feature_size,
-            min_frequency=0.0,
-            max_frequency=sampling_rate / 2,
-            sampling_rate=sampling_rate,
-            norm="slaney",
-            mel_scale="slaney",
-            dtype=np.float32,
+        # TODO: @eustlb, for now we use librosa to compute the mel filters
+        # indeed mel_filter_bank uses np.float64 (while librosa uses np.float32), giving numerial differences
+        # self.mel_filters = mel_filter_bank(
+        #     num_frequency_bins=n_fft // 2 + 1,
+        #     num_mel_filters=feature_size,
+        #     min_frequency=0.0,
+        #     max_frequency=sampling_rate / 2,
+        #     sampling_rate=sampling_rate,
+        #     norm="slaney",
+        #     mel_scale="slaney",
+        #     dtype=np.float32,
+        # )
+        self.mel_filters = librosa.filters.mel(
+            sr=sampling_rate, n_fft=n_fft, n_mels=feature_size, fmin=0.0, fmax=sampling_rate / 2, norm="slaney"
         )
 
     def _torch_extract_fbank_features(self, waveform, device="cpu"):
-        # preemphasis
-        if self.preemphasis is not None:
-            waveform = torch.cat([waveform[:, :1], waveform[:, 1:] - self.preemphasis * waveform[:, :-1]], dim=1)
-
         # spectrogram
         window = torch.hann_window(self.win_length, periodic=False, device=device)
         stft = torch.stft(
@@ -109,8 +115,13 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             win_length=self.win_length,
             window=window,
             return_complex=True,
+            pad_mode="constant",
         )
-        magnitudes = torch.abs(stft) ** 2
+        # Let's math original implementation
+        # magnitudes = torch.abs(stft) ** 2
+        magnitudes = torch.view_as_real(stft)
+        magnitudes = torch.sqrt(magnitudes.pow(2).sum(-1))
+        magnitudes = magnitudes.pow(2)
 
         # log mel spectrogram
         mel_filters = (
@@ -118,7 +129,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             if isinstance(self.mel_filters, np.ndarray)
             else self.mel_filters
         )
-        mel_spec = mel_filters.T @ magnitudes
+        mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 
         # (batch_size, num_mel_filters, num_frames) -> (batch_size, num_frames, num_mel_filters)
@@ -247,10 +258,23 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors="pt",
         )
+        input_features = padded_inputs.input_features.squeeze(-1)
 
-        input_features = self._torch_extract_fbank_features(padded_inputs.input_features.squeeze(-1), device)
-        features_lengths = padded_inputs.audio_lengths // self.hop_length + 1
-        attention_mask = torch.arange(features_lengths.max(), device=device)[None, :] < features_lengths[:, None]
+        # preemphasis
+        if self.preemphasis is not None:
+            timemask = torch.arange(input_features.shape[1], device=input_features.device).unsqueeze(
+                0
+            ) < padded_inputs.audio_lengths.unsqueeze(1)
+            input_features = torch.cat(
+                [input_features[:, :1], input_features[:, 1:] - self.preemphasis * input_features[:, :-1]], dim=1
+            )
+            input_features = input_features.masked_fill(~timemask, 0.0)
+
+        input_features = self._torch_extract_fbank_features(input_features, device)
+        features_lengths = torch.floor_divide(
+            padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
+        )
+        attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
         # normalize mel features, ignoring padding
         mask = attention_mask.unsqueeze(-1)
@@ -260,8 +284,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         variance = ((input_features_masked - mean) ** 2 * mask).sum(dim=1) / (features_lengths - 1).unsqueeze(-1)
         std = torch.sqrt(variance).unsqueeze(1)
         input_features = (input_features - mean) / (std + EPSILON)
-
-        input_features = input_features.masked_fill(~mask, self.padding_value)
+        input_features *= mask
 
         return BatchFeature(
             data={
