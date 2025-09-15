@@ -1075,8 +1075,14 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
-        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
+        # Extract parameters from kwargs or fall back to config
+        output_attentions = kwargs.get("output_attentions")
+        if output_attentions is None:
+            output_attentions = getattr(self.config, "output_attentions", False)
+
+        output_hidden_states = kwargs.get("output_hidden_states")
+        if output_hidden_states is None:
+            output_hidden_states = getattr(self.config, "output_hidden_states", False)
 
         if input_ids is None and inputs_embeds is None:
             raise ValueError("Either input_ids or inputs_embeds has to be passed.")
@@ -1211,8 +1217,15 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
-        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
+        # Extract parameters from kwargs or fall back to config
+        output_attentions = kwargs.get("output_attentions")
+        if output_attentions is None:
+            output_attentions = getattr(self.config, "output_attentions", False)
+
+        output_hidden_states = kwargs.get("output_hidden_states")
+        if output_hidden_states is None:
+            output_hidden_states = getattr(self.config, "output_hidden_states", False)
+
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if input_ids is None and inputs_embeds is None:
