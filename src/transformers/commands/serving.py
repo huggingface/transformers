@@ -400,11 +400,11 @@ class ServeArguments:
     )
     load_in_8bit: bool = field(
         default=False,
-        metadata={"help": "Whether to use 8 bit precision for the base model - works only with LoRA."},
+        metadata={"help": "Whether to use 8 bit precision for the base model."},
     )
     load_in_4bit: bool = field(
         default=False,
-        metadata={"help": "Whether to use 4 bit precision for the base model - works only with LoRA."},
+        metadata={"help": "Whether to use 4 bit precision for the base model."},
     )
     bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
     use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
