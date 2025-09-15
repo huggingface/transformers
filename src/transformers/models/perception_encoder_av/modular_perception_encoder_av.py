@@ -79,17 +79,14 @@ class VideoEncoderConfig(Config):
 class DACVAEConfig(DacConfig): ...
 
 
-EMPTY_DICT = {}
-
-
 class PerceptionEncoderAVConfig(PretrainedConfig):
     def __init__(
         self,
-        video_encoder: dict = EMPTY_DICT,
-        audio_codec: dict = EMPTY_DICT,
-        audio_encoder: dict = EMPTY_DICT,
-        audio_video_encoder: dict = EMPTY_DICT,
-        text_encoder: dict = EMPTY_DICT,
+        video_encoder: Optional[dict] = None,
+        audio_codec: Optional[dict] = None,
+        audio_encoder: Optional[dict] = None,
+        audio_video_encoder: Optional[dict] = None,
+        text_encoder: Optional[dict] = None,
         separate_text_heads: bool = False,
         output_dim: int = 1024,
         contrastive_head_norm_type: NormalizeTypeConfig = NormalizeTypeConfig.L2,
@@ -97,11 +94,12 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.video_encoder = VideoEncoderConfig.from_dict(video_encoder)
+        audio_codec = audio_codec or {}
+        self.video_encoder = VideoEncoderConfig.from_dict(video_encoder or {})
         self.audio_codec = DACVAEConfig(**audio_codec)
-        self.audio_encoder = TransformerConfig.from_dict(audio_encoder)
-        self.audio_video_encoder = TransformerConfig.from_dict(audio_video_encoder)
-        self.text_encoder = PerceptionEncoderAVModernBertConfig(**text_encoder)
+        self.audio_encoder = TransformerConfig.from_dict(audio_encoder or {})
+        self.audio_video_encoder = TransformerConfig.from_dict(audio_video_encoder or {})
+        self.text_encoder = PerceptionEncoderAVModernBertConfig.from_dict(text_encoder or {})
         self.separate_text_heads = separate_text_heads
         self.output_dim = output_dim
         self.contrastive_head_norm_type = contrastive_head_norm_type

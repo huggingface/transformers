@@ -325,9 +325,6 @@ class FlClapModernBertConfig(PretrainedConfig):
         return output
 
 
-EMPTY_DICT = {}
-
-
 class FLCLAPConfig(PretrainedConfig):
     audio_codec: DACVAEConfig
     audio_encoder: FlClapTransformerConfig
@@ -335,15 +332,16 @@ class FLCLAPConfig(PretrainedConfig):
 
     def __init__(
         self,
-        audio_codec: dict = EMPTY_DICT,
-        audio_encoder: dict = EMPTY_DICT,
-        text_encoder: dict = EMPTY_DICT,
+        audio_codec: Optional[dict] = None,
+        audio_encoder: Optional[dict] = None,
+        text_encoder: Optional[dict] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        audio_codec = audio_codec or {}
         self.audio_codec = DACVAEConfig(**audio_codec)
-        self.audio_encoder = FlClapTransformerConfig.from_dict(audio_encoder)
-        self.text_encoder = FlClapModernBertConfig(**text_encoder)
+        self.audio_encoder = FlClapTransformerConfig.from_dict(audio_encoder or {})
+        self.text_encoder = FlClapModernBertConfig.from_dict(text_encoder or {})
 
     def to_dict(self):
         output = super().to_dict()

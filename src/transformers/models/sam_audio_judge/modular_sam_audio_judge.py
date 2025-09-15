@@ -28,9 +28,6 @@ def mask_from_sizes(sizes: torch.Tensor) -> torch.Tensor:
     return torch.arange(sizes.max()).expand(len(sizes), -1) < sizes.unsqueeze(1)
 
 
-EMPTY_DICT = {}
-
-
 class SamAudioJudgeTransformerConfig(TransformerConfig): ...
 
 
@@ -51,17 +48,18 @@ class SamAudioJudgeConfig(PretrainedConfig):
 
     def __init__(
         self,
-        audio_codec: dict = EMPTY_DICT,
-        audio_encoder: dict = EMPTY_DICT,
-        text_encoder: dict = EMPTY_DICT,
-        finetune_encoder: dict = EMPTY_DICT,
+        audio_codec: Optional[dict] = None,
+        audio_encoder: Optional[dict] = None,
+        text_encoder: Optional[dict] = None,
+        finetune_encoder: Optional[dict] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        audio_codec = audio_codec or {}
         self.audio_codec = DACVAEConfig(**audio_codec)
-        self.audio_encoder = SamAudioJudgeTransformerConfig.from_dict(audio_encoder)
-        self.finetune_encoder = SamAudioJudgeTransformerConfig.from_dict(finetune_encoder)
-        self.text_encoder = SamAudioJudgeModernBertConfig.from_dict(text_encoder)
+        self.audio_encoder = SamAudioJudgeTransformerConfig.from_dict(audio_encoder or {})
+        self.finetune_encoder = SamAudioJudgeTransformerConfig.from_dict(finetune_encoder or {})
+        self.text_encoder = SamAudioJudgeModernBertConfig.from_dict(text_encoder or {})
 
     def to_dict(self):
         output = super().to_dict()
