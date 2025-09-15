@@ -84,6 +84,24 @@ try:
                 )
             },
         },
+        "FastGELU": {
+            "cuda": LayerRepository(
+                repo_id="kernels-community/activation",
+                layer_name="FastGELU",
+            )
+        },
+        "QuickGELU": {
+            "cuda": LayerRepository(
+                repo_id="kernels-community/activation",
+                layer_name="QuickGELU",
+            )
+        },
+        "NewGELU": {
+            "cuda": LayerRepository(
+                repo_id="kernels-community/activation",
+                layer_name="NewGELU",
+            )
+        },
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)
