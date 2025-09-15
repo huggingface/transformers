@@ -2541,6 +2541,7 @@ class GenerationTesterMixin:
                     max_new_tokens=5,
                     output_scores=True,
                     output_logits=True,
+                    output_attentions=True,
                     return_dict_in_generate=True,
                     offload_logits_to_cpu=False,
                     do_sample=False,
@@ -2552,6 +2553,7 @@ class GenerationTesterMixin:
                     max_new_tokens=5,
                     output_scores=True,
                     output_logits=True,
+                    output_attentions=True,
                     return_dict_in_generate=True,
                     offload_logits_to_cpu=True,
                     do_sample=False,
@@ -2560,11 +2562,13 @@ class GenerationTesterMixin:
             # Check that sequences are identical (functionality preserved)
             self.assertTrue(torch.equal(output_gpu.sequences, output_cpu_offload.sequences))
 
-            # Check that scores/logits shapes are preserved
+            # Check that scores/logits/attentions shapes are preserved
             self.assertEqual(len(output_gpu.scores), len(output_cpu_offload.scores))
             self.assertEqual(len(output_gpu.logits), len(output_cpu_offload.logits))
+            if hasattr(output_gpu, "attentions") and output_gpu.attentions:
+                self.assertEqual(len(output_gpu.attentions), len(output_cpu_offload.attentions))
 
-            # Verify that offloading worked: scores and logits should be on CPU
+            # Verify that offloading worked: scores, logits, and attentions should be on CPU
             for i in range(len(output_cpu_offload.scores)):
                 self.assertEqual(output_cpu_offload.scores[i].device.type, "cpu")
                 self.assertEqual(output_cpu_offload.logits[i].device.type, "cpu")
@@ -2576,6 +2580,19 @@ class GenerationTesterMixin:
                 self.assertTrue(
                     torch.allclose(output_gpu.logits[i].cpu(), output_cpu_offload.logits[i], atol=1e-5, rtol=1e-5)
                 )
+
+            # Verify attentions offloading (if present). A custom logic is required.
+            if hasattr(output_cpu_offload, "attentions") and output_cpu_offload.attentions:
+                for i in range(len(output_cpu_offload.attentions)):
+                    attention_tuple = output_cpu_offload.attentions[i]
+                    for j, attention_layer in enumerate(attention_tuple):
+                        self.assertEqual(attention_layer.device.type, "cpu")
+                        # Check equality
+                        if hasattr(output_gpu, "attentions") and output_gpu.attentions:
+                            gpu_attention_layer = output_gpu.attentions[i][j]
+                            self.assertTrue(
+                                torch.allclose(gpu_attention_layer.cpu(), attention_layer, atol=1e-5, rtol=1e-5)
+                            )
 
 
 @require_torch

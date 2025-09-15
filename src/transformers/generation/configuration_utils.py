@@ -257,10 +257,10 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to return the unprocessed prediction logit scores. See `logits` under returned tensors for
             more details.
         offload_logits_to_cpu (`bool`, *optional*, defaults to `False`):
-            Whether or not to transfer logits and scores to CPU memory after each generation step to reduce GPU memory
-            usage. Only effective when `output_scores=True` or `output_logits=True`. This can significantly reduce
+            Whether or not to transfer logits, scores, and attentions to CPU memory after each generation step to reduce GPU memory
+            usage. Only effective when `output_scores=True`, `output_logits=True`, or `output_attentions=True`. This can significantly reduce
             GPU memory consumption during long generations at the cost of some CPU-GPU transfer overhead.
-            NB: if `offload_logits_to_cpu=True`, the returned `scores` and `logits` tensors in the generation output
+            NB: if `offload_logits_to_cpu=True`, the returned `scores`, `logits`, and `attentions` tensors in the generation output
             will be located on CPU memory, not on the same device as the model.
         return_dict_in_generate (`bool`, *optional*, defaults to `False`):
             Whether or not to return a [`~utils.ModelOutput`], as opposed to returning exclusively the generated

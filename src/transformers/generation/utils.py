@@ -2811,11 +2811,21 @@ class GenerationMixin(ContinuousMixin):
                 if output_logits:
                     raw_logits += (_maybe_offload_to_cpu(next_token_logits, offload_logits_to_cpu),)
                 if output_attentions:
-                    decoder_attentions += (
-                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-                    )
                     if self.config.is_encoder_decoder:
-                        cross_attentions += (outputs.cross_attentions,)
+                        decoder_attentions += (
+                            tuple(
+                                _maybe_offload_to_cpu(att, offload_logits_to_cpu) for att in outputs.decoder_attentions
+                            ),
+                        )
+                        cross_attentions += (
+                            tuple(
+                                _maybe_offload_to_cpu(att, offload_logits_to_cpu) for att in outputs.cross_attentions
+                            ),
+                        )
+                    else:
+                        decoder_attentions += (
+                            tuple(_maybe_offload_to_cpu(att, offload_logits_to_cpu) for att in outputs.attentions),
+                        )
 
                 if output_hidden_states:
                     decoder_hidden_states += (
@@ -3296,13 +3306,25 @@ class GenerationMixin(ContinuousMixin):
                     all_scores += (_maybe_offload_to_cpu(log_probs.clone(), offload_logits_to_cpu),)
 
                 if output_attentions:
-                    decoder_attentions += (
-                        (model_outputs.decoder_attentions,)
-                        if self.config.is_encoder_decoder
-                        else (model_outputs.attentions,)
-                    )
                     if self.config.is_encoder_decoder:
-                        cross_attentions += (model_outputs.cross_attentions,)
+                        decoder_attentions += (
+                            tuple(
+                                _maybe_offload_to_cpu(att, offload_logits_to_cpu)
+                                for att in model_outputs.decoder_attentions
+                            ),
+                        )
+                        cross_attentions += (
+                            tuple(
+                                _maybe_offload_to_cpu(att, offload_logits_to_cpu)
+                                for att in model_outputs.cross_attentions
+                            ),
+                        )
+                    else:
+                        decoder_attentions += (
+                            tuple(
+                                _maybe_offload_to_cpu(att, offload_logits_to_cpu) for att in model_outputs.attentions
+                            ),
+                        )
 
                 if output_hidden_states:
                     decoder_hidden_states += (
@@ -3695,6 +3717,18 @@ class GenerationMixin(ContinuousMixin):
                             newly_added_length,
                             is_decoder_attention=True,
                         )
+                        # Apply CPU offloading to the newly added attention tensors
+                        if offload_logits_to_cpu:
+                            # Offload the last `newly_added_length` tuples in cross_attentions
+                            cross_attentions = cross_attentions[:-newly_added_length] + tuple(
+                                tuple(_maybe_offload_to_cpu(att, True) for att in attention_tuple)
+                                for attention_tuple in cross_attentions[-newly_added_length:]
+                            )
+                            # Offload the last `newly_added_length` tuples in decoder_attentions
+                            decoder_attentions = decoder_attentions[:-newly_added_length] + tuple(
+                                tuple(_maybe_offload_to_cpu(att, True) for att in attention_tuple)
+                                for attention_tuple in decoder_attentions[-newly_added_length:]
+                            )
                     # some (V)LLMs have hard requirement on SDPA and thus never return attn
                     elif outputs.attentions[0] is not None:
                         decoder_attentions = _split_model_outputs(
@@ -3704,6 +3738,13 @@ class GenerationMixin(ContinuousMixin):
                             newly_added_length,
                             is_decoder_attention=True,
                         )
+                        # Apply CPU offloading to the newly added attention tensors
+                        if offload_logits_to_cpu:
+                            # Offload the last `newly_added_length` tuples in decoder_attentions
+                            decoder_attentions = decoder_attentions[:-newly_added_length] + tuple(
+                                tuple(_maybe_offload_to_cpu(att, True) for att in attention_tuple)
+                                for attention_tuple in decoder_attentions[-newly_added_length:]
+                            )
                 if output_hidden_states:
                     if self.config.is_encoder_decoder:
                         decoder_hidden_states = _split_model_outputs(
