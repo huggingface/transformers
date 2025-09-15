@@ -40,12 +40,7 @@ def sdpa_attention_paged_forward(
         value = repeat_kv(value, module.num_key_value_groups)
 
     # Get the right causal mask for the current layer
-    if isinstance(attention_mask, dict):
-        sliding_window = getattr(module, "sliding_window", 1)
-        layer_type = "full_attention" if sliding_window == 1 or sliding_window is None else "sliding_attention"
-        causal_mask = attention_mask[layer_type]
-    else:
-        causal_mask = attention_mask
+    causal_mask = attention_mask
 
     # Run the actual attention
     query = query.contiguous()
