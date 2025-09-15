@@ -46,6 +46,7 @@ from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
+    TransformersKwargs,
     is_accelerate_available,
     is_hqq_available,
     is_optimum_quanto_available,
@@ -166,7 +167,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
@@ -176,7 +177,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
     logits: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[tuple[tuple[tuple[torch.FloatTensor]]]] = None
+    past_key_values: Optional[Cache] = None
 
 
 @dataclass
@@ -211,7 +212,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
         decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
@@ -224,7 +225,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[tuple[tuple[tuple[torch.FloatTensor]]]] = None
+    past_key_values: Optional[Cache] = None
 
 
 @dataclass
@@ -256,7 +257,7 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
@@ -268,7 +269,7 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
     beam_indices: Optional[torch.LongTensor] = None
     attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[tuple[tuple[tuple[torch.FloatTensor]]]] = None
+    past_key_values: Optional[Cache] = None
 
 
 @dataclass
@@ -310,7 +311,7 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
         decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
@@ -325,7 +326,7 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[tuple[tuple[tuple[torch.FloatTensor]]]] = None
+    past_key_values: Optional[Cache] = None
 
 
 # TODO (joao): remove the equivalent classes and typing shortcuts below in v5
@@ -559,8 +560,9 @@ class GenerationMixin(ContinuousMixin):
         **kwargs,
     ):
         """
-        Prepare the model inputs for generation. It includes operations like computing the 4D attention mask or
-        slicing inputs given the existing cache.
+        Prepare the model inputs for generation. Notable steps include selecting the correct input key and cloning when appropriate,
+        creating position_ids from the attention_mask when missing, slicing inputs and converting 2D attention masks to 4D for
+        compilable caches, and finally forwarding all additional keyword arguments unchanged to the model's forward pass.
 
         See the forward pass in the model documentation for expected arguments (different models might have different
         requirements for e.g. `past_key_values`). This function should work as is for most LLMs.
@@ -1592,8 +1594,9 @@ class GenerationMixin(ContinuousMixin):
                 decoder_model_args = set(inspect.signature(decoder.forward).parameters)
                 model_args |= {f"decoder_{x}" for x in decoder_model_args}
 
+        # TransformersKwargs are model-agnostic attention and generation arguments such as 'output_attentions'
         for key, value in model_kwargs.items():
-            if value is not None and key not in model_args:
+            if value is not None and key not in model_args and key not in TransformersKwargs.__optional_keys__:
                 unused_model_args.append(key)
 
         if unused_model_args:
@@ -1798,6 +1801,11 @@ class GenerationMixin(ContinuousMixin):
 
         # Finally, apply any passed kwargs
         model_kwargs = generation_config.update(**kwargs)
+        # And keep in model_kwargs variable output controls
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        model_kwargs.update({"output_attentions": output_attentions} if output_attentions else {})
+        model_kwargs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
         return generation_config, model_kwargs
 
