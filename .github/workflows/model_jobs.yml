@@ -97,6 +97,13 @@ jobs:
         run: |
           python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
+      - name: Install torch 2.9.0 RC 1
+        working-directory: /transformers
+        run: |
+          python3 -m pip uninstall -y torch torchvision torchaudio codecarbon torchcodec
+          python3 -m pip install --no-cache-dir torch==2.9.0 torchvision torchaudio torchcodec --index-url https://download.pytorch.org/whl/test/cu126
+          python3 -m pip install --no-cache-dir codecarbon==3.0.2
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
