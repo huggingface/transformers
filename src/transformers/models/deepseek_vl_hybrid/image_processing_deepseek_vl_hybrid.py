@@ -119,12 +119,12 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        do_pad: bool = True,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         high_res_image_mean: Optional[Union[float, list[float]]] = None,
         high_res_image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
+        do_pad: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)

@@ -133,7 +133,8 @@ class ImageProcessorArgs:
 
     do_pad = {
         "description": """
-    Whether to pad the image to the images in the batch.
+    Whether to pad the image. Padding is done either to the largest size in the batch
+    or to a fixed square size per image. The exact padding strategy depends on the model.
     """,
         "shape": None,
     }

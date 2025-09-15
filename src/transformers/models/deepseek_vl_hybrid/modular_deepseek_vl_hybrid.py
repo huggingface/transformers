@@ -505,12 +505,12 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        do_pad: bool = True,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         high_res_image_mean: Optional[Union[float, list[float]]] = None,
         high_res_image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
+        do_pad: bool = True,
         **kwargs,
     ) -> None:
         high_res_size = high_res_size if high_res_size is not None else {"height": 1024, "width": 1024}
@@ -534,6 +534,7 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_convert_rgb=do_convert_rgb,
+            do_pad=do_pad,
             **kwargs,
         )
 
