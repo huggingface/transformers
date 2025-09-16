@@ -30,6 +30,7 @@ from ...modeling_outputs import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import can_return_tuple
 from ..roberta.modeling_roberta import (
     RobertaForCausalLM,
     RobertaForMaskedLM,
@@ -57,6 +58,7 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
 
         self.roberta = CamembertModel(config, add_pooling_layer=False)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -69,9 +71,6 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
         r"""
@@ -89,8 +88,6 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
@@ -100,9 +97,6 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -114,10 +108,6 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
             labels = labels.to(prediction_scores.device)
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -134,6 +124,7 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
 
         self.roberta = CamembertModel(config, add_pooling_layer=False)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -144,9 +135,6 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
@@ -164,8 +152,6 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
@@ -173,9 +159,6 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -206,10 +189,6 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -225,6 +204,7 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
 
         self.roberta = CamembertModel(config, add_pooling_layer=False)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -235,9 +215,6 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
@@ -271,7 +248,6 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -291,9 +267,6 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
             attention_mask=flat_attention_mask,
             head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
         pooled_output = outputs[1]
@@ -308,10 +281,6 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
             labels = labels.to(reshaped_logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,
@@ -328,6 +297,7 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
 
         self.roberta = CamembertModel(config, add_pooling_layer=False)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -338,9 +308,6 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
@@ -356,8 +323,6 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
@@ -365,9 +330,6 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
 
@@ -382,10 +344,6 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
             labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -402,6 +360,7 @@ class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
 
         self.roberta = CamembertModel(config, add_pooling_layer=False)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -413,9 +372,6 @@ class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
@@ -429,8 +385,6 @@ class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
 
             [What are token type IDs?](../glossary#token-type-ids)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
@@ -438,9 +392,6 @@ class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
 
@@ -468,10 +419,6 @@ class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
         return QuestionAnsweringModelOutput(
             loss=total_loss,
             start_logits=start_logits,
@@ -488,6 +435,7 @@ class CamembertForCausalLM(RobertaForCausalLM):
 
         self.roberta = CamembertModel(config, add_pooling_layer=False)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -502,9 +450,6 @@ class CamembertForCausalLM(RobertaForCausalLM):
         labels: Optional[torch.LongTensor] = None,
         past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
@@ -539,7 +484,6 @@ class CamembertForCausalLM(RobertaForCausalLM):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
 
@@ -554,9 +498,6 @@ class CamembertForCausalLM(RobertaForCausalLM):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
@@ -574,10 +515,6 @@ class CamembertForCausalLM(RobertaForCausalLM):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,

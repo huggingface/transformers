@@ -35,6 +35,7 @@ from ...utils import (
     is_torch_flex_attn_available,
     logging,
 )
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_bert_generation import BertGenerationConfig
 
 
@@ -209,14 +210,7 @@ class BertGenerationSelfAttention(nn.Module):
             **kwargs,
         )
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
-
-        outputs = (
-            attn_output,
-            attn_weights,
-        )
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
-        return outputs
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.bert.modeling_bert.BertCrossAttention with Bert->BertGeneration
@@ -309,13 +303,7 @@ class BertGenerationCrossAttention(nn.Module):
             **kwargs,
         )
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
-
-        outputs = (
-            attn_output,
-            attn_weights,
-        )
-        outputs = outputs + (past_key_value,)
-        return outputs
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BertGeneration,BERT->BERT_GENERATION
@@ -362,7 +350,7 @@ class BertGenerationAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         if self.is_cross_attention:
-            self_outputs = self.self(
+            attention_output, attn_weights = self.self(
                 hidden_states,
                 head_mask,
                 encoder_hidden_states,
@@ -371,7 +359,7 @@ class BertGenerationAttention(nn.Module):
                 **kwargs,
             )
         else:
-            self_outputs = self.self(
+            attention_output, attn_weights = self.self(
                 hidden_states,
                 attention_mask,
                 head_mask,
@@ -379,9 +367,8 @@ class BertGenerationAttention(nn.Module):
                 cache_position,
                 **kwargs,
             )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        attention_output = self.output(attention_output, hidden_states)
+        return attention_output, attn_weights
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->BertGeneration
@@ -448,7 +435,7 @@ class BertGenerationLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        self_attention_outputs = self.attention(
+        self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
             head_mask,
@@ -456,12 +443,7 @@ class BertGenerationLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             **kwargs,
         )
-        attention_output = self_attention_outputs[0]
-
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        attention_output = self_attention_output
 
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
@@ -470,8 +452,8 @@ class BertGenerationLayer(GradientCheckpointingLayer):
                     " by setting `config.add_cross_attention=True`"
                 )
 
-            cross_attention_outputs = self.crossattention(
-                attention_output,
+            cross_attention_output, _ = self.crossattention(
+                self_attention_output,
                 None,  # attention_mask
                 head_mask,
                 encoder_hidden_states,
@@ -479,19 +461,12 @@ class BertGenerationLayer(GradientCheckpointingLayer):
                 past_key_value=past_key_value,
                 **kwargs,
             )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+            attention_output = cross_attention_output
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
-
-        return outputs
+        return layer_output
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -507,6 +482,7 @@ class BertEncoder(nn.Module):
         # Ignore copy
         self.layer = nn.ModuleList([BertGenerationLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -516,24 +492,13 @@ class BertEncoder(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-
-        next_decoder_cache = None
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            layer_outputs = layer_module(
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
                 layer_head_mask,
@@ -544,37 +509,9 @@ class BertEncoder(nn.Module):
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache = layer_outputs[-1]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        next_cache = next_decoder_cache if use_cache else None
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
+            past_key_values=past_key_values if use_cache else None,
         )
 
 
@@ -709,6 +646,11 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": BertGenerationLayer,
+        "attentions": BertGenerationSelfAttention,
+        "cross_attentions": BertGenerationCrossAttention,
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -776,6 +718,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -788,18 +731,9 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
@@ -899,9 +833,6 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             position_ids=position_ids,
             **kwargs,
@@ -911,15 +842,9 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         if return_legacy_cache:
             encoder_outputs.past_key_values = encoder_outputs.past_key_values.to_legacy_cache()
 
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
-
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=sequence_output,
             past_key_values=encoder_outputs.past_key_values,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
     # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
@@ -1029,6 +954,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
         self.lm_head.decoder = new_embeddings
         self.lm_head.bias = new_embeddings.bias
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1042,9 +968,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
         labels: Optional[torch.Tensor] = None,
         past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
@@ -1072,7 +995,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
 
@@ -1086,9 +1008,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1104,10 +1023,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,

@@ -37,7 +37,9 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils.generic import can_return_tuple, check_model_inputs
 from ..bert.modeling_bert import (
+    BertCrossAttention,
     BertEmbeddings,
     BertEncoder,
     BertForMaskedLM,
@@ -48,10 +50,12 @@ from ..bert.modeling_bert import (
     BertForQuestionAnswering,
     BertForSequenceClassification,
     BertForTokenClassification,
+    BertLayer,
     BertLMHeadModel,
     BertLMPredictionHead,
     BertModel,
     BertPooler,
+    BertSelfAttention,
 )
 from .configuration_ernie import ErnieConfig
 
@@ -125,6 +129,18 @@ class ErnieEmbeddings(BertEmbeddings):
         return embeddings
 
 
+class ErnieSelfAttention(BertSelfAttention):
+    pass
+
+
+class ErnieCrossAttention(BertCrossAttention):
+    pass
+
+
+class ErnieLayer(BertLayer):
+    pass
+
+
 class ErniePooler(BertPooler):
     pass
 
@@ -146,6 +162,11 @@ class ErniePreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": ErnieLayer,
+        "attentions": ErnieSelfAttention,
+        "cross_attentions": ErnieCrossAttention,
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -182,6 +203,7 @@ class ErnieModel(BertModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -196,9 +218,6 @@ class ErnieModel(BertModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
@@ -209,12 +228,6 @@ class ErnieModel(BertModel):
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
@@ -317,9 +330,6 @@ class ErnieModel(BertModel):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             position_ids=position_ids,
             **kwargs,
@@ -330,16 +340,10 @@ class ErnieModel(BertModel):
         if return_legacy_cache:
             encoder_outputs.past_key_values = encoder_outputs.past_key_values.to_legacy_cache()
 
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
-
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
     # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
@@ -409,6 +413,7 @@ class ErnieForPreTrainingOutput(BertForPreTrainingOutput):
 class ErnieForPreTraining(BertForPreTraining):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -421,9 +426,6 @@ class ErnieForPreTraining(BertForPreTraining):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         next_sentence_label: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], ErnieForPreTrainingOutput]:
         r"""
@@ -459,8 +461,6 @@ class ErnieForPreTraining(BertForPreTraining):
         >>> seq_relationship_logits = outputs.seq_relationship_logits
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.ernie(
             input_ids,
             attention_mask=attention_mask,
@@ -469,9 +469,6 @@ class ErnieForPreTraining(BertForPreTraining):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
 
@@ -485,10 +482,6 @@ class ErnieForPreTraining(BertForPreTraining):
             next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + next_sentence_loss
 
-        if not return_dict:
-            output = (prediction_scores, seq_relationship_score) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
         return ErnieForPreTrainingOutput(
             loss=total_loss,
             prediction_logits=prediction_scores,
@@ -499,6 +492,7 @@ class ErnieForPreTraining(BertForPreTraining):
 
 
 class ErnieForCausalLM(BertLMHeadModel):
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -514,9 +508,6 @@ class ErnieForCausalLM(BertLMHeadModel):
         labels: Optional[torch.Tensor] = None,
         past_key_values: Optional[list[torch.Tensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
@@ -531,7 +522,6 @@ class ErnieForCausalLM(BertLMHeadModel):
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
 
@@ -547,9 +537,6 @@ class ErnieForCausalLM(BertLMHeadModel):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
@@ -566,10 +553,6 @@ class ErnieForCausalLM(BertLMHeadModel):
                 **kwargs,
             )
 
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
-
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
             logits=prediction_scores,
@@ -583,6 +566,7 @@ class ErnieForCausalLM(BertLMHeadModel):
 class ErnieForMaskedLM(BertForMaskedLM):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -596,9 +580,6 @@ class ErnieForMaskedLM(BertForMaskedLM):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
         r"""
@@ -612,9 +593,6 @@ class ErnieForMaskedLM(BertForMaskedLM):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.ernie(
             input_ids,
             attention_mask=attention_mask,
@@ -625,9 +603,6 @@ class ErnieForMaskedLM(BertForMaskedLM):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
 
@@ -639,10 +614,6 @@ class ErnieForMaskedLM(BertForMaskedLM):
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
         return MaskedLMOutput(
             loss=masked_lm_loss,
             logits=prediction_scores,
@@ -652,6 +623,7 @@ class ErnieForMaskedLM(BertForMaskedLM):
 
 
 class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -663,9 +635,6 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], NextSentencePredictorOutput]:
         r"""
@@ -708,8 +677,6 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
             )
             labels = kwargs.pop("next_sentence_label")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.ernie(
             input_ids,
             attention_mask=attention_mask,
@@ -718,9 +685,6 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
 
@@ -733,10 +697,6 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
             loss_fct = CrossEntropyLoss()
             next_sentence_loss = loss_fct(seq_relationship_scores.view(-1, 2), labels.view(-1))
 
-        if not return_dict:
-            output = (seq_relationship_scores,) + outputs[2:]
-            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
-
         return NextSentencePredictorOutput(
             loss=next_sentence_loss,
             logits=seq_relationship_scores,
@@ -746,6 +706,7 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
 
 
 class ErnieForSequenceClassification(BertForSequenceClassification):
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -757,9 +718,6 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
@@ -773,8 +731,6 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.ernie(
             input_ids,
             attention_mask=attention_mask,
@@ -783,9 +739,6 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
 
@@ -816,9 +769,6 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -829,6 +779,7 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
 
 
 class ErnieForMultipleChoice(BertForMultipleChoice):
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -840,9 +791,6 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
@@ -880,7 +828,6 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -901,9 +848,6 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
 
@@ -918,10 +862,6 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
 
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return MultipleChoiceModelOutput(
             loss=loss,
             logits=reshaped_logits,
@@ -931,6 +871,7 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
 
 
 class ErnieForTokenClassification(BertForTokenClassification):
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -942,9 +883,6 @@ class ErnieForTokenClassification(BertForTokenClassification):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
@@ -956,8 +894,6 @@ class ErnieForTokenClassification(BertForTokenClassification):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.ernie(
             input_ids,
             attention_mask=attention_mask,
@@ -966,9 +902,6 @@ class ErnieForTokenClassification(BertForTokenClassification):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
 
@@ -982,10 +915,6 @@ class ErnieForTokenClassification(BertForTokenClassification):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
@@ -995,6 +924,7 @@ class ErnieForTokenClassification(BertForTokenClassification):
 
 
 class ErnieForQuestionAnswering(BertForQuestionAnswering):
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1007,9 +937,6 @@ class ErnieForQuestionAnswering(BertForQuestionAnswering):
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
@@ -1019,8 +946,6 @@ class ErnieForQuestionAnswering(BertForQuestionAnswering):
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.ernie(
             input_ids,
             attention_mask=attention_mask,
@@ -1029,9 +954,6 @@ class ErnieForQuestionAnswering(BertForQuestionAnswering):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
 
@@ -1058,10 +980,6 @@ class ErnieForQuestionAnswering(BertForQuestionAnswering):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
