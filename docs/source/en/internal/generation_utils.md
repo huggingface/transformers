@@ -253,7 +253,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - update
     - lazy_initialization
 
-[[autodoc]] SlidingWindowLayer
+[[autodoc]] StaticSlidingWindowLayer
     - update
     - lazy_initialization
 
