@@ -2241,6 +2241,7 @@ class Gemma3nModel(PaliGemmaModel):
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
         del self.multi_modal_projector  # Replaced by Gemma3nVisionEmbedder
+        del self.text_config_dtype
         self.vocab_size_per_layer_input = config.text_config.vocab_size_per_layer_input
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
