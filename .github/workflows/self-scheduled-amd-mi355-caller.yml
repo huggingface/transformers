@@ -21,9 +21,9 @@ jobs:
       job: run_models_gpu
       slack_report_channel: "#amd-hf-ci"
       runner_scale_set: amd-mi355-ci
-      docker: huggingface/transformers-pytorch-amd-gpu
+      docker: huggingface/testing-rocm7.0-preview
       ci_event: Scheduled CI (AMD) - mi355
-      report_repo_id: optimum-amd/transformers_daily_ci
+      report_repo_id: hf-transformers-bot/transformers-ci-dummy
     secrets: inherit
 
   torch-pipeline:
@@ -33,9 +33,9 @@ jobs:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#amd-hf-ci"
       runner_scale_set: amd-mi355-ci
-      docker: huggingface/transformers-pytorch-amd-gpu
+      docker: huggingface/testing-rocm7.0-preview
       ci_event: Scheduled CI (AMD) - mi355
-      report_repo_id: optimum-amd/transformers_daily_ci
+      report_repo_id: hf-transformers-bot/transformers-ci-dummy
     secrets: inherit
 
   example-ci:
@@ -45,9 +45,9 @@ jobs:
       job: run_examples_gpu
       slack_report_channel: "#amd-hf-ci"
       runner_scale_set: amd-mi355-ci
-      docker: huggingface/transformers-pytorch-amd-gpu
+      docker: huggingface/testing-rocm7.0-preview
       ci_event: Scheduled CI (AMD) - mi355
-      report_repo_id: optimum-amd/transformers_daily_ci
+      report_repo_id: hf-transformers-bot/transformers-ci-dummy
     secrets: inherit
 
   deepspeed-ci:
@@ -57,7 +57,7 @@ jobs:
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#amd-hf-ci"
       runner_scale_set: amd-mi355-ci
-      docker: huggingface/transformers-pytorch-deepspeed-amd-gpu
+      docker: huggingface/testing-rocm7.0-preview
       ci_event: Scheduled CI (AMD) - mi355
-      report_repo_id: optimum-amd/transformers_daily_ci
+      report_repo_id: hf-transformers-bot/transformers-ci-dummy
     secrets: inherit

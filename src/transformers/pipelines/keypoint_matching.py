@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Sequence, TypedDict, Union
+from collections.abc import Sequence
+from typing import Any, TypedDict, Union
 
 from typing_extensions import TypeAlias, overload
 
@@ -29,8 +30,16 @@ if is_vision_available():
 
 ImagePair: TypeAlias = Sequence[Union["Image.Image", str]]
 
-Keypoint = TypedDict("Keypoint", {"x": float, "y": float})
-Match = TypedDict("Match", {"keypoint_image_0": Keypoint, "keypoint_image_1": Keypoint, "score": float})
+
+class Keypoint(TypedDict):
+    x: float
+    y: float
+
+
+class Match(TypedDict):
+    keypoint_image_0: Keypoint
+    keypoint_image_1: Keypoint
+    score: float
 
 
 def validate_image_pairs(images: Any) -> Sequence[Sequence[ImagePair]]:
@@ -138,7 +147,7 @@ class KeypointMatchingPipeline(Pipeline):
     def preprocess(self, images, timeout=None):
         images = [load_image(image, timeout=timeout) for image in images]
         model_inputs = self.image_processor(images=images, return_tensors=self.framework)
-        model_inputs = model_inputs.to(self.torch_dtype)
+        model_inputs = model_inputs.to(self.dtype)
         target_sizes = [image.size for image in images]
         preprocess_outputs = {"model_inputs": model_inputs, "target_sizes": target_sizes}
         return preprocess_outputs

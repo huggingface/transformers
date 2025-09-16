@@ -539,7 +539,7 @@ class AriaImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         return_tensors: Optional[Union[str, TensorType]] = "pt",
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -727,7 +727,7 @@ class AriaImageProcessor(BaseImageProcessor):
         )
 
     def _resize_for_patching(
-        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
+        self, image: np.ndarray, target_resolution: tuple, resample, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
@@ -760,7 +760,7 @@ class AriaImageProcessor(BaseImageProcessor):
         return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
 
     def _pad_for_patching(
-        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
+        self, image: np.ndarray, target_resolution: tuple, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
@@ -840,7 +840,7 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def get_image_patches(
         self,
-        image: np.array,
+        image: np.ndarray,
         grid_pinpoints: list[tuple[int, int]],
         patch_size: int,
         resample: PILImageResampling,
@@ -1126,37 +1126,28 @@ class AriaGroupedExpertsGemm(nn.Module):
         )
 
 
-class AriaGroupedExpertsMLP(nn.Module):
-    """
-    Grouped MLP module for Mixture of Experts.
+class AriaRouter(nn.Module):
+    def __init__(self, config: AriaTextConfig):
+        super().__init__()
+        self.router = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False)
+        self.config = config
 
-    Args:
-        config (`AriaTextConfig`):
-            Configuration object for the model.
-    """
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        logits = self.router(hidden_states)
+        top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
+        scores = nn.functional.softmax(top_logits, dim=-1)
+        return logits, top_indices, scores
 
+
+class AriaExperts(nn.Module):
     def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
         self.config = config
         self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
         self.fc2 = AriaGroupedExpertsGemm(config.intermediate_size, config.hidden_size, config.moe_num_experts)
 
-    def forward(self, hidden_states, logits):
-        """
-        Forward pass of the Grouped MLP.
-
-        Args:
-            permuted_tokens (torch.Tensor): Permuted input tokens.
-            tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
-
-        Returns:
-            torch.Tensor: Output tensor after passing through the MLP.
-        """
-        top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
-        scores = nn.functional.softmax(top_logits, dim=-1)
-
+    def forward(self, hidden_states, top_indices, scores):
         original_dtype = top_indices.dtype
-
         tokens_per_expert = torch.histc(
             top_indices.flatten().to(torch.float32),
             bins=self.config.moe_num_experts,
@@ -1165,7 +1156,6 @@ class AriaGroupedExpertsMLP(nn.Module):
         ).to(original_dtype)
         indices = top_indices
 
-        # Token permutation
         flatten_indices = indices.view(-1)
         sorted_indices = torch.argsort(flatten_indices)
         permuted_tokens = hidden_states.index_select(0, sorted_indices // self.config.moe_topk)
@@ -1175,7 +1165,6 @@ class AriaGroupedExpertsMLP(nn.Module):
         fc1_output = nn.functional.silu(projection) * gate
         expert_output = self.fc2(fc1_output, tokens_per_expert)
 
-        # Token unpermutation
         unpermuted_tokens = torch.zeros(
             (scores.shape[0] * self.config.moe_topk, expert_output.size(1)),
             dtype=expert_output.dtype,
@@ -1188,52 +1177,21 @@ class AriaGroupedExpertsMLP(nn.Module):
         return output
 
 
-# Token permutation adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
 class AriaTextMoELayer(nn.Module):
-    """
-    Aria Text Mixture of Experts (MoE) Layer.
-
-    This layer applies a gating mechanism to route input tokens to different experts.
-
-    Args:
-        config (`AriaTextConfig`):
-            Configuration object for the text component of the model.
-    """
-
     def __init__(self, config: AriaTextConfig):
         super().__init__()
-
-        self.router = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False)
-        self.experts = AriaGroupedExpertsMLP(config)
+        self.gate = AriaRouter(config)
+        self.experts = AriaExperts(config)
         self.shared_experts = AriaSharedExpertsMLP(config)
         self.config = config
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the MoE Layer.
-
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input tensor of shape (batch_size, sequence_length, hidden_size).
-
-        Returns:
-            torch.Tensor: Output tensor after passing through the MoE layer.
-
-        Process:
-        1. Route tokens to experts using the router.
-        2. Permute tokens based on routing decisions.
-        3. Process tokens through experts.
-        4. Unpermute and combine expert outputs.
-        5. Add shared expert output to the final result.
-        """
         original_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.size(-1))
 
-        # Top K Routing
-        logits = self.router(hidden_states)
-        expert_output = self.experts(hidden_states, logits).view(original_shape)
+        _, top_indices, scores = self.gate(hidden_states)
+        expert_output = self.experts(hidden_states, top_indices, scores).view(original_shape)
 
-        # Add shared expert output
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
         return expert_output + shared_expert_output
 
@@ -1391,9 +1349,9 @@ class AriaModel(LlavaModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1462,9 +1420,9 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_mask: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
