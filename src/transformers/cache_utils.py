@@ -1357,6 +1357,15 @@ class EncoderDecoderCache(Cache):
 ### Deprecated classes
 
 
+class ChunkedSlidingLayer(SlidingWindowLayer):
+    def __init__(self, max_cache_len: int, sliding_window: int):
+        logger.warning_once(
+            "`ChunkedSlidingLayer` is deprecated and will be removed in version v4.59 "
+            "Use `SlidingWindowLayer` instead, which has the exact same functionalities."
+        )
+        super().__init__(max_cache_len, sliding_window)
+
+
 class OffloadedCache(DynamicCache):
     def __init__(self) -> None:
         logger.warning_once(
