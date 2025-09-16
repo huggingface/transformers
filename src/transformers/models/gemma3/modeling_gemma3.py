@@ -729,7 +729,6 @@ class Gemma3MultiModalProjector(nn.Module):
 def token_type_ids_mask_function(
     token_type_ids: Optional[torch.Tensor],
     image_group_ids: Optional[torch.Tensor],
-    tokens_per_image: int,
 ) -> Optional[Callable]:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
@@ -945,7 +944,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
                     is_image, image_group_ids, torch.full_like(token_type_ids, -1, device=is_image.device)
                 )
                 mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-                    token_type_ids.to(cache_position.device), image_group_ids, self.config.mm_tokens_per_image
+                    token_type_ids.to(cache_position.device), image_group_ids
                 )
 
             # Create the masks
@@ -1221,7 +1220,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
             image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
             mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-                token_type_ids.to(cache_position.device), image_group_ids, config.mm_tokens_per_image
+                token_type_ids.to(cache_position.device), image_group_ids
             )
 
         return create_masks_for_generate(**mask_kwargs)

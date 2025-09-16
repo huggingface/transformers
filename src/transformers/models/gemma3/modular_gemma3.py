@@ -22,7 +22,7 @@ import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
@@ -48,6 +48,7 @@ from ..paligemma.modeling_paligemma import (
     PaliGemmaForConditionalGeneration,
     PaliGemmaModel,
     PaligemmaModelOutputWithPast,
+    token_type_ids_mask_function,
 )
 from ..siglip import SiglipVisionConfig
 
@@ -721,39 +722,6 @@ class Gemma3MultiModalProjector(nn.Module):
         return projected_vision_outputs.type_as(vision_outputs)
 
 
-def token_type_ids_mask_function(
-    token_type_ids: Optional[torch.Tensor],
-    image_group_ids: Optional[torch.Tensor],
-    tokens_per_image: int,
-) -> Optional[Callable]:
-    """
-    This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
-    not start and end indices.
-    """
-    # Do not return an additional mask in this case
-    if token_type_ids is None:
-        return None
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        # If it's 1 for both query and key/value, we are in an image block
-        # NOTE: static cache shape goes beyond input seq length, while token_type_ids.shape[1] == input seq length
-        # Since vmap doesn't support `if statement` we workaround it with `torch.where`
-        safe_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
-        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_idx]
-        token_type_ids_at_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0)
-
-        image_group_ids_at_kv_idx = image_group_ids[batch_idx, safe_idx]
-        image_group_ids_at_kv_idx = torch.where(kv_idx < image_group_ids.shape[1], image_group_ids_at_kv_idx, -1)
-
-        is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids_at_kv_idx == 1)
-        same_image_block = image_group_ids[batch_idx, q_idx] == image_group_ids_at_kv_idx
-
-        # This is bidirectional attention whenever we are dealing with image tokens
-        return is_image_block & same_image_block
-
-    return inner_mask
-
-
 class Gemma3Model(PaliGemmaModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
@@ -775,9 +743,6 @@ class Gemma3Model(PaliGemmaModel):
         vision_outputs = self.vision_tower(pixel_values=pixel_values).last_hidden_state
         image_features = self.multi_modal_projector(vision_outputs)
         return image_features
-
-    def _update_causal_mask(self, **super_kwargs):
-        raise AttributeError("We don't want to inherit it")
 
     @can_return_tuple
     @auto_docstring
@@ -866,7 +831,7 @@ class Gemma3Model(PaliGemmaModel):
                     is_image, image_group_ids, torch.full_like(token_type_ids, -1, device=is_image.device)
                 )
                 mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-                    token_type_ids.to(cache_position.device), image_group_ids, self.config.mm_tokens_per_image
+                    token_type_ids.to(cache_position.device), image_group_ids
                 )
 
             # Create the masks
@@ -1028,81 +993,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        pixel_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        labels=None,
-        **kwargs,
-    ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            cache_position=cache_position,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
-            **kwargs,
-        )
-
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
-        if cache_position[0] == 0:
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
-
-    def _prepare_4d_causal_attention_mask_with_cache_position(self, **super_kwargs):
-        raise AttributeError("We don't want to inherit it")
-
-    @staticmethod
-    def create_masks_for_generate(
-        config: PretrainedConfig,
-        input_embeds: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
-        cache_position: torch.Tensor,
-        past_key_values: Optional[Cache],
-        position_ids: Optional[torch.Tensor],
-        token_type_ids: Optional[torch.Tensor] = None,
-        **kwargs,
-    ) -> dict:
-        # Prepare mask arguments
-        mask_kwargs = {
-            "config": config.get_text_config(),
-            "input_embeds": input_embeds,
-            "attention_mask": attention_mask,
-            "cache_position": cache_position,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        # Add the token type ids mask for generate as well
-        if token_type_ids is not None and input_embeds.shape[1] != 1:
-            # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
-
-            # First find where a new image block starts: 1 if image and previous not image
-            # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
-            is_image = (token_type_ids == 1).to(cache_position.device)
-            new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
-            image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-            image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
-            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-                token_type_ids.to(cache_position.device), image_group_ids, config.mm_tokens_per_image
-            )
-
-        return create_masks_for_generate(**mask_kwargs)
 
 
 class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
