@@ -452,6 +452,7 @@ else:
             "SynthIDTextWatermarkingConfig",
             "SynthIDTextWatermarkLogitsProcessor",
             "TemperatureLogitsWarper",
+            "TopHLogitsWarper",
             "TopKLogitsWarper",
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
@@ -732,6 +733,7 @@ if TYPE_CHECKING:
     from .generation import TFTemperatureLogitsWarper as TFTemperatureLogitsWarper
     from .generation import TFTopKLogitsWarper as TFTopKLogitsWarper
     from .generation import TFTopPLogitsWarper as TFTopPLogitsWarper
+    from .generation import TopHLogitsWarper as TopHLogitsWarper
     from .generation import TopKLogitsWarper as TopKLogitsWarper
     from .generation import TopPLogitsWarper as TopPLogitsWarper
     from .generation import TypicalLogitsWarper as TypicalLogitsWarper
