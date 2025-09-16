@@ -62,6 +62,7 @@ Dokumentasi disusun kepada lima bahagian:
 1. **[BARThez](model_doc/barthez)** (from École polytechnique) released with the paper [BARThez: a Skilled Pretrained French Sequence-to-Sequence Model](https://huggingface.co/papers/2010.12321) by Moussa Kamal Eddine, Antoine J.-P. Tixier, Michalis Vazirgiannis.
 1. **[BARTpho](model_doc/bartpho)** (from VinAI Research) released with the paper [BARTpho: Pre-trained Sequence-to-Sequence Models for Vietnamese](https://huggingface.co/papers/2109.09701) by Nguyen Luong Tran, Duong Minh Le and Dat Quoc Nguyen.
 1. **[BEiT](model_doc/beit)** (from Microsoft) released with the paper [BEiT: BERT Pre-Training of Image Transformers](https://huggingface.co/papers/2106.08254) by Hangbo Bao, Li Dong, Furu Wei.
+1. **[BEiT-3](model_doc/beit3)** (from Microsoft) released with the paper [Image as a Foreign Language: BEiT Pretraining for All Vision and Vision-Language Tasks](https://huggingface.co/papers/2208.10442) by Wenhui Wang, Hangbo Bao, Li Dong, Johan Bjorck, Zhiliang Peng, Qiang Liu, Kriti Aggarwal, Owais Khan Mohammed, Saksham Singhal, Subhojit Som, Furu Wei.
 1. **[BERT](model_doc/bert)** (from Google) released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://huggingface.co/papers/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
 1. **[BERT For Sequence Generation](model_doc/bert-generation)** (from Google) released with the paper [Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://huggingface.co/papers/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
 1. **[BERTweet](model_doc/bertweet)** (from VinAI Research) released with the paper [BERTweet: A pre-trained language model for English Tweets](https://aclanthology.org/2020.emnlp-demos.2/) by Dat Quoc Nguyen, Thanh Vu and Anh Tuan Nguyen.
@@ -278,6 +279,7 @@ Flax), PyTorch, dan/atau TensorFlow.
 |          Autoformer           |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |             BART              |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |             BEiT              |       ❌       |       ❌       |       ✅        |         ❌         |      ✅      |
+|             Beit3             |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |             BERT              |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |        Bert Generation        |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 |            BigBird            |       ✅       |       ✅       |       ✅        |         ❌         |      ✅      |
