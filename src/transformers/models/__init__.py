@@ -239,6 +239,7 @@ if TYPE_CHECKING:
     from .nystromformer import *
     from .olmo import *
     from .olmo2 import *
+    from .olmo3 import *
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *
