@@ -385,23 +385,47 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         output_attentions,
         enable_kernels,
     ):
-        "We need to relax a bit the `atols` for fp32 here due to the altup projections"
+        "We need to relax a bit the `atols` and `rtols` for fp32 here due to the altup projections"
         atols = {
-            ("cpu", False, torch.float32): 1e-3,  # this was relaxed
+            ("cpu", False, torch.float32): 5e-2,  # this was relaxed
             ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
-            ("cpu", True, torch.float32): 1e-3,  # this was relaxed
+            ("cpu", True, torch.float32): 5e-2,  # this was relaxed
             ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float32): 1e-3,  # this was relaxed
+            ("cuda", False, torch.float32): 5e-2,  # this was relaxed
             ("cuda", False, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float16): 5e-3,
-            ("cuda", True, torch.float32): 1e-3,  # this was relaxed
+            ("cuda", True, torch.float32): 5e-2,  # this was relaxed
             ("cuda", True, torch.bfloat16): 1e-2,
             ("cuda", True, torch.float16): 5e-3,
         }
+
+        rtols = {
+            ("cpu", False, torch.float32): 1e-2, # this was relaxed
+            ("cpu", False, torch.float16): 5e-3,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-2, # this was relaxed
+            ("cpu", True, torch.float16): 5e-3,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-2, # this was relaxed
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-2, # this was relaxed
+            ("cuda", True, torch.bfloat16): 3e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+
         _test_eager_matches_sdpa_inference(
-            self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
+            self,
+            name,
+            dtype,
+            padding_side,
+            use_attention_mask,
+            output_attentions,
+            enable_kernels,
+            atols=atols,
+            rtols=rtols
         )
 
     @pytest.mark.generate

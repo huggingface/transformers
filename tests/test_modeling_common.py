@@ -1093,8 +1093,6 @@ class ModelTesterMixin:
                     msg += str(e)
                     raise AssertionError(msg)
 
-        set_model_tester_for_less_flaky_test(self)
-
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
 
