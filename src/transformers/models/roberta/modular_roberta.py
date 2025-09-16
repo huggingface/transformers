@@ -136,6 +136,7 @@ class RobertaEmbeddings(BertEmbeddings):
         incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
         return incremental_indices.long() + padding_idx
 
+
 class RobertaSelfAttention(BertSelfAttention):
     pass
 

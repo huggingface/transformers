@@ -38,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging, torch_int
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -767,7 +767,11 @@ class BridgeTowerBertCrossLayer(nn.Module):
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        return (layer_output, self_attn_weights, cross_attn_weights,)
+        return (
+            layer_output,
+            self_attn_weights,
+            cross_attn_weights,
+        )
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -841,7 +845,10 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        return outputs + (layer_output, self_attn_weights,)
+        return outputs + (
+            layer_output,
+            self_attn_weights,
+        )
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
