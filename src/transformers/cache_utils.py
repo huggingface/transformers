@@ -122,8 +122,7 @@ class DynamicLayer(CacheLayerMixin):
         """Return the length and offset of the cache, used to generate the mask"""
         kv_offset = 0
         query_length = cache_position.shape[0]
-        past_seen_tokens = self.get_seq_length()
-        kv_length = query_length + past_seen_tokens
+        kv_length = self.get_seq_length() + query_length
         return kv_length, kv_offset
 
     def get_seq_length(self) -> int:
