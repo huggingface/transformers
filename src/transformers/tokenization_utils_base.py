@@ -98,9 +98,11 @@ def flatten(arr: list):
     return res
 
 
+if is_tokenizers_available() or TYPE_CHECKING:
+    from tokenizers import Encoding as EncodingFast
+
 if is_tokenizers_available():
     from tokenizers import AddedToken
-    from tokenizers import Encoding as EncodingFast
 else:
 
     @dataclass(frozen=False, eq=True)
@@ -128,12 +130,6 @@ else:
 
         def __str__(self):
             return self.content
-
-    @dataclass
-    class EncodingFast:
-        """This is dummy class because without the `tokenizers` library we don't have these objects anyway"""
-
-        pass
 
 
 logger = logging.get_logger(__name__)
@@ -238,7 +234,8 @@ class BatchEncoding(UserDict):
     ):
         super().__init__(data)
 
-        if isinstance(encoding, EncodingFast):
+        # If encoding is not None, the fast tokenization is used
+        if encoding is not None and isinstance(encoding, EncodingFast):
             encoding = [encoding]
 
         self._encodings = encoding
