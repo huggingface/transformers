@@ -244,13 +244,13 @@ class ConversationCacheManager:
     by setting the CBM's `manual_eviction` flag to `True` and using the `evict_callback` of this cache's entries.
     """
 
-    def __init__(self, entry_timeout_seconds: int, max_entries: int = 512):
+    def __init__(self, entry_timeout_seconds: float, max_entries: int = 512):
         if max_entries <= 0:
             raise ValueError("max_entries must be greater than 0")
         self._closed = False
         self.conversation_cache: dict[str, Entry] = {}
         self.max_entries = max_entries
-        self.time_to_live = float(entry_timeout_seconds)
+        self.time_to_live = entry_timeout_seconds
 
     def acquire_lease(self, conversation_id: str, evict_callback: Optional[EvictCallback] = None):
         """
@@ -289,11 +289,12 @@ class ConversationCacheManager:
             entry.expiry_task = asyncio.create_task(
                 self.evict_entry_after_expiry(conversation_id, self.time_to_live), name=f"ttl-{conversation_id}"
             )
-            self.conversation_cache[conversation_id] = entry
         else:
             while len(self.conversation_cache) >= self.max_entries:
                 # Evict the least recently used entry
-                lru_conversation_id = next(iter(self.conversation_cache))
+                lru_conversation_id = next((cid for cid, e in self.conversation_cache.items() if e.lease <= 0), None)
+                if lru_conversation_id is None:
+                    raise RuntimeError("All conversation cache entries are in use, cannot evict")
                 self.evict_entry(lru_conversation_id)
             entry = Entry(
                 conversation_id=conversation_id,
