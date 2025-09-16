@@ -1266,12 +1266,6 @@ class GenerationMixin(ContinuousMixin):
                 processors.append(
                     MinPLogitsWarper(min_p=generation_config.min_p, min_tokens_to_keep=min_tokens_to_keep)
                 )
-<<<<<<< HEAD
-
-=======
-            if generation_config.top_h is not None:
-                processors.append(TopHLogitsWarper(top_h=generation_config.top_h))
->>>>>>> 6bc1458be0 (style: autoformat with make fixup)
             if generation_config.typical_p is not None and generation_config.typical_p < 1.0:
                 processors.append(
                     TypicalLogitsWarper(mass=generation_config.typical_p, min_tokens_to_keep=min_tokens_to_keep)

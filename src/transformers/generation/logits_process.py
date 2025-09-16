@@ -593,6 +593,7 @@ class TopHLogitsWarper(LogitsProcessor):
 
     Args:
 <<<<<<< HEAD
+<<<<<<< HEAD
         top_h (`float`):
             Scaling coefficient for the entropy-based threshold. Must be in the range `(0, 1]`.
 =======
@@ -600,6 +601,9 @@ class TopHLogitsWarper(LogitsProcessor):
             The maximum number of tokens to consider for filtering.
             Only the top `top_n` tokens (by probability) are evaluated.
         alpha (`float`, *optional*, defaults to 0.4):
+=======
+        top_h (`float`):
+>>>>>>> 71dc17af16 (Update logits_process.py removed defaults)
             Scaling coefficient for the entropy-based threshold (`tau`). Must be in the range `(0, 1]`.
 >>>>>>> a481999de7 (Resolving logits_process.py Issues)
         filter_value (`float`, *optional*, defaults to -inf):
