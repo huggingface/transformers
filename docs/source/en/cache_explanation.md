@@ -85,7 +85,7 @@ When you use Transformers' [`Cache`] class, the self-attention module performs s
 
 Caches are structured as a list of layers, where each layer contains a key and value cache. The key and value caches are tensors with the shape `[batch_size, num_heads, seq_len, head_dim]`.
 
-Layers can be of different types (e.g. `DynamicLayer`, `StaticLayer`, `SlidingWindowLayer`), which mostly changes how sequence length is handled and how the cache is updated.
+Layers can be of different types (e.g. `DynamicLayer`, `StaticLayer`, `StaticSlidingWindowLayer`), which mostly changes how sequence length is handled and how the cache is updated.
 
 The simplest is a `DynamicLayer` that grows as more tokens are processed. The sequence length dimension (`seq_len`) increases with each new token:
 
@@ -94,7 +94,7 @@ cache.layers[idx].keys = torch.cat([cache.layers[idx].keys, key_states], dim=-2)
 cache.layers[idx].values = torch.cat([cache.layers[idx].values, value_states], dim=-2)
 ```
 
-Other layer types like `StaticLayer` and `SlidingWindowLayer` have a fixed sequence length that is set when the cache is created. This makes them compatible with `torch.compile`. In the case of `SlidingWindowLayer`, existing tokens are shifted out of the cache when a new token is added.
+Other layer types like `StaticLayer` and `StaticSlidingWindowLayer` have a fixed sequence length that is set when the cache is created. This makes them compatible with `torch.compile`. In the case of `StaticSlidingWindowLayer`, existing tokens are shifted out of the cache when a new token is added.
 
 The example below demonstrates how to create a generation loop with [`DynamicCache`]. As discussed, the attention mask is a concatenation of past and current token values and `1` is added to the cache position for the next token.
 

@@ -199,6 +199,8 @@
     title: HIGGS
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/mxfp4
+    title: MXFP4
   - local: quantization/optimum
     title: Optimum
   - local: quantization/quanto
@@ -625,6 +627,8 @@
         title: OLMo
       - local: model_doc/olmo2
         title: OLMo2
+      - local: model_doc/olmo3
+        title: Olmo3
       - local: model_doc/olmoe
         title: OLMoE
       - local: model_doc/open-llama
@@ -709,6 +713,8 @@
         title: UL2
       - local: model_doc/umt5
         title: UMT5
+      - local: model_doc/vaultgemma
+        title: VaultGemma
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm
@@ -1125,6 +1131,10 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
         title: Qwen2VL
+      - local: model_doc/qwen3_vl
+        title: Qwen3VL
+      - local: model_doc/qwen3_vl_moe
+        title: Qwen3VLMoe
       - local: model_doc/sam2
         title: SAM2
       - local: model_doc/sam2_video

@@ -18,7 +18,7 @@ from inspect import signature
 import pytest
 from parameterized import parameterized
 
-from transformers import PretrainedConfig, set_seed
+from transformers import AutoModelForCausalLM, PretrainedConfig, set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
@@ -473,6 +473,22 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 logits = outputs.hidden_states[-1]
                 logits_fa = outputs_fa.hidden_states[-1]
                 torch.testing.assert_close(logits_fa, logits, atol=3e-2, rtol=3e-2)
+
+    def test_causal_lm_can_accept_training_kwargs(self):
+        if not getattr(self.model_tester, "is_training", False):
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with torch.device(torch_device):
+                model_eager = AutoModelForCausalLM.from_config(config, dtype=torch.float32)
+
+            model_eager.save_pretrained(tmpdir)
+            model = AutoModelForCausalLM.from_pretrained(tmpdir, dtype=torch.float32, device_map=torch_device)
+            inputs_dict["num_items_in_batch"] = torch.tensor(inputs_dict["input_ids"].shape[0])
+            inputs_dict["labels"] = inputs_dict["input_ids"]
+            _ = model(**inputs_dict, return_dict=False)
 
 
 def _config_supports_rope_scaling(config: PretrainedConfig) -> bool:
