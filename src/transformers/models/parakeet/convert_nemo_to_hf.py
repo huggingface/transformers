@@ -149,11 +149,18 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
 
 def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=None):
     tokenizer_converted = ParakeetConverter(model_files["tokenizer_model_file"]).converted()
-    tokenizer_converted.add_tokens([AddedToken("<blank>", normalized=False, special=True)])
-
     tokenizer_converted_fast = ParakeetTokenizerFast(
         tokenizer_object=tokenizer_converted,
         clean_up_tokenization_spaces=False,
+    )
+    tokenizer_converted_fast.add_tokens(
+        [AddedToken("<unk>", normalized=False, special=True), AddedToken("<pad>", normalized=False, special=True)]
+    )
+    tokenizer_converted_fast.add_special_tokens(
+        {
+            "pad_token": AddedToken("<pad>", normalized=False, special=True),
+            "unk_token": AddedToken("<unk>", normalized=False, special=True),
+        }
     )
 
     feature_extractor_keys_to_ignore = ["_target_", "pad_to", "frame_splicing", "dither", "normalize", "window", "log"]

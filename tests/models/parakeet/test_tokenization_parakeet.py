@@ -15,23 +15,39 @@
 
 import unittest
 
-from transformers.models.parakeet import ParakeetCTCTokenizer
+from transformers.models.parakeet import ParakeetTokenizerFast
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class ParakeetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "bezzam/parakeet-ctc-1.1b-hf"
-    tokenizer_class = ParakeetCTCTokenizer
-    test_rust_tokenizer = False
-    test_seq2seq = False  # Fails due to no pad token
+    slow_tokenizer_class = None
+    rust_tokenizer_class = ParakeetTokenizerFast
+    tokenizer_class = ParakeetTokenizerFast
+    test_slow_tokenizer = False
+    test_rust_tokenizer = True
+    from_pretrained_id = "eustlb/parakeet-ctc-1.1b"
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        tokenizer = ParakeetCTCTokenizer.from_pretrained("bezzam/parakeet-ctc-1.1b-hf")
+        tokenizer = ParakeetTokenizerFast.from_pretrained("eustlb/parakeet-ctc-1.1b")
         tokenizer.save_pretrained(cls.tmpdirname)
 
-    @unittest.skip(reason="Perhaps failing due to CTC-style decoding?")
-    def test_pretokenized_inputs(self):
+    @unittest.skip(
+        reason="This test does not apply to ParakeetTokenizerFast. More details in the test docstring itself."
+    )
+    def test_added_tokens_do_lower_case(self):
+        """
+        Precompiled normalization from sentencepiece is `nmt_nfkc_cf` that includes lowercasing. Yet, ParakeetTokenizerFast does not have a do_lower_case attribute.
+        This result in the test failing.
+        """
+        pass
+
+    @unittest.skip(reason="This needs a slow tokenizer. Parakeet does not have one!")
+    def test_encode_decode_with_spaces(self):
+        return
+
+    @unittest.skip(reason="ParakeetTokenizerFast doesn't have tokenizer_file in its signature.")
+    def test_rust_tokenizer_signature(self):
         pass
