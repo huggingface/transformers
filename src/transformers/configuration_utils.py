@@ -1058,7 +1058,9 @@ class PretrainedConfig(PushToHubMixin):
         if d.get("dtype") is not None:
             if isinstance(d["dtype"], dict):
                 d["dtype"] = {k: str(v).split(".")[-1] for k, v in d["dtype"].items()}
-            elif not isinstance(d["dtype"], str):
+            # models like Emu3 can have "dtype" as token in config's vocabulary map,
+            # so we also exclude int type here to avoid error in this special case.
+            elif not isinstance(d["dtype"], (str, int)):
                 d["dtype"] = str(d["dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
