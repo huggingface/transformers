@@ -401,8 +401,7 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
                     tmpdirname,
                     dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    device_map='auto', # small change to ensure device placement
-                    #load_in_4bit=True,
+                    device_map="auto",  # small change to ensure device placement
                 )
 
                 for _, param in model.named_parameters():
