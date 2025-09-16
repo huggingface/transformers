@@ -2472,9 +2472,6 @@ class Gemma3nModel(PaliGemmaModel):
         audio_outputs, audio_mask = self.audio_tower(input_features, input_features_mask)
         return self.embed_audio(inputs_embeds=audio_outputs), audio_mask
 
-    def _update_causal_mask(self, **super_kwargs):
-        raise AttributeError("We don't want to inherit it")
-
 
 @auto_docstring(
     custom_intro="""
