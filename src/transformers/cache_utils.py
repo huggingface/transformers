@@ -212,14 +212,13 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
         query_length = cache_position.shape[0]
-        first_cache_position = cache_position[0]
+        is_full = self.cumulative_length >= self.sliding_window
 
-        kv_offset = torch.clamp(first_cache_position - self.sliding_window + 1, min=0)
-
-        if self.get_seq_length() >= self.sliding_window:
+        kv_offset = max(self.cumulative_length - self.sliding_window + 1, 0)
+        if is_full:
             kv_length = self.sliding_window - 1 + query_length
         else:
-            kv_length = self.get_seq_length() + query_length
+            kv_length = self.cumulative_length + query_length
 
         return kv_length, kv_offset
 
