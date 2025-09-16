@@ -37,7 +37,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -236,7 +235,7 @@ class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
 class T5GemmaSelfAttention(Gemma2Attention):
     def __init__(self, config: T5GemmaModuleConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        # Requied by flash attention: encoder selfattention is non-causal
+        # Required by flash attention: encoder selfattention is non-causal
         self.is_causal = config.is_decoder
 
 
@@ -477,10 +476,10 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
     config: T5GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["T5GemmaBlock"]
+    _no_split_modules = ["T5GemmaEncoderLayer", "T5GemmaDecoderLayer"]
 
     def _init_weights(self, module):
-        # TODO: support intialization for encoders and decoders separately(?)
+        # TODO: support initialization for encoders and decoders separately(?)
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
@@ -573,7 +572,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        # As we want to pass `past_key_values=None` explicitly everwhere, we need to pop them from kwargs if present
+        # As we want to pass `past_key_values=None` explicitly everywhere, we need to pop them from kwargs if present
         kwargs.pop("past_key_values", None)
 
         if inputs_embeds is None:
@@ -921,15 +920,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        if self.training and self.config._attn_implementation != "eager":
-            msg = (
-                "It is strongly recommended to train T5Gemma models with the `eager` attention implementation "
-                f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
-            )
-            if is_torchdynamo_compiling():
-                raise ValueError(msg)
-            else:
-                logger.warning_once(msg)
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right

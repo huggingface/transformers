@@ -26,7 +26,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -217,7 +217,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_center_crop: bool,
         do_flip_channel_order: bool,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         rescale_factor: Optional[float] = None,
         crop_size: Optional[dict[str, int]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -244,7 +244,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         image: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_center_crop: Optional[bool] = None,
@@ -329,7 +329,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         segmentation_maps: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_center_crop: Optional[bool] = None,
@@ -404,12 +404,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+            segmentation_maps = make_flat_list_of_images(segmentation_maps, expected_ndims=2)
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

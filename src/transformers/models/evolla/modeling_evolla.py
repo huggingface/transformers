@@ -41,15 +41,9 @@ from ...modeling_outputs import (
     ModelOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import (
-    ALL_ATTENTION_FUNCTIONS,
-    ModuleUtilsMixin,
-    PreTrainedModel,
-    find_pruneable_heads_and_indices,
-    get_parameter_dtype,
-    prune_linear_layer,
-)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModuleUtilsMixin, PreTrainedModel, get_parameter_dtype
 from ...processing_utils import Unpack
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -643,7 +637,11 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
         )
 
     def get_extended_attention_mask(
-        self, attention_mask: Tensor, input_shape: tuple[int], device: torch.device = None, dtype: torch.float = None
+        self,
+        attention_mask: Tensor,
+        input_shape: tuple[int],
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
     ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -812,7 +810,7 @@ class EvollaSequenceCompressorResampler(nn.Module):
 @dataclass
 @auto_docstring
 class EvollaProteinEncoderModelOutput(ModelOutput):
-    sequence_compressor_output: torch.FloatTensor = None
+    sequence_compressor_output: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -981,7 +979,7 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
         attention_mask = query_attn_mask[:, None, :, None] * kv_attn_mask[:, None, None, :]
         # Compute the scaled dot-product attention scores
         attn_weights = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # [bs, numheads, querylength, keylength]
-        attn_weights = attn_weights - attn_weights.amax(dim=-1, keepdim=True).detach()  # To stablize score
+        attn_weights = attn_weights - attn_weights.amax(dim=-1, keepdim=True).detach()  # To stabilize score
         attention_scores = attn_weights.masked_fill(
             (1 - attention_mask).bool(), torch.finfo(attn_weights.dtype).min
         )  # [bs, numheads, querylength, keylength]
@@ -1403,7 +1401,7 @@ class EvollaModel(EvollaPreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -1521,11 +1519,11 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,  # text input ids
+        input_ids: Optional[torch.LongTensor] = None,  # text input ids
         attention_mask: Optional[torch.Tensor] = None,  # text attention mask
         inputs_embeds: Optional[torch.FloatTensor] = None,  # text input embeddings
         labels: Optional[torch.LongTensor] = None,
-        protein_input_ids: torch.LongTensor = None,
+        protein_input_ids: Optional[torch.LongTensor] = None,
         protein_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         **kwargs,

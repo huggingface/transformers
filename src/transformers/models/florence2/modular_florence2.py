@@ -24,7 +24,6 @@ from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
@@ -357,7 +356,7 @@ class Florence2Processor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BartTokenizerFast's [`~BartTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -994,7 +993,7 @@ class Florence2PostProcessor:
                     instances = self.parse_description_with_bboxes_from_text_and_spans(text, image_size=image_size)
                 parsed_dict["description_with_bboxes_or_polygons"] = instances
             else:
-                raise ValueError("task {} is not supported".format(task))
+                raise ValueError(f"task {task} is not supported")
 
         return parsed_dict
 
@@ -1569,7 +1568,6 @@ class Florence2Model(LlavaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1620,7 +1618,6 @@ class Florence2Model(LlavaModel):
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             return_dict=True,
-            **kwargs,
         )
 
         return Florence2Seq2SeqModelOutput(
@@ -1731,7 +1728,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            **kwargs,
+            # **kwargs, ## TODO: add back when Bart attention is refactored and takes kwargs
         )
 
         hidden_states = outputs[0]

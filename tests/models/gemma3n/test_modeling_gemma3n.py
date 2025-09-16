@@ -28,7 +28,6 @@ from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
     AutoTokenizer,
-    Cache,
     Gemma3nAudioConfig,
     Gemma3nAudioFeatureExtractor,
     Gemma3nConfig,
@@ -39,7 +38,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_gpu,
@@ -377,13 +375,6 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 [expected_shape] * len(iter_hidden_states),
             )
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Gemma3n flash attention does not support right padding")
-
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
         self,
@@ -394,45 +385,48 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         output_attentions,
         enable_kernels,
     ):
-        "We need to relax a bit the `atols` for fp32 here due to the altup projections"
+        "We need to relax a bit the `atols` and `rtols` for fp32 here due to the altup projections"
         atols = {
-            ("cpu", False, torch.float32): 1e-3,  # this was relaxed
+            ("cpu", False, torch.float32): 5e-2,  # this was relaxed
             ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
-            ("cpu", True, torch.float32): 1e-3,  # this was relaxed
+            ("cpu", True, torch.float32): 5e-2,  # this was relaxed
             ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float32): 1e-3,  # this was relaxed
+            ("cuda", False, torch.float32): 5e-2,  # this was relaxed
             ("cuda", False, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float16): 5e-3,
-            ("cuda", True, torch.float32): 1e-3,  # this was relaxed
+            ("cuda", True, torch.float32): 5e-2,  # this was relaxed
             ("cuda", True, torch.bfloat16): 1e-2,
             ("cuda", True, torch.float16): 5e-3,
         }
+
+        rtols = {
+            ("cpu", False, torch.float32): 1e-2,  # this was relaxed
+            ("cpu", False, torch.float16): 5e-3,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-2,  # this was relaxed
+            ("cpu", True, torch.float16): 5e-3,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-2,  # this was relaxed
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-2,  # this was relaxed
+            ("cuda", True, torch.bfloat16): 3e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+
         _test_eager_matches_sdpa_inference(
-            self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
+            self,
+            name,
+            dtype,
+            padding_side,
+            use_attention_mask,
+            output_attentions,
+            enable_kernels,
+            atols=atols,
+            rtols=rtols,
         )
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with contrastive decoding"
-    )
-    def test_contrastive_generate_low_memory(self):
-        pass
 
     @pytest.mark.generate
     @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
@@ -579,141 +573,6 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
                 self.assertTrue(has_similar_generate_outputs(dynamic_cache_generation, static_cache_generation))
-
-    @pytest.mark.generate
-    def test_past_key_values_format(self, custom_all_cache_shapes=None):
-        """
-        Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test, or pass the
-        expected cache shapes.
-        Having a standard KV cache format is important for a consistent API (and for advanced generation methods).
-        """
-        for model_class in self.all_generative_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-            # 1. If it doesn't support cache, skip the test
-            if not hasattr(config.get_text_config(), "use_cache"):
-                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
-
-            model = model_class(config).to(torch_device)
-            model = model.eval()
-            if "use_cache" not in inputs:
-                inputs["use_cache"] = True
-            outputs = model(**inputs)
-
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
-
-            # 2. retrieve the KV cache and compute its default expected shapes (if no custom shapes are provided)
-            past_kv = outputs["past_key_values"]
-            is_legacy_cache = not isinstance(past_kv, Cache)
-
-            text_config = config.get_text_config()
-            num_decoder_layers = (
-                getattr(text_config, "decoder_layers", None)
-                or getattr(text_config, "num_decoder_layers", None)
-                or text_config.num_hidden_layers
-            )
-
-            if custom_all_cache_shapes is None:
-                num_query_attention_heads = getattr(
-                    text_config, "decoder_attention_heads", text_config.num_attention_heads
-                )
-                embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
-                per_head_embed_dim = embed_dim // num_query_attention_heads
-                num_key_value_heads = (
-                    text_config.num_key_value_heads
-                    if getattr(text_config, "num_key_value_heads", None) is not None
-                    else num_query_attention_heads
-                )
-                if config.is_encoder_decoder:
-                    encoder_num_attention_heads = (
-                        text_config.encoder_attention_heads
-                        if hasattr(text_config, "encoder_attention_heads")
-                        else text_config.num_attention_heads
-                    )
-                    encoder_per_head_embed_dim = embed_dim // encoder_num_attention_heads
-                    batch_size, seq_length = inputs["decoder_input_ids"].shape[:2]
-                    # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
-                    # autoregressive generation, we're keeping the test general and not checking the 3rd dim
-                    default_cross_attention_shape = (
-                        batch_size,
-                        encoder_num_attention_heads,
-                        encoder_per_head_embed_dim,
-                    )
-                    default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
-                    all_cache_shapes = [
-                        [
-                            default_self_attention_shape,
-                            default_self_attention_shape,
-                            default_cross_attention_shape,
-                            default_cross_attention_shape,
-                        ]
-                        for _ in range(num_decoder_layers)
-                    ]
-                else:
-                    batch_size, seq_length = inputs["input_ids"].shape[:2]
-                    default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
-                    all_cache_shapes = [
-                        [default_self_attention_shape, default_self_attention_shape] for _ in range(num_decoder_layers)
-                    ]
-
-            else:
-                all_cache_shapes = custom_all_cache_shapes
-
-            # 3. Check cache shapes
-            # 3.1. Encoder-Decoder checks
-            if config.is_encoder_decoder:
-                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv.self_attention_cache)
-                self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
-
-                for i in range(num_decoder_layers):
-                    if is_legacy_cache:
-                        self.assertEqual(len(past_kv[0]), 4)  # legacy check: confirm number of elements in tuple
-
-                    # Self attention
-                    self_attention_layer_keys = (
-                        past_kv[i][0] if is_legacy_cache else past_kv.self_attention_cache.layers[i].keys
-                    )
-                    self_attention_layer_values = (
-                        past_kv[i][1] if is_legacy_cache else past_kv.self_attention_cache.layers[i].values
-                    )
-                    self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
-                    self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
-
-                    # Cross attention (ignore 3rd dim, see default shape preparation)
-                    cross_attention_layer_keys = (
-                        past_kv[i][2] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].keys
-                    )
-                    cross_attention_layer_values = (
-                        past_kv[i][3] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].values
-                    )
-                    cross_attention_layer_keys = cross_attention_layer_keys[:, :, 0, :]
-                    cross_attention_layer_values = cross_attention_layer_values[:, :, 0, :]
-                    self.assertEqual(cross_attention_layer_keys.shape, all_cache_shapes[i][2])
-                    self.assertEqual(cross_attention_layer_values.shape, all_cache_shapes[i][3])
-
-            # 3.2. Decoder-only checks
-            else:
-                num_cache_decoder_layers = len(past_kv)
-                self.assertEqual(num_cache_decoder_layers, num_decoder_layers - text_config.num_kv_shared_layers)
-
-                for i in range(num_decoder_layers - text_config.num_kv_shared_layers):
-                    if is_legacy_cache:
-                        self.assertEqual(len(past_kv[0]), 2)  # legacy check: confirm number of elements in tuple
-
-                    # Self attention
-                    if is_legacy_cache:
-                        self_attention_layer_keys = past_kv[i][0]
-                        self_attention_layer_values = past_kv[i][1]
-                    elif getattr(past_kv, "layers", None) is None:
-                        # Cache is lot layered (i.e, Mamba derivatives)
-                        self_attention_layer_keys = past_kv.key_cache[i]
-                        self_attention_layer_values = past_kv.value_cache[i]
-                    else:
-                        self_attention_layer_keys = past_kv.layers[i].keys
-                        self_attention_layer_values = past_kv.layers[i].values
-                    self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
-                    self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
 
 
 class Gemma3nVision2TextModelTester:
@@ -992,7 +851,10 @@ class Gemma3nIntegrationTest(unittest.TestCase):
                         "type": "image",
                         "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
                     },
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
             },
@@ -1048,7 +910,10 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "What do you see here?"},
                 ],
             },

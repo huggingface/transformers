@@ -62,7 +62,14 @@ class GptOssConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         max_position_embeddings=131072,
         rms_norm_eps: float = 1e-5,
-        rope_scaling={"rope_type": "yarn", "factor": 32.0, "beta_fast": 32.0, "beta_slow": 1.0, "truncate": False},
+        rope_scaling={
+            "rope_type": "yarn",
+            "factor": 32.0,
+            "beta_fast": 32.0,
+            "beta_slow": 1.0,
+            "truncate": False,
+            "original_max_position_embeddings": 4096,
+        },
         attention_dropout: float = 0.0,
         num_experts_per_tok=4,
         router_aux_loss_coef: float = 0.9,
@@ -96,7 +103,7 @@ class GptOssConfig(PretrainedConfig):
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.attention_bias = True
         self.max_position_embeddings = max_position_embeddings

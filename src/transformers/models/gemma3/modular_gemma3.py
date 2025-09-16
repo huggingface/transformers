@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-import warnings
 from collections.abc import Callable
 from typing import Any, Optional, Union
 
@@ -26,7 +25,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -162,6 +161,8 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
+        use_bidirectional_attention (`bool`, *optional*, defaults to `False`): If True, the model will attend to all
+            text tokens instead of using a causal mask. This does not change behavior for vision tokens.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -204,6 +205,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         attn_logit_softcapping=None,
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
+        use_bidirectional_attention=False,
         **kwargs,
     ):
         PretrainedConfig.__init__(
@@ -233,6 +235,9 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        self.use_bidirectional_attention = use_bidirectional_attention
+        if use_bidirectional_attention:
+            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
@@ -246,19 +251,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
                 "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
-
-    @property
-    def sliding_window_pattern(self):
-        warnings.warn(
-            "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.55.0.",
-            FutureWarning,
-        )
-        return self._sliding_window_pattern
-
-    @sliding_window_pattern.setter
-    def sliding_window_pattern(self, value):
-        self._sliding_window_pattern = value
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 class Gemma3Config(PretrainedConfig):
@@ -398,6 +391,7 @@ class Gemma3Attention(Gemma2Attention):
 
         super().__init__(config, layer_idx)
         self.sliding_window = config.sliding_window if self.is_sliding else None
+        self.is_causal = not self.config.use_bidirectional_attention
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
@@ -535,6 +529,19 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
             module.mm_input_projection_weight.data.zero_()
 
 
+def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
+    """
+    Enables a bidirectional mask within the sliding window.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        """A token can attend to any other token if their absolute distance is within
+        the (exclusive) sliding window size (distance < sliding_window)."""
+        return abs(q_idx - kv_idx) < sliding_window
+
+    return inner_mask
+
+
 class Gemma3TextModel(Gemma2Model):
     config: Gemma3TextConfig
 
@@ -609,10 +616,16 @@ class Gemma3TextModel(Gemma2Model):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
+            sliding_mask_kwargs = mask_kwargs.copy()
+
+            if self.config.use_bidirectional_attention:
+                mask_kwargs["or_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
+                sliding_mask_kwargs["or_mask_function"] = _bidirectional_window_overlay(self.config.sliding_window)
+
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
             }
 
         # embed positions
@@ -764,11 +777,11 @@ class Gemma3Model(PaliGemmaModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -825,11 +838,21 @@ class Gemma3Model(PaliGemmaModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            if token_type_ids is not None and inputs_embeds.shape[1] != 1:
+            # NOTE: this `is_prefill` logic is not flawless, it fails when we're using a cache eagerly initialized
+            # (e.g. compiled prefill) AND `pixel_values` are not provided. Determining prefill in that case requires
+            # checking data values, which is not compile-compatible.
+            is_prefill = (
+                not use_cache
+                or past_key_values is None
+                or not past_key_values.is_initialized
+                or pixel_values is not None
+            )
+            if token_type_ids is not None and is_prefill:
                 # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
 
                 # First find where a new image block starts: 1 if image and previous not image
-                # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
+                # The images cannot attend to future images, but can attend to all prev images and to itself
+                # bidirectionally
                 is_image = (token_type_ids == 1).to(cache_position.device)
                 new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
                 image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
@@ -869,14 +892,18 @@ class Gemma3Model(PaliGemmaModel):
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    # Fix: https://github.com/huggingface/transformers/issues/40564
+    accepts_loss_kwargs = False
+
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1098,7 +1125,7 @@ class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1166,6 +1193,15 @@ class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
         )
 
 
+class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemma3PreTrainedModel):
+    """
+    Gemma3TextForSequenceClassification is a text-only sequence classification model that works with Gemma3TextConfig.
+    It uses the generic sequence classification implementation for efficiency and consistency.
+    """
+
+    config: Gemma3TextConfig
+
+
 __all__ = [
     "Gemma3Config",
     "Gemma3TextConfig",
@@ -1175,4 +1211,5 @@ __all__ = [
     "Gemma3ForConditionalGeneration",
     "Gemma3Model",
     "Gemma3ForSequenceClassification",
+    "Gemma3TextForSequenceClassification",
 ]
