@@ -210,8 +210,8 @@ class FlexOlmoMLP(OlmoeMLP):
     pass
 
 
-# FlexOlmo uses Olmo2 attention instead of OlmoE Attention since it is more up-to-date with the rest
-# of the transformers library. Olmo2 attention uses only 1 class, rather than 1 class per attention implementation.
+# FlexOlmo uses Olmo2 attention instead of OlmoE Attention since its `apply_rotary_pos_emb`
+# implementation handles lower precision more faithfully to the Olmo codebase.
 class FlexOlmoAttention(Olmo2Attention):
     pass
 
