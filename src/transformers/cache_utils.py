@@ -183,10 +183,9 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     def __init__(self, sliding_window: int):
         super().__init__()
         self.sliding_window = sliding_window
-        # TODO - torch.compile has a recompilation on this value. There are 2 ways to handle this
-        # 1) Short term - make it a scalar tensor - and set it up in lazy_initialization. We
-        # might need to update get_mask_sizes.
-        # 2) Long term - wait for torch.compile team to give torch.symint like API.
+        # Note: torch.recompile has a recompilation when this value is updated. To circumvent it, we use a compile
+        # trick based on this variable name, while waiting for a more stable torch.symint like API from torch
+        # Thus this should not be renamed, or the model compilation should be updated accordingly
         self.cumulative_length = 0
 
     def update(
@@ -255,9 +254,6 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             )
         super().crop(max_length)
         self.cumulative_length = self.keys.shape[-2]
-
-    def mark_dynamic_for_compile(self):
-        super().mark_dynamic_for_compile()
 
 
 class StaticLayer(CacheLayerMixin):
