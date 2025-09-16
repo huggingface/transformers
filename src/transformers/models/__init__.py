@@ -278,6 +278,8 @@ if TYPE_CHECKING:
     from .qwen3 import *
     from .qwen3_moe import *
     from .qwen3_next import *
+    from .qwen3_vl import *
+    from .qwen3_vl_moe import *
     from .rag import *
     from .recurrent_gemma import *
     from .reformer import *
@@ -338,6 +340,7 @@ if TYPE_CHECKING:
     from .unispeech_sat import *
     from .univnet import *
     from .upernet import *
+    from .vaultgemma import *
     from .video_llava import *
     from .videomae import *
     from .vilt import *
