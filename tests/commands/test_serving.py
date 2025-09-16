@@ -25,7 +25,7 @@ from parameterized import parameterized
 
 import transformers.commands.transformers_cli as cli
 from transformers import GenerationConfig
-from transformers.commands.serving import Modality, ServeArguments, ServeCommand
+from transformers.commands.serving import ConversationCacheManager, Modality, ServeArguments, ServeCommand
 from transformers.testing_utils import CaptureStd, require_openai, slow
 from transformers.utils.import_utils import is_openai_available
 
@@ -748,3 +748,66 @@ class ServeInfrastructureTest(unittest.TestCase):
         self.assertIsNotNone(response, "Failed to connect to the server health endpoint.")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
+
+
+class ConversationCacheManagerTest(unittest.TestCase):
+    def setUp(self):
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+
+    def tearDown(self):
+        try:
+            tasks = asyncio.all_tasks(loop=self.loop)
+            for t in tasks:
+                t.cancel()
+            self.loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+        finally:
+            self.loop.close()
+
+    def test_eviction_callback(self):
+        self.loop.run_until_complete(self._test_eviction_callback())
+
+    async def _test_eviction_callback(self):
+        time_to_live = 0.01
+        cache_manager = ConversationCacheManager(entry_timeout_seconds=time_to_live)
+        evicted = False
+        conversation_id = "test_conversation"
+
+        def eviction_cb(cid: str):
+            nonlocal conversation_id
+            nonlocal evicted
+            evicted = True
+            self.assertEqual(cid, conversation_id)
+
+        cache_manager.acquire_lease(conversation_id, eviction_cb)
+        await asyncio.sleep(time_to_live * 2)
+        self.assertTrue(conversation_id in cache_manager.conversation_cache)
+        self.assertFalse(evicted)
+        cache_manager.release_lease(conversation_id)
+        await asyncio.sleep(time_to_live * 2)
+        self.assertTrue(evicted)
+        cache_manager.close()
+
+    def test_eviction_max_entries(self):
+        self.loop.run_until_complete(self._test_eviction_max_entries())
+
+    async def _test_eviction_max_entries(self):
+        max_entries = 3
+        cache_manager = ConversationCacheManager(entry_timeout_seconds=300, max_entries=max_entries)
+        evicted = False
+
+        def eviction_cb(_cid: str):
+            nonlocal evicted
+            evicted = True
+
+        for i in range(max_entries):
+            if i == 0:
+                cache_manager.touch(f"test_conversation_{i}", eviction_cb)
+            cache_manager.touch(f"test_conversation_{i}")
+
+        self.assertEqual(evicted, False)
+
+        # Adding one more entry should trigger eviction of the least recently used entry
+        cache_manager.touch(f"test_conversation_{max_entries}")
+        self.assertEqual(evicted, True)
+        cache_manager.close()
