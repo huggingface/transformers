@@ -4125,7 +4125,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 - **Audio waveform** (`torch.Tensor`): Generated audio waveform.
         """
         # check `False` on purpose because the paramter can be `str/bool`. This is needed for BC
-        generation_mode = kwargs.pop("generation_mode")
+        generation_mode = kwargs.pop("generation_mode", None)
         return_audio = generation_mode != "text" and generation_mode is not False
 
         if speaker not in self.speaker_map:
