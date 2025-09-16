@@ -73,7 +73,7 @@ def recursive_parse(
     if node_regex is not None:
         node_match = re.search(node_regex, node_content, flags=re.DOTALL)
         if not node_match:
-            return None  # TODO Is this correct? Should I raise an error?
+            return None
         node_content = _parse_re_match(node_match)
     if node_regex_iterator is not None:
         if node_type != "array":
@@ -84,7 +84,7 @@ def recursive_parse(
             for node_match in re.finditer(node_regex_iterator, node_content, flags=re.DOTALL)
         ]
         if not node_content:
-            return None  # TODO Is this correct? Should I raise an error?
+            return None
     if node_regex_to_dict is not None:
         if node_type != "object":
             raise TypeError(f"Schema node with type {node_type} cannot use x-regex-to-dict.\nSchema: {node_schema}")
@@ -225,7 +225,7 @@ def recursive_parse(
             # String type
             return node_content
     elif node_type == "any":
+        # TODO Is there a better way of handling this? Not sure if 'any' is in the spec, but we need something like it
         return node_content
     else:
-        # TODO Should we handle null types?
         raise TypeError(f"Unsupported schema type {node_type} for node: {node_content}")
