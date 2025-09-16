@@ -175,6 +175,8 @@ class AnyToAnyPipeline(Pipeline):
         forward_kwargs["generate_kwargs"] = generate_kwargs or {}
         if generation_mode is not None and generation_mode != "text":
             forward_kwargs["generate_kwargs"]["generation_mode"] = generation_mode
+        if kwargs.get("load_audio_from_video"):
+            forward_kwargs["generate_kwargs"]["use_audio_in_video"] = True
         if stop_sequence is not None:
             if isinstance(stop_sequence, str):
                 stop_sequence = [stop_sequence]
