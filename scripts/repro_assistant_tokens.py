@@ -1,5 +1,6 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 def main():
     model = AutoModelForCausalLM.from_pretrained("gpt2")
     tok = AutoTokenizer.from_pretrained("gpt2")

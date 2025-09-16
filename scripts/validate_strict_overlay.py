@@ -1,12 +1,14 @@
 """End-to-end validation of strict overlay functionality."""
 
 import logging
-import sys
 import os
+import sys
+
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+from assist_strict.assisted import ConfigDriftError, assisted_generate_strict
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from assist_strict.assisted import assisted_generate_strict, ConfigDriftError
 
 
 # Test configuration

@@ -1,14 +1,14 @@
 """Strict assistant generation utilities."""
 
 import copy
-from typing import Any, Dict, Protocol, Union
+from typing import Any, Protocol, Union
 
 from .overlay import AssistantModelProxy, build_overlay_config
 
 
 class GenerationModel(Protocol):
     """Protocol for models that can generate text."""
-    def generate(self, inputs: Dict[str, Any], **kwargs: Any) -> Union[Dict[str, Any], Any]: ...
+    def generate(self, inputs: dict[str, Any], **kwargs: Any) -> Union[dict[str, Any], Any]: ...
 
 
 class ConfiguredModel(Protocol):
@@ -16,7 +16,7 @@ class ConfiguredModel(Protocol):
     generation_config: Any
 
 
-def _extract_assistant_overrides(gen_kwargs: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_assistant_overrides(gen_kwargs: dict[str, Any]) -> dict[str, Any]:
     """Extract assistant-specific overrides from generation kwargs.
 
     Pulls out allowed assistant keys to prevent accidental propagation
@@ -32,7 +32,7 @@ def _extract_assistant_overrides(gen_kwargs: Dict[str, Any]) -> Dict[str, Any]:
     return overrides
 
 
-def _snapshot_config(model: ConfiguredModel) -> Dict[str, Any]:
+def _snapshot_config(model: ConfiguredModel) -> dict[str, Any]:
     """Capture a deep snapshot of the model's generation_config for drift detection.
 
     Creates a comparable copy that's safe for concurrent calls.
@@ -52,10 +52,10 @@ class ConfigDriftError(RuntimeError):
 
 def assisted_generate_strict(
     model: GenerationModel,
-    inputs: Dict[str, Any],
+    inputs: dict[str, Any],
     assistant_model: ConfiguredModel,
     **gen_kwargs: Any,
-) -> Union[Dict[str, Any], Any]:
+) -> Union[dict[str, Any], Any]:
     """Perform strict assisted generation with overlay protection and drift detection.
 
     Guarantees assistant overrides are visible via proxy, verifies config access,

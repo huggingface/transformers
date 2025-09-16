@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Comprehensive end-to-end test of all functionality."""
 
-import sys
 import os
 import subprocess
+import sys
+
 import torch
+
 
 # Add the repo root to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -14,9 +16,6 @@ def test_imports():
     print("🔍 Testing imports...")
 
     try:
-        from assist_strict.overlay import build_overlay_config, AssistantModelProxy
-        from assist_strict.assisted import assisted_generate_strict
-        from transformers.generation.utils import MetaSafeTensorError
         print("✅ All imports successful")
         return True
     except Exception as e:
@@ -28,7 +27,7 @@ def test_meta_tensor_safety():
     print("🔍 Testing meta tensor safety...")
 
     try:
-        from transformers import GenerationConfig, AutoModelForCausalLM
+        from transformers import AutoModelForCausalLM, GenerationConfig
         from transformers.generation.utils import MetaSafeTensorError
 
         # Load a small model

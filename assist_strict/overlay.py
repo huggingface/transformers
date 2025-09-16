@@ -5,9 +5,8 @@ to ensure deterministic behavior during assisted generation under concurrency.
 """
 
 import threading
+from typing import Any, Protocol
 from weakref import WeakKeyDictionary
-
-from typing import Any, Dict, Protocol
 
 from transformers import GenerationConfig
 
@@ -63,7 +62,7 @@ class _ImmutableGenerationConfig(GenerationConfig):
 
 
 def build_overlay_config(
-    base: GenerationConfig, overrides: Dict[str, Any]
+    base: GenerationConfig, overrides: dict[str, Any]
 ) -> _ImmutableGenerationConfig:
     """Build an immutable config by merging base with overrides.
 
