@@ -42,6 +42,8 @@ class ParakeetEncoderConfig(PretrainedConfig):
             Dimension of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
+        attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the attention layers.
         conv_kernel_size (`int`, *optional*, defaults to 9):
             The kernel size of the convolution layers in the Conformer block.
         subsampling_factor (`int`, *optional*, defaults to 8):
@@ -159,14 +161,8 @@ class ParakeetCTCConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 1025):
             Vocabulary size of the CTC head. Defines the number of different tokens that can be predicted by the model.
-        blank_token_id (`int`, *optional*, defaults to 1024):
-            The id of the blank token used in CTC. Typically 0.
         pad_token_id (`int`, *optional*, defaults to 1024):
-            The id of the padding token.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            The id of the beginning-of-sequence token.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the end-of-sequence token.
+            The id of the padding token. Note that in this case (CTC), it will also be used to identify the blank token.
         ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
             The reduction method for CTC loss. Can be "mean", "sum", or "none".
         ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
@@ -198,17 +194,13 @@ class ParakeetCTCConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=1025,
-        blank_token_id=1024,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
         encoder_config: Union[dict, ParakeetEncoderConfig] = None,
         pad_token_id=1024,
-        bos_token_id=1,
-        eos_token_id=2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.blank_token_id = blank_token_id
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
 
@@ -222,8 +214,6 @@ class ParakeetCTCConfig(PretrainedConfig):
 
         super().__init__(
             pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             **kwargs,
         )
 
