@@ -340,6 +340,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
         # verify generation
         inputs = inputs.to(torch_device)
 
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
+
         output = model.generate(**inputs, max_new_tokens=30)
         EXPECTED_DECODED_TEXT = "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks"
         self.assertEqual(
@@ -356,6 +359,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(
             batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
@@ -395,10 +401,15 @@ class Glm4vIntegrationTest(unittest.TestCase):
         inputs = processor.apply_chat_template(
             messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True
         ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
+
         output = model.generate(**inputs, max_new_tokens=30)
         EXPECTED_DECODED_TEXT = [
             "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court. There are two players: one in the foreground wearing"
         ]  # fmt: skip
+
         self.assertEqual(
             processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -412,6 +423,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
@@ -442,6 +456,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device)
 
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
+
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
@@ -468,6 +485,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
             return_tensors="pt",
             padding=True,
         ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
@@ -500,6 +520,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
             return_tensors="pt",
             padding=True,
         ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
@@ -535,6 +558,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
             return_tensors="pt",
             padding=True,
         ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
