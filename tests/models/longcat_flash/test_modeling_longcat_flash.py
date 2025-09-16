@@ -404,10 +404,7 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
                     device_map="auto",  # small change to ensure device placement
                 )
 
-                for _, param in model.named_parameters():
-                    # upcast only layer norms
-                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
-                        param.data = param.data.to(torch.float32)
+                # no upcasting at all
 
                 if model.config.is_encoder_decoder:
                     dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
