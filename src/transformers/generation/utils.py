@@ -576,6 +576,9 @@ class GenerationMixin(ContinuousMixin):
         # 2. Generic cache-dependent input preparation
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
+            # TODO (joao): handle the case where cache length == input_ids length. The function below results in an
+            # exception because we get empty input_ids after slicing. In essence, we need to roll back the cache 1
+            # token to recompute the logits for the first token to be generated (but not all caches support roll backs)
             inputs_embeds, input_ids = self._cache_dependant_input_preparation(
                 input_ids, inputs_embeds, cache_position
             )
@@ -2635,19 +2638,19 @@ class GenerationMixin(ContinuousMixin):
         # replace bos with pad to not condition healing on it
         input_ids = torch.where(input_ids == bos_token_id, pad_token_id, input_ids)
 
-        """
-        the latter code assumes the input_ids is not empty,
-        input_id has to be checked if contains elements
-		"""
+        # the latter code assumes the input_ids is not empty, input_id has to be checked if contains elements
         if input_ids.numel() == 0:
             return input_ids
 
         tail_ids = input_ids[:, -1].tolist()
 
-        space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
         # tail tokens are used for a prefix search, thus, whitespaces are replaced with
         # their tokenization (e.g. 'Ġ') to enable search for tokens prefixed with a whitespace
-        tail_toks = (tokenizer.decode(t).replace(" ", space_tok) for t in tail_ids)
+        if tokenizer.convert_tokens_to_ids(" ") is not None:
+            space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
+            tail_toks = (tokenizer.decode(t).replace(" ", space_tok) for t in tail_ids)
+        else:
+            tail_toks = (tokenizer.decode(t) for t in tail_ids)
 
         for batch_idx, (tail_id, tail_tok) in enumerate(zip(tail_ids, tail_toks)):
             batch_ids = input_ids[batch_idx]
