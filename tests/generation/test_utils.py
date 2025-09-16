@@ -2224,8 +2224,6 @@ class GenerationTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        set_model_tester_for_less_flaky_test(self)
-
         for model_class in self.all_generative_model_classes:
             if not model_class._can_compile_fullgraph:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
