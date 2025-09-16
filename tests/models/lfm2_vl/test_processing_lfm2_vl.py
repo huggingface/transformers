@@ -262,9 +262,9 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)],
         )
-        self.assertEqual(np.array(inputs["pixel_values"]).shape, (29, 49, 12))
-        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (29, 49))
-        self.assertListEqual(inputs["spatial_shapes"].tolist(), [[7, 7]] * 18 + [[6, 6]] + [[7, 7]] * 9 + [[6, 6]])
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (30, 49, 12))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (30, 49))
+        self.assertListEqual(inputs["spatial_shapes"].tolist(), ([[7, 7]] * 9 + [[6, 6]]) * 3)
 
     def test_add_special_tokens_processor_image_splitting(self):
         processor = self.get_processor()
