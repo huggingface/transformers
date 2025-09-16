@@ -27,10 +27,15 @@ line-length = 119
 # UP031: Use format specifiers instead of percent format
 # UP004: Class `XXX` inherits from `object`
 # UP028: Checks for for loops that can be replaced with yield from expressions
-ignore = ["C901", "E501", "E741", "F402", "F823", "SIM1", "SIM300", "SIM212", "SIM905", "UP009", "UP015", "UP031", "UP028", "UP004"]
+# PLW2901: `for` loop variable overwritten by assignment target
+# PLW0603: Using the global statement to update variable
+# PLE0704: Bare `raise` statement is not inside an exception handler
+# PLW1641: Checks for classes that implement __eq__ but not __hash__
+# PLE0643: Expression is likely to raise `IndexError`
+ignore = ["C901", "E501", "E741", "F402", "F823", "SIM1", "SIM300", "SIM212", "SIM905", "UP009", "UP015", "UP031", "UP028", "UP004", "PLW2901", "PLW0603", "PLE0704", "PLW1641", "PLE0643"]
 # RUF013: Checks for the use of implicit Optional
 #  in type annotations when the default parameter value is None.
-select = ["C", "E", "F", "I", "W", "RUF013", "PERF102", "PLC1802", "PLC0208", "SIM", "UP"]
+select = ["C", "E", "F", "I", "W", "RUF013", "PERF102", "PLC1802", "PLC0208", "SIM", "UP", "PLW", "PLE", "SIM"]
 extend-safe-fixes = ["UP006"]
 
 # Ignore import violations in all `__init__.py` files.

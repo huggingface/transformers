@@ -326,8 +326,6 @@ class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
         output_attentions: bool = False,
         conv_attention_mask: Optional[torch.Tensor] = None,
     ):
-        hidden_states = hidden_states
-
         # 1. Feed-Forward 1 layer
         residual = hidden_states
         hidden_states = self.ffn1_layer_norm(hidden_states)

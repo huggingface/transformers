@@ -43,7 +43,7 @@ def main():
             ./run_glue.py \
             {"".join([f" --{parameter} {value}" for parameter, value in args.__dict__.items()])}"""
     try:
-        subprocess.run(cmd, shell=True)
+        subprocess.run(cmd, check=False, shell=True)
     except Exception as e:
         logger.info(e)
 

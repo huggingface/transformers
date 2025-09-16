@@ -776,7 +776,7 @@ class HFProxyableClassMeta(type):
         attrs: dict[str, Any],
         proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
     ):
-        cls = super().__new__(cls, name, bases, attrs)
+        cls = super().__new__(cls, name, bases, attrs)  # noqa: PLW0642
         for attr_name in dir(cls):
             attr = getattr(cls, attr_name, None)
             if attr is None:
