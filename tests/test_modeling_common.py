@@ -100,7 +100,6 @@ from transformers.testing_utils import (
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
-    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )

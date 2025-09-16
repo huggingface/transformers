@@ -402,16 +402,16 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         }
 
         rtols = {
-            ("cpu", False, torch.float32): 1e-2, # this was relaxed
+            ("cpu", False, torch.float32): 1e-2,  # this was relaxed
             ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
-            ("cpu", True, torch.float32): 1e-2, # this was relaxed
+            ("cpu", True, torch.float32): 1e-2,  # this was relaxed
             ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float32): 1e-2, # this was relaxed
+            ("cuda", False, torch.float32): 1e-2,  # this was relaxed
             ("cuda", False, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float16): 5e-3,
-            ("cuda", True, torch.float32): 1e-2, # this was relaxed
+            ("cuda", True, torch.float32): 1e-2,  # this was relaxed
             ("cuda", True, torch.bfloat16): 3e-2,
             ("cuda", True, torch.float16): 5e-3,
         }
@@ -425,7 +425,7 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             output_attentions,
             enable_kernels,
             atols=atols,
-            rtols=rtols
+            rtols=rtols,
         )
 
     @pytest.mark.generate
