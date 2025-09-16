@@ -31,13 +31,13 @@ if is_vision_available():
     from PIL import Image
 
     from transformers.image_utils import get_image_size
-    from transformers.models.videollama3.video_processing_videollama3 import smart_resize
+    from transformers.models.video_llama_3.video_processing_video_llama_3 import smart_resize
 
     if is_torchvision_available():
-        from transformers import Videollama3VideoProcessor
+        from transformers import VideoLlama3VideoProcessor
 
 
-class Videollama3VideoProcessingTester:
+class VideoLlama3VideoProcessingTester:
     def __init__(
         self,
         parent,
@@ -134,12 +134,12 @@ class Videollama3VideoProcessingTester:
 
 @require_torch
 @require_vision
-class Videollama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
-    fast_video_processing_class = Videollama3VideoProcessor if is_torchvision_available() else None
+class VideoLlama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
+    fast_video_processing_class = VideoLlama3VideoProcessor if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.video_processor_tester = Videollama3VideoProcessingTester(self)
+        self.video_processor_tester = VideoLlama3VideoProcessingTester(self)
 
     @property
     def video_processor_dict(self):

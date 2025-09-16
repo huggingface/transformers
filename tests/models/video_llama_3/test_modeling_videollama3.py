@@ -23,11 +23,11 @@ import torch.nn as nn
 from parameterized import parameterized
 
 from transformers import (
-    Videollama3Config,
-    Videollama3ForConditionalGeneration,
-    Videollama3Model,
-    Videollama3VisionConfig,
-    Videollama3VisionModel,
+    VideoLlama3Config,
+    VideoLlama3ForConditionalGeneration,
+    VideoLlama3Model,
+    VideoLlama3VisionConfig,
+    VideoLlama3VisionModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -430,7 +430,7 @@ def _test_eager_matches_sdpa_inference(
                 )
 
 
-class Videollama3VisionModelTester:
+class VideoLlama3VisionModelTester:
     def __init__(
         self,
         parent,
@@ -463,7 +463,7 @@ class Videollama3VisionModelTester:
         self.seq_length = (self.image_size // self.patch_size) ** 2
 
     def get_config(self):
-        return Videollama3VisionConfig(
+        return VideoLlama3VisionConfig(
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
@@ -498,13 +498,13 @@ class Videollama3VisionModelTester:
 
 
 @require_torch
-class Videollama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
+class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SIGLIP does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (Videollama3VisionModel,) if is_torch_available() else ()
+    all_model_classes = (VideoLlama3VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["grid_thw", "merge_sizes"]
     # fx_compatible = False
     test_pruning = False
@@ -515,8 +515,8 @@ class Videollama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_disk_offload_bin = False
 
     def setUp(self):
-        self.model_tester = Videollama3VisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Videollama3VisionConfig, has_text_modality=False)
+        self.model_tester = VideoLlama3VisionModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=VideoLlama3VisionConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -530,23 +530,23 @@ class Videollama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    @unittest.skip(reason="Videollama3VisionModel does not use inputs_embeds")
+    @unittest.skip(reason="VideoLlama3VisionModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Videollama3VisionModel does not support standalone training")
+    @unittest.skip(reason="VideoLlama3VisionModel does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Videollama3VisionModel does not support standalone training")
+    @unittest.skip(reason="VideoLlama3VisionModel does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="Videollama3VisionModel does not support standalone training")
+    @unittest.skip(reason="VideoLlama3VisionModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="Videollama3VisionModel does not support standalone training")
+    @unittest.skip(reason="VideoLlama3VisionModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
@@ -706,7 +706,7 @@ class Videollama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(attentions.grad)
 
 
-class Videollama3VisionText2TextModelTester:
+class VideoLlama3VisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -742,7 +742,7 @@ class Videollama3VisionText2TextModelTester:
             "hidden_size": 32,
             "intermediate_size": 64,
             "layer_norm_eps": 1e-06,
-            "model_type": "videollama3_vision",
+            "model_type": "video_llama_3_vision",
             "num_attention_heads": 4,
             "num_channels": 3,
             "num_hidden_layers": 2,
@@ -771,7 +771,7 @@ class Videollama3VisionText2TextModelTester:
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
-        return Videollama3Config(
+        return VideoLlama3Config(
             text_config=self.text_config,
             vision_config=self.vision_config,
             use_token_compression=self.use_token_compression,
@@ -814,27 +814,27 @@ class Videollama3VisionText2TextModelTester:
 
 
 @require_torch
-class Videollama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
-    Model tester for `Videollama3ForConditionalGeneration`.
+    Model tester for `VideoLlama3ForConditionalGeneration`.
     """
 
     all_model_classes = (
         (
-            Videollama3Model,
-            Videollama3ForConditionalGeneration,
+            VideoLlama3Model,
+            VideoLlama3ForConditionalGeneration,
         )
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"image-text-to-text": Videollama3ForConditionalGeneration}
+    pipeline_model_mapping = {"image-text-to-text": VideoLlama3ForConditionalGeneration}
     test_pruning = False
     test_head_masking = False
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = Videollama3VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Videollama3Config, has_text_modality=False)
+        self.model_tester = VideoLlama3VisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=VideoLlama3Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()

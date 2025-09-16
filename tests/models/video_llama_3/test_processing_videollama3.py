@@ -31,10 +31,10 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Videollama3Processor
+    from transformers import VideoLlama3Processor
 
     if is_torchvision_available():
-        from transformers import Videollama3ImageProcessor, Videollama3VideoProcessor
+        from transformers import VideoLlama3ImageProcessor, VideoLlama3VideoProcessor
 
 if is_torch_available():
     import torch
@@ -50,13 +50,13 @@ def prepare_image_inputs():
 @require_vision
 @require_torch
 @require_torchvision
-class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = Videollama3Processor
+class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = VideoLlama3Processor
 
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        processor = Videollama3Processor.from_pretrained(
+        processor = VideoLlama3Processor.from_pretrained(
             "lkhl/VideoLLaMA3-2B-Image-HF", patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28
         )
         processor.save_pretrained(cls.tmpdirname)
@@ -105,24 +105,24 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         video_processor = self.get_video_processor()
 
-        processor = Videollama3Processor(
+        processor = VideoLlama3Processor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
         processor.save_pretrained(self.tmpdirname)
-        processor = Videollama3Processor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor = VideoLlama3Processor.from_pretrained(self.tmpdirname, use_fast=False)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
-        self.assertIsInstance(processor.image_processor, Videollama3ImageProcessor)
-        self.assertIsInstance(processor.video_processor, Videollama3VideoProcessor)
+        self.assertIsInstance(processor.image_processor, VideoLlama3ImageProcessor)
+        self.assertIsInstance(processor.video_processor, VideoLlama3VideoProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Videollama3Processor(
+        processor = VideoLlama3Processor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 
@@ -139,7 +139,7 @@ class Videollama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Videollama3Processor(
+        processor = VideoLlama3Processor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 

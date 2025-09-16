@@ -72,7 +72,7 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class Videollama3ImageProcessor(BaseImageProcessor):
+class VideoLlama3ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a VideoLLaMA3 image processor that dynamically resizes images based on the original images.
 
@@ -489,4 +489,4 @@ class Videollama3ImageProcessor(BaseImageProcessor):
         return grid_h * grid_w
 
 
-__all__ = ["Videollama3ImageProcessor"]
+__all__ = ["VideoLlama3ImageProcessor"]

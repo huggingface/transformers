@@ -118,7 +118,7 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class Videollama3VisionConfig(SiglipVisionConfig):
+class VideoLlama3VisionConfig(SiglipVisionConfig):
     """
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -144,7 +144,7 @@ class Videollama3VisionConfig(SiglipVisionConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
-    model_type = "videollama3_vision"
+    model_type = "video_llama_3_vision"
     base_config_key = "vision_config"
 
     def __init__(
@@ -178,12 +178,12 @@ class Videollama3VisionConfig(SiglipVisionConfig):
         del self.image_size
 
 
-class Videollama3Config(PretrainedConfig):
+class VideoLlama3Config(PretrainedConfig):
     """
     Args:
         text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen2Config`):
             The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Videollama3VisionConfig`):
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `VideoLlama3VisionConfig`):
             The config object or dictionary of the vision backbone.
         image_token_id (`int`, *optional*, defaults to 151655):
             The image token index to encode the image prompt.
@@ -191,8 +191,8 @@ class Videollama3Config(PretrainedConfig):
             The video token index to encode the image prompt.
     """
 
-    model_type = "videollama3"
-    sub_configs = {"vision_config": Videollama3VisionConfig, "text_config": AutoConfig}
+    model_type = "video_llama_3"
+    sub_configs = {"vision_config": VideoLlama3VisionConfig, "text_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -235,7 +235,7 @@ class Videollama3Config(PretrainedConfig):
     Base class for VideoLLaMA3 outputs, with hidden states and attentions.
     """
 )
-class Videollama3ModelOutputWithPast(ModelOutput):
+class VideoLlama3ModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
@@ -265,7 +265,7 @@ class Videollama3ModelOutputWithPast(ModelOutput):
     Base class for VideoLLaMA3 causal language model (or autoregressive) outputs.
     """
 )
-class Videollama3CausalLMOutputWithPast(ModelOutput):
+class VideoLlama3CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -294,7 +294,7 @@ class Videollama3CausalLMOutputWithPast(ModelOutput):
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class Videollama3VisionRotaryEmbedding(VisionRotaryEmbedding):
+class VideoLlama3VisionRotaryEmbedding(VisionRotaryEmbedding):
     def forward(self, grid_thw, merge_sizes) -> tuple[torch.Tensor, torch.Tensor]:
         pos_ids = []
         for (t, h, w), merge_size in zip(grid_thw, merge_sizes):
@@ -330,8 +330,8 @@ class Videollama3VisionRotaryEmbedding(VisionRotaryEmbedding):
         return (emb.cos(), emb.sin())
 
 
-class Videollama3VisionEmbeddings(nn.Module):
-    def __init__(self, config: Videollama3VisionConfig) -> None:
+class VideoLlama3VisionEmbeddings(nn.Module):
+    def __init__(self, config: VideoLlama3VisionConfig) -> None:
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -352,11 +352,11 @@ class Videollama3VisionEmbeddings(nn.Module):
         return embeddings
 
 
-class Videollama3VisionMLP(SiglipMLP):
+class VideoLlama3VisionMLP(SiglipMLP):
     pass
 
 
-class Videollama3VisionAttention(SiglipAttention):
+class VideoLlama3VisionAttention(SiglipAttention):
     def __init__(self, config):
         super().__init__(config)
         self.num_key_value_groups = 1
@@ -446,11 +446,11 @@ class Videollama3VisionAttention(SiglipAttention):
         return attn_output, attn_weights
 
 
-class Videollama3VisionEncoderLayer(SiglipEncoderLayer):
-    def __init__(self, config: Videollama3VisionConfig):
+class VideoLlama3VisionEncoderLayer(SiglipEncoderLayer):
+    def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__(config)
-        self.self_attn = Videollama3VisionAttention(config=config)
-        self.mlp = Videollama3VisionMLP(config=config)
+        self.self_attn = VideoLlama3VisionAttention(config=config)
+        self.mlp = VideoLlama3VisionMLP(config=config)
 
     def forward(
         self,
@@ -487,10 +487,10 @@ class Videollama3VisionEncoderLayer(SiglipEncoderLayer):
         return hidden_states
 
 
-class Videollama3VisionEncoder(SiglipEncoder):
-    def __init__(self, config: Videollama3VisionConfig):
+class VideoLlama3VisionEncoder(SiglipEncoder):
+    def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__(config)
-        self.layers = nn.ModuleList([Videollama3VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([VideoLlama3VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
     @can_return_tuple
     @auto_docstring
@@ -518,31 +518,31 @@ class Videollama3VisionEncoder(SiglipEncoder):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class Videollama3PreTrainedModel(Qwen2VLPreTrainedModel):
-    config: Videollama3Config
-    _no_split_modules = ["Videollama3VisionEncoderLayer"]
+class VideoLlama3PreTrainedModel(Qwen2VLPreTrainedModel):
+    config: VideoLlama3Config
+    _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
 
 
-class Videollama3VisionModel(Videollama3PreTrainedModel):
-    config: Videollama3VisionConfig
+class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
+    config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
     _can_record_outputs = {
-        "hidden_states": Videollama3VisionEncoderLayer,
-        "attentions": Videollama3VisionAttention,
+        "hidden_states": VideoLlama3VisionEncoderLayer,
+        "attentions": VideoLlama3VisionAttention,
     }
 
-    def __init__(self, config: Videollama3VisionConfig):
+    def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__(config)
         head_dim = config.hidden_size // config.num_attention_heads
 
-        self.rotary_pos_emb = Videollama3VisionRotaryEmbedding(head_dim // 2)
-        self.embeddings = Videollama3VisionEmbeddings(config)
-        self.encoder = Videollama3VisionEncoder(config)
+        self.rotary_pos_emb = VideoLlama3VisionRotaryEmbedding(head_dim // 2)
+        self.embeddings = VideoLlama3VisionEmbeddings(config)
+        self.encoder = VideoLlama3VisionEncoder(config)
         self.post_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.post_init()
 
-    def get_input_embeddings(self) -> Videollama3VisionEmbeddings:
+    def get_input_embeddings(self) -> VideoLlama3VisionEmbeddings:
         return self.embeddings.patch_embedding
 
     def pixel_unshuffle(
@@ -610,8 +610,8 @@ class Videollama3VisionModel(Videollama3PreTrainedModel):
         return BaseModelOutput(last_hidden_state=last_hidden_state)
 
 
-class Videollama3Projector(nn.Module):
-    def __init__(self, config: Videollama3Config) -> None:
+class VideoLlama3Projector(nn.Module):
+    def __init__(self, config: VideoLlama3Config) -> None:
         super().__init__()
         in_hidden_size = config.vision_config.hidden_size
         out_hidden_size = config.text_config.hidden_size
@@ -626,14 +626,14 @@ class Videollama3Projector(nn.Module):
         return hidden_states
 
 
-class Videollama3Model(Qwen2VLModel):
+class VideoLlama3Model(Qwen2VLModel):
     _checkpoint_conversion_mapping = {}
     _can_compile_fullgraph = False
 
-    def __init__(self, config: Videollama3Config):
+    def __init__(self, config: VideoLlama3Config):
         PreTrainedModel.__init__(self, config)
         self.vision_model = AutoModel.from_config(config.vision_config)
-        self.projector = Videollama3Projector(config)
+        self.projector = VideoLlama3Projector(config)
         self.language_model = AutoModel.from_config(config.text_config)
 
         self.post_init()
@@ -708,7 +708,7 @@ class Videollama3Model(Qwen2VLModel):
         video_compression_mask: Optional[torch.BoolTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Videollama3ModelOutputWithPast]:
+    ) -> Union[tuple, VideoLlama3ModelOutputWithPast]:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
@@ -756,7 +756,7 @@ class Videollama3Model(Qwen2VLModel):
             **kwargs,
         )
 
-        return Videollama3ModelOutputWithPast(
+        return VideoLlama3ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -766,13 +766,13 @@ class Videollama3Model(Qwen2VLModel):
         )
 
 
-class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
+class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
     _can_compile_fullgraph = False
 
-    def __init__(self, config: Videollama3Config):
+    def __init__(self, config: VideoLlama3Config):
         PreTrainedModel.__init__(self, config)
-        self.model = Videollama3Model(config)
+        self.model = VideoLlama3Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
@@ -804,7 +804,7 @@ class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         video_compression_mask: Optional[torch.BoolTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Videollama3CausalLMOutputWithPast]:
+    ) -> Union[tuple, VideoLlama3CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -850,7 +850,7 @@ class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return Videollama3CausalLMOutputWithPast(
+        return VideoLlama3CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -1109,12 +1109,12 @@ class Videollama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         return input_ids, model_kwargs
 
 
-class Videollama3ImagesKwargs(Qwen2VLImagesKwargs):
+class VideoLlama3ImagesKwargs(Qwen2VLImagesKwargs):
     pass
 
 
-class Videollama3ProcessorKwargs(Qwen2VLProcessorKwargs):
-    image_kwargs: Videollama3ImagesKwargs
+class VideoLlama3ProcessorKwargs(Qwen2VLProcessorKwargs):
+    image_kwargs: VideoLlama3ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -1124,17 +1124,17 @@ class Videollama3ProcessorKwargs(Qwen2VLProcessorKwargs):
     }
 
 
-class Videollama3Processor(Qwen2VLProcessor):
+class VideoLlama3Processor(Qwen2VLProcessor):
     r"""
     Constructs a VideoLLaMA3 processor which wraps a VideoLLaMA3 image processor and a Qwen2 tokenizer into a single processor.
-    [`Videollama3Processor`] offers all the functionalities of [`Videollama3ImageProcessor`] and [`Qwen2Tokenizer`]. See the
-    [`~Videollama3Processor.__call__`] and [`~Videollama3Processor.decode`] for more information.
+    [`VideoLlama3Processor`] offers all the functionalities of [`VideoLlama3ImageProcessor`] and [`Qwen2Tokenizer`]. See the
+    [`~VideoLlama3Processor.__call__`] and [`~VideoLlama3Processor.decode`] for more information.
     Args:
-        image_processor ([`Videollama3ImageProcessor`], *optional*):
+        image_processor ([`VideoLlama3ImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`Qwen2Tokenizer`], *optional*):
             The tokenizer is a required input.
-        video_processor ([`Videollama3VideoProcessor`], *optional*):
+        video_processor ([`VideoLlama3VideoProcessor`], *optional*):
             The video processor is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
     """
@@ -1144,10 +1144,10 @@ class Videollama3Processor(Qwen2VLProcessor):
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         videos: VideoInput = None,
-        **kwargs: Unpack[Videollama3ProcessorKwargs],
+        **kwargs: Unpack[VideoLlama3ProcessorKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
-            Videollama3ProcessorKwargs,
+            VideoLlama3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -1228,16 +1228,16 @@ class Videollama3Processor(Qwen2VLProcessor):
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
 
-class Videollama3FastImageProcessorKwargs(Qwen2VLFastImageProcessorKwargs):
+class VideoLlama3FastImageProcessorKwargs(Qwen2VLFastImageProcessorKwargs):
     pass
 
 
-class Videollama3ImageProcessorFast(Qwen2VLImageProcessorFast):
+class VideoLlama3ImageProcessorFast(Qwen2VLImageProcessorFast):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     merge_size = 1
-    valid_kwargs = Videollama3FastImageProcessorKwargs
+    valid_kwargs = VideoLlama3FastImageProcessorKwargs
     model_input_names = [
         "pixel_values",
         "image_grid_thw",
@@ -1272,9 +1272,9 @@ class Videollama3ImageProcessorFast(Qwen2VLImageProcessorFast):
             )
         if videos is not None:
             logger.warning(
-                "`Videollama3ImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
+                "`VideoLlama3ImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
                 "This is a deprecated behavior and will be removed in v5.0. "
-                "Your videos should be forwarded to `Videollama3VideoProcessor`. "
+                "Your videos should be forwarded to `VideoLlama3VideoProcessor`. "
             )
             # Can't change _prepare_images_structure to work with videos because it also needs to work with images.
             videos = make_batched_videos(videos)
@@ -1294,18 +1294,18 @@ class Videollama3ImageProcessorFast(Qwen2VLImageProcessorFast):
         return batch_feature
 
 
-class Videollama3VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs):
+class VideoLlama3VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs):
     use_token_compression: Optional[bool]
 
 
-class Videollama3VideoProcessor(Qwen2VLVideoProcessor):
+class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
     use_token_compression = True
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     max_frames = 180
     return_metadata = True
-    valid_kwargs = Videollama3VideoProcessorInitKwargs
+    valid_kwargs = VideoLlama3VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes", "video_compression_mask"]
 
     def _get_compression_mask(
@@ -1471,13 +1471,13 @@ class Videollama3VideoProcessor(Qwen2VLVideoProcessor):
 
 
 __all__ = [
-    "Videollama3VisionConfig",
-    "Videollama3Config",
-    "Videollama3VisionModel",
-    "Videollama3PreTrainedModel",
-    "Videollama3Model",
-    "Videollama3ForConditionalGeneration",
-    "Videollama3Processor",
-    "Videollama3ImageProcessorFast",
-    "Videollama3VideoProcessor",
+    "VideoLlama3VisionConfig",
+    "VideoLlama3Config",
+    "VideoLlama3VisionModel",
+    "VideoLlama3PreTrainedModel",
+    "VideoLlama3Model",
+    "VideoLlama3ForConditionalGeneration",
+    "VideoLlama3Processor",
+    "VideoLlama3ImageProcessorFast",
+    "VideoLlama3VideoProcessor",
 ]

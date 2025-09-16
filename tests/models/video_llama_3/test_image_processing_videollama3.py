@@ -20,7 +20,7 @@ import numpy as np
 import requests
 
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from transformers.models.videollama3.image_processing_videollama3 import smart_resize
+from transformers.models.video_llama_3.image_processing_video_llama_3 import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -33,13 +33,13 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Videollama3ImageProcessor
+    from transformers import VideoLlama3ImageProcessor
 
     if is_torchvision_available():
-        from transformers import Videollama3ImageProcessorFast
+        from transformers import VideoLlama3ImageProcessorFast
 
 
-class Videollama3ImageProcessingTester:
+class VideoLlama3ImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -114,13 +114,13 @@ class Videollama3ImageProcessingTester:
 
 @require_torch
 @require_vision
-class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = Videollama3ImageProcessor if is_vision_available() else None
-    fast_image_processing_class = Videollama3ImageProcessorFast if is_torchvision_available() else None
+class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = VideoLlama3ImageProcessor if is_vision_available() else None
+    fast_image_processing_class = VideoLlama3ImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = Videollama3ImageProcessingTester(self)
+        self.image_processor_tester = VideoLlama3ImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
@@ -238,7 +238,7 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
-    @unittest.skip(reason="Videollama3ImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
+    @unittest.skip(reason="VideoLlama3ImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
     def test_call_numpy_4_channels(self):
         pass
 
@@ -271,7 +271,7 @@ class Videollama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
 
     @unittest.skip(
-        reason="`Videollama3ImageProcessor` works only with image inputs and doesn't process videos anymore."
+        reason="`VideoLlama3ImageProcessor` works only with image inputs and doesn't process videos anymore."
     )
     def test_video_inputs(self):
         pass
