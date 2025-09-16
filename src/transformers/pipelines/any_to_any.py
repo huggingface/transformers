@@ -165,7 +165,8 @@ class AnyToAnyPipeline(Pipeline):
 
         # Forward kwargs
         forward_kwargs["generate_kwargs"] = generate_kwargs or {}
-        forward_kwargs["generate_kwargs"]["generation_mode"] = generation_mode
+        if generation_mode is not None and generation_mode != "text":
+            forward_kwargs["generate_kwargs"]["generation_mode"] = generation_mode
         if stop_sequence is not None:
             if isinstance(stop_sequence, str):
                 stop_sequence = [stop_sequence]
@@ -295,9 +296,7 @@ class AnyToAnyPipeline(Pipeline):
             raise ValueError("You must at least provide either text or images.")
 
         # Do we need this codepath ???
-        if (isinstance(text, dict) and text.get("text") is not None) or (
-            isinstance(text, list) and isinstance(text[0], dict) and text[0].get("text") is not None
-        ):
+        if text is not None and not (isinstance(text, str) or (isinstance(text, list) and isinstance(text[0], str))):
             """
             Supports the following format
             - {"text": text, "image": image, "video": video, "audio": audio}

@@ -45,7 +45,11 @@ if is_vision_available():
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, dtype="float32"):
+    # We only need `processor` but the Mixin will pass all possible preprocessing classes for a model.
+    # So we add them all in signature
+    def get_test_pipeline(
+        self, model, tokenizer, processor, image_processor=None, feature_extractor=None, dtype="float32"
+    ):
         _is_images_supported = hasattr(processor, "image_processor")
         _is_videos_supported = hasattr(processor, "video_processor")
         _is_audios_supported = hasattr(processor, "feature_extractor")

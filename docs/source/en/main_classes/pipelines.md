@@ -492,7 +492,7 @@ Pipelines available for multimodal tasks include the following.
 
 ### AnyToAnyPipeline
 
-[[autodoc]] ImageTextToTextPipeline
+[[autodoc]] AnyToAnyPipeline
     - __call__
     - all
 
