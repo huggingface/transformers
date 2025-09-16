@@ -933,8 +933,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
             is_prefill = (
                 not use_cache
                 or past_key_values is None
-                or len(past_key_values) == 0
-                or past_key_values[0][0] is None
+                or not past_key_values.is_initialized
                 or pixel_values is not None
             )
             if token_type_ids is not None and is_prefill:
