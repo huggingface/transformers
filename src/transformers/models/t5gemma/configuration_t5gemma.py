@@ -309,7 +309,7 @@ class T5GemmaConfig(PretrainedConfig):
         # Used in pipeline generation.
         self.vocab_size = vocab_size
 
-        # Expose decoder num_hidden_layers for cache initialization (following T5Config pattern)
+        # Expose decoder num_hidden_layers for cache initialization
         self.num_layers = decoder.num_hidden_layers
 
     def __setattr__(self, key, value):
