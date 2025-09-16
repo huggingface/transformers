@@ -137,7 +137,7 @@ class Llama4VisionConfig(PretrainedConfig):
         @vision_feature_layer.setter
         def vision_feature_layer(self, value):
             self._vision_feature_layer = value
-            super().__init__(**kwargs)
+        super().__init__(**kwargs)
 
 
 class Llama4TextConfig(PretrainedConfig):
