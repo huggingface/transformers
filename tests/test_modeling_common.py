@@ -100,7 +100,6 @@ from transformers.testing_utils import (
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
-    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -224,8 +223,6 @@ def _test_eager_matches_sdpa_inference(
             ("cuda", True, torch.bfloat16): 3e-2,  # (different from others)
             ("cuda", True, torch.float16): 5e-3,
         }
-
-    set_model_tester_for_less_flaky_test(self)
 
     def _can_output_attn(model):
         parameters = inspect.signature(model.forward).parameters
@@ -1094,8 +1091,6 @@ class ModelTesterMixin:
                     msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
                     msg += str(e)
                     raise AssertionError(msg)
-
-        set_model_tester_for_less_flaky_test(self)
 
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)

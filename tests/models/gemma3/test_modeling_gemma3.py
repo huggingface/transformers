@@ -345,17 +345,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("Gemma3 does not seem to be compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Gemma3 does not seem to be compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
     @unittest.skip(
         reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation"
     )

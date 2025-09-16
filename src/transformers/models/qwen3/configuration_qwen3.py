@@ -215,7 +215,7 @@ class Qwen3Config(PretrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
