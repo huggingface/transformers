@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import MISSING, field, make_dataclass
-from typing import Annotated, Any, ForwardRef, Optional, TypedDict, Union, get_args, get_origin
+from typing import Annotated, ForwardRef, Optional, TypedDict, Union, get_args, get_origin
 
 from huggingface_hub.dataclasses import as_validated_field, strict
 
@@ -45,6 +45,11 @@ class TypedDictAdapter:
     A utility class used to convert a TypedDict object to dataclass and attach
     a hub validator on top based on TypedDict annotations.
 
+    We don't want to replace `TypedDict` by dataclasses in the codebase because
+    with dataclasses we will lose typing hints that `Unpack[TypedDict]` gives.
+    So this utility is a sweet spot to keep the balance between DevX and strong
+    typing`validation.
+
     Args:
         type: The TypedDict object that needs to be validated.
     """
@@ -52,12 +57,8 @@ class TypedDictAdapter:
     def __init__(
         self,
         type: type[TypedDict],
-        globalns: Optional[dict[str, Any]] = None,
-        localns: Optional[dict[str, Any]] = None,
     ):
         self.type = type
-        self.globalns = globalns
-        self.localns = localns
         self.dataclass = self.create_dataclass()
         self.dataclass = strict(self.dataclass)
 
