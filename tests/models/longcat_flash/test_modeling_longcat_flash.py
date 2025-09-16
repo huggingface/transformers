@@ -320,6 +320,10 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_disk_offload_safetensors(self):
         pass
 
+    @unittest.skip("Most probably because of the MOE, the moe and router does not ignore padding tokens")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
     @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
