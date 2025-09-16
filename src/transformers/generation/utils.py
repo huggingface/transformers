@@ -3413,6 +3413,7 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         this_peer_finished = False
+        is_first_iteration = True  # to preserve the same API in the output as other generation methods
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[1]
 
@@ -3531,12 +3532,14 @@ class GenerationMixin(ContinuousMixin):
                         cur_len,
                         newly_added,
                         is_decoder_attention=False,
+                        include_prompt_block=is_first_iteration,
                     )
                     decoder_attention_chunks = _split_model_outputs(
                         outputs.decoder_attentions,
                         cur_len,
                         newly_added,
                         is_decoder_attention=True,
+                        include_prompt_block=is_first_iteration,
                     )
                 else:
                     if outputs.attentions[0] is not None:
@@ -3545,6 +3548,7 @@ class GenerationMixin(ContinuousMixin):
                             cur_len,
                             newly_added,
                             is_decoder_attention=True,
+                            include_prompt_block=is_first_iteration,
                         )
 
             if generate_output["output_hidden_states"]:
@@ -3554,6 +3558,7 @@ class GenerationMixin(ContinuousMixin):
                         cur_len,
                         newly_added,
                         is_decoder_attention=False,
+                        include_prompt_block=is_first_iteration,
                     )
                 else:
                     decoder_hidden_state_chunks = _split_model_outputs(
@@ -3561,6 +3566,7 @@ class GenerationMixin(ContinuousMixin):
                         cur_len,
                         newly_added,
                         is_decoder_attention=False,
+                        include_prompt_block=is_first_iteration,
                     )
 
             score_tensors = (
@@ -3583,6 +3589,7 @@ class GenerationMixin(ContinuousMixin):
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, generate_output["scores"])
             this_peer_finished = unfinished_sequences.max() == 0
+            is_first_iteration = False
 
         if streamer is not None:
             streamer.end()
@@ -3846,12 +3853,25 @@ def _speculative_sampling(
     return valid_tokens, n_matches
 
 
-def _split_model_outputs(new_outputs, cur_len, added_len, is_decoder_attention=False):
+def _split_model_outputs(
+    new_outputs,
+    cur_len: int,
+    added_len: int,
+    is_decoder_attention: bool = False,
+    include_prompt_block: bool = False,
+):
     """
     Given the (decoder/cross attentions)/(decoder hidden states) for multiple generated tokens, splits it into a tuple
     where each member corresponds to a single generated token.
     """
     outputs = ()
+    if include_prompt_block:
+        prompt_block = ()
+        for layer_tensor in new_outputs:
+            last_dim_size = cur_len if is_decoder_attention else layer_tensor.shape[-1]
+            prompt_block += (layer_tensor[..., :cur_len, :last_dim_size],)
+        outputs += (prompt_block,)
+
     for i in range(added_len):
         new_tuple = ()
         for layer in new_outputs:
