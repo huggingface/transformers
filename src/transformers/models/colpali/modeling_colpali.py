@@ -15,7 +15,7 @@
 """PyTorch ColPali model"""
 
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn
@@ -67,8 +67,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
     embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -79,7 +78,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     embeddings: Optional[torch.Tensor] = None
-    past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
