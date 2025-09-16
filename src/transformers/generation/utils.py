@@ -143,6 +143,15 @@ GENERATION_MODES_MAPPING = {
 }
 
 
+class MetaSafeTensorError(RuntimeError):
+    """Custom exception for unsafe meta tensor operations inside generation utils.
+
+    Raised when code attempts to copy or access data from a meta tensor without a safe fallback.
+    """
+    def __init__(self, message: str):
+        super().__init__(f"Meta tensor operation not supported: {message}")
+
+
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
     """
@@ -2052,7 +2061,26 @@ class GenerationMixin(ContinuousMixin):
 
             device = device if device is not None else self.device
             if isinstance(token, torch.Tensor):
-                return token.to(device)
+                if token.device.type == "meta":
+                    # Meta tensors have no data, so we cannot use .item(), .cpu(), or .numpy()
+                    if token.numel() == 1:
+                        # For scalar meta tensors, we cannot safely extract the actual value
+                        # This indicates the config was set up with meta tensors, which is not supported
+                        # for special token preparation during generation
+                        raise MetaSafeTensorError(
+                            f"Cannot extract token ID from scalar meta tensor with shape {token.shape}. "
+                            "Special tokens (eos_token_id, bos_token_id, pad_token_id) should be integers "
+                            "or regular tensors, not meta tensors during generation."
+                        )
+                    else:
+                        # Multi-element meta tensors are definitely not supported for special tokens
+                        raise MetaSafeTensorError(
+                            f"Cannot process multi-element meta tensor with shape {token.shape} for special tokens. "
+                            "Special tokens must be scalar integers or single-element tensors."
+                        )
+                else:
+                    return token.to(device)
+            # For int tokens, wrap in tensor
             return torch.tensor(token, device=device, dtype=torch.long)
 
         bos_token_tensor = _tensor_or_none(generation_config.bos_token_id, device=device)
@@ -2078,7 +2106,11 @@ class GenerationMixin(ContinuousMixin):
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
             pad_token_tensor = eos_token_tensor[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
+            # Safe tensor logging - avoid .item() on meta tensors during string formatting
+            if pad_token_tensor.device.type == "meta":
+                logger.warning(f"Setting `pad_token_id` to `eos_token_id`:<meta tensor> for open-end generation.")
+            else:
+                logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
 
         # Sanity checks/warnings
         if self.config.is_encoder_decoder and decoder_start_token_tensor is None:
@@ -2098,10 +2130,17 @@ class GenerationMixin(ContinuousMixin):
         if eos_token_tensor is not None and (
             torch.is_floating_point(eos_token_tensor) or (eos_token_tensor < 0).any()
         ):
-            logger.warning(
-                f"`eos_token_id` should consist of positive integers, but is {eos_token_tensor}. Your generation "
-                "will not stop until the maximum length is reached. Depending on other flags, it may even crash."
-            )
+            # Safe tensor logging - avoid .item() on meta tensors during string formatting
+            if eos_token_tensor.device.type == "meta":
+                logger.warning(
+                    f"`eos_token_id` should consist of positive integers, but is <meta tensor>. Your generation "
+                    "will not stop until the maximum length is reached. Depending on other flags, it may even crash."
+                )
+            else:
+                logger.warning(
+                    f"`eos_token_id` should consist of positive integers, but is {eos_token_tensor}. Your generation "
+                    "will not stop until the maximum length is reached. Depending on other flags, it may even crash."
+                )
 
         # Update generation config with the updated special tokens tensors
         # NOTE: this must be written into a different attribute name than the one holding the original special tokens
