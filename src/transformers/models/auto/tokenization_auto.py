@@ -485,6 +485,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("olmo", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         ("olmo2", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+        ("olmo3", (None, "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("olmoe", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         (
             "omdet-turbo",
@@ -583,6 +584,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "Qwen2TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("qwen3_vl", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
+        ("qwen3_vl_moe", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
         ("rag", ("RagTokenizer", None)),
         ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
         (
