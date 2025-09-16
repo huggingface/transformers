@@ -100,6 +100,7 @@ class T5GemmaConfig(PretrainedConfig):
 
     model_type = "t5gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_hidden_layers": "num_layers"}
     base_model_tp_plan = {
         # encoder
         "encoder.layers.*.self_attn.q_proj": "colwise",
@@ -190,6 +191,9 @@ class T5GemmaConfig(PretrainedConfig):
 
         # Used in pipeline generation.
         self.vocab_size = vocab_size
+
+        # Expose decoder num_hidden_layers for cache initialization
+        self.num_layers = decoder.num_hidden_layers
 
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [
