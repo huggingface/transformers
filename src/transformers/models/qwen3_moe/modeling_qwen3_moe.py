@@ -261,7 +261,7 @@ class Qwen3MoeExperts(nn.ModuleList):
     def __init__(self, config: Qwen3MoeConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.num_experts
         for _ in range(self.num_experts):
             self.append(Qwen3MoeBlockSparseTop2MLP(config))
 

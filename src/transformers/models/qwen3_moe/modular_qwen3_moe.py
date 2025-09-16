@@ -30,9 +30,9 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeMLP, Qwen2MoeSparseMoeBlock
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeMLP
 from ..qwen3.modeling_qwen3 import Qwen3Attention
-from ..mixtral.modeling_mixtral import MixtralSparseMoeBlock
+from ..mixtral.modeling_mixtral import MixtralSparseMoeBlock, MixtralExperts
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
 
@@ -73,6 +73,10 @@ class Qwen3MoeRouter(nn.Linear):
         return router_logits, selected_experts, routing_weights
 
 
+class Qwen3MoeExperts(MixtralExperts):
+    def __init__(self, config: Qwen3MoeConfig):
+        super().__init__(config)
+        self.num_experts = config.num_experts
 
 class Qwen3MoeSparseMoeBlock(MixtralSparseMoeBlock):
     pass
