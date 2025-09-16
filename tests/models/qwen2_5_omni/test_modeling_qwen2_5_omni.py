@@ -266,7 +266,9 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
     #     }
     #     if is_torch_available()
     #     else {}
-    # ) # FIXME @raushan Omni tests take ages because the model is big. Try to make it even smaller
+    # )
+    # FIXME @raushan Omni tests take ages because the model is big. Try to make it even smaller
+    pipeline_model_mapping = {}
     test_pruning = False
     test_head_masking = False
     _is_composite = True

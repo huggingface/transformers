@@ -327,9 +327,9 @@ class AnyToAnyPipeline(Pipeline):
 
         if isinstance(text, (list, tuple, KeyDataset)) and isinstance(text[0], (list, tuple, dict)):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
-            if isinstance(text[0], dict):
+            if isinstance(text[0], dict) and "role" in text[0]:
                 return super().__call__(Chat(text), **kwargs)
-            else:
+            elif isinstance(text[0], (list, tuple)) and isinstance(text[0][0], dict) and "role" in text[0][0]:
                 chats = [Chat(chat) for chat in text]  # 🐈 🐈 🐈
                 return super().__call__(chats, **kwargs)
 
