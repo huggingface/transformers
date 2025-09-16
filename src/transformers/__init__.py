@@ -378,6 +378,7 @@ else:
         "CacheLayerMixin",
         "DynamicLayer",
         "StaticLayer",
+        "StaticSlidingWindowLayer",
         "SlidingWindowLayer",
         "ChunkedSlidingLayer",
         "QuantoQuantizedLayer",
@@ -600,6 +601,7 @@ if TYPE_CHECKING:
     from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticLayer as StaticLayer
+    from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
