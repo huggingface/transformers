@@ -2668,8 +2668,8 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         return model_inputs
 
-    def _prepare_4d_causal_attention_mask_with_cache_position(self, **super_kwargs):
-        raise AttributeError("Do not inherit _prepare_4d_causal_attention_mask_with_cache_position from PaliGemma")
+    def create_masks_for_generate(self, **super_kwargs):
+        raise AttributeError("Do not inherit create_masks_for_generate from PaliGemma")
 
 
 __all__ = [
