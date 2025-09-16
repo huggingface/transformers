@@ -28,7 +28,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -506,17 +506,22 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
 
+        output_hidden_states = output_hidden_states or self.config.output_hidden_states
+
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
+
+        all_hidden_states = [hidden_states] if output_hidden_states else []
 
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
@@ -526,12 +531,16 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
                 position_embeddings=position_embeddings,
             )
 
+            if output_hidden_states:
+                all_hidden_states.append(hidden_states)
+
         sequence_output = self.norm(hidden_states)
         pooled_output = sequence_output[:, 0, :]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
+            hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
         )
 
 
