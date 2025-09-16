@@ -143,7 +143,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         self.language_model = language_model
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self.text_config_dtype = self.config.get_text_config().dtype
+        self.text_config_dtype = self.config.get_text_config().dtype or self.dtype
         self.post_init()
 
     # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_input_embeddings with Llava->PaliGemma
