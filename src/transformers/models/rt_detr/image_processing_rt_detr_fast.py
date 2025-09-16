@@ -507,6 +507,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             data.update({"pixel_mask": torch.stack(pixel_masks, dim=0)})
 
         data.update({"pixel_values": torch.stack(images, dim=0)})
+
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
             encoded_inputs["labels"] = [
@@ -564,8 +565,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             scores = torch.nn.functional.sigmoid(out_logits)
             scores, index = torch.topk(scores.flatten(1), num_top_queries, axis=-1)
             labels = index % num_classes
-            index = index.float() // num_classes
-            boxes = boxes.gather(dim=1, index=index.to(torch.int64).unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+            index = index // num_classes
+            boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
         else:
             scores = torch.nn.functional.softmax(out_logits)[:, :, :-1]
             scores, labels = scores.max(dim=-1)
@@ -575,9 +576,14 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
 
         results = []
-        # return scores, labels, boxes
-        mask = scores > threshold
-        results = {"scores": scores[mask], "labels": labels[mask], "boxes": boxes[mask]}
+        for score, label, box in zip(scores, labels, boxes):
+            results.append(
+                {
+                    "scores": score[score > threshold],
+                    "labels": label[score > threshold],
+                    "boxes": box[score > threshold],
+                }
+            )
 
         return results
 

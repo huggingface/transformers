@@ -651,7 +651,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     @auto_docstring
     def preprocess(
-        self, images: ImageInput, *args, intermediate_return=True, **kwargs: Unpack[DefaultFastImageProcessorKwargs]
+        self, images: ImageInput, *args, intermediate_return=False, **kwargs: Unpack[DefaultFastImageProcessorKwargs]
     ) -> BatchFeature:
         # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
