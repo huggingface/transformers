@@ -1,8 +1,9 @@
 """Tests for generation utils with meta tensors."""
 
+from copy import deepcopy
+
 import pytest
 import torch
-from copy import deepcopy
 
 from transformers import AutoModelForCausalLM, GenerationConfig
 from transformers.testing_utils import require_torch
@@ -27,9 +28,7 @@ def test_prepare_special_tokens_cpu(cpu_model):
     generation_config = deepcopy(cpu_model.generation_config)
 
     cpu_model._prepare_special_tokens(
-        generation_config=generation_config,
-        kwargs_has_attention_mask=True,
-        device=torch.device("cpu")
+        generation_config=generation_config, kwargs_has_attention_mask=True, device=torch.device("cpu")
     )
 
     assert generation_config._eos_token_tensor is not None
@@ -62,7 +61,7 @@ def test_prepare_special_tokens_meta(cpu_model):
     generation_config = GenerationConfig()
 
     # Manually create special token tensors on meta device to trigger the error
-    meta_device = torch.device('meta')
+    meta_device = torch.device("meta")
     generation_config.eos_token_id = torch.tensor(50256, device=meta_device, dtype=torch.long)
     generation_config.bos_token_id = torch.tensor(50256, device=meta_device, dtype=torch.long)
     generation_config.pad_token_id = torch.tensor(50256, device=meta_device, dtype=torch.long)
@@ -70,9 +69,7 @@ def test_prepare_special_tokens_meta(cpu_model):
     # Should raise MetaSafeTensorError with meta tensors
     with pytest.raises(MetaSafeTensorError, match="Cannot extract token ID from scalar meta tensor"):
         cpu_model._prepare_special_tokens(
-            generation_config=generation_config,
-            kwargs_has_attention_mask=True,
-            device=torch.device("cpu")
+            generation_config=generation_config, kwargs_has_attention_mask=True, device=torch.device("cpu")
         )
 
 
@@ -93,9 +90,7 @@ def test_prepare_special_tokens_consistency(cpu_model):
     cpu_config.pad_token_id = pad_token_id
 
     cpu_model._prepare_special_tokens(
-        generation_config=cpu_config,
-        kwargs_has_attention_mask=True,
-        device=torch.device("cpu")
+        generation_config=cpu_config, kwargs_has_attention_mask=True, device=torch.device("cpu")
     )
 
     # Verify CPU tensors are created successfully
@@ -104,7 +99,7 @@ def test_prepare_special_tokens_consistency(cpu_model):
 
     # Test 2: Meta tensors should raise MetaSafeTensorError
     meta_config = GenerationConfig()
-    meta_device = torch.device('meta')
+    meta_device = torch.device("meta")
     meta_config.eos_token_id = torch.tensor(eos_token_id, device=meta_device, dtype=torch.long)
     meta_config.bos_token_id = torch.tensor(bos_token_id, device=meta_device, dtype=torch.long)
     meta_config.pad_token_id = torch.tensor(pad_token_id, device=meta_device, dtype=torch.long)
@@ -112,9 +107,7 @@ def test_prepare_special_tokens_consistency(cpu_model):
     # Should raise MetaSafeTensorError for meta tensors
     with pytest.raises(MetaSafeTensorError, match="Cannot extract token ID from scalar meta tensor"):
         cpu_model._prepare_special_tokens(
-            generation_config=meta_config,
-            kwargs_has_attention_mask=True,
-            device=torch.device("cpu")
+            generation_config=meta_config, kwargs_has_attention_mask=True, device=torch.device("cpu")
         )
 
 
@@ -133,31 +126,33 @@ def test_no_drift_after_prepare(cpu_model):
     original_decoder_start = deepcopy(generation_config.decoder_start_token_id)
 
     # Also snapshot other important config attributes
-    original_max_length = deepcopy(getattr(generation_config, 'max_length', None))
-    original_do_sample = deepcopy(getattr(generation_config, 'do_sample', None))
+    original_max_length = deepcopy(getattr(generation_config, "max_length", None))
+    original_do_sample = deepcopy(getattr(generation_config, "do_sample", None))
 
     cpu_model._prepare_special_tokens(
-        generation_config=generation_config,
-        kwargs_has_attention_mask=True,
-        device=torch.device("cpu")
+        generation_config=generation_config, kwargs_has_attention_mask=True, device=torch.device("cpu")
     )
 
     # Assert original config values are unchanged (no drift)
     assert generation_config.eos_token_id == original_eos, "eos_token_id should not be mutated"
     assert generation_config.bos_token_id == original_bos, "bos_token_id should not be mutated"
     assert generation_config.pad_token_id == original_pad, "pad_token_id should not be mutated"
-    assert generation_config.decoder_start_token_id == original_decoder_start, "decoder_start_token_id should not be mutated"
+    assert generation_config.decoder_start_token_id == original_decoder_start, (
+        "decoder_start_token_id should not be mutated"
+    )
 
     # Check other config attributes remain unchanged
-    assert getattr(generation_config, 'max_length', None) == original_max_length, "max_length should not be mutated"
-    assert getattr(generation_config, 'do_sample', None) == original_do_sample, "do_sample should not be mutated"
+    assert getattr(generation_config, "max_length", None) == original_max_length, "max_length should not be mutated"
+    assert getattr(generation_config, "do_sample", None) == original_do_sample, "do_sample should not be mutated"
 
     # Verify only tensor versions were added (new attributes)
-    assert hasattr(generation_config, '_eos_token_tensor'), "_eos_token_tensor should be added"
-    assert hasattr(generation_config, '_bos_token_tensor'), "_bos_token_tensor should be added"
-    assert hasattr(generation_config, '_pad_token_tensor'), "_pad_token_tensor should be added"
+    assert hasattr(generation_config, "_eos_token_tensor"), "_eos_token_tensor should be added"
+    assert hasattr(generation_config, "_bos_token_tensor"), "_bos_token_tensor should be added"
+    assert hasattr(generation_config, "_pad_token_tensor"), "_pad_token_tensor should be added"
 
     # Ensure tensor versions are properly created
     if generation_config._eos_token_tensor is not None:
-        assert isinstance(generation_config._eos_token_tensor, torch.Tensor), "_eos_token_tensor should be torch.Tensor"
+        assert isinstance(generation_config._eos_token_tensor, torch.Tensor), (
+            "_eos_token_tensor should be torch.Tensor"
+        )
         assert generation_config._eos_token_tensor.device.type == "cpu", "_eos_token_tensor should be on CPU"

@@ -148,6 +148,7 @@ class MetaSafeTensorError(RuntimeError):
 
     Raised when code attempts to copy or access data from a meta tensor without a safe fallback.
     """
+
     def __init__(self, message: str):
         super().__init__(f"Meta tensor operation not supported: {message}")
 
@@ -2108,7 +2109,7 @@ class GenerationMixin(ContinuousMixin):
             pad_token_tensor = eos_token_tensor[0]
             # Safe tensor logging - avoid .item() on meta tensors during string formatting
             if pad_token_tensor.device.type == "meta":
-                logger.warning(f"Setting `pad_token_id` to `eos_token_id`:<meta tensor> for open-end generation.")
+                logger.warning("Setting `pad_token_id` to `eos_token_id`:<meta tensor> for open-end generation.")
             else:
                 logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
 
@@ -2133,7 +2134,7 @@ class GenerationMixin(ContinuousMixin):
             # Safe tensor logging - avoid .item() on meta tensors during string formatting
             if eos_token_tensor.device.type == "meta":
                 logger.warning(
-                    f"`eos_token_id` should consist of positive integers, but is <meta tensor>. Your generation "
+                    "`eos_token_id` should consist of positive integers, but is <meta tensor>. Your generation "
                     "will not stop until the maximum length is reached. Depending on other flags, it may even crash."
                 )
             else:
