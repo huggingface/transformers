@@ -277,11 +277,11 @@ class Gemma3nAudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
         diff = input_features_dither - input_features_no_dither
 
         # features are not identical
-        self.assertTrue(np.abs(diff).mean() > 1e-6)
+        assert np.abs(diff).mean() > 1e-6
         # features are not too different
-        self.assertTrue(np.abs(diff).mean() <= 1e-4)
-        # the heuristic value `1e-1` is obtained by running 50000 times (maximal value is ``).
-        self.assertTrue(np.abs(diff).max() <= 1e-1)
+        assert np.abs(diff).mean() < 1e-4
+        # the heuristic value `1e-1` is obtained by running 50000 times (maximal value is around 5e-2 ~ 6e-2).
+        assert np.abs(diff).max() < 1e-1
 
     @require_torch
     def test_double_precision_pad(self):
