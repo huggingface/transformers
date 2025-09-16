@@ -300,6 +300,8 @@ def get_gguf_hf_weights_map(
         model_type = "qwen3moe"
     elif model_type == "gemma3_text":
         model_type = "gemma3"
+    elif model_type == "qwen2_vl":
+        model_type = "qwen2vl"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
