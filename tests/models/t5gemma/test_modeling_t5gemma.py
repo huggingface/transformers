@@ -70,7 +70,7 @@ class T5GemmaModelTester:
         # decoder-specific
         seq_length=7,
         hidden_size=32,
-        num_hidden_layers=2,
+        decoder_num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
@@ -106,7 +106,7 @@ class T5GemmaModelTester:
         # decoder
         self.seq_length = seq_length
         self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
+        self.decoder_num_hidden_layers = decoder_num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
@@ -164,7 +164,7 @@ class T5GemmaModelTester:
         return self.module_config_class(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
+            num_hidden_layers=self.decoder_num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             intermediate_size=self.intermediate_size,
@@ -192,7 +192,8 @@ class T5GemmaModelTester:
             num_key_value_heads=self.num_key_value_heads,
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
+            encoder_num_hidden_layers=self.encoder_num_hidden_layers,
+            decoder_num_hidden_layers=self.decoder_num_hidden_layers,
         )
 
     def prepare_config_and_inputs(self):
@@ -609,7 +610,8 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             hidden_size=37,
             vocab_size=self.model_tester.vocab_size,
             num_attention_heads=self.model_tester.num_attention_heads,
-            num_hidden_layers=self.model_tester.num_hidden_layers,
+            encoder_num_hidden_layers=self.model_tester.encoder_num_hidden_layers,
+            decoder_num_hidden_layers=self.model_tester.decoder_num_hidden_layers,
         )
 
     def is_pipeline_test_to_skip(
@@ -631,6 +633,22 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_num_hidden_layers_property(self):
+        """Test that num_hidden_layers property returns encoder layers count."""
+        config = T5GemmaConfig()
+
+        # Test that num_hidden_layers property works
+        self.assertEqual(config.num_hidden_layers, config.encoder.num_hidden_layers)
+
+        # Test with different encoder/decoder layer counts
+        config.encoder.num_hidden_layers = 12
+        config.decoder.num_hidden_layers = 8
+        self.assertEqual(config.num_hidden_layers, 12)
+
+        # Test that setter raises NotImplementedError
+        with self.assertRaises(NotImplementedError):
+            config.num_hidden_layers = 10
 
     def test_shift_right(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -894,7 +912,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(attentions), self.model_tester.encoder_num_hidden_layers)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -906,7 +924,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(attentions), self.model_tester.encoder_num_hidden_layers)
 
             if chunk_length is not None:
                 self.assertListEqual(
@@ -934,7 +952,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 # decoder attentions
                 decoder_attentions = outputs.decoder_attentions
                 self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(len(decoder_attentions), self.model_tester.decoder_num_hidden_layers)
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
@@ -943,7 +961,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 # cross attentions
                 cross_attentions = outputs.cross_attentions
                 self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(len(cross_attentions), self.model_tester.decoder_num_hidden_layers)
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
                     [
@@ -972,7 +990,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(self_attentions), self.model_tester.encoder_num_hidden_layers)
             if chunk_length is not None:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-4:]),
@@ -1260,7 +1278,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.encoder_num_hidden_layers + 1
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -1405,7 +1423,7 @@ class T5GemmaEncoderOnlyModelTester:
         seq_length=7,
         # default to encoders
         hidden_size=32,
-        num_hidden_layers=2,
+        encoder_num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
@@ -1434,7 +1452,9 @@ class T5GemmaEncoderOnlyModelTester:
         # encoder
         self.seq_length = seq_length
         self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
+        self.encoder_num_hidden_layers = encoder_num_hidden_layers
+        # For backward compatibility with base test classes
+        self.num_hidden_layers = encoder_num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
@@ -1459,7 +1479,7 @@ class T5GemmaEncoderOnlyModelTester:
         return self.module_config_class(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
+            num_hidden_layers=self.encoder_num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             intermediate_size=self.intermediate_size,
@@ -1486,6 +1506,7 @@ class T5GemmaEncoderOnlyModelTester:
             num_key_value_heads=self.num_key_value_heads,
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            encoder_num_hidden_layers=self.encoder_num_hidden_layers,
         )
 
     def prepare_config_and_inputs(self):
@@ -1587,7 +1608,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_size=37,
             vocab_size=self.model_tester.vocab_size,
             num_attention_heads=self.model_tester.num_attention_heads,
-            num_hidden_layers=self.model_tester.num_hidden_layers,
+            encoder_num_hidden_layers=self.model_tester.encoder_num_hidden_layers,
         )
 
     def test_config(self):
@@ -1687,10 +1708,10 @@ class TestAsymmetricT5Gemma(unittest.TestCase):
         return model.model
 
     def test_small_decoder(self):
-        model = self.build_model_and_check_forward_pass(num_hidden_layers=1, encoder_num_hidden_layers=2)
+        model = self.build_model_and_check_forward_pass(decoder_num_hidden_layers=1, encoder_num_hidden_layers=2)
         assert len(model.encoder.layers) == 2
         assert len(model.decoder.layers) == 1
 
     def test_defaulting_to_symmetry(self):
-        model = self.build_model_and_check_forward_pass(num_hidden_layers=2, encoder_num_hidden_layers=2)
+        model = self.build_model_and_check_forward_pass(decoder_num_hidden_layers=2, encoder_num_hidden_layers=2)
         assert len(model.decoder.layers) == len(model.encoder.layers) == 2
