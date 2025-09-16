@@ -1430,6 +1430,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
+        self.response_schema = kwargs.pop("response_schema", None)
+
         super().__init__(**kwargs)
 
         self.extra_special_tokens = kwargs.pop("extra_special_tokens", {})
@@ -1577,7 +1579,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tools: Optional[list[Union[dict, Callable]]] = None,
         documents: Optional[list[dict[str, str]]] = None,
         chat_template: Optional[str] = None,
-        chat_schema: Optional[dict] = None,
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
         tokenize: bool = True,
@@ -1611,9 +1612,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             chat_template (`str`, *optional*):
                 A Jinja template to use for this conversion. It is usually not necessary to pass anything to this
                 argument, as the model's template will be used by default.
-            chat_schema (`dict[str]`, *optional*):
-                A JSON schema dict with optional parsing fields, used to indicate the model's input spec and allow
-                parsing of rendered chats.
             add_generation_prompt (bool, *optional*):
                 If this is set, a prompt with the token(s) that indicate
                 the start of an assistant message will be appended to the formatted output. This is useful when you want to generate a response from the model.
@@ -1674,8 +1672,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_kwargs = {}
 
         chat_template = self.get_chat_template(chat_template, tools)
-        if chat_schema is None and getattr(self, "chat_schema", None) is not None:
-            chat_schema = self.chat_schema
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
@@ -1705,18 +1701,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             add_generation_prompt=add_generation_prompt,
             **template_kwargs,
         )
-
-        if return_assistant_tokens_mask and chat_schema:
-            # TODO This probably needs to be reverted - in cases with tool calls or thinking, we are unlikely to
-            #      correctly capture the assistant boundaries with the regexes, without making them a lot more
-            #      failure-prone. Generation tags in the template are more reliable and should be fully embraced.
-            generation_indices = []  # This takes priority over jinja generation parsing
-            for chat in rendered_chat:
-                parsed_chat = recursive_parse(chat, chat_schema, offset=0)
-                assistant_messages = [
-                    message["content"] for message in parsed_chat.get("messages", []) if message["role"] == "assistant"
-                ]
-                generation_indices.append([(message.start, message.end) for message in assistant_messages])
 
         if not is_batched:
             rendered_chat = rendered_chat[0]
@@ -1873,6 +1857,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 )
 
         return chat_template
+
+    def parse_response(self, response: str, schema: list | dict | None = None):
+        if schema is None:
+            if getattr(self, "response_schema", None) is None:
+                raise AttributeError("This tokenizer does not have a `response_schema` for parsing chat responses!")
+            schema = self.response_schema
+        return recursive_parse(response, schema)
 
     @classmethod
     def from_pretrained(
@@ -2559,6 +2550,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer_config, saved_raw_chat_template_files = self.save_chat_templates(
             save_directory, tokenizer_config, filename_prefix, save_jinja_files
         )
+        if getattr(self, "response_schema", None) is not None:
+            tokenizer_config["response_schema"] = self.response_schema
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
