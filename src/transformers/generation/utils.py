@@ -3846,23 +3846,16 @@ def _speculative_sampling(
     return valid_tokens, n_matches
 
 
-def _split_model_outputs(
-    new_outputs,
-    cur_len: int,
-    added_len: int,
-    is_decoder_attention: bool = False,
-):
+def _split_model_outputs(new_outputs, cur_len, added_len, is_decoder_attention=False):
     """
     Given the (decoder/cross attentions)/(decoder hidden states) for multiple generated tokens, splits it into a tuple
-    where each member corresponds to a single generated token
+    where each member corresponds to a single generated token.
     """
-    chunks = ()
-
+    outputs = ()
     for i in range(added_len):
-        token_block = ()
-        for layer_tensor in new_outputs:
-            last_dim_size = (cur_len + i) if is_decoder_attention else layer_tensor.shape[-1]
-            token_block += (layer_tensor[..., i : i + 1, :last_dim_size],)
-        chunks += (token_block,)
-
-    return chunks
+        new_tuple = ()
+        for layer in new_outputs:
+            last_dim_size = cur_len + i if is_decoder_attention else layer.shape[-1]
+            new_tuple += (layer[..., i : i + 1, :last_dim_size],)
+        outputs += (new_tuple,)
+    return outputs
