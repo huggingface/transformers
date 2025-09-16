@@ -172,7 +172,6 @@ def recursive_parse(
                         parsed_schema[key] = recursive_parse(value, node_schema["additionalProperties"])
             return parsed_schema
         else:
-            breakpoint()
             raise TypeError(f"Expected a dict or str for schema node with type object, got {node_content}")
     elif node_type == "array":
         if not node_content:
