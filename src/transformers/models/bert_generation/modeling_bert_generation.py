@@ -861,7 +861,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
                     embedding_output,
                 )
         elif attention_mask is not None and attention_mask.dim() == 3:
-            if self.config._attn_implementation in ["flash_attention_2", "flex_attention"]:
+            if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
                 raise ValueError(
                     "Passing attention mask with a 3D/4D shape does not work with type "
                     f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
@@ -877,7 +877,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
                     embedding_output,
                 )
             else:
-                if self.config._attn_implementation in ["flash_attention_2", "flex_attention"]:
+                if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
                     raise ValueError(
                         "Passing attention mask with a 3D/4D shape does not work with type "
                         f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
@@ -929,7 +929,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         inputs_embeds: torch.Tensor,
     ):
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
@@ -955,7 +955,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     ):
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash" in self.config._attn_implementation:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on

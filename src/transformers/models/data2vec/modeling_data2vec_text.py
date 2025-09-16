@@ -856,7 +856,7 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
                     embedding_output,
                 )
         elif attention_mask is not None and attention_mask.dim() == 3:
-            if self.config._attn_implementation in ["flash_attention_2", "flex_attention"]:
+            if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
                 raise ValueError(
                     "Passing attention mask with a 3D/4D shape does not work with type "
                     f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
@@ -872,7 +872,7 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
                     embedding_output,
                 )
             else:
-                if self.config._attn_implementation in ["flash_attention_2", "flex_attention"]:
+                if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
                     raise ValueError(
                         "Passing attention mask with a 3D/4D shape does not work with type "
                         f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
