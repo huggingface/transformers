@@ -152,17 +152,16 @@ class MixtralBlockSparseTop2MLP(nn.Module):
         return current_hidden_states
 
 
-class MixtralRouter(nn.Module):
+class MixtralRouter(nn.Linear):
     """
     Gate module which determines which experts to use for each token.
     It uses a separate set of parameters for each expert.
     """
 
     def __init__(self, config: MixtralConfig):
-        super().__init__()
+        self.num_experts = config.num_experts
+        super().__init__(config.hidden_size, self.num_experts, bias=False)
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
         self.jitter_noise = config.router_jitter_noise
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -177,7 +176,7 @@ class MixtralRouter(nn.Module):
         if self.training and self.jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        router_logits = self.gate(hidden_states)
+        router_logits = super().forward(hidden_states)
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
@@ -211,18 +210,13 @@ class MixtralExperts(nn.ModuleList):
         final_hidden_states = torch.zeros_like(hidden_states)
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
-        for expert_idx in range(self.num_experts):
-            expert_layer = self[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx])
-
-            if top_x.shape[0] == 0:
-                continue
-
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
+            current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
-
 
 class MixtralSparseMoeBlock(nn.Module):
     def __init__(self, config):

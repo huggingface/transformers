@@ -260,16 +260,14 @@ class Qwen2MoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Qwen2MoeRouter(nn.Module):
+class Qwen2MoeRouter(nn.Linear):
     def __init__(self, config):
-        super().__init__()
-        self.num_experts = config.num_experts
+        super().__init__(config.hidden_size, config.num_experts, bias=False)
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        router_logits = self.gate(hidden_states)
+        router_logits = super().forward(hidden_states)
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
         if self.norm_topk_prob:
@@ -285,12 +283,21 @@ class Qwen2MoeExperts(nn.ModuleList):
 
     def __init__(self, config):
         nn.Module.__init__(self)
+        self.num_experts = config.num_experts
         for _ in range(config.num_experts):
             self += [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size)]
 
     def forward(
         self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
     ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states: (batch_size * sequence_length, hidden_dim)
+            selected_experts: (batch_size * sequence_length, top_k)
+            routing_weights: (batch_size * sequence_length, top_k)
+        Returns:
+            (batch_size * sequence_length, hidden_dim)
+        """
         final_hidden_states = torch.zeros_like(hidden_states)
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 

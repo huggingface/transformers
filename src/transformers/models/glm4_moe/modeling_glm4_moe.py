@@ -306,6 +306,14 @@ class Glm4MoeNaiveMoe(nn.ModuleList):
     def forward(
         self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
     ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states: (batch_size * sequence_length, hidden_dim)
+            selected_experts: (batch_size * sequence_length, top_k)
+            routing_weights: (batch_size * sequence_length, top_k)
+        Returns:
+            (batch_size * sequence_length, hidden_dim)
+        """
         final_hidden_states = torch.zeros_like(hidden_states)
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 

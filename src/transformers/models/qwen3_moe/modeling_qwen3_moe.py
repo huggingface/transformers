@@ -210,22 +210,47 @@ class Qwen3MoeMLP(nn.Module):
         return down_proj
 
 
-class Qwen3MoeRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
+class Qwen3MoeRouter(nn.Linear):
+    def __init__(self, config: Qwen3MoeConfig):
         self.num_experts = config.num_experts
+        super().__init__(config.hidden_size, self.num_experts, bias=False)
         self.top_k = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        router_logits = self.gate(hidden_states)
+        """
+        Args:
+            hidden_states: (batch_size, sequence_length, hidden_dim)
+        Returns:
+            router_logits: (batch_size * sequence_length, num_experts)
+            selected_experts:s (batch_size * sequence_length, top_k)
+            routing_weights: (batch_size * sequence_length, top_k)
+        """
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        router_logits = super().forward(hidden_states)
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        if self.norm_topk_prob:
+        if self.norm_topk_prob:  # only diff with mixtral sparse moe block!
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         routing_weights = routing_weights.to(hidden_states.dtype)
         return router_logits, selected_experts, routing_weights
+
+
+class Qwen3MoeBlockSparseTop2MLP(nn.Module):
+    def __init__(self, config: Qwen3MoeConfig):
+        super().__init__()
+        self.ffn_dim = config.intermediate_size
+        self.hidden_dim = config.hidden_size
+
+        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
+        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states):
+        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
+        current_hidden_states = self.w2(current_hidden_states)
+        return current_hidden_states
 
 
 class Qwen3MoeExperts(nn.ModuleList):
@@ -233,14 +258,24 @@ class Qwen3MoeExperts(nn.ModuleList):
     ModuleList of experts.
     """
 
-    def __init__(self, config):
-        nn.Module.__init__(self)
-        for _ in range(config.num_experts):
-            self += [Qwen3MoeMLP(config, intermediate_size=config.moe_intermediate_size)]
+    def __init__(self, config: Qwen3MoeConfig):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        for _ in range(self.num_experts):
+            self.append(Qwen3MoeBlockSparseTop2MLP(config))
 
     def forward(
         self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
     ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states: (batch_size * sequence_length, hidden_dim)
+            selected_experts: (batch_size * sequence_length, top_k)
+            routing_weights: (batch_size * sequence_length, top_k)
+        Returns:
+            (batch_size * sequence_length, hidden_dim)
+        """
         final_hidden_states = torch.zeros_like(hidden_states)
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
@@ -256,25 +291,16 @@ class Qwen3MoeExperts(nn.ModuleList):
 class Qwen3MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # gating
         self.gate = Qwen3MoeRouter(config)
         self.experts = Qwen3MoeExperts(config)
 
-        self.shared_expert = Qwen3MoeMLP(config, intermediate_size=config.shared_expert_intermediate_size)
-        self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
-
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        router_logits, selected_experts, routing_weights = self.gate(hidden_states_reshaped)
-        expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
-
-        shared_expert_output = self.shared_expert(hidden_states_reshaped)
-        shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
-
-        expert_output += shared_expert_output
-        expert_output = expert_output.reshape(batch_size, sequence_length, hidden_dim)
-        return expert_output, router_logits
+        router_logits, selected_experts, routing_weights = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states, router_logits
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -319,7 +345,7 @@ class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:

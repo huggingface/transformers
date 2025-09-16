@@ -124,6 +124,9 @@ class MixtralConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
 
     def __init__(
         self,

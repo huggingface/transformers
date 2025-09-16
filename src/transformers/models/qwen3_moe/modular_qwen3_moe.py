@@ -32,6 +32,7 @@ from ..llama.modeling_llama import (
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeMLP, Qwen2MoeSparseMoeBlock
 from ..qwen3.modeling_qwen3 import Qwen3Attention
+from ..mixtral.modeling_mixtral import MixtralSparseMoeBlock
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
 
@@ -47,10 +48,34 @@ class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
 class Qwen3MoeMLP(Qwen2MoeMLP):
     pass
 
+class Qwen3MoeRouter(nn.Linear):
+    def __init__(self, config: Qwen3MoeConfig):
+        self.num_experts = config.num_experts
+        super().__init__(config.hidden_size, self.num_experts, bias=False)
+        self.top_k = config.num_experts_per_tok
 
-class Qwen3MoeSparseMoeBlock(Qwen2MoeSparseMoeBlock):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            hidden_states: (batch_size, sequence_length, hidden_dim)
+        Returns:
+            router_logits: (batch_size * sequence_length, num_experts)
+            selected_experts:s (batch_size * sequence_length, top_k)
+            routing_weights: (batch_size * sequence_length, top_k)
+        """
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        router_logits = super().forward(hidden_states)
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        if self.norm_topk_prob:  # only diff with mixtral sparse moe block!
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return router_logits, selected_experts, routing_weights
+
+
+
+class Qwen3MoeSparseMoeBlock(MixtralSparseMoeBlock):
     pass
-
 
 class Qwen3MoeRMSNorm(LlamaRMSNorm):
     pass

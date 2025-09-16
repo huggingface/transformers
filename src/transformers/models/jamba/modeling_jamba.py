@@ -23,7 +23,7 @@ from ...modeling_layers import GenericForSequenceClassification, GradientCheckpo
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, can_return_tuple, is_causal_conv1d_available, is_mamba_ssm_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_jamba import JambaConfig
 
@@ -526,6 +526,8 @@ class JambaMambaMixer(nn.Module):
         self.dt_layernorm = JambaRMSNorm(self.time_step_rank, eps=config.rms_norm_eps)
         self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
         self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
+        self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
+        self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
 
         if not is_fast_path_available:
             logger.warning(
@@ -858,7 +860,7 @@ JAMBA_ATTENTION_CLASSES = {
 class JambaAttentionDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: JambaConfig, layer_idx: int):
         super().__init__()
-        num_experts = config.layers_num_experts[layer_idx]
+        num_experts = config.layers_num_experts[layer_idx] if config.layers_num_experts else 1
         self.self_attn = JAMBA_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
         ffn_layer_class = JambaSparseMoeBlock if num_experts > 1 else JambaMLP
@@ -940,7 +942,7 @@ class JambaAttentionDecoderLayer(GradientCheckpointingLayer):
 class JambaMambaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: JambaConfig, layer_idx: int):
         super().__init__()
-        num_experts = config.layers_num_experts[layer_idx]
+        num_experts = config.layers_num_experts[layer_idx] if config.layers_num_experts else 1
         self.mamba = JambaMambaMixer(config=config, layer_idx=layer_idx)
 
         ffn_layer_class = JambaSparseMoeBlock if num_experts > 1 else JambaMLP
@@ -1092,7 +1094,11 @@ class JambaModel(JambaPreTrainedModel):
         if position_ids is None and isinstance(hidden_states, torch.Tensor):
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = (
+            self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+            if self.config.use_mamba_kernels
+            else attention_mask
+        )
         mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
 
         all_hidden_states = () if output_hidden_states else None
@@ -1166,7 +1172,7 @@ class JambaModel(JambaPreTrainedModel):
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
         if cache_position is not None:
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= (torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)).to(torch.bool)
         causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -1333,7 +1339,6 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        return_tuple: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
@@ -1366,7 +1371,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_dict
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -1405,9 +1410,12 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
                 outputs.router_logits, self.num_experts, self.num_experts_per_tok, attention_mask
             )
             if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                if self.router_aux_loss_coef > 0 and aux_loss is not None:
+                    loss += self.router_aux_loss_coef * aux_loss.to(
+                        loss.device
+                    )  # make sure to reside in the same device
 
-        if not return_tuple:
+        if not can_return_tuple(self.config):
             output = (logits,) + outputs[1:]
             if output_router_logits:
                 output = (aux_loss,) + output
@@ -1464,12 +1472,6 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
                 "cache_position": cache_position,
             }
         )
-
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
-
         return model_inputs
 
 
