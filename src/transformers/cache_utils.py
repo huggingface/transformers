@@ -400,14 +400,6 @@ class SlidingWindowLayer(StaticLayer):
         # Update it now that we saved the value above
         self.cumulative_length += key_states.shape[-2]
 
-        # Handle prefill phase when prompt length > sliding_window_size.
-        # Note that we store cropped key/value states in the cache but return the full key/value states.
-        if cache_position.shape[0] > self.max_cache_len:
-            self.keys.copy_(key_states[:, :, -self.max_cache_len :, :])
-            self.values.copy_(value_states[:, :, -self.max_cache_len :, :])
-            # Return the full states here
-            return key_states, value_states
-
         if is_full:
             # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
             # dynamo is currently bugged when doing it - see https://github.com/pytorch/pytorch/issues/159855 for more details
