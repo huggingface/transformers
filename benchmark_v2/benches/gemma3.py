@@ -31,16 +31,6 @@ class Gemma3Benchmark(ModelBenchmark):
         super().__init__(logger)
         self._default_prompt = "Why dogs are so cute?"
 
-    def _is_kernelization_available(self) -> bool:
-        """Check if kernelization is available for Gemma3."""
-        try:
-            from kernels import Mode, kernelize  # noqa: F401
-
-            return True
-        except ImportError:
-            self.logger.debug("Kernelization not available: kernels module not found")
-            return False
-
     def get_model_init_kwargs(self, config) -> dict[str, Any]:
         """Get Gemma3-specific model initialization kwargs."""
         # Use base class defaults and add Gemma3-specific parameters
