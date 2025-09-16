@@ -1,9 +1,12 @@
+from transformers.utils import is_jmespath_available
+
 import json
 import re
-import jmespath  # TODO Make this a proper optional dependency
 
-# Next line only used because eval might grab them. Can be removed once we have something better than eval
-from typing import Any, Dict, List, Optional, Tuple, Union  # noqa: F401
+if is_jmespath_available():
+    import jmespath
+else:
+    jmespath = None
 
 
 def _parse_re_match(node_match, require_groups: list[str] | None = None):
@@ -111,6 +114,8 @@ def recursive_parse(
                     f"Node has JSON parser but could not parse its contents as JSON: {node_content}\nError: {e}"
                 )
             if "transform" in parser_args:
+                if jmespath is None:
+                    raise ImportError("Chat response schema includes a jmespath transformation, but jmespath is not installed. You can install it with `pip install jmespath`.")
                 parsed_json = jmespath.search(parser_args["transform"], parsed_json)
             node_content = parsed_json
         else:
