@@ -22,14 +22,14 @@ jobs:
         changed: ${{ steps.was_changed.outputs.changed }}
       steps:
         - uses: actions/checkout@v4
-          with: 
+          with:
             fetch-depth: "2"
-        
+
         - name: Get changed files
           id: changed-files
           uses: tj-actions/changed-files@1c8e6069583811afb28f97afeaf8e7da80c6be5c
-        
-        - name: Was setup changed 
+
+        - name: Was setup changed
           id: was_changed
           run: |
             for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
