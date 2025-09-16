@@ -470,6 +470,9 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     """
 )
 class ParakeetEncoder(ParakeetPreTrainedModel):
+    config: ParakeetEncoderConfig
+    base_model_prefix = "encoder"
+
     def __init__(self, config: ParakeetEncoderConfig):
         super().__init__(config)
         self.config = config
@@ -565,6 +568,8 @@ class ParakeetGenerateOutput(ModelOutput):
     """
 )
 class ParakeetForCTC(ParakeetPreTrainedModel):
+    config: ParakeetCTCConfig
+
     def __init__(self, config: ParakeetCTCConfig):
         super().__init__(config)
         self.encoder = ParakeetEncoder(config.encoder_config)
