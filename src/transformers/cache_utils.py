@@ -962,6 +962,8 @@ class DynamicCache(Cache):
                 layer_types = layer_types[: -config.num_kv_shared_layers]
 
             for layer_type in layer_types:
+                # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
+                # states they should return - only the mask changes to make them different at the end!
                 if layer_type in ("sliding_attention", "chunked_attention"):
                     layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
                 else:
@@ -1080,6 +1082,8 @@ class StaticCache(Cache):
             if layer_type == "sliding_attention":
                 layer = SlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
             elif layer_type == "chunked_attention":
+                # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
+                # states they should return - only the mask changes to make them different at the end!
                 layer = SlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size)
             else:
                 layer = StaticLayer(max_cache_len=max_cache_len)
