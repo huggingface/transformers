@@ -148,6 +148,5 @@ if is_torch_available():
     # the patched version will always run with `fullgraph=True`.
     patch_torch_compile_force_graph()
 
-
 if os.environ.get("PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS", "").lower() in ("yes", "true", "on", "y", "1"):
     patch_testing_methods_to_collect_info()
