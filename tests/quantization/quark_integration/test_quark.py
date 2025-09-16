@@ -36,7 +36,7 @@ if is_quark_available():
 
 @require_quark
 class QuarkConfigTest(unittest.TestCase):
-    def test_commmon_args(self):
+    def test_common_args(self):
         config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
         QuarkConfig(**config.quantization_config)
 

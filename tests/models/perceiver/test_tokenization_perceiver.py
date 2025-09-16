@@ -18,9 +18,10 @@ import re
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import AddedToken, BatchEncoding, PerceiverTokenizer
-from transformers.utils import cached_property, is_tf_available, is_torch_available
+from transformers.utils import is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
