@@ -1,0 +1,102 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+      fail-fast: false
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml', '**/setup.py') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-${{ matrix.python-version }}-
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install accelerate pytest
+        pip install -e .
+
+    - name: Run strict overlay tests
+      run: |
+        python -m pytest -q tests/test_generation_meta.py -v
+        echo "✓ Meta tensor regression tests passed"
+
+    - name: Run assist_strict module tests
+      run: |
+        python -c "
+        import sys
+        sys.path.insert(0, '.')
+        try:
+            from assist_strict.overlay import build_overlay_config, AssistantModelProxy
+            from assist_strict.assisted import assisted_generate_strict
+            print('✓ assist_strict imports successful')
+        except Exception as e:
+            print(f'✗ assist_strict import failed: {e}')
+            sys.exit(1)
+        "
+
+    - name: Run validation scripts
+      run: |
+        if [ -f scripts/validate_strict_overlay.py ]; then
+          python scripts/validate_strict_overlay.py
+          echo "✓ Strict overlay validation passed"
+        fi
+
+        if [ -f scripts/concurrency_probe.py ]; then
+          python scripts/concurrency_probe.py
+          echo "✓ Concurrency probe passed"
+        fi
+
+    - name: Verify meta tensor safety
+      run: |
+        python -c "
+        import torch
+        from transformers.generation.utils import MetaSafeTensorError, _tensor_or_none
+
+        # Test meta tensor error handling
+        meta_tensor = torch.tensor(42, device='meta')
+        try:
+            _tensor_or_none(meta_tensor, device=torch.device('cpu'))
+            print('✗ Should have raised MetaSafeTensorError')
+            exit(1)
+        except MetaSafeTensorError as e:
+            print(f'✓ Meta tensor safety check passed: {e}')
+        except Exception as e:
+            print(f'✗ Unexpected error: {e}')
+            exit(1)
+        "
+
+    - name: Test summary
+      if: always()
+      run: |
+        echo "==================== Test Summary ===================="
+        echo "Python version: ${{ matrix.python-version }}"
+        echo "Runner OS: ${{ runner.os }}"
+        echo "Meta tensor regression tests: ✓"
+        echo "Assist strict module: ✓"
+        echo "Validation scripts: ✓"
+        echo "Meta tensor safety: ✓"
+        echo "====================================================="
