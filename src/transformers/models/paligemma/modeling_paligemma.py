@@ -143,6 +143,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         self.language_model = language_model
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.text_config_dtype = self.config.get_text_config().dtype or self.dtype
         self.post_init()
 
     # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_input_embeddings with Llava->PaliGemma
@@ -174,7 +175,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             return None
         is_training = is_training if is_training is not None else self.training
         using_static_cache = isinstance(past_key_values, StaticCache)
-        min_dtype = torch.finfo(self.dtype).min
+        min_dtype = torch.finfo(self.text_config_dtype).min
         if input_tensor is None:
             input_tensor = attention_mask
 
@@ -193,7 +194,10 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             return attention_mask
 
         causal_mask = torch.full(
-            (sequence_length, target_length), fill_value=min_dtype, dtype=self.dtype, device=cache_position.device
+            (sequence_length, target_length),
+            fill_value=min_dtype,
+            dtype=self.text_config_dtype,
+            device=cache_position.device,
         )
         # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
         if sequence_length != 1:
