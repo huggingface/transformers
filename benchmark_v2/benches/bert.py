@@ -31,49 +31,6 @@ class BERTBenchmark(ModelBenchmark):
         super().__init__(logger)
         self._default_prompt = "Why dogs are so cute?"
 
-    def get_scenario_configs(self) -> list[dict[str, Any]]:
-        """
-        Get BERT-specific scenario configurations.
-
-        Returns:
-            List of scenario configuration dictionaries
-        """
-        return [
-            {"variant": "eager", "compile_mode": None, "use_cache": True, "description": "Eager execution with cache"},
-            {
-                "variant": "compiled",
-                "compile_mode": "max-autotune",
-                "use_cache": True,
-                "description": "Compiled with max autotune",
-            },
-            {
-                "variant": "kernelized",
-                "compile_mode": "max-autotune",
-                "use_cache": True,
-                "description": "Kernelized execution",
-            },
-        ]
-
-    def _is_kernelization_available(self) -> bool:
-        """Check if kernelization is available for BERT."""
-        try:
-            from kernels import Mode, kernelize  # noqa: F401
-
-            return True
-        except ImportError:
-            self.logger.debug("Kernelization not available: kernels module not found")
-            return False
-
-    def get_default_generation_config(self) -> dict[str, Any]:
-        """Get BERT-specific generation configuration."""
-        return {
-            "do_sample": False,
-            "top_p": 1.0,
-            "temperature": 1.0,
-            "repetition_penalty": 1.0,
-            "max_new_tokens": None,
-        }
-
     def get_model_init_kwargs(self, config) -> dict[str, Any]:
         """Get BERT-specific model initialization kwargs."""
         return {
@@ -103,22 +60,14 @@ def run_bert(logger, output_dir, **kwargs):
     Returns:
         Path to output file if successful
     """
-    from benchmark_framework import BenchmarkRunner
+    # Extract parameters with common defaults
+    from benchmark_framework import BenchmarkRunner, ModelBenchmark
 
-    # Extract parameters with defaults
-    model_id = kwargs.get("model_id", "bert-base-uncased")
-    warmup_iterations = kwargs.get("warmup_iterations", 3)
-    measurement_iterations = kwargs.get("measurement_iterations", 5)
-    num_tokens_to_generate = kwargs.get("num_tokens_to_generate", 100)
-    include_sdpa_variants = kwargs.get("include_sdpa_variants", True)
-    device = kwargs.get("device", "cuda")
-    torch_dtype = kwargs.get("torch_dtype", "float16")
-    batch_size = kwargs.get("batch_size", 1)
-    commit_id = kwargs.get("commit_id")
+    params = ModelBenchmark.extract_benchmark_kwargs("bert-base-uncased", **kwargs)
 
-    logger.info(f"Starting BERT benchmark for model: {model_id}")
+    logger.info(f"Starting BERT benchmark for model: {params['model_id']}")
     logger.info(
-        f"Configuration: warmup={warmup_iterations}, measurement={measurement_iterations}, tokens={num_tokens_to_generate}"
+        f"Configuration: warmup={params['warmup_iterations']}, measurement={params['measurement_iterations']}, tokens={params['num_tokens_to_generate']}"
     )
 
     try:
@@ -126,29 +75,21 @@ def run_bert(logger, output_dir, **kwargs):
         benchmark = BERTBenchmark(logger)
 
         # Create scenarios
-        scenarios = benchmark.create_scenarios(
-            model_id=model_id,
-            warmup_iterations=warmup_iterations,
-            measurement_iterations=measurement_iterations,
-            num_tokens_to_generate=num_tokens_to_generate,
-            include_sdpa_variants=include_sdpa_variants,
-            device=device,
-            torch_dtype=torch_dtype,
-            batch_size=batch_size,
-        )
+        scenario_kwargs = {k: v for k, v in params.items() if k != "commit_id"}
+        scenarios = benchmark.create_scenarios(**scenario_kwargs)
 
         logger.info(f"Created {len(scenarios)} benchmark scenarios")
 
         # Create runner and execute benchmarks
         runner = BenchmarkRunner(logger, output_dir)
-        results = runner.run_benchmark(benchmark, scenarios, commit_id=commit_id)
+        results = runner.run_benchmark(benchmark, scenarios, commit_id=params["commit_id"])
 
         if not results:
             logger.warning("No successful benchmark results")
             return None
 
         # Save results
-        model_name = model_id.split("/")[-1]  # Extract model name from ID
+        model_name = params["model_id"].split("/")[-1]  # Extract model name from ID
         output_file = runner.save_results(model_name, results)
 
         logger.info(f"BERT benchmark completed successfully. Results saved to: {output_file}")
