@@ -178,7 +178,7 @@ class MegatronBertEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->MegatronBert
+# copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->MegatronBert
 class MegatronBertSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None, layer_idx=None):
         super().__init__()
