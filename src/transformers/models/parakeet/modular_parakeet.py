@@ -189,7 +189,7 @@ class ParakeetEncoderAttention(LlamaAttention):
         return attn_output, attn_weights
 
     def _rel_shift(self, attention_scores):
-        """Relative position shift for Shaw et al. style attention."""
+        """Relative position shift for Shaw et al. style attention. See appendix B of https://huggingface.co/papers/1901.02860."""
         batch_size, num_heads, query_length, position_length = attention_scores.shape
         attention_scores = nn.functional.pad(attention_scores, pad=(1, 0))
         attention_scores = attention_scores.view(batch_size, num_heads, -1, query_length)

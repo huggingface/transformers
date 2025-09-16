@@ -283,7 +283,7 @@ class ParakeetEncoderAttention(nn.Module):
         return attn_output, attn_weights
 
     def _rel_shift(self, attention_scores):
-        """Relative position shift for Shaw et al. style attention."""
+        """Relative position shift for Shaw et al. style attention. See appendix B of https://huggingface.co/papers/1901.02860."""
         batch_size, num_heads, query_length, position_length = attention_scores.shape
         attention_scores = nn.functional.pad(attention_scores, pad=(1, 0))
         attention_scores = attention_scores.view(batch_size, num_heads, -1, query_length)
@@ -382,7 +382,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.feed_forward1(self.norm_feed_forward1(hidden_states))
         hidden_states = residual + 0.5 * hidden_states
@@ -501,6 +501,26 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, ParakeetEncoder
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = "eustlb/parakeet-ctc-1.1b"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> encoder = ParakeetEncoder.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"])
+        >>> encoder_outputs = encoder(**inputs)
+
+        >>> print(encoder_outputs.last_hidden_state.shape)
+        """
+
         hidden_states = self.subsampling(input_features, attention_mask)
         hidden_states = hidden_states * self.input_scale
         position_embeddings = self.encode_positions(hidden_states)
@@ -587,6 +607,26 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutput:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, ParakeetForCTC
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = "eustlb/parakeet-ctc-1.1b"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = ParakeetForCTC.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"], text=ds[0]["text"])
+        >>> outputs = model(**inputs)
+
+        >>> print(outputs.loss)
+        ```"""
+
         encoder_outputs = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -638,6 +678,27 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         return_dict_in_generate: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[ParakeetGenerateOutput, torch.LongTensor]:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, ParakeetForCTC
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = "eustlb/parakeet-ctc-1.1b"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = ParakeetForCTC.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"], text=ds[0]["text"])
+        >>> predicted_ids = model.generate(**inputs)
+        >>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+
+        >>> print(transcription)
+        ```
+        """
         kwargs["return_dict"] = True
         outputs: CausalLMOutput = self.forward(
             input_features=input_features,
