@@ -16,24 +16,24 @@ rendered properly in your Markdown viewer.
 
 # MXFP4
 
-| ![explanation of mxfp4 format](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/faster-transformers/mxfp4.png) |
-| :--: |
-| Figure 1: The E2M1 format used in the MXFP4 format |
+MXFP4 is a **4-bit** floating point format that dramatically reduces the memory requirements of large models. Large models (GPT-OSS-120B) can fit on a single 80GB GPU and smaller models (GPT-OSS-20B) only require 16GB of memory. It uses blockwise scaling to preserve it's range and accuracy, which typically becomes degraded at lower precisions.
 
-`MXFP4` is a 4-bit floating format with E2M1 layout: 1 sign bit, 2 exponent bits, and 1 mantissa bit, as shown in **Figure 1**. On its own, E2M1 is very coarse. MXFP4 compensates with **blockwise scaling**:
+To use MXPF4, make sure your hardware meets the following requirements.
 
-- Vectors are grouped into blocks of 32 elements.
-- Each block stores a shared scale that restores dynamic range when dequantizing.
-- Inside each block, 4-bit values represent numbers relative to that scale.
+- Install `accelerate`, `kernels`, and `triton≥ 3.4`. Only manually install `triton 3.4` if you're using `PyTorch 2.7` because it is already supported in `PyTorch 2.8`.
+- NVIDIA GPU Compute Capability ≥ 7.5 which includes Tesla GPUs and newer.
 
-This blockwise scheme lets `MXFP4` keep range while using very few bits. In practice, GPT-OSS 20B fits in roughly `16 GB` of VRAM and GPT-OSS 120B fits in roughly `80 GB` when `MXFP4` is active, which is the difference between “cannot load” and “can run on a single GPU.” The catch is that matrix multiplies now have to respect block scales. Doing this efficiently at scale requires dedicated kernels.
+Code below will check for NVIDIA GPU Compute Capability:
 
-Key implementation details:
+```python
+from torch import cuda
+cuda.get_device_capability()
 
-- Quantizer logic: Found in the [MXFP4 quantizer file](https://github.com/huggingface/transformers/blob/0997c2f2ab08c32c8e2f90aaad06e29a7108535b/src/transformers/quantizers/quantizer_mxfp4.py), this handles the core quantization process for MXFP4.
-- Integration hooks: The [MXFP4 integration file](https://github.com/huggingface/transformers/blob/0997c2f2ab08c32c8e2f90aaad06e29a7108535b/src/transformers/integrations/mxfp4.py) enables seamless use of MXFP4 within the transformers framework.
+# (7, 5)
+```
 
-To check if a model supports `MXFP4`, inspect its configuration:
+Let's look at the quantization configuration of the gpt-oss series of models:
+
 ```py
 from transformers import GptOssConfig
 
@@ -53,27 +53,11 @@ print(cfg.quantization_config)
 # }
 ```
 
-If `'quant_method': 'mxfp4'` is present, the model will automatically use the MXFP4 pathway with Triton kernels when supported.
+If `'quant_method': 'mxfp4'` is present, the model will automatically use the MXFP4 pathway.
 
-## Requirements and fallbacks
+## MXFP4 kernels
 
-To run `MXFP4` on GPU you need:
-
-1. `accelerate`, `kernels`, and `triton>=3.4` installed. Note that `Pytorch 2.8` already comes with `triton 3.4`, so you only need to manually install triton if using `Pytorch 2.7`.
-2. NVIDIA GPU with compute capability `≥ 7.5`. This goes all the way back to Tesla, so you can run `gpt-oss-20b` on the free tiers of Google Colab and Kaggle, and on many consumer GPUs.
-
-If these constraints are not met, `transformers` falls back to a higher-precision path (`bfloat16` is used by default), which requires about 4× the memory of MXFP4.
-
-The [snippet](https://huggingface.co/datasets/ariG23498/faster-transformers-scripts/blob/main/memory-requirements-quantized-vs-dequantized.py) loads GPT-OSS twice on CUDA: once with `Mxfp4Config(dequantize=True)` (memory intensive) and once in the default quantized path (memory efficient). **Figure 2** shows the amount of used VRAM after each load so you can visualize the savings.
-
-| ![memory used with quantized vs dequantized models](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/faster-transformers/quantization.png) |
-| :--: |
-| Figure 2: Memory requirements for the quantized and dequantized models |
-
-## Kernels for MXFP4 (Advanced)
-
-Efficient `MXFP4` requires kernels that understand 32-element blocks and their scales during GEMMs and fused ops. This is where **Kernels from the Hub** comes in again. `transformers` automatically pulls in the `MXFP4`-aware
-Triton kernels from the community repository when you load a model that needs them. The repository will appear in your local cache and will be used during the forward pass. For the `MXFP4` kernels one does not need to use the `use_kernels=True` parameter like before, it is set to default in `transformers`.
+`transformers` automatically pulls in the `MXFP4`-aware Triton kernels from the community repository when you load a model that needs them. The repository will appear in your local cache and will be used during the forward pass. For the `MXFP4` kernels one does not need to use the `use_kernels=True` parameter like before, it is set to default in `transformers`.
 
 Quick sanity check with the Hugging Face cache CLI,  after running `gpt-oss-20b` on a GPU compatible with the triton MXFP4 kernels:
 
@@ -90,13 +74,6 @@ kernels-community/triton_kernels model           536.2K
 openai/gpt-oss-20b               model            13.8G
 ```
 
-This indicates the MXFP4 kernels were fetched and are available for execution.
+## Resources
 
-Let's run some benchmarks and see how well the MXFP4 kernels perform. In **Figure 3**, we see that the `MXFP4` kernels are even better than the custom MoE and RMSNorm kernels for larger batches.
-
-| ![benchmark mxfp4 kernels](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/faster-transformers/benchmark-mxfp4.png) |
-| :--: |
-| Figure 3: MXFP4 kernel benchmark |
-
-> [!NOTE]
-> You can explore and play with the benchmarking script [here](https://huggingface.co/datasets/ariG23498/faster-transformers-scripts/blob/main/benchmark-mxfp4-kernels.py)
+To learn more about it please refer [here](https://huggingface.co/blog/faster-transformers#mxfp4-quantization).
