@@ -219,6 +219,13 @@ EvictCallback = Callable[[str], None]
 
 @dataclass
 class Entry:
+    """
+    An entry in the conversation cache.
+    The `lease` and `_lease_lock` are used to prevent eviction of an entry while it is in use. When `lease` is
+    greater than 0, the entry is in use and cannot be evicted. The `_lease_lock` is used to synchronize access to
+    the `lease` counter, making the process thread-safe.
+    """
+
     conversation_id: str
     expiry_task: asyncio.Task
     evict_callback: Optional[EvictCallback] = None
@@ -226,7 +233,7 @@ class Entry:
     _lease_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
 
-class ConversationTTLCache:
+class ConversationCacheManager:
     """
     A simple TTL (time to live) cache for conversations, with a maximum number of entries. Each entry has a TTL, after which it is
     evicted from the cache. The cache is implemented as a dictionary, with the conversation ID as the key and an
@@ -280,7 +287,7 @@ class ConversationTTLCache:
                 entry.evict_callback = evict_callback
             entry.expiry_task.cancel()
             entry.expiry_task = asyncio.create_task(
-                self.evict_entry_after_expiry(conversation_id, self.ttl), name=f"ttl-{conversation_id}"
+                self.evict_entry_after_expiry(conversation_id, self.time_to_live), name=f"ttl-{conversation_id}"
             )
             self.conversation_cache[conversation_id] = entry
         else:
@@ -291,7 +298,7 @@ class ConversationTTLCache:
             entry = Entry(
                 conversation_id=conversation_id,
                 expiry_task=asyncio.create_task(
-                    self.evict_entry_after_expiry(conversation_id, self.ttl), name=f"ttl-{conversation_id}"
+                    self.evict_entry_after_expiry(conversation_id, self.time_to_live), name=f"ttl-{conversation_id}"
                 ),
                 evict_callback=evict_callback,
             )
@@ -823,7 +830,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 self.running_continuous_batching_manager.stop(block=True, timeout=5)
             self.conversation_cache.close()
 
-        self.conversation_cache = ConversationTTLCache(entry_timeout_seconds=self.args.cache_timeout)
+        self.conversation_cache = ConversationCacheManager(entry_timeout_seconds=self.args.cache_timeout)
 
         app = FastAPI(lifespan=lifespan)
 
