@@ -592,7 +592,7 @@ class TopHLogitsWarper(LogitsProcessor):
     diversity and coherence.
 
     Args:
-        top_h (`float`, *optional*, defaults to 0.4):
+        top_h (`float`):
             Scaling coefficient for the entropy-based threshold (`tau`). Must be in the range `(0, 1]`.
         filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
@@ -613,14 +613,14 @@ class TopHLogitsWarper(LogitsProcessor):
     ```
     """
 
-    def __init__(self, top_h: float = 0.4, filter_value: float = -float("Inf")):
+    def __init__(self, top_h: float, filter_value: float = -float("Inf")):
         super().__init__()
 
         # input checks
         if not (0 < top_h <= 1):
-            raise ValueError("alpha must be in the range (0, 1].")
+            raise ValueError("`top_h` must be in the range (0, 1].")
         self.top_n = 100
-        self.coef = top_h
+        self.top_h = top_h
         self.filter_value = filter_value
 
     @staticmethod
@@ -670,7 +670,7 @@ class TopHLogitsWarper(LogitsProcessor):
 
             # entropy-based threshold tau (computed on the top-k distribution)
             alpha_sum = top_probs.sum()
-            tau = (self.calculate_entropy(top_probs) - torch.log2(alpha_sum)) * alpha_sum * self.coef
+            tau = (self.calculate_entropy(top_probs) - torch.log2(alpha_sum)) * alpha_sum * self.top_h
 
             # grow the kept set until the stopping rule triggers
             sigma = top_probs[0]
