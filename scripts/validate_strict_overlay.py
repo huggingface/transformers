@@ -1,8 +1,11 @@
 """End-to-end validation of strict overlay functionality."""
 
 import logging
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from assist_strict.assisted import assisted_generate_strict, ConfigDriftError
 
 

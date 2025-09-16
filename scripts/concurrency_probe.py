@@ -1,10 +1,13 @@
 """Concurrency probe for strict overlay functionality."""
 
 import concurrent.futures
+import sys
+import os
 from typing import Any, Tuple
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from assist_strict.assisted import assisted_generate_strict
 
 
