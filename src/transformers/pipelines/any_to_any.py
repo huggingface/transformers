@@ -325,7 +325,14 @@ class AnyToAnyPipeline(Pipeline):
         if images is None and text is None:
             raise ValueError("You must at least provide either text or images.")
 
-        # Do we need this codepath ???
+        if isinstance(text, (list, tuple, KeyDataset)) and isinstance(text[0], (list, tuple, dict)):
+            # We have one or more prompts in list-of-dicts format, so this is chat mode
+            if isinstance(text[0], dict):
+                return super().__call__(Chat(text), **kwargs)
+            else:
+                chats = [Chat(chat) for chat in text]  # 🐈 🐈 🐈
+                return super().__call__(chats, **kwargs)
+
         if text is not None and not (isinstance(text, str) or (isinstance(text, list) and isinstance(text[0], str))):
             """
             Supports the following format
@@ -335,14 +342,6 @@ class AnyToAnyPipeline(Pipeline):
             This is a common pattern in other multimodal pipelines, so we support it here as well.
             """
             return super().__call__(text, **kwargs)
-
-        if isinstance(text, (list, tuple, KeyDataset)) and isinstance(text[0], (list, tuple, dict)):
-            # We have one or more prompts in list-of-dicts format, so this is chat mode
-            if isinstance(text[0], dict):
-                return super().__call__(Chat(text), **kwargs)
-            else:
-                chats = [Chat(chat) for chat in text]  # 🐈 🐈 🐈
-                return super().__call__(chats, **kwargs)
 
         # encourage the user to use the chat format if supported
         if getattr(self.processor, "chat_template", None) is not None:
@@ -446,7 +445,8 @@ class AnyToAnyPipeline(Pipeline):
             # Remove the input text from the generated text if the generated text starts with the input text
             # (accounting for the possibility of a space between the input and generated text)
             new_generated_texts = []
-            decoded_inputs = self.processor.post_process_image_text_to_text(
+            postprocess_kwargs["generation_mode"] = "text"
+            decoded_inputs = self.processor.post_process_multimodal_output(
                 input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
             )
             for text_generated, decoded_input in zip(generated_outputs, decoded_inputs):
