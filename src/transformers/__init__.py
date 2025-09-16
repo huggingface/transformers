@@ -150,6 +150,7 @@ _import_structure = {
     # Models
     "onnx": [],
     "pipelines": [
+        "AnyToAnyPipeline",
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
@@ -166,7 +167,6 @@ _import_structure = {
         "JsonPipelineDataFormat",
         "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
-        "AnyToAnyPipeline",
         "NerPipeline",
         "ObjectDetectionPipeline",
         "PipedPipelineDataFormat",
@@ -819,9 +819,9 @@ if TYPE_CHECKING:
     from .optimization_tf import GradientAccumulator as GradientAccumulator
     from .optimization_tf import WarmUp as WarmUp
     from .optimization_tf import create_optimizer as create_optimizer
-    from .pipelines import AnyToAnyPipeline as AnyToAnyPipeline
 
     # Pipelines
+    from .pipelines import AnyToAnyPipeline as AnyToAnyPipeline
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat

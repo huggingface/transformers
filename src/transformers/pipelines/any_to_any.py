@@ -14,7 +14,9 @@
 # limitations under the License.
 
 import enum
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, overload
+
+import numpy as np
 
 from ..audio_utils import AudioInput
 from ..generation import GenerationConfig
@@ -23,6 +25,7 @@ from ..processing_utils import ProcessingKwargs, Unpack
 from ..utils import (
     add_end_docstrings,
     is_torch_available,
+    is_vision_available,
     logging,
     requires_backends,
 )
@@ -31,8 +34,13 @@ from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
     from .pt_utils import KeyDataset
+
+if is_vision_available():
+    from PIL import Image
 
 logger = logging.get_logger(__name__)
 
@@ -214,6 +222,26 @@ class AnyToAnyPipeline(Pipeline):
         postprocess_params["generation_mode"] = generation_mode
         return preprocess_params, forward_kwargs, postprocess_params
 
+    @overload
+    def __call__(
+        self,
+        text: Optional[str] = None,
+        images: Optional[Union[str, "Image.Image"]] = None,
+        videos: Optional[Union[str, "np.ndarray", "torch.Tensor"]] = None,
+        audio: Optional[Union[str, "np.ndarray"]] = None,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]: ...
+
+    @overload
+    def __call__(
+        self,
+        text: Optional[list[str]] = None,
+        images: Optional[Union[list[str], list["Image.Image"]]] = None,
+        videos: Optional[Union[list[str], list["np.ndarray"], list["torch.Tensor"]]] = None,
+        audio: Optional[Union[list[str], list["np.ndarray"]]] = None,
+        **kwargs: Any,
+    ) -> list[list[dict[str, Any]]]: ...
+
     def __call__(
         self,
         text: Union[str, list[str], list[dict]],
@@ -233,7 +261,7 @@ class AnyToAnyPipeline(Pipeline):
         Generate a text given text and optionally multimodal data passed as inputs.
 
         Args:
-            text (str, list[str], `list[dict]`):
+            text (`str`, `list[str]`, `list[dict]`):
                 The text to be used for generation. If a list of strings is passed, the length of the list should be
                 the same as the number of images. Text can also follow the chat format: a list of dictionaries where
                 each dictionary represents a message in a conversation. Each dictionary should have two keys: 'role'
