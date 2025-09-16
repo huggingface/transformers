@@ -934,7 +934,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
             return_dict=return_dict,
             cache_position=cache_position,
             position_ids=position_ids,
-            **kwargs
+            **kwargs,
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.LayerNorm(sequence_output)

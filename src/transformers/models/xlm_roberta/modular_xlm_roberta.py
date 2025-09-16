@@ -132,7 +132,7 @@ class XLMRobertaForCausalLM(RobertaForCausalLM):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -217,7 +217,7 @@ class XLMRobertaForMaskedLM(RobertaForMaskedLM):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -296,7 +296,7 @@ class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -415,7 +415,7 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         pooled_output = outputs[1]
 
@@ -490,7 +490,7 @@ class XLMRobertaForTokenClassification(RobertaForTokenClassification):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -564,7 +564,7 @@ class XLMRobertaForQuestionAnswering(RobertaForQuestionAnswering):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]

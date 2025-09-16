@@ -429,7 +429,9 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 class BertGenerationEncoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = BertGenerationEncoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder", attn_implementation="eager")
+        model = BertGenerationEncoder.from_pretrained(
+            "google/bert_for_seq_generation_L-24_bbc_encoder", attn_implementation="eager"
+        )
         input_ids = torch.tensor([[101, 7592, 1010, 2026, 3899, 2003, 10140, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]
@@ -445,7 +447,9 @@ class BertGenerationEncoderIntegrationTest(unittest.TestCase):
 class BertGenerationDecoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = BertGenerationDecoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder", attn_implementation="eager")
+        model = BertGenerationDecoder.from_pretrained(
+            "google/bert_for_seq_generation_L-24_bbc_encoder", attn_implementation="eager"
+        )
         input_ids = torch.tensor([[101, 7592, 1010, 2026, 3899, 2003, 10140, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]

@@ -726,7 +726,7 @@ class XmodEncoder(nn.Module):
                 encoder_attention_mask,
                 past_key_values,
                 cache_position,
-                **kwargs
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -1313,7 +1313,7 @@ class XmodForMaskedLM(XmodPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -1424,7 +1424,7 @@ class XmodForSequenceClassification(XmodPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -1551,7 +1551,7 @@ class XmodForMultipleChoice(XmodPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         pooled_output = outputs[1]
 
@@ -1629,7 +1629,7 @@ class XmodForTokenClassification(XmodPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1725,7 +1725,7 @@ class XmodForQuestionAnswering(XmodPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]

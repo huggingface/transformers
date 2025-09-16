@@ -738,12 +738,12 @@ class BridgeTowerBertCrossLayer(nn.Module):
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         self.crossattention = BridgeTowerAttention(
-                config,
-                position_embedding_type="absolute",
-                is_causal=False,
-                layer_idx=layer_idx,
-                is_cross_attention=True,
-            )
+            config,
+            position_embedding_type="absolute",
+            is_causal=False,
+            layer_idx=layer_idx,
+            is_cross_attention=True,
+        )
         self.intermediate = BridgeTowerIntermediate(config)
         self.output = BridgeTowerOutput(config)
 

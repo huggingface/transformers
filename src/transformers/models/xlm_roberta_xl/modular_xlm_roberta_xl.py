@@ -409,7 +409,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -500,7 +500,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -572,7 +572,7 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -685,7 +685,7 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         pooled_output = outputs[1]
 
@@ -756,7 +756,7 @@ class XLMRobertaXLForTokenClassification(XLMRobertaXLPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -829,7 +829,7 @@ class XLMRobertaXLForQuestionAnswering(XLMRobertaXLPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]

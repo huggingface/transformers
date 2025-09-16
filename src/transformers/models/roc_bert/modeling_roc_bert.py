@@ -1323,7 +1323,7 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output, pooled_output = outputs[:2]
@@ -1494,7 +1494,7 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1652,7 +1652,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1782,7 +1782,7 @@ class RoCBertForSequenceClassification(RoCBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         pooled_output = outputs[1]
@@ -1932,7 +1932,7 @@ class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         pooled_output = outputs[1]
@@ -2024,7 +2024,7 @@ class RoCBertForTokenClassification(RoCBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -2110,7 +2110,7 @@ class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]

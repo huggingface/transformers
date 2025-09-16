@@ -322,7 +322,7 @@ class ErnieModel(BertModel):
             return_dict=return_dict,
             cache_position=cache_position,
             position_ids=position_ids,
-            **kwargs
+            **kwargs,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -472,7 +472,7 @@ class ErnieForPreTraining(BertForPreTraining):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output, pooled_output = outputs[:2]
@@ -551,7 +551,7 @@ class ErnieForCausalLM(BertLMHeadModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -628,7 +628,7 @@ class ErnieForMaskedLM(BertForMaskedLM):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -721,7 +721,7 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         pooled_output = outputs[1]
@@ -786,7 +786,7 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         pooled_output = outputs[1]
@@ -904,7 +904,7 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         pooled_output = outputs[1]
@@ -969,7 +969,7 @@ class ErnieForTokenClassification(BertForTokenClassification):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1032,7 +1032,7 @@ class ErnieForQuestionAnswering(BertForQuestionAnswering):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]

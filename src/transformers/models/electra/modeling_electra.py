@@ -1225,7 +1225,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = discriminator_hidden_states[0]
@@ -1340,7 +1340,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
@@ -1429,7 +1429,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         generator_sequence_output = generator_hidden_states[0]
 
@@ -1506,7 +1506,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
@@ -1572,7 +1572,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = discriminator_hidden_states[0]
@@ -1695,7 +1695,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = discriminator_hidden_states[0]
@@ -1808,7 +1808,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            **kwargs
+            **kwargs,
         )
 
         sequence_output = outputs[0]
