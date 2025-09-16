@@ -129,7 +129,7 @@ class Llama4VisionConfig(PretrainedConfig):
         @property
         def vision_feature_layer(self):
             warnings.warn(
-                "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.55.0.",
+                "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.58.0.",
                 FutureWarning,
             )
             return self._vision_feature_layer
