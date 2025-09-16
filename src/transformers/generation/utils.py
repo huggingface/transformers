@@ -2776,26 +2776,23 @@ class GenerationMixin(ContinuousMixin):
                 is_prefill = False
             else:
                 if compile_forward:
-                    attention_mask = model_inputs.get("attention_mask")
-                    assert isinstance(attention_mask, (dict, type(None)))
-                    # With compileable caches, we get 4D masks (not sure why)
-                    if isinstance(attention_mask, dict):
-                        for mask in attention_mask.values():
-                            if isinstance(mask, torch.Tensor):
-                                torch._dynamo.mark_dynamic(mask, 3)
-                    kv_cache = model_inputs.get("past_key_values")
-                    if kv_cache and isinstance(kv_cache, DynamicCache):
-                        kv_cache.mark_dynamic_for_compile()
+                    cache = model_inputs.get("past_key_values")
+                    if isinstance(cache, DynamicCache):
+                        # Mark the sequence_length dimension as dynamic
+                        cache.mark_dynamic_for_compile()
+                        attention_mask = model_inputs.get("attention_mask")
+                        if isinstance(attention_mask, dict):
+                            for mask in attention_mask.values():
+                                if isinstance(mask, torch.Tensor):
+                                    torch._dynamo.mark_dynamic(mask, 3)
+                        elif isinstance(attention_mask, torch.Tensor):
+                            torch._dynamo.mark_dynamic(mask, 3)
 
-                    # Mark `DynamicSlidingWindowLayer.cumulative_length` as
-                    # dynamic.  There isn’t a public/stable API for dynamic
-                    # *integers* yet, so we use `dynamic_sources`, which relies
-                    # on string matching to identify tensors/ints.  This is
-                    # brittle: if the attribute is renamed, this selector must
-                    # be updated.  The torch.compile team is discussing a
-                    # SymInt-like API that would make this explicit and remove
-                    # the string-matching workaround.  TODO: switch when
-                    # available.
+                    # Mark `cumulative_length` as dynamic for sliding layers, if any. There isn’t a public/stable API for dynamic
+                    # *integers* yet, so we use `dynamic_sources`, which relies on string matching to identify tensors/ints.
+                    # This is brittle: if the attribute is renamed, this selector must be updated.  The torch.compile team is
+                    # discussing a SymInt-like API that would make this explicit and remove this string-matching workaround
+                    # Update this when the API is available
                     with torch.compiler.config.patch(dynamic_sources=".*cumulative_length"):
                         outputs = model_forward(**model_inputs, return_dict=True)
                 else:

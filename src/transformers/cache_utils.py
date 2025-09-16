@@ -79,9 +79,6 @@ class CacheLayerMixin(ABC):
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
-    @abstractmethod
-    def mark_dynamic_for_compile(self): ...
-
 
 class DynamicLayer(CacheLayerMixin):
     """
@@ -167,9 +164,9 @@ class DynamicLayer(CacheLayerMixin):
 
     def mark_dynamic_for_compile(self):
         """Marks the seq length of KV tensors dynamic for torch.compile."""
-        super().mark_dynamic_for_compile()
-        torch._dynamo.mark_dynamic(self.keys, 2)
-        torch._dynamo.mark_dynamic(self.values, 2)
+        if self.get_seq_length() > 0:
+            torch._dynamo.mark_dynamic(self.keys, 2)
+            torch._dynamo.mark_dynamic(self.values, 2)
 
 
 class DynamicSlidingWindowLayer(DynamicLayer):
@@ -1004,13 +1001,6 @@ class DynamicCache(Cache):
         else:
             super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
-        # Store the indexes of the same type of layers to add torch._size checks later
-        from collections import defaultdict
-
-        self.layer_type_to_layer_indexes = defaultdict(list)
-        for idx, layer in enumerate(self.layers):
-            self.layer_type_to_layer_indexes[layer.__class__].append(idx)
-
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """
         Converts the `Cache` instance into the its equivalent in the legacy cache format. Used for
@@ -1038,25 +1028,23 @@ class DynamicCache(Cache):
 
     def add_torch_size_checks(self):
         """
-        Insert torch._checks size asserts to assist torch.compile dynamic shape
-        infra to reuse same symbolic shape for different layers in the Dynamic
-        cache. Here, we collect the layers that are of same type, and add checks
+        Insert torch._checks size asserts to assist torch.compile dynamic shape infra to reuse same symbolic shape
+        for different layers in the DynamiCache. Here, we collect the layers that are of same type, and add checks
         on them.
         """
-
-        if not len(self.layers):
-            return
-
-        for layer_idxs in self.layer_type_to_layer_indexes.values():
-            if len(layer_idxs) > 1:
-                first_layer = self.layers[layer_idxs[0]]
-
-                for layer_idx in layer_idxs:
-                    layer = self.layers[layer_idx]
-                    torch._check(first_layer.keys.size(2) == layer.keys.size(2))
-                    torch._check(first_layer.values.size(2) == layer.values.size(2))
+        # We need to separate each type of layers in the Cache, i.e. sliding layers or not
+        dynamic_dim_per_type = {}
+        for layer in self.layers:
+            if layer.__class__ not in dynamic_dim_per_type:
+                dynamic_dim = layer.keys.size(2)
+                dynamic_dim_per_type[layer.__class__] = dynamic_dim
+            else:
+                dynamic_dim = dynamic_dim_per_type[layer.__class__]
+            torch._check(layer.keys.size(2) == dynamic_dim)
+            torch._check(layer.keys.values(2) == dynamic_dim)
 
     def mark_dynamic_for_compile(self):
+        """Set the `seq_length` dim of each layer as dynamic for dynamo tracing."""
         for layer in self.layers:
             layer.mark_dynamic_for_compile()
 
