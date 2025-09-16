@@ -150,7 +150,7 @@ KOSMOS2_5_TEXT_INPUTS_DOCSTRING = r"""
             - 1 for places where to put the image features,
             - 0 for places that are not for image features (i.e. for text tokens).
 
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (`Cache` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
@@ -210,7 +210,7 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
 
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (`Cache` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
@@ -272,19 +272,16 @@ class Kosmos2_5ModelOutput(ModelOutput):
             the weighted average in the self-attention heads.
         vision_model_output(`BaseModelOutputWithPooling`, *optional*):
             The output of the [`Kosmos2VisionModel`].
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-            encoder_sequence_length, embed_size_per_head)`.
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
             `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
             input) to speed up sequential decoding.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     width: Optional[torch.FloatTensor] = None
@@ -334,11 +331,8 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
             the weighted average in the self-attention heads.
         vision_model_output(`BaseModelOutputWithPooling`, *optional*):
             The output of the [`Kosmos2VisionModel`].
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-            encoder_sequence_length, embed_size_per_head)`.
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
             `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
@@ -346,7 +340,7 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -1131,7 +1125,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1648,7 +1642,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
                 dim=1,
             )
 
-        return {
+        model_inputs = {
             "input_ids": input_ids,
             "image_embeds": image_embeds,
             "image_embeds_position_mask": image_embeds_position_mask,
@@ -1657,6 +1651,13 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
             "position_ids": position_ids,
             "use_cache": use_cache,
         }
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in model_kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
+        return model_inputs
 
 
 @add_start_docstrings(
@@ -1730,13 +1731,13 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         >>> import torch
         >>> from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
-        >>> repo = "ydshieh/kosmos-2.5"
+        >>> repo = "microsoft/kosmos-2.5"
         >>> device = "cuda:0"
         >>> dtype = torch.bfloat16 # torch.float16
-        >>> model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
+        >>> model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, dtype=dtype)
         >>> processor = AutoProcessor.from_pretrained(repo)
 
-        >>> url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        >>> url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
 
         >>> image = Image.open(requests.get(url, stream=True).raw)
 

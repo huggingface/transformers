@@ -20,7 +20,6 @@ import random
 import shutil
 import tempfile
 import unittest
-from functools import lru_cache
 
 import numpy as np
 
@@ -33,7 +32,7 @@ from transformers import (
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizerOutput
 from transformers.testing_utils import require_torch, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 global_rng = random.Random()
@@ -72,8 +71,6 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
             fp.write(json.dumps(vocab_tokens) + "\n")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname
@@ -393,8 +390,6 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             fp.write(json.dumps(vocab_tokens) + "\n")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname

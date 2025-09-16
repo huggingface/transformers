@@ -182,19 +182,6 @@ class MgpstrProcessorTest(unittest.TestCase):
 
         self.assertListEqual(decode_strs, decoded_processor)
 
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = MgpstrProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = None
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
-
     def test_processor_batch_decode(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()

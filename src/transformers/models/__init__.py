@@ -123,6 +123,7 @@ if TYPE_CHECKING:
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
+    from .florence2 import *
     from .fnet import *
     from .focalnet import *
     from .fsmt import *
@@ -157,6 +158,8 @@ if TYPE_CHECKING:
     from .hgnet_v2 import *
     from .hiera import *
     from .hubert import *
+    from .hunyuan_v1_dense import *
+    from .hunyuan_v1_moe import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -205,6 +208,7 @@ if TYPE_CHECKING:
     from .mgp_str import *
     from .mimi import *
     from .minimax import *
+    from .ministral import *
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
@@ -235,6 +239,7 @@ if TYPE_CHECKING:
     from .nystromformer import *
     from .olmo import *
     from .olmo2 import *
+    from .olmo3 import *
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *
@@ -273,6 +278,9 @@ if TYPE_CHECKING:
     from .qwen2_vl import *
     from .qwen3 import *
     from .qwen3_moe import *
+    from .qwen3_next import *
+    from .qwen3_vl import *
+    from .qwen3_vl_moe import *
     from .rag import *
     from .recurrent_gemma import *
     from .reformer import *
@@ -292,6 +300,7 @@ if TYPE_CHECKING:
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
+    from .seed_oss import *
     from .segformer import *
     from .seggpt import *
     from .sew import *
@@ -332,6 +341,7 @@ if TYPE_CHECKING:
     from .unispeech_sat import *
     from .univnet import *
     from .upernet import *
+    from .vaultgemma import *
     from .video_llava import *
     from .videomae import *
     from .vilt import *

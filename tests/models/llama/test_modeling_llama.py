@@ -46,7 +46,6 @@ if is_torch_available():
         LlamaModel,
         LlamaTokenizer,
     )
-    from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
 
 class LlamaModelTester(CausalLMModelTester):
@@ -87,7 +86,6 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = LlamaModelTester
-    rotary_embedding_layer = LlamaRotaryEmbedding  # Enables RoPE tests if set
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -126,7 +124,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct")
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Meta-Llama-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
+            "meta-llama/Meta-Llama-3.1-8B-Instruct", device_map="auto", dtype=torch.bfloat16
         )
         input_text = ["Tell me about the french revolution."]
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
@@ -140,7 +138,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            "meta-llama/Llama-2-7b-hf", device_map="auto", dtype=torch.bfloat16, attn_implementation="eager"
         )
 
         with torch.no_grad():
@@ -184,9 +182,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
-        )
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="auto", dtype=torch.float16)
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
@@ -229,6 +225,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
         )
 
+    # TODO joao, manuel: remove this in v4.62.0
     # TODO: check why we have the following strange situation.
     # without running in subprocess, this test causes subsequent tests failing with `RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cpu and cuda:0!`
     @run_test_using_subprocess
@@ -244,13 +241,20 @@ class LlamaIntegrationTest(unittest.TestCase):
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-chat-hf", device_map="sequential", torch_dtype=torch.float16
+            "meta-llama/Llama-2-7b-chat-hf", device_map="sequential", dtype=torch.float16
         )
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         generated_ids = model.generate(
-            **model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
+            **model_inputs,
+            max_new_tokens=64,
+            top_p=None,
+            temperature=1,
+            do_sample=False,
+            dola_layers="low",
+            trust_remote_code=True,
+            custom_generate="transformers-community/dola",
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -281,7 +285,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
+            "meta-llama/Llama-2-7b-hf", device_map=torch_device, dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -330,7 +334,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             model = LlamaForCausalLM.from_pretrained(
                 llama_model_ckp,
                 device_map=device,
-                torch_dtype=dtype,
+                dtype=dtype,
                 attn_implementation=attn_implementation,
                 generation_config=GenerationConfig(
                     use_cache=True,
@@ -375,7 +379,7 @@ class Mask4DTestHard(unittest.TestCase):
         model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self.model_dtype = torch.float32
         self.tokenizer = LlamaTokenizer.from_pretrained(model_name)
-        self.model = LlamaForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+        self.model = LlamaForCausalLM.from_pretrained(model_name, dtype=self.model_dtype).to(torch_device)
 
     def get_test_data(self):
         template = "my favorite {}"

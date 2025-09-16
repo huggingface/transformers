@@ -73,7 +73,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
 
 model_name = "facebook/opt-125m"
-model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 bits, group_size, sym = 4, 128, True
 # mixed bits config
@@ -104,7 +104,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
 
 model_name = "facebook/opt-125m"
-model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 bits, group_size, sym = 4, 128, True
 autoround = AutoRound(
@@ -133,7 +133,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
 
 model_name = "facebook/opt-125m"
-model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 bits, group_size, sym = 4, 128, True
 autoround = AutoRound(
@@ -177,7 +177,7 @@ Supports 2, 4, and 8 bits. We recommend using intel-extension-for-pytorch (IPEX)
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", torch_dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
@@ -196,7 +196,7 @@ Supports 4 bits only. We recommend using intel-extension-for-pytorch (IPEX) for 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="xpu", torch_dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="xpu", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
@@ -215,7 +215,7 @@ Supports 2, 3, 4, and 8 bits. We recommend using GPTQModel for 4 and 8 bits infe
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda", torch_dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
@@ -231,14 +231,14 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 AutoRound automatically selects the backend for each layer based on compatibility. In general, the priority order is Marlin > ExLLaMAV2 > Triton, but the final choice depends on factors such as group size, bit width, packing format, hardware device, and other implementation details. For more details, please refer to [backends](https://github.com/intel/auto-round?tab=readme-ov-file#specify-backend),
 
 The backend may not always be the most suitable for certain devices. 
-You can specify your preferred backend such as "ipex" for CPU and CPU, "marlin/exllamav2/triton" for CUDA, according to your needs or hardware compatibility. Please note that additional corresponding libraries may be required.
+You can specify your preferred backend such as "ipex" for CPU, "ipex/triton" for XPU, "marlin/exllamav2/triton" for CUDA, according to your needs or hardware compatibility. Please note that additional corresponding libraries may be required.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoRoundConfig
 
 model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
 quantization_config = AutoRoundConfig(backend="ipex")
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", quantization_config=quantization_config, torch_dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", quantization_config=quantization_config, dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
@@ -259,7 +259,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, AutoRoundConfig
 
 model_name = "ybelkada/opt-125m-gptq-4bit"
 quantization_config = AutoRoundConfig()
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", quantization_config=quantization_config, torch_dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", quantization_config=quantization_config, dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"
 inputs = tokenizer(text, return_tensors="pt").to(model.device)

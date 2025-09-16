@@ -40,7 +40,6 @@ if is_torch_available():
         Phi3ForTokenClassification,
         Phi3Model,
     )
-    from transformers.models.phi3.modeling_phi3 import Phi3RotaryEmbedding
 
     end_of_text_token = 32000
 
@@ -116,7 +115,6 @@ class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = Phi3ModelTester
-    rotary_embedding_layer = Phi3RotaryEmbedding
 
 
 @slow
@@ -261,7 +259,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         See #33586 for more
         """
         model = Phi3ForCausalLM.from_pretrained(
-            "microsoft/Phi-3-mini-4k-instruct", device_map=torch_device, torch_dtype=torch.bfloat16
+            "microsoft/Phi-3-mini-4k-instruct", device_map=torch_device, dtype=torch.bfloat16
         )
         tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
 
@@ -390,7 +388,7 @@ class Phi3IntegrationTest(unittest.TestCase):
             model_id,
             config=config,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,

@@ -15,7 +15,6 @@
 
 import unittest
 
-import pytest
 import requests
 
 from transformers import (
@@ -61,6 +60,10 @@ class AriaVisionText2TextModelTester:
     def __init__(
         self,
         parent,
+        batch_size=13,
+        num_channels=3,
+        image_size=16,
+        num_image_tokens=4,
         ignore_index=-100,
         image_token_index=9,
         projector_hidden_act="gelu",
@@ -83,16 +86,16 @@ class AriaVisionText2TextModelTester:
             num_choices=4,
             pad_token_id=1,
             hidden_size=32,
-            intermediate_size=64,
+            intermediate_size=16,
             max_position_embeddings=60,
             model_type="aria_moe_lm",
             moe_intermediate_size=4,
-            moe_num_experts=4,
+            moe_num_experts=3,
             moe_topk=2,
-            num_attention_heads=8,
+            num_attention_heads=2,
             num_experts_per_tok=3,
             num_hidden_layers=2,
-            num_key_value_heads=8,
+            num_key_value_heads=2,
             rope_theta=5000000,
             vocab_size=99,
             eos_token_id=2,
@@ -100,15 +103,15 @@ class AriaVisionText2TextModelTester:
         ),
         is_training=True,
         vision_config=Idefics3VisionConfig(
-            image_size=358,
-            patch_size=10,
+            image_size=16,
+            patch_size=8,
             num_channels=3,
             is_training=True,
             hidden_size=32,
-            projection_dim=20,
+            projection_dim=4,
             num_hidden_layers=2,
-            num_attention_heads=16,
-            intermediate_size=10,
+            num_attention_heads=2,
+            intermediate_size=4,
             dropout=0.1,
             attention_dropout=0.1,
             initializer_range=0.02,
@@ -130,11 +133,14 @@ class AriaVisionText2TextModelTester:
         self.num_attention_heads = text_config.num_attention_heads
         self.is_training = is_training
 
-        self.batch_size = 10
-        self.num_channels = 3
-        self.image_size = 358
-        self.num_image_tokens = 128
+        self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.num_image_tokens = num_image_tokens
         self.seq_length = seq_length + self.num_image_tokens
+        self.projector_patch_to_query_dict = {
+            vision_config.image_size**2 // vision_config.patch_size**2: vision_config.projection_dim
+        }
 
     def get_config(self):
         return AriaConfig(
@@ -146,6 +152,7 @@ class AriaVisionText2TextModelTester:
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
             eos_token_id=self.eos_token_id,
+            projector_patch_to_query_dict=self.projector_patch_to_query_dict,
         )
 
     def prepare_config_and_inputs(self):
@@ -176,7 +183,6 @@ class AriaVisionText2TextModelTester:
         return config, inputs_dict
 
 
-@slow
 @require_torch
 class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
@@ -193,63 +199,8 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
         self.model_tester = AriaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AriaConfig, has_text_modality=False)
 
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in LLava models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in LLava models")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Feedforward chunking is not yet supported")
-    def test_feed_forward_chunking(self):
-        pass
-
     @unittest.skip(reason="Unstable test")
     def test_initialization(self):
-        pass
-
-    @unittest.skip(reason="Unstable test")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip(reason="Dynamic control flow due to MoE")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip(reason="Dynamic control flow due to MoE")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
-    def test_disk_offload_safetensors(self):
         pass
 
 

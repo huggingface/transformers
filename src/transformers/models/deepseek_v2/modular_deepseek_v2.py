@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     logging,
 )
@@ -311,8 +311,8 @@ class DeepseekV2MoE(nn.Module):
         cnts = topk_ids.new_zeros((topk_ids.shape[0], len(self.experts)))
         cnts.scatter_(1, topk_ids, 1)
         tokens_per_expert = cnts.sum(dim=0)
-        indicies = topk_ids.view(-1).argsort()
-        sorted_tokens = hidden_states[indicies // topk_ids.shape[1]]
+        indices = topk_ids.view(-1).argsort()
+        sorted_tokens = hidden_states[indices // topk_ids.shape[1]]
 
         # Process experts
         outputs = []
@@ -331,7 +331,7 @@ class DeepseekV2MoE(nn.Module):
 
         # Reorder and combine outputs
         new_x = torch.empty_like(outs)
-        new_x[indicies] = outs
+        new_x[indices] = outs
         hidden_states = (
             new_x.view(*topk_ids.shape, -1)
             .type(topk_weight.dtype)
@@ -507,7 +507,7 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
 
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2MoEGate):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 

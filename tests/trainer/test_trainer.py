@@ -516,11 +516,15 @@ if is_torch_available():
             self.lstm = nn.LSTM(hidden_size, hidden_size, batch_first=True)
             self.fc = nn.Linear(hidden_size, vocab_size)
 
-        def forward(self, input_ids, **kwargs):
+        def forward(self, input_ids, labels=None, **kwargs):
             embedded = self.embedding(input_ids)
             lstm_out, _ = self.lstm(embedded)
             logits = self.fc(lstm_out)
-            return logits
+            if labels is None:
+                return logits
+
+            loss = nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1))
+            return loss, logits
 
     def create_dummy_dataset_for_text_generation(vocab_size, seq_length, num_samples):
         import numpy as np
@@ -1293,6 +1297,104 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_trained_model(trainer.model)
 
+    def test_include_num_input_tokens_seen(self):
+        model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=2)
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenizer.pad_token = "[PAD]"
+        model.config.pad_token_id = tokenizer.pad_token_id
+
+        sentences = ["This is a short sentence.", "This is a much longer sentence that will require padding."]
+        labels = torch.tensor([0, 1])
+
+        # 1. Test with attention_mask
+        tokenized_dataset_with_mask = tokenizer(sentences, truncation=True, padding="longest", return_tensors="pt")
+        tokenized_dataset_with_mask["labels"] = labels
+        dataset_with_mask = datasets.Dataset.from_dict(tokenized_dataset_with_mask)
+
+        # 2. Test without attention_mask
+        tokenized_dataset_no_mask = {k: v for k, v in tokenized_dataset_with_mask.items() if k != "attention_mask"}
+        dataset_no_mask = datasets.Dataset.from_dict(tokenized_dataset_no_mask)
+
+        # 3. Test with no padding information
+        tokenizer_no_pad = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenizer_no_pad.pad_token = None
+
+        data_collator = default_data_collator
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Test case 1: "non_padding" with attention_mask
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                include_num_input_tokens_seen="non_padding",
+                per_device_train_batch_size=2,
+                max_steps=1,
+                report_to="none",
+            )
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=dataset_with_mask,
+                data_collator=data_collator,
+                processing_class=tokenizer,
+            )
+            trainer.train()
+            attention_mask = tokenized_dataset_with_mask["attention_mask"]
+            non_padded_tokens_with_mask = attention_mask.sum().item()
+            self.assertEqual(trainer.state.num_input_tokens_seen, non_padded_tokens_with_mask)
+
+            # Test case 2: "non_padding" without attention_mask (fallback to pad_token_id)
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=dataset_no_mask,
+                data_collator=data_collator,
+                processing_class=tokenizer,
+            )
+            trainer.train()
+            input_ids = tokenized_dataset_with_mask["input_ids"]  # use original to compute expected
+            non_padded_tokens_no_mask = (input_ids != tokenizer.pad_token_id).sum().item()
+            self.assertEqual(trainer.state.num_input_tokens_seen, non_padded_tokens_no_mask)
+
+            # Test case 3: "non_padding" with no padding info (fallback to numel)
+            with self.assertLogs("transformers.trainer", level="WARNING") as cm:
+                trainer = Trainer(
+                    model=model,
+                    args=args,
+                    train_dataset=dataset_no_mask,  # still has input_ids
+                    data_collator=data_collator,
+                    processing_class=tokenizer_no_pad,  # tokenizer without pad token
+                )
+                trainer.train()
+                self.assertTrue(
+                    any("Could not determine method to count non-padding tokens" in log for log in cm.output)
+                )
+            total_tokens = input_ids.numel()
+            self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
+
+            # Test case 4: "all"
+            args.include_num_input_tokens_seen = "all"
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=dataset_with_mask,
+                data_collator=data_collator,
+                processing_class=tokenizer,
+            )
+            trainer.train()
+            self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
+
+            # Test case 5: True (backward compatibility)
+            args.include_num_input_tokens_seen = True
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=dataset_with_mask,
+                data_collator=data_collator,
+                processing_class=tokenizer,
+            )
+            trainer.train()
+            self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
+
 
 @require_torch
 @require_sentencepiece
@@ -1648,7 +1750,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         if torch_device in ["cuda"]:
             n_gpu = max(1, backend_device_count(torch_device))
         else:
-            # DP is decprecated by PyTorch, accelerators like XPU doesn't support DP
+            # DP is deprecated by PyTorch, accelerators like XPU doesn't support DP
             n_gpu = 1
 
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -2568,6 +2670,38 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # reflects displayed lr in trainer
         self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
+
+    @require_torch_optimi
+    @require_torch_accelerator
+    def test_stable_adamw_trainer_adamw_args(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        learning_rate = 1e-9
+        num_steps = 10
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=learning_rate,
+            logging_steps=5,
+            weight_decay=0.001,
+            adam_beta1=0.89,
+            adam_beta2=0.98,
+            adam_epsilon=1e-8,
+            optim="stable_adamw",
+            optim_target_modules=[r".*attn.*", r".*mlp.*"],
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # check StableAdamW optimizer is created with the correct parameters
+        self.assertEqual(trainer.optimizer.defaults["beta1"], args.adam_beta1)
+        self.assertEqual(trainer.optimizer.defaults["beta2"], args.adam_beta2)
+        self.assertEqual(trainer.optimizer.defaults["eps"], args.adam_epsilon)
+        self.assertEqual(trainer.optimizer.defaults["weight_decay"], args.weight_decay)
 
     @require_torch_optimi
     @require_torch_accelerator
@@ -4526,10 +4660,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
             self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
 
-    def test_torch_dtype_to_json(self):
+    def test_dtype_to_json(self):
         @dataclasses.dataclass
         class TorchDtypeTrainingArguments(TrainingArguments):
-            torch_dtype: torch.dtype = dataclasses.field(
+            dtype: torch.dtype = dataclasses.field(
                 default=torch.float32,
             )
 
@@ -4549,11 +4683,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         ]:
             torch_dtype = getattr(torch, dtype)
             with tempfile.TemporaryDirectory() as tmp_dir:
-                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, torch_dtype=torch_dtype)
+                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, dtype=torch_dtype)
 
                 args_dict = args.to_dict()
-                self.assertIn("torch_dtype", args_dict)
-                self.assertEqual(args_dict["torch_dtype"], dtype)
+                self.assertIn("dtype", args_dict)
+                self.assertEqual(args_dict["dtype"], dtype)
 
     @require_accelerate_version_min_0_30
     def test_eval_use_gather_object(self):
@@ -4944,7 +5078,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             assert len(os.listdir(tmpdir)) == trainer.state.global_step // 2
 
-    def test_special_token_aligment(self):
+    def test_special_token_alignment(self):
         """
         Tests that special token changes in the tokenizer result in model configs updates when using the trainer, to
         ensure special tokens are aligned across configs
@@ -4988,6 +5122,44 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
             self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
             self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+    def test_trainer_works_without_model_config(self):
+        """
+        Tests that models without a `config` parameter can still be trained.
+        This is useful for preserving compatibility with third parties that train different models using the
+        transformers Trainer.
+
+        If this test fails, it doesn't imply that there's issues with transformers, but perhaps with third
+        parties.
+        """
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
+        # Note that this class does not have a config attribute
+
+        train_dataset = LineByLineTextDataset(
+            tokenizer=tokenizer,
+            file_path=PATH_SAMPLE_TEXT,
+            block_size=tokenizer.max_len_single_sentence,
+        )
+        for example in train_dataset.examples:
+            example["labels"] = example["input_ids"]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            training_args = TrainingArguments(
+                output_dir=tmpdir,
+                report_to="none",
+                max_steps=5,
+                per_device_train_batch_size=1,
+                remove_unused_columns=False,
+            )
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                processing_class=tokenizer,
+                train_dataset=train_dataset,
+            )
+            trainer.train()
 
 
 @require_torch
