@@ -614,7 +614,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
                     flattened_targets,
                     input_lengths,
                     target_lengths,
-                    blank=self.config.blank_token_id,
+                    blank=self.config.pad_token_id,
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
