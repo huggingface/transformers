@@ -217,7 +217,6 @@ class T5GemmaConfig(PretrainedConfig):
 
     model_type = "t5gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_hidden_layers": "num_layers"}
     base_model_tp_plan = {
         # encoder
         "encoder.layers.*.self_attn.q_proj": "colwise",
@@ -309,9 +308,6 @@ class T5GemmaConfig(PretrainedConfig):
         # Used in pipeline generation.
         self.vocab_size = vocab_size
 
-        # Expose decoder num_hidden_layers for cache initialization (following T5Config pattern)
-        self.num_layers = decoder.num_hidden_layers
-
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [
             "output_hidden_states",
@@ -327,9 +323,23 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
 
-    def get_text_config(self, *args, **kwargs):
-        # Always return self, regardless of the decoder option.
-        return self
+    def get_text_config(self, decoder=None, encoder=None):
+        """
+        Returns the decoder or encoder config for T5Gemma.
+
+        Args:
+            decoder (bool, optional): If True, return decoder config.
+            encoder (bool, optional): If True, return encoder config.
+
+        Returns:
+            T5GemmaModuleConfig or T5GemmaConfig: The requested sub-config or self.
+        """
+        if decoder is True and encoder is not True:
+            return self.decoder
+        elif encoder is True and decoder is not True:
+            return self.encoder
+        else:
+            return self
 
 
 __all__ = ["T5GemmaConfig", "T5GemmaModuleConfig"]
