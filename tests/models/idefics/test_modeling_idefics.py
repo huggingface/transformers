@@ -323,7 +323,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
         {
             "feature-extraction": IdeficsModel,
             "image-text-to-text": IdeficsForVisionText2Text,
-            "multimodal-generation": IdeficsForVisionText2Text,
+            "any-to-any": IdeficsForVisionText2Text,
         }
         if is_torch_available()
         else {}

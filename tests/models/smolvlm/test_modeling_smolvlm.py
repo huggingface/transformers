@@ -336,7 +336,7 @@ class SmolVLMForConditionalGenerationModelTest(
     pipeline_model_mapping = (
         {
             "image-text-to-text": SmolVLMForConditionalGeneration,
-            "multimodal-generation": SmolVLMForConditionalGeneration,
+            "any-to-any": SmolVLMForConditionalGeneration,
         }
         if is_torch_available()
         else ()

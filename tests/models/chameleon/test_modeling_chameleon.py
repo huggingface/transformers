@@ -290,7 +290,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     pipeline_model_mapping = (
         {
             "image-text-to-text": ChameleonForConditionalGeneration,
-            "multimodal-generation": ChameleonForConditionalGeneration,
+            "any-to-any": ChameleonForConditionalGeneration,
         }
         if is_torch_available()
         else {}

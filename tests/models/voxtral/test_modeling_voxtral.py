@@ -138,7 +138,7 @@ class VoxtralForConditionalGenerationModelTest(
 
     all_model_classes = (VoxtralForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-to-speech": VoxtralForConditionalGeneration, "multimodal-generation": VoxtralForConditionalGeneration}
+        {"text-to-speech": VoxtralForConditionalGeneration, "any-to-any": VoxtralForConditionalGeneration}
         if is_torch_available()
         else {}
     )

@@ -202,7 +202,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     pipeline_model_mapping = {
         "image-text-to-text": Qwen2VLForConditionalGeneration,
-        "multimodal-generation": Qwen2VLForConditionalGeneration,
+        "any-to-any": Qwen2VLForConditionalGeneration,
     }
     test_pruning = False
     test_head_masking = False

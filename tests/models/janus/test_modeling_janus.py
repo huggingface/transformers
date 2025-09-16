@@ -195,7 +195,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
     all_model_classes = (JanusModel, JanusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (JanusForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"multimodal-generation": JanusForConditionalGeneration, "image-text-to-text": JanusForConditionalGeneration}
+        {"any-to-any": JanusForConditionalGeneration, "image-text-to-text": JanusForConditionalGeneration}
         if is_torch_available()
         else {}
     )

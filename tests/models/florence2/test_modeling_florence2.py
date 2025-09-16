@@ -230,7 +230,7 @@ class Florence2ForConditionalGenerationModelTest(
         {
             "image-to-text": Florence2ForConditionalGeneration,
             "image-text-to-text": Florence2ForConditionalGeneration,
-            "multimodal-generation": Florence2ForConditionalGeneration,
+            "any-to-any": Florence2ForConditionalGeneration,
         }
         if is_torch_available()
         else {}

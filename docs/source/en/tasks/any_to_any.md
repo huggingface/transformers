@@ -83,11 +83,11 @@ print(generated_texts)
 
 ## Pipeline
 
-The fastest way to get started is to use the [`Pipeline`] API. Specify the `"multimodal-generation"` task and the model you want to use.
+The fastest way to get started is to use the [`Pipeline`] API. Specify the `"any-to-any"` task and the model you want to use.
 
 ```python
 from transformers import pipeline
-pipe = pipeline("multimodal-generation", model="mistralai/Voxtral-Mini-3B-2507")
+pipe = pipeline("any-to-any", model="mistralai/Voxtral-Mini-3B-2507")
 ```
 
 The example below uses chat templates to format the text inputs and uses audio modality as an multimodal data.
@@ -118,7 +118,7 @@ Any-to-any pipeline also supports generating audio or images with any-to-any mod
 
 ```python
 import soundfile as sf
-pipe = pipeline("multimodal-generation", model="Qwen/Qwen2.5-Omni-3B")
+pipe = pipeline("any-to-any", model="Qwen/Qwen2.5-Omni-3B")
 messages = [
     {
         "role": "user",

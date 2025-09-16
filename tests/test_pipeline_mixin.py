@@ -107,7 +107,7 @@ pipeline_test_mapping = {
     "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
     "mask-generation": {"test": MaskGenerationPipelineTests},
-    "multimodal-generation": {"test": AnyToAnyPipelineTests},
+    "any-to-any": {"test": AnyToAnyPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
     "question-answering": {"test": QAPipelineTests},
     "summarization": {"test": SummarizationPipelineTests},
@@ -605,13 +605,13 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_any_to_any(self):
-        self.run_task_tests(task="multimodal-generation")
+        self.run_task_tests(task="any-to-any")
 
     @is_pipeline_test
     @require_vision
     @require_torch
     def test_pipeline_any_to_any_fp16(self):
-        self.run_task_tests(task="multimodal-generation", dtype="float16")
+        self.run_task_tests(task="any-to-any", dtype="float16")
 
     @is_pipeline_test
     @require_vision

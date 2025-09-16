@@ -185,7 +185,7 @@ class LlavaForConditionalGenerationModelTest(
         {
             "image-to-text": LlavaForConditionalGeneration,
             "image-text-to-text": LlavaForConditionalGeneration,
-            "multimodal-generation": LlavaForConditionalGeneration,
+            "any-to-any": LlavaForConditionalGeneration,
         }
         if is_torch_available()
         else {}

@@ -175,7 +175,7 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else ()
     )
     pipeline_model_mapping = (
-        {"image-text-to-text": Ovis2ForConditionalGeneration, "multimodal-generation": Ovis2ForConditionalGeneration}
+        {"image-text-to-text": Ovis2ForConditionalGeneration, "any-to-any": Ovis2ForConditionalGeneration}
         if is_torch_available()
         else {}
     )
