@@ -183,7 +183,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     def __init__(self, sliding_window: int):
         super().__init__()
         self.sliding_window = sliding_window
-        # Note: torch.recompile has a recompilation when this value is updated. To circumvent it, we use a compile
+        # Note: torch.compile has a recompilation when this value is updated. To circumvent it, we use a compile
         # trick based on this variable name, while waiting for a more stable torch.symint like API from torch
         # Thus this should not be renamed, or the model compilation should be updated accordingly
         self.cumulative_length = 0
@@ -381,6 +381,9 @@ class StaticSlidingWindowLayer(StaticLayer):
     def __init__(self, max_cache_len: int, sliding_window: int):
         effective_max_cache_len = min(sliding_window, max_cache_len)
         super().__init__(max_cache_len=effective_max_cache_len)
+        # Note: torch.compile has a recompilation when this value is updated. To circumvent it, we use a compile
+        # trick based on this variable name, while waiting for a more stable torch.symint like API from torch
+        # Thus this should not be renamed, or the model compilation should be updated accordingly
         self.cumulative_length = 0
 
     def update(

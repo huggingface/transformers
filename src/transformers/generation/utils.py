@@ -2126,22 +2126,20 @@ class GenerationMixin(ContinuousMixin):
         """
         Determines whether to trigger auto-compilation of the model's forward pass at generation time.
         """
-        # TODO - In my opinion, we should keep compile disable by default, and
-        # then introduce `enable_compile` in the generation config to do the
-        # compilation. With DynamicCache becoming compileable, the blast radius
-        # could be big.
         # Override: honor `disable_compile` flag
         if generation_config.disable_compile:
             return False
 
+        compile_config = generation_config.compile_config
+        cache = model_kwargs.get("past_key_values")
+
         # Base logic
-        valid_hardware = self.device.type == "cuda" or bool(
-            generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
+        valid_hardware = self.device.type == "cuda" or (
+            compile_config is not None and compile_config._compile_all_devices
         )
-        using_compilable_cache = (
-            isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
-        )
-        can_compile = valid_hardware and using_compilable_cache
+        using_static_cache = isinstance(cache, StaticCache)
+        using_dynamic_cache_with_explicit_compile = compile_config is not None and isinstance(cache, DynamicCache)
+        can_compile = valid_hardware and (using_static_cache or using_dynamic_cache_with_explicit_compile)
 
         # Exception 1: Some quantization methods do not support compilation
         if getattr(self, "hf_quantizer", None) is not None:
@@ -2159,7 +2157,7 @@ class GenerationMixin(ContinuousMixin):
 
         # Finally: if the user has manually specified compilation options, but compilation is not possible, let's warn
         # them
-        if generation_config.compile_config is not None and not can_compile:
+        if compile_config is not None and not can_compile:
             logger.warning_once(
                 "You have set `compile_config`, but we are unable to meet the criteria for compilation. Compilation "
                 "will be skipped."
