@@ -70,7 +70,7 @@ def _sanitize_module_name(name: str) -> str:
         new_name = f"_{new_name}"
     if keyword.iskeyword(new_name):
         logger.warning(
-            f"The module name {new_name!r} (originally {name!r}) is a reserved keyword in Python. "
+            f"The module name {new_name} (originally {name}) is a reserved keyword in Python. "
             "Please rename the original module to avoid import issues."
         )
     elif not new_name.isidentifier():
