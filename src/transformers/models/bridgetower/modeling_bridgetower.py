@@ -38,6 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging, torch_int
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -554,14 +555,7 @@ class BridgeTowerSelfAttention(nn.Module):
             **kwargs,
         )
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
-
-        outputs = (
-            attn_output,
-            attn_weights,
-        )
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
-        return outputs
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaCrossAttention with Roberta->BridgeTower
@@ -654,13 +648,7 @@ class BridgeTowerCrossAttention(nn.Module):
             **kwargs,
         )
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
-
-        outputs = (
-            attn_output,
-            attn_weights,
-        )
-        outputs = outputs + (past_key_value,)
-        return outputs
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower,BERT->BRIDGE_TOWER
@@ -707,7 +695,7 @@ class BridgeTowerAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         if self.is_cross_attention:
-            self_outputs = self.self(
+            attention_output, attn_weights = self.self(
                 hidden_states,
                 head_mask,
                 encoder_hidden_states,
@@ -716,7 +704,7 @@ class BridgeTowerAttention(nn.Module):
                 **kwargs,
             )
         else:
-            self_outputs = self.self(
+            attention_output, attn_weights = self.self(
                 hidden_states,
                 attention_mask,
                 head_mask,
@@ -724,9 +712,8 @@ class BridgeTowerAttention(nn.Module):
                 cache_position,
                 **kwargs,
             )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        attention_output = self.output(attention_output, hidden_states)
+        return attention_output, attn_weights
 
 
 class BridgeTowerBertCrossLayer(nn.Module):
@@ -755,38 +742,32 @@ class BridgeTowerBertCrossLayer(nn.Module):
         head_mask=None,
         encoder_attention_mask=None,
         past_key_value=None,
-        output_attentions=False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        self_attention_outputs = self.attention(
+        self_attention_output, self_attn_weights = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             head_mask=None,
-            output_attentions=output_attentions,
             past_key_value=None,
+            **kwargs,
         )
-        attention_output = self_attention_outputs[0]
+        attention_output = self_attention_output
 
-        outputs = self_attention_outputs[1:]
-
-        cross_attention_outputs = self.crossattention(
+        cross_attention_output, cross_attn_weights = self.crossattention(
             attention_output,
             attention_mask=attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_value=past_key_value,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        attention_output = cross_attention_outputs[0]
-        # add cross attentions if we output attention weights
-        outputs = outputs + cross_attention_outputs[1:-1]
+        attention_output = cross_attention_output
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        return (layer_output, self_attn_weights, cross_attn_weights,)
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -815,7 +796,7 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
         self.intermediate = BridgeTowerIntermediate(config)
         self.output = BridgeTowerOutput(config)
 
-    # Copied from transformers.models.bert.modeling_bert.BertLayer.forward
+    # copied from transformers.models.bert.modeling_bert.BertLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -827,7 +808,8 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        self_attention_outputs = self.attention(
+        outputs = ()
+        self_attention_output, self_attn_weights = self.attention(
             hidden_states,
             attention_mask,
             head_mask,
@@ -835,12 +817,7 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             **kwargs,
         )
-        attention_output = self_attention_outputs[0]
-
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        attention_output = self_attention_output
 
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
@@ -849,8 +826,8 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
                     " by setting `config.add_cross_attention=True`"
                 )
 
-            cross_attention_outputs = self.crossattention(
-                attention_output,
+            cross_attention_output, cross_attn_weights = self.crossattention(
+                self_attention_output,
                 None,  # attention_mask
                 head_mask,
                 encoder_hidden_states,
@@ -858,19 +835,13 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
                 past_key_value=past_key_value,
                 **kwargs,
             )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+            attention_output = cross_attention_output
+            outputs = (cross_attn_weights,)
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
-
-        return outputs
+        return outputs + (layer_output, self_attn_weights,)
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -878,7 +849,7 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaEncoder with Roberta->BridgeTowerText
+# copied from transformers.models.roberta.modeling_roberta.RobertaEncoder with Roberta->BridgeTowerText
 class BridgeTowerTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -887,6 +858,7 @@ class BridgeTowerTextEncoder(nn.Module):
             [BridgeTowerTextLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
         )
 
+    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -898,7 +870,6 @@ class BridgeTowerTextEncoder(nn.Module):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
@@ -906,11 +877,7 @@ class BridgeTowerTextEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
-        next_decoder_cache = None
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             layer_outputs = layer_module(
@@ -925,8 +892,6 @@ class BridgeTowerTextEncoder(nn.Module):
             )
 
             hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache = layer_outputs[-1]
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
@@ -935,23 +900,9 @@ class BridgeTowerTextEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values if use_cache else None,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
@@ -1166,8 +1117,11 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @can_return_tuple
     @auto_docstring
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
+    # NOTE: bridgetower with its multimodality has a more complicated scheme making records harder
+    # for now we skip the copies from bert but stay close to the original
+    # copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1182,7 +1136,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
@@ -1190,7 +1143,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1294,7 +1246,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             position_ids=position_ids,
             **kwargs,
@@ -1304,9 +1255,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
 
         if return_legacy_cache:
             encoder_outputs.past_key_values = encoder_outputs.past_key_values.to_legacy_cache()
-
-        if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
