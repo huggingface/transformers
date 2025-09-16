@@ -355,10 +355,11 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
                 )
 
             # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-            }
+            causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
+            if "sliding_window" in self.config.text_config or "sliding_attention" in getattr(
+                self.config, "layer_types", []
+            ):
+                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         outputs = self.language_model(
             attention_mask=causal_mask_mapping,

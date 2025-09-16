@@ -379,14 +379,18 @@ class GemmaModel(GemmaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(
+                    config=self.config,
+                    input_embeds=inputs_embeds,
+                    attention_mask=attention_mask,
+                    cache_position=cache_position,
+                    past_key_values=past_key_values,
+                    position_ids=position_ids,
+                )
+            }
 
         # embed positions
         hidden_states = inputs_embeds
@@ -403,7 +407,7 @@ class GemmaModel(GemmaPreTrainedModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping["full_attention"],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
