@@ -2,15 +2,17 @@
 name: Self-hosted runner (push-caller)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-      - "utils/**"
+  # Temporarily disabled automatic push triggers to avoid conflicts with pytest-ci.yml
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - "src/**"
+  #     - "tests/**"
+  #     - ".github/**"
+  #     - "templates/**"
+  #     - "utils/**"
+  workflow_dispatch:  # Manual trigger only
 
 jobs:
   check-for-setup:
