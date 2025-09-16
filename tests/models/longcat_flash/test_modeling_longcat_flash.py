@@ -22,19 +22,26 @@ from pytest import mark
 
 from transformers import LongcatFlashConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    require_accelerate,
     require_bitsandbytes,
     require_flash_attn,
     require_large_cpu_ram,
+    require_non_hpu,
     require_torch,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
+from transformers.utils import is_accelerate_available
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ids_tensor
 
+
+if is_accelerate_available():
+    from accelerate.utils import compute_module_sizes
 
 if is_torch_available():
     import torch
@@ -317,58 +324,6 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @require_flash_attn
-    @require_torch_gpu
-    @require_bitsandbytes
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_fp32_ln(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_input = inputs_dict[model.main_input_name]
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                batch_size = dummy_attention_mask.shape[0]
-
-                is_padding_right = dummy_attention_mask[:, -1].sum().item() != batch_size
-
-                if is_padding_right:
-                    dummy_attention_mask = torch.ones_like(dummy_input)
-
-                # Skip 4bit loading for LongcatFlash due to router compatibility issues
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                )
-
-                for _, param in model.named_parameters():
-                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
-                        param.data = param.data.to(torch.float32)
-
-                if model.config.is_encoder_decoder:
-                    dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
-                    dummy_decoder_attention_mask = inputs_dict["decoder_attention_mask"]
-
-                    _ = model(dummy_input, decoder_input_ids=dummy_decoder_input_ids)
-                    _ = model(
-                        dummy_input,
-                        attention_mask=dummy_attention_mask,
-                        decoder_input_ids=dummy_decoder_input_ids,
-                        decoder_attention_mask=dummy_decoder_attention_mask,
-                    )
-                else:
-                    _ = model(dummy_input)
-                    _ = model(dummy_input, attention_mask=dummy_attention_mask)
-
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
         # there's specific head dims due to lora compressions in longcat
@@ -414,6 +369,109 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+
+    @require_flash_attn
+    @require_torch_gpu
+    @require_bitsandbytes
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_fp32_ln(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:  # TODO: this test should run on all classes instead
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_input = inputs_dict[model.main_input_name]
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                batch_size = dummy_attention_mask.shape[0]
+
+                is_padding_right = dummy_attention_mask[:, -1].sum().item() != batch_size
+
+                # To avoid errors with padding_side=="right"
+                if is_padding_right:
+                    dummy_attention_mask = torch.ones_like(dummy_input)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    device_map='auto', # small change to ensure device placement
+                    #load_in_4bit=True,
+                )
+
+                for _, param in model.named_parameters():
+                    # upcast only layer norms
+                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
+                        param.data = param.data.to(torch.float32)
+
+                if model.config.is_encoder_decoder:
+                    dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
+                    dummy_decoder_attention_mask = inputs_dict["decoder_attention_mask"]
+
+                    _ = model(dummy_input, decoder_input_ids=dummy_decoder_input_ids)
+                    # with attention mask
+                    _ = model(
+                        dummy_input,
+                        attention_mask=dummy_attention_mask,
+                        decoder_input_ids=dummy_decoder_input_ids,
+                        decoder_attention_mask=dummy_decoder_attention_mask,
+                    )
+                else:
+                    _ = model(dummy_input)
+                    # with attention mask
+                    _ = model(dummy_input, attention_mask=dummy_attention_mask)
+
+    @require_non_hpu
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_multi_accelerator
+    def test_model_parallelism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval().to(torch_device)
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[""]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                # Use symmetric caps to avoid skipping the first GPU due to a large first module.
+                for p in self.model_split_percents[1:]:
+                    cap = int(p * model_size)
+                    max_memory = {0: cap, 1: cap, "cpu": model_size * 2}
+
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory).eval()
+
+                    # Assert that model parallelism actually placed modules on >= 2 GPUs
+                    used_gpus = {d for d in new_model.hf_device_map.values() if isinstance(d, int)}
+                    if model_size > cap:  # total model doesn't fit in a single cap → must split
+                        self.assertGreaterEqual(len(used_gpus), 2)
+                    else:
+                        self.assertGreaterEqual(len(used_gpus), 1)
+
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_class)
+
+                    if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                        for a, b in zip(base_output[0], new_output[0]):
+                            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                    else:
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
 
 @slow
