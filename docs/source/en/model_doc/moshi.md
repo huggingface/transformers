@@ -116,13 +116,13 @@ To follow the example of the following image, `"Hello, I'm Moshi"` could be tran
 ```python 
 >>> from datasets import load_dataset, Audio
 >>> import torch, math
->>> from transformers import MoshiForConditionalGeneration, AutoFeatureExtractor, AutoTokenizer
+>>> from transformers import MoshiForConditionalGeneration, AutoFeatureExtractor, AutoTokenizer, infer_device
 
 
 >>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/moshiko-pytorch-bf16")
 >>> tokenizer = AutoTokenizer.from_pretrained("kyutai/moshiko-pytorch-bf16")
->>> device = "cuda"
+>>> device = infer_device()
 >>> dtype = torch.bfloat16
 
 >>> # prepare user input audio 

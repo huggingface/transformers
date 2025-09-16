@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch Evolla model."""
 
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
@@ -23,12 +24,8 @@ from transformers.testing_utils import (
     TestCasePlus,
     require_bitsandbytes,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
-)
-from transformers.utils import (
-    cached_property,
 )
 
 from ...test_configuration_common import ConfigTester
@@ -324,7 +321,6 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @unittest.skip("Evolla requires both text and protein inputs which is currently not done in this test.")
     def test_eager_matches_sdpa_inference(self):
         pass

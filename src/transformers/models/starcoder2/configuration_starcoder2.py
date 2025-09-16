@@ -141,7 +141,7 @@ class Starcoder2Config(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.c_fc": "colwise",
-        "layers.*.mlp.c_proj": "colwise",
+        "layers.*.mlp.c_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

@@ -117,8 +117,8 @@ class DeepseekV2MoE(nn.Module):
         cnts = topk_ids.new_zeros((topk_ids.shape[0], len(self.experts)))
         cnts.scatter_(1, topk_ids, 1)
         tokens_per_expert = cnts.sum(dim=0)
-        indicies = topk_ids.view(-1).argsort()
-        sorted_tokens = hidden_states[indicies // topk_ids.shape[1]]
+        indices = topk_ids.view(-1).argsort()
+        sorted_tokens = hidden_states[indices // topk_ids.shape[1]]
 
         # Process experts
         outputs = []
@@ -137,7 +137,7 @@ class DeepseekV2MoE(nn.Module):
 
         # Reorder and combine outputs
         new_x = torch.empty_like(outs)
-        new_x[indicies] = outs
+        new_x[indices] = outs
         hidden_states = (
             new_x.view(*topk_ids.shape, -1)
             .type(topk_weight.dtype)
@@ -460,8 +460,7 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": DeepseekV2DecoderLayer,
@@ -567,12 +566,6 @@ class DeepseekV2ForCausalLM(DeepseekV2PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring

@@ -73,7 +73,7 @@ model = AutoModelForCausalLM.from_pretrained("bigscience/bloom", device_map="aut
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", torch_dtype=torch.bfloat16, device_map="auto", pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", dtype=torch.bfloat16, device_map="auto", pad_token_id=0)
 tokenizer = AutoTokenizer.from_pretrained("bigcode/octocoder")
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -114,7 +114,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 > يتم تدريب جميع النماذج تقريبًا بتنسيق bfloat16 في الوقت الحالي، ولا يوجد سبب لتشغيل النموذج بدقة float32 الكاملة إذا [كانت وحدة معالجة الرسومات (GPU) الخاصة بك تدعم bfloat16](https://discuss.pytorch.org/t/bfloat16-native-support/117155/5). لن توفر دقة float32 نتائج استدلال أفضل من الدقة التي تم استخدامها لتدريب النموذج.
 
-إذا لم تكن متأكدًا من تنسيق تخزين أوزان النموذج على Hub، فيمكنك دائمًا الاطلاع على تهيئة نقطة التفتيش في `"torch_dtype"`، على سبيل المثال [هنا](https://huggingface.co/meta-llama/Llama-2-7b-hf/blob/6fdf2e60f86ff2481f2241aaee459f85b5b0bbb9/config.json#L21). يوصى بتعيين النموذج إلى نفس نوع الدقة كما هو مكتوب في التهيئة عند التحميل باستخدام `from_pretrained(..., torch_dtype=...)` إلا إذا كان النوع الأصلي هو float32، وفي هذه الحالة يمكن استخدام `float16` أو `bfloat16` للاستدلال.
+إذا لم تكن متأكدًا من تنسيق تخزين أوزان النموذج على Hub، فيمكنك دائمًا الاطلاع على تهيئة نقطة التفتيش في `"dtype"`، على سبيل المثال [هنا](https://huggingface.co/meta-llama/Llama-2-7b-hf/blob/6fdf2e60f86ff2481f2241aaee459f85b5b0bbb9/config.json#L21). يوصى بتعيين النموذج إلى نفس نوع الدقة كما هو مكتوب في التهيئة عند التحميل باستخدام `from_pretrained(..., dtype=...)` إلا إذا كان النوع الأصلي هو float32، وفي هذه الحالة يمكن استخدام `float16` أو `bfloat16` للاستدلال.
 
 
 دعونا نحدد وظيفة `flush(...)` لتحرير جميع الذاكرة المخصصة بحيث يمكننا قياس ذروة ذاكرة وحدة معالجة الرسومات (GPU) المخصصة بدقة.
@@ -389,7 +389,7 @@ long_prompt = 10 * system_prompt + prompt
 نقوم بتنفيذ نموذجنا مرة أخرى بدقة bfloat16.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", torch_dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", dtype=torch.bfloat16, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("bigcode/octocoder")
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)

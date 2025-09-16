@@ -46,7 +46,7 @@ pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-3-4b-pt",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -63,7 +63,7 @@ from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
 model = Gemma3ForConditionalGeneration.from_pretrained(
     "google/gemma-3-4b-it",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -92,7 +92,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -120,7 +120,7 @@ from transformers import TorchAoConfig, Gemma3ForConditionalGeneration, AutoProc
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Gemma3ForConditionalGeneration.from_pretrained(
     "google/gemma-3-27b-it",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -149,7 +149,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -206,7 +206,7 @@ visualizer("<img>What is shown in this image?")
         return_tensors="pt",
         add_generation_prompt=True,
     +   do_pan_and_scan=True,
-        ).to("cuda")
+        ).to(model.device)
     ```
 - 텍스트 전용 모드로 훈련된 Gemma-3 1B 체크포인트의 경우, [`AutoModelForCausalLM`]을 대신 사용하세요.
 
@@ -219,11 +219,11 @@ visualizer("<img>What is shown in this image?")
     )
     model = AutoModelForCausalLM.from_pretrained(
         "google/gemma-3-1b-pt",
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         device_map="auto",
         attn_implementation="sdpa"
     )
-    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
     output = model.generate(**input_ids, cache_implementation="static")
     print(tokenizer.decode(output[0], skip_special_tokens=True))

@@ -123,9 +123,9 @@ class Qwen3MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
+class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
-        nn.Module().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
         self.self_attn = Qwen3MoeAttention(config, layer_idx)
@@ -147,7 +147,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.FloatTensor:

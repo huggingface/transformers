@@ -46,7 +46,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMoE-1B-7B-0125",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0,
 )
 
@@ -59,11 +59,11 @@ print(result)
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", torch_dtype="auto", device_map="auto").to(device)
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto").to(device)
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
 inputs = tokenizer("Bitcoin is", return_tensors="pt")
@@ -79,9 +79,9 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 quantization_config = BitsAndBytesConfig(
    load_in_4bit=True,
@@ -90,7 +90,7 @@ quantization_config = BitsAndBytesConfig(
    bnb_4bit_quant_type="nf4"
 )
 
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", torch_dtype="auto", device_map="auto", quantization_config=quantization_config).to(device)
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto", quantization_config=quantization_config).to(device)
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
 inputs = tokenizer("Bitcoin is", return_tensors="pt")

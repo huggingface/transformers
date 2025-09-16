@@ -13,7 +13,6 @@
 """Image processor class for PromptDepthAnything."""
 
 import math
-from collections.abc import Iterable
 from typing import TYPE_CHECKING, Optional, Union
 
 
@@ -34,7 +33,7 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     is_torch_available,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -68,13 +67,11 @@ def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
 
 def _get_resize_output_image_size(
     input_image: np.ndarray,
-    output_size: Union[int, Iterable[int]],
+    output_size: tuple[int, int],
     keep_aspect_ratio: bool,
     multiple: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> tuple[int, int]:
-    output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
-
     input_height, input_width = get_image_size(input_image, input_data_format)
     output_height, output_width = output_size
 
@@ -266,11 +263,11 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(image, input_data_format)
 
-        pad_size_left, pad_size_right = _get_pad(height, size_divisor)
-        pad_size_top, pad_size_bottom = _get_pad(width, size_divisor)
+        pad_size_top, pad_size_bottom = _get_pad(height, size_divisor)
+        pad_size_left, pad_size_right = _get_pad(width, size_divisor)
 
         padded_image = pad(
-            image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format
+            image, ((pad_size_top, pad_size_bottom), (pad_size_left, pad_size_right)), data_format=data_format
         )
         return padded_image
 
@@ -368,7 +365,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -432,7 +429,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         if prompt_depth is not None:
             # prompt_depth is a list of images with shape (height, width)
             # we need to convert it to a list of images with shape (1, height, width)
-            prompt_depths = make_list_of_images(prompt_depth, expected_ndims=2)
+            prompt_depths = make_flat_list_of_images(prompt_depth, expected_ndims=2)
 
             # Validate prompt_depths has same length as images
             if len(prompt_depths) != len(images):
@@ -452,7 +449,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
                     # We can simply select one pixel and set it to a small value.
                     depth[0, 0] = depth[0, 0] + 1e-6
                 depth = depth[..., None].astype(np.float32)
-                depth = to_channel_dimension_format(depth, data_format, input_channel_dim=input_data_format)
+                # Always use LAST as input format since we add channel dim with [..., None]
+                depth = to_channel_dimension_format(depth, data_format, input_channel_dim=ChannelDimension.LAST)
 
                 processed_prompt_depths.append(depth)
             prompt_depths = processed_prompt_depths

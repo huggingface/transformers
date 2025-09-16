@@ -45,7 +45,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "VPTQ-community/Meta-Llama-3.1-70B-Instruct-v16-k65536-65536-woft",
-    torch_dtype="auto", 
+    dtype="auto", 
     device_map="auto"
 )
 ```

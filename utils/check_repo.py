@@ -71,6 +71,8 @@ PRIVATE_MODELS = [
     "Qwen2AudioEncoder",
     "Qwen2VisionTransformerPretrainedModel",
     "Qwen2_5_VisionTransformerPretrainedModel",
+    "Qwen3VLVisionModel",
+    "Qwen3VLMoeVisionModel",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -86,6 +88,9 @@ PRIVATE_MODELS = [
     "Idefics2PerceiverResampler",
     "Idefics2VisionTransformer",
     "Idefics3VisionTransformer",
+    "Kosmos2_5TextModel",
+    "Kosmos2_5TextForCausalLM",
+    "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
     "AriaTextForCausalLM",
     "AriaTextModel",
@@ -148,6 +153,10 @@ IGNORE_NON_TESTED = (
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
+        "Qwen3VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLForConditionalGeneration.
+        "Qwen3VLMoeModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLMoeForConditionalGeneration.
+        "Qwen3VLTextModel",  # Building part of bigger (tested) model.
+        "Qwen3VLMoeTextModel",  # Building part of bigger (tested) model.
         "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Testted in Qwen2_5OmniModelIntergrationTest
         "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
@@ -171,6 +180,7 @@ IGNORE_NON_TESTED = (
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
     ]
 )
 
@@ -372,6 +382,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
     "VitPoseForPoseEstimation",
     "CLIPTextModel",
+    "MetaClip2TextModel",
+    "MetaClip2TextModelWithProjection",
+    "MetaClip2VisionModel",
+    "MetaClip2VisionModelWithProjection",
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
     "Emu3VQVAE",  # no autoclass for VQ-VAE models
     "Emu3TextModel",  # Building part of bigger (tested) model
@@ -388,6 +402,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CsmDepthDecoderModel",  # Building part of a bigger model
     "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
     "CsmForConditionalGeneration",  # Building part of a bigger model
+    "Florence2VisionBackbone",  # Building part of a bigger model
 ]
 
 # DO NOT edit this list!
@@ -412,6 +427,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("data2vec-audio", "data2vec"),
         ("data2vec-vision", "data2vec"),
         ("donut-swin", "donut"),
+        ("kosmos-2.5", "kosmos2_5"),
         ("dinov3_convnext", "dinov3"),
         ("dinov3_vit", "dinov3"),
     ]
@@ -881,7 +897,7 @@ def check_all_auto_mappings_importable():
 
 def check_objects_being_equally_in_main_init():
     """
-    Check if a (TensorFlow or Flax) object is in the main __init__ iif its counterpart in PyTorch is.
+    Check if a (TensorFlow or Flax) object is in the main __init__ if its counterpart in PyTorch is.
     """
     attrs = dir(transformers)
 
@@ -1001,16 +1017,19 @@ def find_all_documented_objects() -> list[str]:
 
 # One good reason for not being documented is to be deprecated. Put in this list deprecated objects.
 DEPRECATED_OBJECTS = [
+    "AdamWeightDecay",  # TensorFlow object, support is deprecated
     "AutoModelWithLMHead",
     "BartPretrainedModel",
     "DataCollator",
     "DataCollatorForSOP",
     "GlueDataset",
     "GlueDataTrainingArguments",
+    "GradientAccumulator",  # TensorFlow object, support is deprecated
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
     "NerPipeline",
+    "OwlViTFeatureExtractor",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
     "SingleSentenceClassificationProcessor",
@@ -1020,24 +1039,24 @@ DEPRECATED_OBJECTS = [
     "SquadFeatures",
     "SquadV1Processor",
     "SquadV2Processor",
-    "TFAutoModelWithLMHead",
-    "TFBartPretrainedModel",
     "TextDataset",
     "TextDatasetForNextSentencePrediction",
+    "TFTrainingArguments",
+    "WarmUp",  # TensorFlow object, support is deprecated
     "Wav2Vec2ForMaskedLM",
     "Wav2Vec2Tokenizer",
+    "create_optimizer",  # TensorFlow object, support is deprecated
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",
     "glue_processors",
     "glue_tasks_num_labels",
+    "shape_list",
     "squad_convert_examples_to_features",
     "xnli_compute_metrics",
     "xnli_output_modes",
     "xnli_processors",
     "xnli_tasks_num_labels",
-    "TFTrainingArguments",
-    "OwlViTFeatureExtractor",
 ]
 
 # Exceptionally, some objects should not be documented after all rules passed.
@@ -1138,7 +1157,13 @@ def check_all_objects_are_documented():
     """Check all models are properly documented."""
     documented_objs, documented_methods_map = find_all_documented_objects()
     modules = transformers._modules
-    objects = [c for c in dir(transformers) if c not in modules and not c.startswith("_")]
+    # the objects with the following prefixes are not required to be in the docs
+    ignore_prefixes = [
+        "_",  # internal objects
+        "TF",  # TF objects, support is deprecated
+        "Flax",  # Flax objects, support is deprecated
+    ]
+    objects = [c for c in dir(transformers) if c not in modules and not any(c.startswith(p) for p in ignore_prefixes)]
     undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
     if len(undocumented_objs) > 0:
         raise Exception(
