@@ -75,7 +75,7 @@ def _sanitize_module_name(name: str) -> str:
         )
     elif not new_name.isidentifier():
         logger.warning(
-            f"The module name {new_name!r} (originally {name!r}) is not a valid Python identifier. "
+            f"The module name {new_name} (originally {name}) is not a valid Python identifier. "
             "Please rename the original module to avoid import issues."
         )
     return new_name
