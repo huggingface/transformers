@@ -31,6 +31,7 @@ class CacheLayerMixin(ABC):
     def __init__(self):
         self.keys: Optional[torch.Tensor] = None
         self.values: Optional[torch.Tensor] = None
+        self.is_initialized = False
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
@@ -54,19 +55,19 @@ class CacheLayerMixin(ABC):
 
     def offload(self):
         """Offload this layer's data to CPU device."""
-        if self.keys is not None:
+        if self.is_initialized:
             self.keys = self.keys.to("cpu", non_blocking=True)
             self.values = self.values.to("cpu", non_blocking=True)
 
     def prefetch(self):
         """In case of layer offloading, this allows to move the data back to the layer's device ahead of time."""
-        if self.keys is not None and self.keys.device != self.device:
+        if self.is_initialized and self.keys.device != self.device:
             self.keys = self.keys.to(self.device, non_blocking=True)
             self.values = self.values.to(self.device, non_blocking=True)
 
     def reset(self) -> None:
         """Resets the cache values while preserving the objects"""
-        if self.keys is not None:
+        if self.is_initialized:
             self.keys.zero_()
             self.values.zero_()
         # This attribute is set on several Layers
@@ -92,6 +93,7 @@ class DynamicLayer(CacheLayerMixin):
         self.dtype, self.device = key_states.dtype, key_states.device
         self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
         self.values = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.is_initialized = True
 
     def update(
         self,
@@ -111,7 +113,7 @@ class DynamicLayer(CacheLayerMixin):
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
         # Lazy initialization
-        if self.keys is None:
+        if not self.is_initialized:
             self.lazy_initialization(key_states)
 
         self.keys = torch.cat([self.keys, key_states], dim=-2)
@@ -122,13 +124,12 @@ class DynamicLayer(CacheLayerMixin):
         """Return the length and offset of the cache, used to generate the mask"""
         kv_offset = 0
         query_length = cache_position.shape[0]
-        past_seen_tokens = self.get_seq_length()
-        kv_length = query_length + past_seen_tokens
+        kv_length = self.get_seq_length() + query_length
         return kv_length, kv_offset
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
-        if self.keys is None or self.keys.numel() == 0:
+        if not self.is_initialized or self.keys.numel() == 0:
             return 0
         return self.keys.shape[-2]
 
@@ -194,7 +195,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
         # Lazy initialization
-        if self.keys is None:
+        if not self.is_initialized:
             self.lazy_initialization(key_states)
 
         self.cumulative_length += key_states.shape[-2]
@@ -212,14 +213,13 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
         query_length = cache_position.shape[0]
-        first_cache_position = cache_position[0]
+        is_full = self.cumulative_length >= self.sliding_window
 
-        kv_offset = torch.clamp(first_cache_position - self.sliding_window + 1, min=0)
-
-        if self.get_seq_length() >= self.sliding_window:
+        kv_offset = max(self.cumulative_length - self.sliding_window + 1, 0)
+        if is_full:
             kv_length = self.sliding_window - 1 + query_length
         else:
-            kv_length = self.get_seq_length() + query_length
+            kv_length = self.cumulative_length + query_length
 
         return kv_length, kv_offset
 
@@ -297,6 +297,8 @@ class StaticLayer(CacheLayerMixin):
             torch._dynamo.mark_static_address(self.keys)
             torch._dynamo.mark_static_address(self.values)
 
+        self.is_initialized = True
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -315,7 +317,7 @@ class StaticLayer(CacheLayerMixin):
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
         # Lazy initialization
-        if self.keys is None:
+        if not self.is_initialized:
             self.lazy_initialization(key_states)
 
         # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
@@ -345,7 +347,7 @@ class StaticLayer(CacheLayerMixin):
         """Returns the sequence length of the cached states."""
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
-        return (self.keys[0, 0].any(dim=-1)).sum() if self.keys is not None else 0
+        return (self.keys[0, 0].any(dim=-1)).sum() if self.is_initialized else 0
 
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""
@@ -390,7 +392,7 @@ class StaticSlidingWindowLayer(StaticLayer):
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
         # Lazy initialization
-        if self.keys is None:
+        if not self.is_initialized:
             self.lazy_initialization(key_states)
 
         cache_position = cache_kwargs.get("cache_position")
@@ -461,9 +463,10 @@ class StaticSlidingWindowLayer(StaticLayer):
         # Not yet full, but becoming full on this update
         elif self.cumulative_length + query_length > sliding_window:
             kv_length = self.cumulative_length + query_length
+        # Here the Cache is still smaller than the local size, but we return the local size as it's static
         else:
-            # Here the Cache is still smaller than the local size, but we return the local size as it's static
             kv_length = sliding_window
+
         return kv_length, kv_offset
 
     def get_seq_length(self) -> int:
@@ -519,7 +522,7 @@ class QuantizedLayer(DynamicLayer):
         self.cumulative_length += key_states.shape[-2]
 
         # Lazy initialization
-        if self.keys is None:
+        if not self.is_initialized:
             self.lazy_initialization(key_states)
             self._quantized_keys = self._quantize(key_states.contiguous(), axis=self.axis_key)
             self._quantized_values = self._quantize(value_states.contiguous(), axis=self.axis_value)
@@ -861,6 +864,11 @@ class Cache:
         return all(layer.is_compileable for layer in self.layers)
 
     @property
+    def is_initialized(self) -> bool:
+        """Return whether the cache data is initialized"""
+        return len(self.layers) > 0 and all(layer.is_initialized for layer in self.layers)
+
+    @property
     def is_sliding(self) -> list[bool]:
         """Return whether the layers of the cache are sliding window"""
         return [getattr(layer, "is_sliding", False) for layer in self.layers]
@@ -872,8 +880,6 @@ class Cache:
         """
         if layer_idx < len(self.layers):
             return self.layers[layer_idx].keys, self.layers[layer_idx].values
-        # elif len(self.layers) == 0:
-        #     return None, None
         else:
             raise KeyError(
                 f"Cache only has {len(self.layers)} layers, attempted to access layer with index {layer_idx}"

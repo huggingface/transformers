@@ -187,10 +187,6 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-    @unittest.skip(reason="No speed gain on CPU due to minimal processing.")
-    def test_fast_is_faster_than_slow(self):
-        pass
-
     def test_slow_fast_equivalence_batched(self):
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
