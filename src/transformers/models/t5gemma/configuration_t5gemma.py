@@ -308,6 +308,8 @@ class T5GemmaConfig(PretrainedConfig):
         # Used in pipeline generation.
         self.vocab_size = vocab_size
 
+        self.num_hidden_layers = kwargs.get("num_hidden_layers", decoder.num_hidden_layers)
+
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [
             "output_hidden_states",
@@ -324,22 +326,8 @@ class T5GemmaConfig(PretrainedConfig):
         super().__setattr__(key, value)
 
     def get_text_config(self, decoder=None, encoder=None):
-        """
-        Returns the decoder or encoder config for T5Gemma.
-
-        Args:
-            decoder (bool, optional): If True, return decoder config.
-            encoder (bool, optional): If True, return encoder config.
-
-        Returns:
-            T5GemmaModuleConfig or T5GemmaConfig: The requested sub-config or self.
-        """
-        if decoder is True and encoder is not True:
-            return self.decoder
-        elif encoder is True and decoder is not True:
-            return self.encoder
-        else:
-            return self
+        # Always return self, regardless of the decoder option.
+        return self
 
 
 __all__ = ["T5GemmaConfig", "T5GemmaModuleConfig"]
