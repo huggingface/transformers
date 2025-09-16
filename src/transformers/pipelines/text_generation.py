@@ -506,6 +506,7 @@ class TextGenerationPipeline(Pipeline):
                             continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
                         if continue_final_message:
                             # With assistant prefill, concat onto the end of the last message
+                            # TODO Chat decoding when continue_final_message is set
                             all_text = list(prompt_text.messages)[:-1] + [
                                 {
                                     "role": prompt_text.messages[-1]["role"],
@@ -514,7 +515,12 @@ class TextGenerationPipeline(Pipeline):
                             ]
                         else:
                             # When we're not starting from a prefill, the output is a new assistant message
-                            all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
+                            if self.tokenizer.response_schema:
+                                assistant_message = self.tokenizer.parse_response(all_text)
+                            else:
+                                # If there's no schema, then we have to assume it's all content
+                                assistant_message = {"role": "assistant", "content": all_text}
+                            all_text = list(prompt_text.messages) + [assistant_message]
                 record = {"generated_text": all_text}
                 for key, values in split_keys.items():
                     record[key] = values[idx]
