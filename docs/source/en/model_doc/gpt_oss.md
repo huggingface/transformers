@@ -27,19 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The GptOss model was proposed in [blog post](https://openai.com/index/introducing-gpt-oss/) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
-
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+[GptOss](https://huggingface.co/papers/2508.10925) is a mixture-of-experts (MoEs) model released by OpenAI designed for powerful reasoning, agentic tasks, and versatile developer use cases.It comprises of two models:gpt-oss-120b and gpt-oss-20b.
 
 
 ## GptOssConfig
