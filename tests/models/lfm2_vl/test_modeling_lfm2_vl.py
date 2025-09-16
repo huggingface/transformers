@@ -208,7 +208,9 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip2 backbone uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="Siglip2 backbone has a non-standard initialization scheme, that this test cannot handle easily"
+    )
     def test_initialization(self):
         pass
 
