@@ -1433,18 +1433,18 @@ class CompileConfig:
     See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
 
     Args:
-            fullgraph (`bool`, *optional*, defaults to `False`):
-                If False (default), attempts to discover compileable regions that will be optimized. If True, then require
-                that the entire function be capturable into a single graph. If this is not possible (that is, if there are
-                graph breaks), then an error will be raised.
-            dynamic (`bool` or `None`, *optional*):
-                Whether to try to use dynamic shape graphs.
-            backend (`str` or `Callable`, *optional*, defaults to `"inductor"`):
-                Backend to be used.
-            mode (`str`, *optional*, defaults to `"default"`):
-                Controls balance between performance and overhead.
-            options (`dict`, *optional*):
-                A dictionary of options to pass to the backend.
+        fullgraph (`bool`, *optional*, defaults to `False`):
+            If False (default), attempts to discover compileable regions that will be optimized. If True, then require
+            that the entire function be capturable into a single graph. If this is not possible (that is, if there are
+            graph breaks), then an error will be raised.
+        dynamic (`bool` or `None`, *optional*):
+            Whether to try to use dynamic shape graphs.
+        backend (`str` or `Callable`, *optional*, defaults to `"inductor"`):
+            Backend to be used.
+        mode (`str`, *optional*, defaults to `"default"`):
+            Controls balance between performance and overhead.
+        options (`dict`, *optional*):
+            A dictionary of options to pass to the backend.
 
     Examples:
     ```python
