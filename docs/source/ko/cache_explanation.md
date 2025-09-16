@@ -84,7 +84,7 @@ Transformers의 [`Cache`] 클래스를 사용할 때, 셀프 어텐션 모듈은
 
 캐시는 각 레이어가 key와 value 캐시를 포함하는 레이어 목록 형태로 구성되어 있습니다. key 및 value 캐시는 `[batch_size, num_heads, seq_len, head_dim]` 형태의 텐서입니다.
 
-레이어는 서로 다른 타입일 수 있으며(예: `DynamicLayer`, `StaticLayer`, `SlidingWindowLayer`), 이는 주로 시퀀스 길이를 어떻게 처리하고 캐시를 어떻게 갱신하는지에 따라 달라집니다.
+레이어는 서로 다른 타입일 수 있으며(예: `DynamicLayer`, `StaticLayer`, `StaticSlidingWindowLayer`), 이는 주로 시퀀스 길이를 어떻게 처리하고 캐시를 어떻게 갱신하는지에 따라 달라집니다.
 
 가장 단순한 형태는 `DynamicLayer`로, 더 많은 토큰이 처리됨에 따라 점진적으로 확장됩니다. 시퀀스 길이 차원(`seq_len`)은 새로운 토큰이 추가될 때마다 증가합니다:
 
@@ -93,7 +93,7 @@ cache.layers[idx].keys = torch.cat([cache.layers[idx].keys, key_states], dim=-2)
 cache.layers[idx].values = torch.cat([cache.layers[idx].values, value_states], dim=-2)
 ```
 
-`StaticLayer`나 `SlidingWindowLayer`와 같은 다른 레이어 타입은 캐시가 생성될 때 고정된 시퀀스 길이를 가지며, 이는 `torch.compile`과 호환되도록 만듭니다. `SlidingWindowLayer`의 경우, 새로운 토큰이 추가되면 기존 토큰은 캐시에서 제거됩니다.
+`StaticLayer`나 `StaticSlidingWindowLayer`와 같은 다른 레이어 타입은 캐시가 생성될 때 고정된 시퀀스 길이를 가지며, 이는 `torch.compile`과 호환되도록 만듭니다. `StaticSlidingWindowLayer`의 경우, 새로운 토큰이 추가되면 기존 토큰은 캐시에서 제거됩니다.
 
 아래 예제는 [`DynamicCache`]로 생성 루프를 만드는 방법을 보여줍니다. 논의된 바와 같이, 어텐션 마스크는 과거와 현재 토큰값의 연결이며 다음 토큰을 위해 캐시 위치에 `1`이 추가됩니다.
 
