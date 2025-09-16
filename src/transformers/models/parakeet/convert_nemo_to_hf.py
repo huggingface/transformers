@@ -166,7 +166,7 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
     feature_extractor_keys_to_ignore = ["_target_", "pad_to", "frame_splicing", "dither", "normalize", "window", "log"]
     feature_extractor_config_keys_mapping = {
         "sample_rate": "sampling_rate",
-        "window_size": "window_size",
+        "window_size": "win_length",
         "window_stride": "hop_length",
         "window": "window",
         "n_fft": "n_fft",

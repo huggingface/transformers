@@ -69,7 +69,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             when VAD cutoff is present in the signal.
     """
 
-    model_input_names = ["input_features"]
+    model_input_names = ["input_features", "attention_mask"]
 
     def __init__(
         self,
