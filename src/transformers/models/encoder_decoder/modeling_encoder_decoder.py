@@ -31,6 +31,7 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.generic import can_return_tuple
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
 from .configuration_encoder_decoder import EncoderDecoderConfig
@@ -443,6 +444,7 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -456,9 +458,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple, Seq2SeqLMOutput]:
@@ -516,24 +515,26 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         >>> # generation
         >>> generated = model.generate(input_ids)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        # `record outputs` can rely on the absence of the kwarg to retrieve whether the config should be used or not
+        # Hence, we use this workaround to allow for defaults to work as expected
+        kwargs_shared = {key: kwargs[key] for key in ["output_attentions", "output_hidden_states"] if key in kwargs}
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
+        kwargs_encoder = kwargs_encoder | kwargs_shared
 
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
         if "num_items_in_batch" in kwargs_encoder:
             kwargs_decoder["num_items_in_batch"] = kwargs_encoder.pop("num_items_in_batch", None)
+        kwargs_decoder = kwargs_decoder | kwargs_shared
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,
                 **kwargs_encoder,
             )
         elif isinstance(encoder_outputs, tuple):
@@ -562,12 +563,10 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             past_key_values=past_key_values,
-            return_dict=return_dict,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs_decoder,
         )
 
@@ -575,15 +574,9 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             warnings.warn(DEPRECATION_WARNING, FutureWarning)
-            logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+            logits = decoder_outputs.logits
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            if loss is not None:
-                return (loss,) + decoder_outputs + encoder_outputs
-            else:
-                return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
             loss=loss,

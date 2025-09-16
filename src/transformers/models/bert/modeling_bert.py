@@ -967,6 +967,7 @@ class BertModel(BertPreTrainedModel):
             use_cache=use_cache,
             cache_position=cache_position,
             position_ids=position_ids,
+            return_dict=True,  # TODO: make this for all other models as well...
             **kwargs,
         )
         sequence_output = encoder_outputs[0]
@@ -1203,6 +1204,7 @@ class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 
