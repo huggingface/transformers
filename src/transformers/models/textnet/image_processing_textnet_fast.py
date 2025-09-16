@@ -44,11 +44,10 @@ from ...utils import (
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+elif is_torchvision_available():
+    from torchvision.transforms import functional as F
 
 
 class TextNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):

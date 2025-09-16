@@ -48,13 +48,14 @@ from .image_processing_flava import (
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    from ...image_utils import pil_torch_interpolation_mapping
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
 
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+    from ...image_utils import pil_torch_interpolation_mapping
+elif is_torchvision_available():
+    from torchvision.transforms import functional as F
+
+    from ...image_utils import pil_torch_interpolation_mapping
 
 
 class FlavaMaskingGenerator:

@@ -31,7 +31,6 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
-    is_vision_available,
     logging,
 )
 from .image_processing_pixtral import get_resize_output_image_size
@@ -42,14 +41,10 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    if is_vision_available():
-        pass
-
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+elif is_torchvision_available():
+    from torchvision.transforms import functional as F
 
 
 class PixtralFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):

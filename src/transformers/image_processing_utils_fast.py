@@ -61,13 +61,13 @@ if is_torch_available():
 
 if is_torchvision_available():
     from .image_utils import pil_torch_interpolation_mapping
-
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
 else:
     pil_torch_interpolation_mapping = None
+
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+elif is_torchvision_available():
+    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
