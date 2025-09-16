@@ -379,7 +379,8 @@ else:
         "DynamicLayer",
         "StaticLayer",
         "StaticSlidingWindowLayer",
-        "StaticChunkedLayer",
+        "SlidingWindowLayer",
+        "ChunkedLayer",
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
         "Cache",
@@ -583,6 +584,7 @@ else:
 if TYPE_CHECKING:
     # All modeling imports
     from .cache_utils import Cache as Cache
+    from .cache_utils import ChunkedLayer as ChunkedLayer
     from .cache_utils import DynamicCache as DynamicCache
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
@@ -596,8 +598,8 @@ if TYPE_CHECKING:
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
     from .cache_utils import SinkCache as SinkCache
     from .cache_utils import SlidingWindowCache as SlidingWindowCache
+    from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
-    from .cache_utils import StaticChunkedLayer as StaticChunkedLayer
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
     from .configuration_utils import PretrainedConfig as PretrainedConfig

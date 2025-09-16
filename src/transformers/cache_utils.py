@@ -1084,7 +1084,9 @@ class StaticCache(Cache):
             elif layer_type == "chunked_attention":
                 # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
                 # states they should return - only the mask changes to make them different at the end!
-                layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size)
+                layer = StaticSlidingWindowLayer(
+                    max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size
+                )
             else:
                 layer = StaticLayer(max_cache_len=max_cache_len)
             layers.append(layer)
@@ -1355,6 +1357,7 @@ class EncoderDecoderCache(Cache):
 
 
 ### Deprecated classes
+
 
 class SlidingWindowLayer(StaticSlidingWindowLayer):
     def __init__(self, max_cache_len: int, sliding_window: int):
