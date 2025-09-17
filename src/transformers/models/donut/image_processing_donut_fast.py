@@ -49,15 +49,10 @@ class DonutFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Whether to resize the image using thumbnail method.
         do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
             Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-        do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-            Whether to pad the image. If `random_padding` is set to `True`, each image is padded with a random
-            amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
-            padded to the largest image size in the batch.
     """
 
     do_thumbnail: Optional[bool]
     do_align_long_axis: Optional[bool]
-    do_pad: Optional[bool]
 
 
 @auto_docstring

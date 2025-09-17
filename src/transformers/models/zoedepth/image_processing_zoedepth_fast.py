@@ -70,8 +70,6 @@ logger = logging.get_logger(__name__)
 
 class ZoeDepthFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Whether to apply pad the input.
     keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
         If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it
         for both dimensions. This ensures that the image is scaled down as little as possible while still fitting
@@ -85,7 +83,6 @@ class ZoeDepthFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         Can be overridden by `ensure_multiple_of` in `preprocess`.
     """
 
-    do_pad: Optional[bool]
     keep_aspect_ratio: Optional[bool]
     ensure_multiple_of: Optional[int]
 
