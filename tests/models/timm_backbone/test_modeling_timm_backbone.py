@@ -169,7 +169,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         pass
 
     @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
-    def test_can_load_with_meta_device_context_manager(self):
+    def test_cannot_load_with_meta_device_context_manager(self):
         pass
 
     @unittest.skip(reason="model weights aren't tied in TimmBackbone.")

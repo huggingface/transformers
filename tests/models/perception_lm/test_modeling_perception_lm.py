@@ -313,10 +313,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_can_be_initialized_on_meta(self):
         pass
 
-    @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
-    def test_can_load_with_meta_device_context_manager(self):
-        pass
-
     @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
     def test_generate_from_inputs_embeds_0_greedy(self):
         pass
