@@ -424,7 +424,6 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
-            patch_size=56,
         ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=3)
         EXPECTED_DECODED_TEXT = ["\n012345Describe this video.\n<think>Got it"]  # fmt: skip
