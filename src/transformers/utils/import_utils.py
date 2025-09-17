@@ -91,9 +91,9 @@ TRITON_MIN_VERSION = "1.0.0"
 @lru_cache
 def is_torch_available() -> bool:
     is_available, torch_version = _is_package_available("torch", return_version=True)
-    if is_available and version.parse(torch_version) < version.parse("2.2.0"):
-        logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {torch_version}")
-    return is_available and version.parse(torch_version) >= version.parse("2.2.0")
+    if is_available and version.parse(torch_version) < version.parse("2.3.0"):
+        logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.3 is required but found {torch_version}")
+    return is_available and version.parse(torch_version) >= version.parse("2.3.0")
 
 
 @lru_cache

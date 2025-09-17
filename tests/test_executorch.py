@@ -23,16 +23,12 @@ from transformers.integrations.executorch import (
     TorchExportableModuleWithHybridCache,
     TorchExportableModuleWithStaticCache,
 )
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
 from transformers.testing_utils import require_torch
 
 
 @require_torch
 class ExecutorchTest(unittest.TestCase):
     def setUp(self):
-        if not is_torch_greater_or_equal_than_2_3:
-            self.skipTest("torch >= 2.3 is required")
-
         set_seed(0)
         self.model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
         self.model.eval()
