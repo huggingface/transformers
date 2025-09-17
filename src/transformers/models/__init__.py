@@ -190,6 +190,7 @@ if TYPE_CHECKING:
     from .llava_next import *
     from .llava_next_video import *
     from .llava_onevision import *
+    from .longcat_flash import *
     from .longformer import *
     from .longt5 import *
     from .luke import *
@@ -208,6 +209,7 @@ if TYPE_CHECKING:
     from .mgp_str import *
     from .mimi import *
     from .minimax import *
+    from .ministral import *
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
@@ -238,6 +240,7 @@ if TYPE_CHECKING:
     from .nystromformer import *
     from .olmo import *
     from .olmo2 import *
+    from .olmo3 import *
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *
@@ -277,6 +280,8 @@ if TYPE_CHECKING:
     from .qwen3 import *
     from .qwen3_moe import *
     from .qwen3_next import *
+    from .qwen3_vl import *
+    from .qwen3_vl_moe import *
     from .rag import *
     from .recurrent_gemma import *
     from .reformer import *
@@ -337,6 +342,7 @@ if TYPE_CHECKING:
     from .unispeech_sat import *
     from .univnet import *
     from .upernet import *
+    from .vaultgemma import *
     from .video_llava import *
     from .videomae import *
     from .vilt import *

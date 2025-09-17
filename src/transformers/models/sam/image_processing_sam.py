@@ -516,8 +516,6 @@ class SamImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=pad_size,  # Here _preprocess needs do_pad and pad_size.
             do_resize=do_resize,
             size=size,
             resample=resample,

@@ -36,19 +36,23 @@ body:
 
         Models:
 
-          - text models: @ArthurZucker
-          - vision models: @amyeroberts, @qubvel
-          - speech models: @eustlb
+          - text models: @ArthurZucker @Cyrilvallez
+          - vision models: @yonigozlan @molbap
+          - audio models: @eustlb @ebezzam @vasqu
+          - multimodal models: @zucchini-nlp
           - graph models: @clefourrier
 
         Library:
 
-          - flax: @gante and @Rocketknight1
           - generate: @zucchini-nlp (visual-language models) or @gante (all others)
+          - continuous batching: @remi-or @ArthurZucker @McPatate
           - pipelines: @Rocketknight1
-          - tensorflow: @gante and @Rocketknight1
           - tokenizers: @ArthurZucker and @itazap
           - trainer: @zach-huggingface @SunMarc
+          - attention: @vasqu @ArthurZucker @CyrilVallez
+          - model loading (from pretrained, etc): @CyrilVallez
+          - distributed: @3outeille @ArthurZucker @S1ro1
+          - CIs: @ydshieh
 
         Integrations:
 
@@ -56,6 +60,7 @@ body:
           - ray/raytune: @richardliaw, @amogkam
           - Big Model Inference: @SunMarc
           - quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
+          - kernels: @MekkCyber @drbh
         
         Devices/Backends:
         
@@ -68,19 +73,6 @@ body:
         Model hub:
 
           - for issues with a model, report at https://discuss.huggingface.co/ and tag the model's creator.
-
-        HF projects:
-
-          - accelerate: [different repo](https://github.com/huggingface/accelerate)
-          - datasets: [different repo](https://github.com/huggingface/datasets)
-          - diffusers: [different repo](https://github.com/huggingface/diffusers)
-          - rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
-
-        Maintained examples (not research project or legacy):
-
-          - Flax: @Rocketknight1
-          - PyTorch: See Models above and tag the person corresponding to the modality of the example.
-          - TensorFlow: @Rocketknight1
 
         Research projects are not maintained and should be taken as is.
 
