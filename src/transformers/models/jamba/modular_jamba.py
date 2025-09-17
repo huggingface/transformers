@@ -552,7 +552,9 @@ class JambaMambaMixer(nn.Module):
         self.ssm_state_size = config.mamba_d_state
         self.conv_kernel_size = config.mamba_d_conv
         self.intermediate_size = config.mamba_expand * config.hidden_size
-        self.time_step_rank = math.ceil(self.hidden_size / 16) if config.mamba_dt_rank == "auto" else config.mamba_dt_rank
+        self.time_step_rank = (
+            math.ceil(self.hidden_size / 16) if config.mamba_dt_rank == "auto" else config.mamba_dt_rank
+        )
         self.use_conv_bias = config.mamba_conv_bias
         self.use_bias = config.mamba_proj_bias
         self.conv1d = nn.Conv1d(
@@ -1131,9 +1133,7 @@ class JambaModel(JambaPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
+            logger.warning("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.")
             use_cache = False
 
         if inputs_embeds is None:
@@ -1151,7 +1151,11 @@ class JambaModel(JambaPreTrainedModel):
         if position_ids is None and isinstance(hidden_states, torch.Tensor):
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position) if self.config.use_mamba_kernels else attention_mask
+        causal_mask = (
+            self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+            if self.config.use_mamba_kernels
+            else attention_mask
+        )
         mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
 
         all_hidden_states = () if output_hidden_states else None
@@ -1292,7 +1296,9 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @deprecate_kwarg("return_tuple", "output_attentions", "Jamba's forward method doesn't have a return_tuple argument.", "v4.47.0")
+    @deprecate_kwarg(
+        "return_tuple", "output_attentions", "Jamba's forward method doesn't have a return_tuple argument.", "v4.47.0"
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1378,7 +1384,9 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
             )
             if labels is not None:
                 if self.router_aux_loss_coef > 0 and aux_loss is not None:
-                    loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                    loss += self.router_aux_loss_coef * aux_loss.to(
+                        loss.device
+                    )  # make sure to reside in the same device
 
         if not can_return_tuple(self.config):
             output = (logits,) + outputs[1:]

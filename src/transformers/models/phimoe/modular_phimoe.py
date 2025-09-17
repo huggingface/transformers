@@ -69,8 +69,10 @@ class PhimoeRotaryEmbedding(nn.Module):
         emb = torch.cat((freqs, freqs), dim=-1)
         return (emb.cos() * mscale).to(x.dtype), (emb.sin() * mscale).to(x.dtype)
 
+
 class PhimoeAttention(LlamaAttention):
     pass
+
 
 class PhieMoeMLP(MixtralMLP):
     pass
@@ -264,8 +266,8 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
 class PhimoeExperts(MixtralExperts):
     pass
 
-class PhimoeRouter(nn.Linear):
 
+class PhimoeRouter(nn.Linear):
     def __init__(self, config: PhimoeConfig):
         super().__init__(config.hidden_size, config.num_local_experts, bias=False)
         self.top_k = config.num_experts_per_tok
@@ -304,11 +306,9 @@ class PhimoeSparseMoeBlock(nn.Module):
         self.gate = PhimoeRouter(config)
         self.experts = PhimoeExperts(config)
 
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-
 
         router_logits = self.gate(hidden_states)
         routing_weights, selected_experts = sparsemixer(
@@ -338,7 +338,6 @@ class PhimoeModel(MixtralModel):
 
 
 class PhimoeForCausalLM(MixtralForCausalLM):
-
     # Copied from transformers.models.phi3.modeling_phi3.Phi3ForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,

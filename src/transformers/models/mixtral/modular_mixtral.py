@@ -218,6 +218,7 @@ class MixtralExperts(nn.ModuleList):
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
+
 class MixtralSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()

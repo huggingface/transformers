@@ -59,6 +59,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.typing_utils import TransformersKwargs
 from ..auto.modeling_auto import AutoModel
 from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
 
@@ -396,6 +397,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -412,8 +414,19 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
+        if input_ids is not None:
+            input_shape = input_ids.size()
+            batch_size, sequence_length = input_shape[:2]
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+            batch_size, sequence_length = input_shape
+
+        num_codebooks = self.config.num_codebooks
+
         if inputs_embeds is None:
-            inputs_embeds = sum([self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks)])
+            inputs_embeds = sum(
+                [self.embed_tokens[codebook](input_ids[:, codebook]) for codebook in range(num_codebooks)]
+            )
 
         attention_mask = self._update_causal_mask(
             attention_mask,
@@ -429,7 +442,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input, past_key_values_length)
+        positions = self.embed_positions(inputs_embeds, past_key_values_length)
         hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 

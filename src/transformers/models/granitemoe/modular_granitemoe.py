@@ -17,13 +17,19 @@ from typing import Optional
 
 import torch
 from torch import nn
+from typing_extensions import Unpack
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, check_model_inputs
+from ...utils.typing_utils import TransformersKwargs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
 from ..jetmoe.modeling_jetmoe import JetMoeParallelExperts, JetMoeTopKGating
 from ..llama.modeling_llama import LlamaAttention
+from ..mixtral.modeling_mixtral import MixtralDecoderLayer, MixtralForCausalLM
 from .configuration_granitemoe import GraniteMoeConfig
 
 
@@ -35,9 +41,9 @@ class GraniteMoeRotaryEmbedding(GraniteRotaryEmbedding):
     pass
 
 
-
 class GraniteMoeParallelExperts(JetMoeParallelExperts):
     pass
+
 
 class GraniteMoeTopKGating(JetMoeTopKGating):
     pass
@@ -98,30 +104,23 @@ class GraniteMoeDecoderLayer(MixtralDecoderLayer):
         self.input_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.residual_multiplier = config.residual_multiplier # Only diff with mixtral!
+        self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        output_router_logits: Optional[bool] = False,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -167,7 +166,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         self.norm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        self.embedding_multiplier = config.embedding_multiplier # only diff with Mixtral
+        self.embedding_multiplier = config.embedding_multiplier  # only diff with Mixtral
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads

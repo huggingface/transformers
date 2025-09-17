@@ -18,6 +18,8 @@ from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
+from torch import nn
+from torch.nn import functional as F
 
 from ...cache_utils import Cache
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -53,6 +55,7 @@ class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
 class Qwen3MoeMLP(Qwen2MoeMLP):
     pass
 
+
 class Qwen3MoeRouter(nn.Linear):
     def __init__(self, config: Qwen3MoeConfig):
         self.num_experts = config.num_experts
@@ -86,8 +89,10 @@ class Qwen3MoeExperts(MixtralExperts, nn.ModuleList):
         for _ in range(self.num_experts):
             self.append(Qwen3MoeMLP(config, intermediate_size=config.moe_intermediate_size))
 
+
 class Qwen3MoeSparseMoeBlock(MixtralSparseMoeBlock):
     pass
+
 
 class Qwen3MoeRMSNorm(LlamaRMSNorm):
     pass

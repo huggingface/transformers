@@ -56,6 +56,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import TransformersKwargs
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..bart.modeling_bart import eager_attention_forward
@@ -158,7 +159,9 @@ class MusicgenAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self, config, layer_idx: Optional[int] = None,
+        self,
+        config,
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.embed_dim = config.embed_dim
@@ -252,13 +255,19 @@ class MusicgenDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.embed_dim = config.hidden_size
 
-        self.self_attn = MusicgenAttention(config,layer_idx=layer_idx,)
+        self.self_attn = MusicgenAttention(
+            config,
+            layer_idx=layer_idx,
+        )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = MusicgenAttention(config, layer_idx=layer_idx,)
+        self.encoder_attn = MusicgenAttention(
+            config,
+            layer_idx=layer_idx,
+        )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim, bias=False)
         self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=False)
@@ -377,6 +386,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -393,8 +403,19 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
+        if input_ids is not None:
+            input_shape = input_ids.size()
+            batch_size, sequence_length = input_shape[:2]
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+            batch_size, sequence_length = input_shape
+
+        num_codebooks = self.config.num_codebooks
+
         if inputs_embeds is None:
-            inputs_embeds = sum([self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks)])
+            inputs_embeds = sum(
+                [self.embed_tokens[codebook](input_ids[:, codebook]) for codebook in range(num_codebooks)]
+            )
 
         attention_mask = self._update_causal_mask(
             attention_mask,
@@ -410,7 +431,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input, past_key_values_length)
+        positions = self.embed_positions(inputs_embeds, past_key_values_length)
         hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -428,7 +449,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **kwargs
+                **kwargs,
             )
 
         hidden_states = self.layer_norm(hidden_states)
@@ -585,7 +606,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
-            **kwargs
+            **kwargs,
         )
 
         return BaseModelOutputWithPastAndCrossAttentions(

@@ -37,21 +37,28 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
-from ..m2m_100.modeling_m2m_100 import M2M100ScaledWordEmbedding, M2M100SinusoidalPositionalEmbedding
+from ...utils.generic import check_model_inputs
+from ...utils.typing_utils import TransformersKwargs
+from ..m2m_100.modeling_m2m_100 import (
+    M2M100ScaledWordEmbedding,
+    M2M100SinusoidalPositionalEmbedding,
+    shift_tokens_right,
+)
 from ..musicgen.modeling_musicgen import MusicgenAttention, MusicgenDecoder
+from ..switch_transformers.modeling_switch_transformers import load_balancing_loss_func
 from .configuration_nllb_moe import NllbMoeConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-
 class NllbMoeScaledWordEmbedding(M2M100ScaledWordEmbedding):
     pass
 
+
 # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding
 class NllbMoeSinusoidalPositionalEmbedding(M2M100SinusoidalPositionalEmbedding):
-   pass
+    pass
 
 
 class NllbMoeTop2Router(nn.Module):
@@ -239,6 +246,7 @@ class NllbMoeExperts(nn.ModuleDict):
             self[f"expert_{idx}"] = expert_class(config, ffn_dim)
 
     def forward(self, hidden_states, router_mask, router_probs):
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
         masked_hidden_states = torch.einsum("bm,be->ebm", hidden_states, router_mask)
         for idx, expert in enumerate(self.experts.values()):
             token_indices = router_mask[:, idx]
@@ -252,6 +260,7 @@ class NllbMoeExperts(nn.ModuleDict):
             masked_hidden_states[idx, token_indices] = torch.einsum("b,be->be", combining_weights, expert_output)
         hidden_states = masked_hidden_states.sum(dim=0).reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
+
 
 class NllbMoeSparseMLP(nn.Module):
     r"""
@@ -338,6 +347,7 @@ def eager_attention_forward(
 class NllbMoeAttention(MusicgenAttention):
     pass
 
+
 class NllbMoeEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: NllbMoeConfig, is_sparse: bool = False):
         super().__init__()
@@ -393,7 +403,7 @@ class NllbMoeEncoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.ff_layer_norm(hidden_states)
-        hidden_states= self.ffn(hidden_states, attention_mask)
+        hidden_states = self.ffn(hidden_states, attention_mask)
         if self.is_sparse:
             hidden_states, _ = hidden_states
 
@@ -541,7 +551,6 @@ class NllbMoePreTrainedModel(PreTrainedModel):
 
 
 class NllbMoeEncoder(NllbMoePreTrainedModel):
-
     def __init__(self, config: NllbMoeConfig, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
 
@@ -585,8 +594,6 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -612,7 +619,6 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         last_hidden_state = self.layer_norm(hidden_states)
 
         return MoEModelOutput(last_hidden_state=last_hidden_state)
-
 
 
 class NllbMoeDecoder(NllbMoePreTrainedModel, MusicgenDecoder):
@@ -676,6 +682,8 @@ class NllbMoeDecoder(NllbMoePreTrainedModel, MusicgenDecoder):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        input_shape = inputs_embeds.size()[:-1]
+
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
@@ -726,7 +734,6 @@ class NllbMoeDecoder(NllbMoePreTrainedModel, MusicgenDecoder):
                     cache_position=cache_position,
                 )
 
-
             if skip_the_layer:
                 continue
 
@@ -736,6 +743,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel, MusicgenDecoder):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
 
 @auto_docstring
 class NllbMoeModel(NllbMoePreTrainedModel):

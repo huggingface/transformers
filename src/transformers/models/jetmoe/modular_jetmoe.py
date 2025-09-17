@@ -32,11 +32,27 @@ from ...modeling_layers import (
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
-from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel, load_balancing_loss_func
+from ..mixtral.modeling_mixtral import (
+    MixtralModel,
+    MixtralPreTrainedModel,
+    MixtralRMSNorm,
+    MixtralRotaryEmbedding,
+    apply_rotary_pos_emb,
+    load_balancing_loss_func,
+)
 from .configuration_jetmoe import JetMoeConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class JetMoeRMSNorm(MixtralRMSNorm):
+    pass
+
+
+class JetMoeRotaryEmbedding(MixtralRotaryEmbedding):
+    pass
+
 
 class JetMoeParallelExperts(nn.Module):
     def __init__(self, num_experts: int, input_size: int, output_size: int) -> None:
@@ -264,8 +280,6 @@ class JetMoeMoA(nn.Module):
 
     def forward(self, layer_input):
         raise NotImplementedError("This module doesn't support call and forward.")
-
-
 
 
 class JetMoeAttention(nn.Module):

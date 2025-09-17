@@ -54,8 +54,6 @@ if is_torch_flex_attn_available():
     from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -170,7 +168,7 @@ class SwitchTransformersTop1Router(nn.Module):
         router_logits = self.classifier(hidden_states)
 
         # Apply Softmax and cast back to the original `dtype`
-        router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
+        router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
         expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
         token_priority = torch.cumsum(expert_index, dim=-2)
@@ -180,12 +178,14 @@ class SwitchTransformersTop1Router(nn.Module):
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
         return expert_index, router_probs, router_logits
 
+
 class SwitchTransformersLayerNorm(T5LayerNorm):
     pass
 
 
 class SwitchTransformersDenseActDense(T5DenseActDense):
     pass
+
 
 class SwitchTransformersExperts(nn.ModuleDict):
     def __init__(self, config: SwitchTransformersConfig):
@@ -208,7 +208,8 @@ class SwitchTransformersExperts(nn.ModuleDict):
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
-class SwitchTransformersSparseMLP(nn.Module): # inherit from mixtral
+
+class SwitchTransformersSparseMLP(nn.Module):  # inherit from mixtral
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__()
         self.router = SwitchTransformersTop1Router(config)
@@ -221,7 +222,6 @@ class SwitchTransformersSparseMLP(nn.Module): # inherit from mixtral
         hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, router_logits
-
 
 
 class SwitchTransformersLayerFF(nn.Module):
@@ -262,11 +262,14 @@ class SwitchTransformersLayerFF(nn.Module):
 class SwitchTransformersAttention(T5Attention):
     pass
 
+
 class SwitchTransformersLayerSelfAttention(T5LayerSelfAttention):
     pass
 
+
 class SwitchTransformersLayerCrossAttention(T5LayerCrossAttention):
     pass
+
 
 class SwitchTransformersBlock(GradientCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, is_sparse=False, layer_idx: Optional[int] = None):
@@ -300,7 +303,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
         output_router_logits=True,
         return_dict=True,
         cache_position=None,
-        **kwargs
+        **kwargs,
     ):
         hidden_states, _ = self.layer[0](
             hidden_states,
@@ -311,7 +314,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
-            **kwargs
+            **kwargs,
         )
 
         # clamp inf values to enable fp16 training
@@ -331,7 +334,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **kwargs
+                **kwargs,
             )
             hidden_states = cross_attention_outputs[0]
 
@@ -346,6 +349,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
         return hidden_states
+
 
 @auto_docstring
 class SwitchTransformersPreTrainedModel(PreTrainedModel):
@@ -429,9 +433,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         past_key_values=None,
         use_cache=None,
         cache_position=None,
-        **kwargs: Unpack[TransformersKwargs]
+        **kwargs: Unpack[TransformersKwargs],
     ):
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -439,6 +442,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             if self.embed_tokens is None:
                 raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
+
+        batch_size, seq_length = inputs_embeds.shape[:2]
 
         if use_cache is True:
             if not self.is_decoder:
@@ -517,7 +522,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **kwargs
+                **kwargs,
             )
 
         hidden_states = self.final_layer_norm(hidden_states)
@@ -714,7 +719,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -949,10 +953,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> Union[tuple[torch.FloatTensor], MoEModelOutput]:
         encoder_outputs = self.encoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            head_mask=head_mask
+            input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
         )
 
         return encoder_outputs
