@@ -271,7 +271,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_base_model_inference_eager(self):
-        model_name = "ducviet00/Florence-2-base-hf"
+        model_name = "florence-community/Florence-2-base"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="eager").to(
             torch_device
@@ -295,7 +295,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
 
     def test_base_model_batching_inference_eager(self):
-        model_name = "ducviet00/Florence-2-base-hf"
+        model_name = "florence-community/Florence-2-base"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="eager").to(
             torch_device
@@ -343,7 +343,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(parsed_answer_1, EXPECTED_PARSED_ANSWER_1)
 
     def test_base_model_inference_sdpa(self):
-        model_name = "ducviet00/Florence-2-base-hf"
+        model_name = "florence-community/Florence-2-base"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="sdpa").to(
             torch_device
@@ -375,7 +375,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
 
     def test_base_model_batching_inference_sdpa(self):
-        model_name = "ducviet00/Florence-2-base-hf"
+        model_name = "florence-community/Florence-2-base"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="sdpa").to(
             torch_device
@@ -415,7 +415,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
 
     def test_large_model_inference_eager(self):
-        model_name = "ducviet00/Florence-2-large-hf"
+        model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="eager").to(
             torch_device
@@ -439,7 +439,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
 
     def test_large_model_batching_inference_eager(self):
-        model_name = "ducviet00/Florence-2-large-hf"
+        model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="eager").to(
             torch_device
@@ -485,7 +485,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(parsed_answer_1, EXPECTED_PARSED_ANSWER_1)
 
     def test_large_model_inference_sdpa(self):
-        model_name = "ducviet00/Florence-2-large-hf"
+        model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="sdpa").to(
             torch_device
@@ -517,7 +517,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
 
     def test_large_model_batching_inference_sdpa(self):
-        model_name = "ducviet00/Florence-2-large-hf"
+        model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="sdpa").to(
             torch_device
