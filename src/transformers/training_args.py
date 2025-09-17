@@ -697,7 +697,9 @@ class TrainingArguments:
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             `hf auth login`.
         hub_private_repo (`bool`, *optional*):
-            Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
+            Whether to make the repo private. If `None` (default), the repo will be public unless the organization's
+            default is private. This value is ignored if the repo already exists. If reporting to Trackio with
+            deployment to Hugging Face Spaces enabled, the same logic determines whether the Space is private.
         hub_always_push (`bool`, *optional*, defaults to `False`):
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         hub_revision (`str`, *optional*):

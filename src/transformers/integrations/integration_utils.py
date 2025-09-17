@@ -1119,6 +1119,7 @@ class TrackioCallback(TrainerCallback):
                 name=args.run_name,
                 space_id=os.getenv("TRACKIO_SPACE_ID", None),
                 resume="allow",
+                private=args.hub_private_repo,
             )
 
             # Add config parameters (run may have been created manually)
