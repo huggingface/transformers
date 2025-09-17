@@ -612,7 +612,7 @@ class PhimoeModel(PhimoePreTrainedModel):
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, seq_len=cache_position[-1] + 1)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
@@ -726,7 +726,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = PhimoeModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
         self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok

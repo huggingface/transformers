@@ -444,9 +444,9 @@ class MiniMaxRouter(nn.Linear):
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         router_logits = super().forward(hidden_states)
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
         return router_logits, top_k_index, top_k_weights
 
 
