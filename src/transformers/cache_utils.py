@@ -395,7 +395,12 @@ class StaticSlidingWindowLayer(StaticLayer):
         if not self.is_initialized:
             self.lazy_initialization(key_states)
 
-        cache_position = cache_kwargs.get("cache_position")
+        # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
+        # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
+        cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
+        cache_position = (
+            cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
+        )
 
         cumulative_length = self.cumulative_length
         is_full = cumulative_length >= self.max_cache_len
@@ -956,7 +961,9 @@ class DynamicCache(Cache):
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             decoder_config = config.get_text_config(decoder=True)
-            sliding_window = getattr(decoder_config, "sliding_window", None) or getattr(decoder_config, "attention_chunk_size", None)
+            sliding_window = getattr(decoder_config, "sliding_window", None) or getattr(
+                decoder_config, "attention_chunk_size", None
+            )
             layer_types = getattr(decoder_config, "layer_types", None)
             if layer_types is None:
                 layer_types = [
