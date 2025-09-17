@@ -1094,10 +1094,14 @@ class ModernBertClassificationModel(ModernBertPreTrainedModel):
         self.model = ModernBertModel(config)
         self.head = ModernBertPredictionHead(config)
         self.drop = torch.nn.Dropout(config.classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.classifier = nn.Linear(config.hidden_size, self.output_dim)
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @property
+    def output_dim(self):
+        return self.config.num_labels
 
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
@@ -1401,6 +1405,10 @@ class ModernBertForQuestionAnswering(ModernBertClassificationModel):
     """
 )
 class ModernBertForMultipleChoice(ModernBertClassificationModel):
+    @property
+    def output_dim(self):
+        return 1
+
     @auto_docstring
     def forward(
         self,

@@ -360,6 +360,32 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
         "attentions": ModernBertDecoderAttention,
     }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.init_stds = {
+            "in": self.config.initializer_range,
+            "out": self.config.initializer_range / math.sqrt(2.0 * self.config.num_hidden_layers),
+            "embedding": self.config.initializer_range,
+            "final_out": self.config.hidden_size**-0.5,
+        }
+
+    def _init_weights_trunc_normal(self, module: nn.Module, std: float):
+        cutoff_factor = self.config.initializer_cutoff_factor
+        if cutoff_factor is None:
+            cutoff_factor = 3
+
+        nn.init.trunc_normal_(
+            module.weight,
+            mean=0.0,
+            std=std,
+            a=-cutoff_factor * std,
+            b=cutoff_factor * std,
+        )
+
+        if isinstance(module, nn.Linear):
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+
     def _init_weights(self, module: nn.Module):
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
