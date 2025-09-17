@@ -50,7 +50,7 @@ from .utils import (
     is_torchvision_v2_available,
     logging,
 )
-from .utils.hub import cached_files
+from .utils.hub import cached_file
 from .utils.import_utils import requires
 from .video_utils import (
     VideoInput,
@@ -676,20 +676,27 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             try:
                 # Try to load with a new config name first and if not successful try with the old file name
                 # NOTE: we will gradually change to saving all processor configs as nested dict in PROCESSOR_NAME
-                resolved_video_processor_files = cached_files(
-                    pretrained_model_name_or_path,
-                    filenames=[VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME, PROCESSOR_NAME],
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                    _raise_exceptions_for_missing_entries=False,
-                )
+                resolved_video_processor_files = [
+                    resolved_file
+                    for filename in [VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME, PROCESSOR_NAME]
+                    if (
+                        resolved_file := cached_file(
+                            pretrained_model_name_or_path,
+                            filename=filename,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            resume_download=resume_download,
+                            local_files_only=local_files_only,
+                            token=token,
+                            user_agent=user_agent,
+                            revision=revision,
+                            subfolder=subfolder,
+                            _raise_exceptions_for_missing_entries=False,
+                        )
+                    )
+                    is not None
+                ]
                 resolved_video_processor_file = resolved_video_processor_files[0]
             except OSError:
                 # Raise any OS error raise by `cached_file`. It will have a helpful error message adapted to

@@ -15,6 +15,7 @@
 import re
 import tempfile
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
@@ -32,7 +33,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )

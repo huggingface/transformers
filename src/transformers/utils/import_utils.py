@@ -592,12 +592,14 @@ def is_flash_linear_attention_available():
 
         if not torch.cuda.is_available():
             return False
-        else:
-            if _is_package_available("fla"):
-                import fla
 
-                if version.parse(fla.__version__) >= version.parse("0.2.2"):
-                    return True
+        try:
+            import fla
+
+            if version.parse(fla.__version__) >= version.parse("0.2.2"):
+                return True
+        except Exception:
+            pass
     return False
 
 
@@ -2468,6 +2470,7 @@ BASE_FILE_REQUIREMENTS = {
     lambda e: e.startswith("tokenization_") and e.endswith("_fast"): ("tokenizers",),
     lambda e: e.startswith("image_processing_") and e.endswith("_fast"): ("vision", "torch", "torchvision"),
     lambda e: e.startswith("image_processing_"): ("vision",),
+    lambda e: e.startswith("video_processing_"): ("vision", "torch", "torchvision"),
 }
 
 
