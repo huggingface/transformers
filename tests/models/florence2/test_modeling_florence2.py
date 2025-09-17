@@ -219,6 +219,7 @@ class Florence2VisionText2TextModelTester:
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+
 @require_torch
 class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
