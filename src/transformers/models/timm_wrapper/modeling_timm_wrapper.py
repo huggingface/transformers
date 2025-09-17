@@ -69,6 +69,13 @@ def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_
         return model
     except RuntimeError as e:
         if "Unknown model" in str(e):
+            if "mobilenetv5_300m_enc" in config.architecture:
+                raise ImportError(
+                    f"You are trying to load a model that uses '{config.architecture}', the vision backbone for Gemma 3n. "
+                    f"This architecture is not supported in your version of timm ({timm.__version__}). "
+                    "Please upgrade to timm >= 1.0.16 with: `pip install -U timm`."
+                ) from e
+            # A good general check for other unknown models too.
             raise ImportError(
                 f"The model architecture '{config.architecture}' is not supported in your version of timm ({timm.__version__}). "
                 "Please upgrade timm to a more recent version with `pip install -U timm`."
