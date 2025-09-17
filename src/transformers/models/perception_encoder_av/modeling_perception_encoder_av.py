@@ -26,8 +26,6 @@ from .configuration_perception_encoder_av import (
 
 
 ## Patcher
-
-
 def pad1d(
     x: torch.Tensor,
     paddings: tuple[int, int],

@@ -21,14 +21,7 @@ class NormalizeTypeConfig(str, enum.Enum):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Config:
-    @classmethod
-    def from_dict(cls, kwargs):
-        return cls(**kwargs)
-
-
-@dataclass(frozen=True, kw_only=True)
-class TransformerConfig(Config):
+class TransformerConfig:
     in_channels: int = 128
     dim: int = 1024
     n_heads: int = 8
@@ -57,7 +50,7 @@ class PerceptionEncoderAVTextEncoderConfig(PretrainedConfig):
 
 
 @dataclass(frozen=True, kw_only=True)
-class VideoEncoderConfig(Config):
+class VideoEncoderConfig:
     backbone: str = "PE-Core-L14-336"
     backbone_checkpoint: Optional[str] = None  # optional path to local checkpoint
     transformer: TransformerConfig = field(
@@ -69,12 +62,6 @@ class VideoEncoderConfig(Config):
             out_channels=1792,
         )
     )
-
-    @classmethod
-    def from_dict(cls, kwargs):
-        if "transformer" in kwargs:
-            kwargs["transformer"] = TransformerConfig.from_dict(kwargs["transformer"])
-        return cls(**kwargs)
 
 
 class DACVAEConfig(DacConfig): ...
@@ -96,11 +83,19 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         audio_codec = audio_codec or {}
-        self.video_encoder = VideoEncoderConfig.from_dict(video_encoder or {})
+        audio_encoder = audio_encoder or {}
+        audio_video_encoder = audio_video_encoder or {}
+        text_encoder = text_encoder or {}
+        video_encoder = video_encoder or {}
+
+        if "transformer" in video_encoder:
+            video_encoder["transformer"] = TransformerConfig(**video_encoder["transformer"])
+
+        self.video_encoder = VideoEncoderConfig(**video_encoder)
         self.audio_codec = DACVAEConfig(**audio_codec)
-        self.audio_encoder = TransformerConfig.from_dict(audio_encoder or {})
-        self.audio_video_encoder = TransformerConfig.from_dict(audio_video_encoder or {})
-        self.text_encoder = PerceptionEncoderAVTextEncoderConfig(**(text_encoder or {}))
+        self.audio_encoder = TransformerConfig(**audio_encoder)
+        self.audio_video_encoder = TransformerConfig(**audio_video_encoder)
+        self.text_encoder = PerceptionEncoderAVTextEncoderConfig(**text_encoder)
         self.separate_text_heads = separate_text_heads
         self.output_dim = output_dim
         self.contrastive_head_norm_type = contrastive_head_norm_type
@@ -113,8 +108,6 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
 
 
 ## Patcher
-
-
 def pad1d(
     x: torch.Tensor,
     paddings: tuple[int, int],
