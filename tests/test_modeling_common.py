@@ -3492,9 +3492,8 @@ class ModelTesterMixin:
                     k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in second_inputs.items()
                 }
 
-                attention = "sdpa" if model_class._supports_sdpa else "eager"
                 model = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attention, device_map=torch_device
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
                 )
 
                 # First run without attention mask
