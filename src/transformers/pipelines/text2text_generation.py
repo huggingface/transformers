@@ -134,15 +134,9 @@ class Text2TextGenerationPipeline(Pipeline):
 
     def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int):
         """
-        Checks whether there might be something wrong with given input with regard to the model.
-
-        Args:
-            input_length: Length of the input sequence
-            min_length: Minimum length for generation
-            max_new_tokens: Maximum number of new tokens to generate (updated from max_length)
-
-        Note: Parameter changed from max_length to max_new_tokens to align with modern generation practices
-        where max_new_tokens specifies the number of new tokens to generate rather than total sequence length.
+        This logic has been removed since we now use `max_new_tokens`, which makes the previous checks irrelevant.
+        The previous checks were mainly useful when `max_length` was roughly equal to `input_length`,
+        which typically indicated unreasonable values set by the user.
         """
         return True
 
@@ -215,8 +209,6 @@ class Text2TextGenerationPipeline(Pipeline):
         elif self.framework == "tf":
             in_b, input_length = tf.shape(model_inputs["input_ids"]).numpy()
 
-        # Updated to use max_new_tokens instead of max_length for modern text generation practices
-        # max_new_tokens specifies the number of new tokens to generate, not the total sequence length
         self.check_inputs(
             input_length,
             generate_kwargs.get("min_length", self.generation_config.min_length),
@@ -315,14 +307,6 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int) -> bool:
         """
         Checks whether there might be something wrong with given input with regard to the model.
-
-        Args:
-            input_length: Length of the input sequence
-            min_length: Minimum length for generation
-            max_new_tokens: Maximum number of new tokens to generate (updated from max_length)
-
-        Note: Parameter changed from max_length to max_new_tokens to align with modern generation practices.
-        For summarization, max_new_tokens specifies how many new tokens to generate for the summary.
         """
         if max_new_tokens < min_length:
             logger.warning(f"Your min_length={min_length} must be inferior than your max_new_tokens={max_new_tokens}.")
@@ -364,13 +348,6 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     return_name = "translation"
 
     def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int):
-        # Updated parameter name from max_length to max_new_tokens to align with modern generation practices
-        # This method validates that input length doesn't exceed 90% of the maximum new tokens to generate
-        if input_length > 0.9 * max_new_tokens:
-            logger.warning(
-                f"Your input_length: {input_length} is bigger than 0.9 * max_new_tokens: {max_new_tokens}. You might consider "
-                "increasing your max_new_tokens manually, e.g. translator('...', max_new_tokens=400)"
-            )
         return True
 
     def preprocess(self, *args, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None):
