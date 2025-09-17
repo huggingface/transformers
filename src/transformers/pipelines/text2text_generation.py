@@ -135,12 +135,12 @@ class Text2TextGenerationPipeline(Pipeline):
     def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int):
         """
         Checks whether there might be something wrong with given input with regard to the model.
-        
+
         Args:
             input_length: Length of the input sequence
             min_length: Minimum length for generation
             max_new_tokens: Maximum number of new tokens to generate (updated from max_length)
-        
+
         Note: Parameter changed from max_length to max_new_tokens to align with modern generation practices
         where max_new_tokens specifies the number of new tokens to generate rather than total sequence length.
         """
@@ -315,12 +315,12 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int) -> bool:
         """
         Checks whether there might be something wrong with given input with regard to the model.
-        
+
         Args:
             input_length: Length of the input sequence
             min_length: Minimum length for generation
             max_new_tokens: Maximum number of new tokens to generate (updated from max_length)
-        
+
         Note: Parameter changed from max_length to max_new_tokens to align with modern generation practices.
         For summarization, max_new_tokens specifies how many new tokens to generate for the summary.
         """
