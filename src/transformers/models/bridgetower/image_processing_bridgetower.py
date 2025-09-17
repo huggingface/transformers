@@ -35,6 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -122,6 +123,21 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
+class BridgeTowerImageProcessorKwargs(ImagesKwargs):
+    """
+    Args:
+        size_divisor (`int`, *optional*, defaults to 32):
+            The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
+            is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
+            the `do_pad` parameter in the `preprocess` method.
+    """
+
+    size_divisor: Optional[int]
+    do_pad: Optional[bool]
+
+
 class BridgeTowerImageProcessor(BaseImageProcessor):
     r"""
     Constructs a BridgeTower image processor.
@@ -169,6 +185,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = BridgeTowerImageProcessorKwargs
 
     def __init__(
         self,

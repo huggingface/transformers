@@ -19,7 +19,6 @@ from typing import Optional, Union
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -42,6 +41,7 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
 )
+from .image_processing_nougat import NougatImageProcessorKwargs
 
 
 if is_torch_available():
@@ -54,23 +54,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class NougatFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-    do_crop_margin (`bool`, *optional*, defaults to `True`):
-            Whether to crop the image margins.
-    do_thumbnail (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image using thumbnail method.
-    do_align_long_axis (`bool`, *optional*, defaults to `False`):
-            Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-    do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the images to the largest image size in the batch.
-    """
-
-    do_crop_margin: Optional[bool]
-    do_thumbnail: Optional[bool]
-    do_align_long_axis: Optional[bool]
-    do_pad: Optional[bool]
+NougatFastImageProcessorKwargs = NougatImageProcessorKwargs
 
 
 @auto_docstring

@@ -21,7 +21,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -43,6 +42,7 @@ from ...utils import (
     is_torchvision_v2_available,
     is_vision_available,
 )
+from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs
 
 
 if is_torch_available():
@@ -120,13 +120,7 @@ def convert_to_grayscale(
     return F.rgb_to_grayscale(image, num_output_channels=3)
 
 
-class EfficientLoFTRFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_grayscale (`bool`, *optional*, defaults to `True`):
-        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
-    """
-
-    do_grayscale: Optional[bool] = True
+EfficientLoFTRFastImageProcessorKwargs = EfficientLoFTRImageProcessorKwargs
 
 
 @auto_docstring

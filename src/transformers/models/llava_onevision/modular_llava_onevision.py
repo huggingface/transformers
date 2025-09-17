@@ -34,7 +34,7 @@ from transformers.models.llava_next_video.modeling_llava_next_video import (
 
 from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import DefaultFastImageProcessorKwargs, group_images_by_shape, reorder_images
+from ...image_processing_utils_fast import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -54,6 +54,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
 if is_torchvision_available():
@@ -66,19 +67,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    image_grid_pinpoints (`list[list[int]]`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-        method.
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    """
-
-    image_grid_pinpoints: Optional[list[list[int]]]
-    do_pad: Optional[bool]
+LlavaOnevisionFastImageProcessorKwargs = LlavaOnevisionImageProcessorKwargs
 
 
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):

@@ -556,6 +556,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self,
         size: Optional[SizeDict] = None,
         crop_size: Optional[SizeDict] = None,
+        pad_size: Optional[SizeDict] = None,
         default_to_square: Optional[bool] = None,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
@@ -570,6 +571,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
             kwargs = {}
         if size is not None:
             size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
+        if pad_size is not None:
+            pad_size = SizeDict(**get_size_dict(size=pad_size, param_name="pad_size"))
         if crop_size is not None:
             crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
         if isinstance(image_mean, list):
@@ -580,6 +583,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             data_format = ChannelDimension.FIRST
 
         kwargs["size"] = size
+        kwargs["pad_size"] = pad_size
         kwargs["crop_size"] = crop_size
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std

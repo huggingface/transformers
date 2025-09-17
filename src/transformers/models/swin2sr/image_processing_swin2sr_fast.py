@@ -19,12 +19,9 @@ from typing import Optional, Union
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
-from ...image_utils import ImageInput
-from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -44,31 +41,12 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class Swin2SRFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Whether to pad the image to make the height and width divisible by `window_size`.
-    pad_size (`int`, *optional*, defaults to `8`):
-        The size of the sliding window for the local attention.
-    """
-
-    do_pad: Optional[bool]
-    pad_size: Optional[int]
-
-
 @auto_docstring
 class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
     do_pad = True
     pad_size = 8
-    valid_kwargs = Swin2SRFastImageProcessorKwargs
-
-    def __init__(self, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
 
     def pad(self, images: "torch.Tensor", size: int) -> "torch.Tensor":
         """

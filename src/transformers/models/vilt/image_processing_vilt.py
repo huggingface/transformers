@@ -35,6 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 from ...utils.import_utils import requires
 
@@ -44,6 +45,19 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class ViltImageProcessorKwargs(ImagesKwargs):
+    """
+    Args:
+        size_divisor (`int`, *optional*, defaults to 32):
+            The size to make the height and width divisible by.
+        rescale_factor (`float`, *optional*, defaults to 1/255):
+            The factor to rescale the image by.
+    """
+
+    size_divisor: Optional[int]
+    rescale_factor: Optional[float]
 
 
 def max_across_indices(values: Iterable[Any]) -> list[Any]:
@@ -162,6 +176,7 @@ class ViltImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = ViltImageProcessorKwargs
 
     def __init__(
         self,

@@ -25,7 +25,7 @@ import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -37,7 +37,7 @@ from ...image_utils import (
 )
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     ModelOutput,
     TensorType,
@@ -77,7 +77,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Sam2FastImageProcessorKwargs(ImagesKwargs):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.

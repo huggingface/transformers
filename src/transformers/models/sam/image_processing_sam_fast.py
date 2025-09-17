@@ -25,7 +25,6 @@ import torch
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -46,6 +45,7 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
 )
+from .image_processing_sam import SamImageProcessorKwargs
 
 
 if is_torch_available():
@@ -60,25 +60,7 @@ elif is_torchvision_available():
     from torchvision.transforms import functional as F_t
 
 
-class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-    pad_size (`dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing.
-    mask_size (`dict[str, int]`, *optional*):
-        The size `{"longest_edge": int}` to resize the segmentation maps to.
-    mask_pad_size (`dict[str, int]`, *optional*):
-        The size `{"height": int, "width": int}` to pad the segmentation maps to. Must be larger than any segmentation
-        map size provided for preprocessing.
-    """
-
-    mask_size: Optional[dict[str, int]]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
-    mask_pad_size: Optional[dict[str, int]]
+SamFastImageProcessorKwargs = SamImageProcessorKwargs
 
 
 @auto_docstring

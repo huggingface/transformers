@@ -20,7 +20,6 @@ from typing import Optional, Union
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     ImageInput,
     SizeDict,
     TensorType,
@@ -31,6 +30,7 @@ from ...image_processing_utils_fast import (
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available
+from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs
 
 
 if is_torch_available():
@@ -93,19 +93,7 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-class BridgeTowerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        size_divisor (`int`, *optional*, defaults to 32):
-            The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
-            is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
-            the `do_pad` parameter in the `preprocess` method.
-    """
-
-    size_divisor: Optional[int]
-    do_pad: Optional[bool]
+BridgeTowerFastImageProcessorKwargs = BridgeTowerImageProcessorKwargs
 
 
 @auto_docstring

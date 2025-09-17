@@ -23,7 +23,6 @@ from ...image_processing_utils import (
 )
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     get_image_size,
     group_images_by_shape,
     reorder_images,
@@ -34,7 +33,7 @@ from ...image_utils import (
     ChannelDimension,
     PILImageResampling,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -50,7 +49,7 @@ if is_torchvision_available():
     from torchvision.transforms import functional as F
 
 
-class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class PerceptionLMFastImageProcessorKwargs(ImagesKwargs):
     r"""
     vision_input_type (`str`, *optional*, defaults to `"thumb+tile"`):
         Vision processing strategy. `"thumb+tile"` uses both thumbnails and multiple tiles for
@@ -61,9 +60,9 @@ class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         Maximum number of tiles an image can be split into based on its aspect ratio.
     """
 
-    vision_input_type: str = "thumb+tile"
-    tile_size: int = 448
-    max_num_tiles: int = 36
+    vision_input_type: Optional[str]
+    tile_size: Optional[int]
+    max_num_tiles: Optional[int]
 
 
 @auto_docstring
@@ -76,6 +75,9 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    vision_input_type = "thumb+tail"
+    tile_size = 448
+    max_num_tiles = 36
     size = {"width": 448, "height": 448}  # for backward compatibility in tests
     valid_kwargs = PerceptionLMFastImageProcessorKwargs
 

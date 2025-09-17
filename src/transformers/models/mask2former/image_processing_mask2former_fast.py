@@ -24,7 +24,6 @@ from typing import Any, Optional, Union
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -48,6 +47,7 @@ from ...utils import (
     logging,
 )
 from .image_processing_mask2former import (
+    Mask2FormerImageProcessorKwargs,
     compute_segments,
     convert_segmentation_to_rle,
     get_size_with_aspect_ratio,
@@ -70,37 +70,7 @@ elif is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class Mask2FormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    size_divisor (`int`, *optional*, defaults to 32):
-        Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-        Swin Transformer.
-    ignore_index (`int`, *optional*):
-        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-        denoted with 0 (background) will be replaced with `ignore_index`.
-    do_reduce_labels (`bool`, *optional*, defaults to `False`):
-        Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
-        The background label will be replaced by `ignore_index`.
-    num_labels (`int`, *optional*):
-        The number of labels in the segmentation map.
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-        If `pad_size` is provided, the image will be padded to the specified dimensions.
-        Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`Dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-        height and width in the batch.
-    """
-
-    size_divisor: Optional[int]
-    ignore_index: Optional[int]
-    do_reduce_labels: Optional[bool]
-    num_labels: Optional[int]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
+Mask2FormerFastImageProcessorKwargs = Mask2FormerImageProcessorKwargs
 
 
 def convert_segmentation_map_to_binary_masks_fast(

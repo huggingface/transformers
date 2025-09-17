@@ -41,7 +41,7 @@ from ...image_utils import (
 )
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -1292,6 +1292,16 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             return generated_tokens
 
 
+class JanusImageProcessorKwargs(ImagesKwargs):
+    r"""
+    min_size (`int`, *optional*, defaults to 14):
+        The minimum allowed size for the resized image. Ensures that neither the height nor width
+        falls below this value after resizing.
+    """
+
+    min_size: int
+
+
 class JanusImageProcessor(BlipImageProcessor):
     r"""
     Constructs a JANUS image processor.
@@ -1329,6 +1339,8 @@ class JanusImageProcessor(BlipImageProcessor):
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
     """
+
+    valid_kwargs = JanusImageProcessorKwargs
 
     def __init__(
         self,

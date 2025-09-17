@@ -19,7 +19,6 @@ from typing import Optional, Union
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     divide_to_patches,
     group_images_by_shape,
     reorder_images,
@@ -41,6 +40,7 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
 )
+from .image_processing_llava_next import LlavaNextImageProcessorKwargs
 
 
 if is_torch_available():
@@ -53,19 +53,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class LlavaNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    image_grid_pinpoints (`list[list[int]]`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-        method.
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    """
-
-    image_grid_pinpoints: Optional[list[list[int]]]
-    do_pad: Optional[bool]
+LlavaNextFastImageProcessorKwargs = LlavaNextImageProcessorKwargs
 
 
 @auto_docstring

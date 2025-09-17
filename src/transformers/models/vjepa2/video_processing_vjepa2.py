@@ -19,7 +19,6 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...video_processing_utils import BaseVideoProcessor
 
 
-
 class VJEPA2VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

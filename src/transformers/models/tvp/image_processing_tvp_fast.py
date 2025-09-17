@@ -19,7 +19,6 @@ from typing import Optional, Union
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -39,6 +38,7 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
 )
+from .image_processing_tvp import TvpImageProcessorKwargs
 
 
 if is_torch_available():
@@ -51,25 +51,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class TvpFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_flip_channel_order (`bool`, *optional*):
-        Whether to flip the channel order of the image from RGB to BGR.
-    do_pad (`bool`, *optional*):
-        Whether to pad the image.
-    pad_size (`Dict[str, int]` or `SizeDict`, *optional*):
-        Size dictionary specifying the desired height and width for padding.
-    constant_values (`float` or `List[float]`, *optional*):
-        Value used to fill the padding area when `pad_mode` is `'constant'`.
-    pad_mode (`str`, *optional*):
-        Padding mode to use — `'constant'`, `'edge'`, `'reflect'`, or `'symmetric'`.
-    """
-
-    do_flip_channel_order: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[SizeDict]
-    constant_values: Optional[Union[float, list[float]]]
-    pad_mode: Optional[str]
+TvpFastImageProcessorKwargs = TvpImageProcessorKwargs
 
 
 @auto_docstring
