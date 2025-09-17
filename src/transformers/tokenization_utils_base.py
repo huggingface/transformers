@@ -1858,7 +1858,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         return chat_template
 
-    def parse_response(self, response: str, schema: list | dict | None = None):
+    def parse_response(self, response: str, schema: Optional[Union[list, dict]] = None):
         if schema is None:
             if getattr(self, "response_schema", None) is None:
                 raise AttributeError("This tokenizer does not have a `response_schema` for parsing chat responses!")
