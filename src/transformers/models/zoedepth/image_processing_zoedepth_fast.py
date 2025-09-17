@@ -20,6 +20,7 @@ from typing import (
 )
 
 import numpy as np
+import torch
 
 from ...image_processing_utils import (
     BatchFeature,
@@ -43,8 +44,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
     requires_backends,
@@ -53,16 +52,10 @@ from .image_processing_zoedepth import get_resize_output_image_size
 from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-    from torchvision.transforms import InterpolationMode
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -296,7 +289,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                 depth = F.resize(
                     depth,
                     size=[source_size[0] + 2 * pad_h, source_size[1] + 2 * pad_w],
-                    interpolation=InterpolationMode.BICUBIC,
+                    interpolation=F.InterpolationMode.BICUBIC,
                     antialias=False,
                 )
 
@@ -310,7 +303,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                 depth = F.resize(
                     depth,
                     size=target_size,
-                    interpolation=InterpolationMode.BICUBIC,
+                    interpolation=F.InterpolationMode.BICUBIC,
                     antialias=False,
                 )
             depth = depth.squeeze(0)

@@ -22,6 +22,8 @@
 import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
+import torch
+
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
 from ...image_transforms import center_to_corners_format, group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -33,31 +35,18 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-)
-
-
-if is_torch_available():
-    import torch
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
+from .image_processing_owlv2 import _scale_boxes, box_iou
 
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 
 if TYPE_CHECKING:
     from .modeling_owlv2 import Owlv2ObjectDetectionOutput
-
-
-if is_torch_available():
-    from .image_processing_owlv2 import _scale_boxes, box_iou
 
 
 class Owlv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs): ...

@@ -16,6 +16,8 @@
 
 from typing import Optional, Union
 
+import torch
+
 from transformers.models.beit.image_processing_beit_fast import BeitFastImageProcessorKwargs, BeitImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
@@ -34,18 +36,13 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 
 
-if is_torch_available():
-    import torch
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 

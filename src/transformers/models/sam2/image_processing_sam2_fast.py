@@ -26,6 +26,7 @@ from typing import Any, Optional, Union
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torchvision.ops.boxes import batched_nms
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
@@ -42,15 +43,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.ops.boxes import batched_nms
-elif is_torchvision_available():
-    from torchvision.ops.boxes import batched_nms
 
 
 class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):

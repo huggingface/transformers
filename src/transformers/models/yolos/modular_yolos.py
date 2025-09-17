@@ -1,17 +1,14 @@
 from typing import Optional, Union
 
+import torch
+
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_transforms import center_to_corners_format
 from ...utils import (
     TensorType,
-    is_torch_available,
     logging,
 )
-
-
-if is_torch_available():
-    import torch
 
 
 logger = logging.get_logger(__name__)

@@ -16,6 +16,8 @@
 
 from typing import TYPE_CHECKING, Optional, Union
 
+import torch
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -31,21 +33,16 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 
-
-if is_torch_available():
-    import torch
 
 if TYPE_CHECKING:
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 if is_torchvision_v2_available():
     import torchvision.transforms.v2.functional as F
-elif is_torchvision_available():
+else:
     import torchvision.transforms.functional as F
 
 

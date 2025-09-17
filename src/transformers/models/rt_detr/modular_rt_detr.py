@@ -1,6 +1,8 @@
 import pathlib
 from typing import Optional, Union
 
+import torch
+
 from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
@@ -20,21 +22,15 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
     requires_backends,
 )
 
 
-if is_torch_available():
-    import torch
-
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 
