@@ -105,8 +105,6 @@ def traced(
         if not _has_opentelemetry:
             return func
 
-        import functools
-
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             instance = args[0] if args and (hasattr(func, "__self__") and func.__self__ is not None) else None
