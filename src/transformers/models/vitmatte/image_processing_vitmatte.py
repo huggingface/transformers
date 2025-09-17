@@ -227,7 +227,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_pad=do_pad,
-            size_divisor=size_divisor,
+            size_divisibility=size_divisor,
         )
 
         # All transformations expect numpy arrays.

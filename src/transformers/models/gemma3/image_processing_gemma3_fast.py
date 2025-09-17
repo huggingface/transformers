@@ -188,6 +188,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched processing
         processed_images_grouped = {}

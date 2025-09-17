@@ -19,6 +19,7 @@ from typing import Optional, Union
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
+    SizeDict,
     group_images_by_shape,
     reorder_images,
 )
@@ -48,7 +49,7 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     pad_size = 8
 
-    def pad(self, images: "torch.Tensor", size: int) -> "torch.Tensor":
+    def pad(self, images: "torch.Tensor", size: SizeDict) -> "torch.Tensor":
         """
         Pad an image to make the height and width divisible by `size`.
 
@@ -62,8 +63,8 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
             `torch.Tensor`: The padded images.
         """
         height, width = get_image_size(images, ChannelDimension.FIRST)
-        pad_height = (height // size + 1) * size - height
-        pad_width = (width // size + 1) * size - width
+        pad_height = (height // size.height + 1) * size.height - height
+        pad_width = (width // size.width + 1) * size.width - width
 
         return F.pad(
             images,
@@ -77,7 +78,7 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_pad: bool,
-        pad_size: int,
+        pad_size: SizeDict,
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,

@@ -59,6 +59,7 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
     size = {"height": 384, "width": 384}
     min_size = 14
     do_resize = True
+    do_pad = True
     do_rescale = True
     do_normalize = True
     valid_kwargs = JanusFastImageProcessorKwargs
