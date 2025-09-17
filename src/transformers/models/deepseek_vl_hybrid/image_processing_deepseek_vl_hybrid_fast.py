@@ -62,7 +62,6 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     do_rescale = True
     do_normalize = True
-    do_pad = True
     valid_kwargs = DeepseekVLHybridFastImageProcessorKwargs
     high_res_image_mean = OPENAI_CLIP_MEAN
     high_res_image_std = OPENAI_CLIP_STD
