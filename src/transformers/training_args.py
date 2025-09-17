@@ -77,8 +77,10 @@ if is_accelerate_available():
 
     from .trainer_pt_utils import AcceleratorConfig
 
-    if is_accelerate_available("1.10.1"):
-        from accelerate.parallelism_config import ParallelismConfig
+if is_accelerate_available("1.10.1"):
+    from accelerate.parallelism_config import ParallelismConfig
+else:
+    ParallelismConfig = Any
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -1264,7 +1266,7 @@ class TrainingArguments:
             )
         },
     )
-    parallelism_config: Optional["ParallelismConfig"] = field(
+    parallelism_config: Optional[ParallelismConfig] = field(
         default=None,
         metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.10.1`")},
     )

@@ -19,7 +19,6 @@ from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -492,7 +491,7 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
                 `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
                 size `(decoder_attention_heads,)`.
-            past_key_values (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_values (`Cache`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -813,16 +812,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 - 0 indicates the head is **masked**.
 
             past_key_values (`EncoderDecoderCache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-                Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
-                four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
-                in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
-                when `config.use_cache=True`
-
-                Two formats are allowed:
-                - An [`~cache_utils.EncoderDecoderCache`] instance;
-                - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-                `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+                It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
