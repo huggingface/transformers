@@ -215,6 +215,9 @@ class Florence2VisionText2TextModelTester:
     def test_load_save_without_tied_weights(self):
         pass
 
+    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported qkv stride")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
 @require_torch
 class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
