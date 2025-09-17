@@ -239,6 +239,7 @@ if TYPE_CHECKING:
     from .nystromformer import *
     from .olmo import *
     from .olmo2 import *
+    from .olmo3 import *
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *
@@ -278,6 +279,8 @@ if TYPE_CHECKING:
     from .qwen3 import *
     from .qwen3_moe import *
     from .qwen3_next import *
+    from .qwen3_vl import *
+    from .qwen3_vl_moe import *
     from .rag import *
     from .recurrent_gemma import *
     from .reformer import *
