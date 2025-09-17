@@ -3488,7 +3488,7 @@ def _get_test_info():
         tb_next = tb
     test_traceback = tb
 
-    origin_method_being_patched = frame_of_patched_obj.frame.f_locals['orig_method']
+    origin_method_being_patched = frame_of_patched_obj.frame.f_locals["orig_method"]
 
     # An iterable of type `traceback.StackSummary` with each element of type `FrameSummary`
     stack = traceback.extract_stack()
