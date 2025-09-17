@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 
 
 class HeliumConfig(PretrainedConfig):
@@ -74,6 +74,8 @@ class HeliumConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
     ```python
     >>> from transformers import HeliumModel, HeliumConfig
     >>> # Initializing a Helium 2b style configuration
@@ -123,6 +125,7 @@ class HeliumConfig(PretrainedConfig):
         bos_token_id=1,
         attention_bias=False,
         mlp_bias=False,
+        layer_types=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -141,6 +144,11 @@ class HeliumConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         super().__init__(
             pad_token_id=pad_token_id,
