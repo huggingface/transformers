@@ -151,6 +151,9 @@ class DeepseekV3Config(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_experts": "n_routed_experts",
+    }
 
     def __init__(
         self,

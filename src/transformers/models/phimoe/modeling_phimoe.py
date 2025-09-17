@@ -253,7 +253,7 @@ class PhimoeExperts(nn.ModuleList):
             self.append(PhimoeMLP(config))
 
     def forward(
-        self, hidden_states: torch.Tensor, tok_k_index: torch.Tensor, top_k_weights: torch.Tensor
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
         """
         Args:

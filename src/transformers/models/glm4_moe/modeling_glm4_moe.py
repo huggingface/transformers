@@ -304,7 +304,7 @@ class Glm4MoeNaiveMoe(nn.ModuleList):
             self += [Glm4MoeMLP(config, intermediate_size=config.moe_intermediate_size)]
 
     def forward(
-        self, hidden_states: torch.Tensor, tok_k_index: torch.Tensor, top_k_weights: torch.Tensor
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
         """
         Args:
