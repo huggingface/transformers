@@ -17,15 +17,13 @@ from shutil import copyfile
 from typing import Optional
 
 from tokenizers import processors
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers.models import BPE, Unigram
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import is_sentencepiece_available, logging
+from ...utils import is_sentencepiece_available, logging, requires_backends
+from ...convert_slow_tokenizer import _get_prepend_scheme, SpmTokenizer
 
-
-if is_sentencepiece_available():
-    from .tokenization_llama import LlamaTokenizer
-else:
-    LlamaTokenizer = None
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
@@ -117,7 +115,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = LlamaTokenizer
+    slow_tokenizer_class = None  # No slow tokenizer class needed
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -146,14 +144,43 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
                 " you can ignore this message."
             )
             legacy = True
-        self.legacy = legacy
+        self.legacy = False
+        legacy = False
+        
+        # Set add_prefix_space attribute for use in override methods
+        self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
 
-        if add_prefix_space is not None:
-            kwargs["from_slow"] = True
+        # Handle from_slow parameter - when True, force SpmTokenizer path even if tokenizer.json exists
+        from_slow = kwargs.pop("from_slow", False)
 
+        # Handle tokenizer creation
+        if tokenizer_file is not None and not from_slow:
+            # Load from existing tokenizer.json file (unless from_slow=True)
+            from tokenizers import Tokenizer as TokenizerFast
+            fast_tokenizer = TokenizerFast.from_file(tokenizer_file)
+        elif vocab_file is not None:
+            # Create LLaMA-specific tokenizer using SpmTokenizer
+            # This path is used when:
+            # 1. vocab_file is provided and no tokenizer_file
+            # 2. from_slow=True (forces SpmTokenizer path even if tokenizer.json exists)
+            spm_tokenizer = SpmTokenizer(
+                vocab_file=vocab_file,
+                handle_byte_fallback=True,
+                legacy=legacy,
+                add_prefix_space=add_prefix_space if add_prefix_space is not None else True,
+                vocab=self._vocab,
+                #unk_id=self._unk_id,
+                normalizer=self._normalizer,
+                pre_tokenizer=self._pre_tokenizer,
+                decoder=self._decoder,
+            )
+            fast_tokenizer = spm_tokenizer.create_tokenizer()
+        else:
+            raise ValueError("Either tokenizer_file or vocab_file must be provided")
+
+        # Initialize the base class with the fast tokenizer
         super().__init__(
-            vocab_file=vocab_file,
-            tokenizer_file=tokenizer_file,
+            tokenizer_object=fast_tokenizer,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -170,6 +197,45 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self.update_post_processor()
         self.use_default_system_prompt = use_default_system_prompt
         self.vocab_file = vocab_file
+
+    def _vocab(self, proto):
+        """Vocabulary handling for this tokenizer."""
+        # First 3 special pieces are fixed for LLaMA
+        vocab = [
+            ("<unk>", 0.0),
+            ("<s>", 0.0),
+            ("</s>", 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def _decoder(self, replacement, add_prefix_space):
+        """Decoder configuration for this tokenizer."""
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def _normalizer(self):
+        """Normalizer configuration for this tokenizer."""
+        if self.legacy:
+            sequence = []
+            if self.add_prefix_space:
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None
+
+    def _pre_tokenizer(self, replacement, add_prefix_space):
+        """Pre-tokenizer configuration for this tokenizer."""
+        if not self.legacy:
+            prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
+            return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+        return None
 
     def update_post_processor(self):
         """
