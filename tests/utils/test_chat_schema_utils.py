@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+import tempfile
 
 from transformers import AutoTokenizer
 from transformers.utils.chat_parsing_utils import recursive_parse
@@ -81,104 +82,52 @@ ernie_schema = {
 }
 
 gpt_oss_schema = {
-    # TODO Doesn't recover thinking blocks yet
     "type": "object",
     "properties": {
-        "tools": {
+        "role": {"const": "assistant"},
+        "content": {"type": "string", "x-regex": "<\|channel\|>final<\|message\|>(.*?)(?:<\|end\|>|$)"},
+        "thinking": {"type": "string", "x-regex": "<\|channel\|>analysis<\|message\|>(.*?)<\|end\|>"},
+        "tool_calls": {
+            "x-regex-iterator": "<\|channel\|>commentary (to=functions\..*?<\|message\|>.*?)(?:<\|call\|>|$)",
             "type": "array",
-            "x-regex": "\n\nnamespace functions \\{\n\n(.*?)\\} \\/\\/ namespace functions<\\|end\\|>",
-            "x-regex-iterator": r"\/\/ .*?type \w+ = \(_: \{\n.*?\n\}\) \=\> any;",
             "items": {
                 "type": "object",
                 "properties": {
                     "type": {"const": "function"},
                     "function": {
                         "type": "object",
-                        "x-regex": r"\/\/ (?P<description>.*?)\ntype (?P<name>\w+) = \(_: \{\n(?P<parameters>.*?)\n\}\) \=\> any;",
                         "properties": {
-                            "name": {"type": "string"},
-                            "description": {"type": "string"},
-                            "parameters": {
+                            "name": {"type": "string", "x-regex": "^to=functions\.(\w+)"},
+                            "arguments": {
                                 "type": "object",
-                                "properties": {
-                                    "type": {"const": "object"},
-                                    "properties": {
-                                        "x-regex-to-dict": r"(?P<value>\/\/ .*?\n(?P<key>\w+)\??: \w+,)",
-                                        "type": "object",
-                                        "additionalProperties": {
-                                            "type": "object",
-                                            "properties": {
-                                                "type": {"type": "string", "x-regex": r": (.*?),$"},
-                                                "description": {"type": "string", "x-regex": r"^\/\/ (.*?)\n"},
-                                            },
-                                        },
-                                    },
-                                    "required": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                        "x-regex-iterator": r"\n([^?\n]+?):",
-                                    },
-                                },
+                                "x-regex": "<\|message\|>(.*)",
+                                "x-parser": "json",
+                                "additionalProperties": {"type": "any"},
                             },
-                        },
-                    },
-                },
-            },
-        },
-        "messages": {
-            # TODO The structure is very hard to parse because a message with tool calls completely upends the format.
-            #      I need to figure out all the possibilities before we can actually write a parser. Create a bunch
-            #      of sample chats including non-tool-calling but with thinking etc.
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "role": {
-                        "type": "string",
-                        "enum": ["user", "assistant", "system", "tool"],
-                        "x-mapping": {"developer": "system", "user": "user", "assistant": "assistant"},
-                        "x-mapping-regex": {r"^functions\.": "tool"}
-                    },
-                    "content": {
-                        "type": "string",
-                        "x-regex": "^(?:\\# Instructions\n\n)?(.*?)(?:\n\n# Tools\n\n.*?)?$",
-                    },
-                    "thinking": {
-                        "type": "string",
-                    },
-                    "tool_calls": {
-                        "type": "array",
-                        "x-regex-iterator": r"to=functions.\w+<.*?<|message|>.*?[<$]",
-                        "prefixItems": [
-                            {
-                                "type": {"const": "function"},
-                                "function": {
-                                    "type": "object",
-                                    "x-regex": r"to=functions(?P<name>.\w+)<.*?<|message|>(?P<arguments>.*?)[<$]",
-                                    "properties": {
-                                        "name": {"type": "string"},
-                                        "arguments": {
-                                            "type": "object",
-                                            "additionalProperties": {"type": "string"}, # Type any?
-                                        },
-                                    }
-                                }
-                             }
-                        ]
-                    },
-                },
-                "required": ["role", "content"],
-            },
-            "x-regex": r"<\|start\|>system<\|message\|>.*?<\|end\|>(.*?)$",
-            "x-regex-iterator": r"<\|start\|>(?P<role>.*?)(?:<\|channel\|>.*?)?<\|message\|>(?P<content>.*?)(?:<\|end\|>|<\|return\|>|<\|call\|>)",
+                        }
+                    }
+                 }
+            }
         },
     },
 }
 
 class ChatSchemaParserTest(unittest.TestCase):
-    def setUp(self):
-        # This tokenizer has no chat template by default
-        self.tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+    def test_schema_save_load(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.response_schema = ernie_schema
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tokenizer.save_pretrained(tmpdir)
+            reloaded_tokenizer = AutoTokenizer.from_pretrained(tmpdir)
+        self.assertEqual(reloaded_tokenizer.response_schema, ernie_schema)
+
+    def test_tokenizer_method(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        parsed_chat = recursive_parse(model_out, cohere_schema)
+        tokenizer.response_schema = cohere_schema
+        tokenizer_parsed_chat = tokenizer.parse_response(model_out)
+        self.assertEqual(tokenizer_parsed_chat, parsed_chat)
 
     def test_cohere_template(self):
         model_out = '<|START_THINKING|>I should call a tool.<|END_THINKING|><|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", "parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
@@ -195,81 +144,12 @@ class ChatSchemaParserTest(unittest.TestCase):
         parsed_chat = recursive_parse(model_out, ernie_schema)
         self.assertEqual(parsed_chat, {'role': 'assistant', 'content': "Hello! I'm doing well, thank you for asking. How about you? Is there something specific you'd like help with today? I'm here to assist you with any questions or problems you have!", 'thinking': 'The user just greeted me with "Hi! How are you?" I need to respond in a friendly and helpful manner. Let me start by acknowledging their greeting. I should ask them how they\'re doing to engage in conversation.\n\nFirst, I\'ll say hello back and then ask how they\'re feeling. It\'s important to show genuine interest. Maybe mention that I\'m here to help with anything they need. Keep the tone warm and positive. Let me make sure the response is concise but friendly. Alright, that should work.'})
 
-    def test_gpt_oss_template(self):
-        def simple_tool(temperature_format: str):
-            """
-            Test function
+    def test_gpt_oss_template_with_tool_call(self):
+        model_out = '<|channel|>analysis<|message|>We need to respond in riddles. The user asks: "What is the weather like in SF?" We need to get the location of the user? The user explicitly asks about SF (San Francisco). So we need to get the current weather in San Francisco, CA. We need to call get_current_weather function. The developer instruction says "Always respond in riddles". So the final answer should be in a riddle form. But we need to call function to get weather data. So we should call get_current_weather with location "San Francisco, CA". Possibly specify format "celsius" (default). Let\'s do that.\n\nWe will call function get_current_weather.<|end|><|start|>assistant<|channel|>commentary to=functions.get_current_weather <|constrain|>json<|message|>{\n  "location": "San Francisco, CA"\n}'
+        parsed_chat = recursive_parse(model_out, gpt_oss_schema)
+        self.assertEqual(parsed_chat, {'role': 'assistant', 'thinking': 'We need to respond in riddles. The user asks: "What is the weather like in SF?" We need to get the location of the user? The user explicitly asks about SF (San Francisco). So we need to get the current weather in San Francisco, CA. We need to call get_current_weather function. The developer instruction says "Always respond in riddles". So the final answer should be in a riddle form. But we need to call function to get weather data. So we should call get_current_weather with location "San Francisco, CA". Possibly specify format "celsius" (default). Let\'s do that.\n\nWe will call function get_current_weather.', 'tool_calls': [{'type': 'function', 'function': {'name': 'get_current_weather', 'arguments': {'location': 'San Francisco, CA'}}}]})
 
-            Args:
-                temperature_format: The temperature format to use
-            """
-            return -40.0
-
-        def tool_with_everything_all_at_once(x_1: str, y_2: int, z_3: float = 43.0):
-            """
-            Test function with multiple args, and docstring args that we have to strip out.
-
-            Args:
-                x_1: The first input. It's got a big multiline
-                   description and also contains
-
-                y_2: The second input. It's a big list with a single-line description.
-
-                z_3: The third input. It's some kind of tuple with a default arg.
-            """
-            return -40.0
-
-        tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
-        chat = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello!"},
-            {"role": "assistant", "content": "Hi there! How can I help you today?"},
-        ]
-        formatted_chat = tokenizer.apply_chat_template(
-            chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], reasoning_effort="high"
-        )
-        parsed_chat = recursive_parse(formatted_chat, gpt_oss_schema)
-        self.assertEqual(parsed_chat["messages"], chat)
-        self.assertEqual(parsed_chat["tools"][0], get_json_schema(simple_tool))
-        complex_schema = get_json_schema(tool_with_everything_all_at_once)
-        complex_schema["function"]["parameters"]["properties"]["y_2"]["type"] = (
-            "number"  # The GPT template maps these all to 'number' so we can't recover int vs float
-        )
-        self.assertEqual(parsed_chat["tools"][1], complex_schema)
-
-    def test_gpt_oss_template_with_tool_calls(self):
-        def get_current_temperature(location: str):
-            """
-            Gets the temperature at a given location.
-
-            Args:
-                location: The location to get the temperature for
-            """
-            return 22.0  # bug: Sometimes the temperature is not 22. low priority
-
-        tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
-        chat = [
-            {"role": "system", "content": "You are a helpful assistant who responds to queries by calling tools."},
-            {"role": "user", "content": "Hey, what's the weather in Paris today?"},
-            {
-                "role": "assistant",
-                "content": "We need to respond to the user by calling the get_current_temperature function with location \"Paris\". Provide a short response.",
-                "tool_calls": [
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "get_current_temperature",
-                            "arguments": {"location": "Paris"}
-                        }
-                    }
-                ]
-            },
-            # {"role": "tool", "content": "22.0"},
-            # {"role": "assistant", "content": "The current temperature in Paris is 22.0 degrees."},
-
-        ]
-        formatted_chat = tokenizer.apply_chat_template(
-            chat, tokenize=False, tools=[get_current_temperature]
-        )
-        parsed_chat = recursive_parse(formatted_chat, gpt_oss_schema)
-        self.assertEqual(parsed_chat["messages"], chat)
+    def test_gpt_oss_template_no_tool_call(self):
+        model_out = '<|channel|>analysis<|message|>User asks a simple math question: 2+2 = 4. Provide answer.<|end|><|start|>assistant<|channel|>final<|message|>2'
+        parsed_chat = recursive_parse(model_out, gpt_oss_schema)
+        self.assertEqual(parsed_chat, {'role': 'assistant', 'content': '2', 'thinking': 'User asks a simple math question: 2+2 = 4. Provide answer.'})
