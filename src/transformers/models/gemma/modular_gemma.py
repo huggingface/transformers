@@ -20,7 +20,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -28,6 +28,8 @@ from ...processing_utils import Unpack
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
@@ -105,6 +107,8 @@ class GemmaConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
     ```python
     >>> from transformers import GemmaModel, GemmaConfig
     >>> # Initializing a Gemma gemma-7b style configuration
@@ -153,6 +157,7 @@ class GemmaConfig(PretrainedConfig):
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,
+        layer_types=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -170,6 +175,11 @@ class GemmaConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -368,6 +378,23 @@ class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
+class GemmaAttention(LlamaAttention):
+    pass
+
+
+class GemmaDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: GemmaConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = GemmaAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = GemmaMLP(config)
+        self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attention_type = config.layer_types[layer_idx]
+
+
 class GemmaPreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -435,7 +462,7 @@ class GemmaModel(LlamaModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping["full_attention"],
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,

@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 
 
 class GemmaConfig(PretrainedConfig):
@@ -77,6 +77,8 @@ class GemmaConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
     ```python
     >>> from transformers import GemmaModel, GemmaConfig
     >>> # Initializing a Gemma gemma-7b style configuration
@@ -125,6 +127,7 @@ class GemmaConfig(PretrainedConfig):
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,
+        layer_types=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -142,6 +145,11 @@ class GemmaConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         super().__init__(
             pad_token_id=pad_token_id,
