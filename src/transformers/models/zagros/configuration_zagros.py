@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""ZagrosBase model configuration"""
+"""Zagros model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -22,10 +22,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class ZagrosBaseConfig(PretrainedConfig):
+class ZagrosConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ZagrosBaseModel`]. It is used to instantiate a
-    ZagrosBase model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`ZagrosModel`]. It is used to instantiate a
+    Zagros model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of [Qwen/Qwen3-15B-A2B](https://huggingface.co/Qwen/Qwen3-15B-A2B).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -34,8 +34,8 @@ class ZagrosBaseConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the ZagrosBase model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`ZagrosBaseModel`]
+            Vocabulary size of the Zagros model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`ZagrosModel`]
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 6144):
@@ -128,27 +128,27 @@ class ZagrosBaseConfig(PretrainedConfig):
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
         mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
-            Indicate which layers use ZagrosBaseMLP rather than ZagrosBaseSparseMoeBlock
+            Indicate which layers use ZagrosMLP rather than ZagrosSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
 
     ```python
-    >>> from transformers import ZagrosBaseModel, ZagrosBaseConfig
+    >>> from transformers import ZagrosModel, ZagrosConfig
 
-    >>> # Initializing a ZagrosBase style configuration
-    >>> configuration = ZagrosBaseConfig()
+    >>> # Initializing a Zagros style configuration
+    >>> configuration = ZagrosConfig()
 
     >>> # Initializing a model from the Qwen3-15B-A2B" style configuration
-    >>> model = ZagrosBaseModel(configuration)
+    >>> model = ZagrosModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "zagros_base"
+    model_type = "zagros"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    # Default tensor parallel plan for base model `ZagrosBase`
+    # Default tensor parallel plan for base model `Zagros`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -237,4 +237,4 @@ class ZagrosBaseConfig(PretrainedConfig):
         )
 
 
-__all__ = ["ZagrosBaseConfig"]
+__all__ = ["ZagrosConfig"]

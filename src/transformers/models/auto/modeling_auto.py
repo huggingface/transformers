@@ -418,7 +418,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
-        ("zagros_base", "ZagrosBaseModel"),
+        ("zagros", "ZagrosModel"),
         ("zagros_next", "ZagrosNextModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
@@ -745,7 +745,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetLMHeadModel"),
         ("xlstm", "xLSTMForCausalLM"),
         ("xmod", "XmodForCausalLM"),
-        ("zagros_base", "ZagrosBaseForCausalLM"),
+        ("zagros", "ZagrosForCausalLM"),
         ("zagros_next", "ZagrosNextForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
@@ -1297,7 +1297,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetForSequenceClassification"),
         ("xmod", "XmodForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
-        ("zagros_base", "ZagrosBaseForSequenceClassification"),
+        ("zagros", "ZagrosForSequenceClassification"),
         ("zagros_next", "ZagrosNextForSequenceClassification"),
         ("zamba", "ZambaForSequenceClassification"),
         ("zamba2", "Zamba2ForSequenceClassification"),
@@ -1386,7 +1386,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetForQuestionAnsweringSimple"),
         ("xmod", "XmodForQuestionAnswering"),
         ("yoso", "YosoForQuestionAnswering"),
-        ("zagros_base", "ZagrosBaseForQuestionAnswering"),
+        ("zagros", "ZagrosForQuestionAnswering"),
         ("zagros_next", "ZagrosNextForQuestionAnswering"),
     ]
 )
@@ -1506,7 +1506,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetForTokenClassification"),
         ("xmod", "XmodForTokenClassification"),
         ("yoso", "YosoForTokenClassification"),
-        ("zagros_base", "ZagrosBaseForTokenClassification"),
+        ("zagros", "ZagrosForTokenClassification"),
         ("zagros_next", "ZagrosNextForTokenClassification"),
     ]
 )

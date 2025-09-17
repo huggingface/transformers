@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_zagros_base import *
-    from .modeling_zagros_base import *
+    from .configuration_zagros import *
+    from .modeling_zagros import *
 else:
     import sys
 
