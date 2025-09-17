@@ -30,6 +30,33 @@ rendered properly in your Markdown viewer.
 [GptOss](https://huggingface.co/papers/2508.10925) is a mixture-of-experts (MoEs) model released by OpenAI designed for powerful reasoning, agentic tasks, and versatile developer use cases.It comprises of two models:gpt-oss-120b and gpt-oss-20b.
 
 
+> [!TIP]
+> Click on the GptOss models in the right sidebar for more examples of how to apply GptOss to different language tasks.
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. GptOss utilizes MXFP4 to reduce the memory requirement for running inference of these models.Refer to the [Quantization](../quantization/mxfp4) guide on MXFP4 for more information.
+
+## Notes
+
+- To check if MXFP4 kernels are loaded, you can use the Hub CLI with the following command:
+
+```
+hf cache scan
+```
+
+- Sample output:
+
+```
+REPO ID                          REPO TYPE SIZE ON DISK
+-------------------------------- --------- ------------
+kernels-community/triton_kernels model           536.2K
+openai/gpt-oss-20b               model            13.8G
+```
+
+This indicates the MXFP4 kernels were fetched and are available for execution.
+
+-
+
+
 ## GptOssConfig
 
 [[autodoc]] GptOssConfig
