@@ -313,7 +313,7 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
-        self.processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V", size={"shortest_edge": 43200, "longest_edge": 43200})
+        self.processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V", size={"shortest_edge": 10800, "longest_edge": 10800})
         self.message = [
             {
                 "role": "user",
