@@ -121,6 +121,7 @@ class PaliGemmaConfig(PretrainedConfig):
                 vocab_size=vocab_size,
             )
 
+        # BC: `use_bidirectional_attention` was originally unset in PaliGemma1. PaliGemma1 wants to default to True.
         if self.text_config.use_bidirectional_attention is None:
             self.text_config.use_bidirectional_attention = True
 
