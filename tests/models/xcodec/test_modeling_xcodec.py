@@ -151,10 +151,6 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             self.assertTrue(model.is_gradient_checkpointing)
 
-    @unittest.skip("XcodecModel cannot be tested with meta device")
-    def test_can_load_with_meta_device_context_manager(self):
-        pass
-
     @unittest.skip(reason="We cannot configure to output a smaller model.")
     def test_model_is_small(self):
         pass
