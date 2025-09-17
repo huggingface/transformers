@@ -16,6 +16,7 @@ import tempfile
 import unittest
 
 from transformers import AutoTokenizer
+from transformers.testing_utils import require_jinja, require_jmespath
 from transformers.utils.chat_parsing_utils import recursive_parse
 
 
@@ -115,6 +116,8 @@ gpt_oss_schema = {
 }
 
 
+@require_jinja
+@require_jmespath
 class ChatSchemaParserTest(unittest.TestCase):
     def test_schema_save_load(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
