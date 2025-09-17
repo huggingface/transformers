@@ -72,15 +72,16 @@ class MixtralMLP(nn.Module):
         return current_hidden_states
 
 
-class MixtralRouter(nn.Linear):
+class MixtralRouter(nn.Module):
     """
     Gate module which determines which experts to use for each token.
     It uses a separate set of parameters for each expert.
     """
 
     def __init__(self, config: MixtralConfig):
+        super().__init__()
         self.num_experts = config.num_experts
-        super().__init__(config.hidden_size, self.num_experts, bias=False)
+        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
         self.top_k = config.num_experts_per_tok
         self.jitter_noise = config.router_jitter_noise
 
@@ -96,7 +97,7 @@ class MixtralRouter(nn.Linear):
         if self.training and self.jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        router_logits = super().forward(hidden_states)
+        router_logits = torch.nn.functional.linear(hidden_states, self.weight)
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
