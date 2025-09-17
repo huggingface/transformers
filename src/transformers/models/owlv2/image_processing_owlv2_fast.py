@@ -39,24 +39,16 @@ from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
 from .image_processing_owlv2 import _scale_boxes, box_iou
 
 
+if TYPE_CHECKING:
+    from .modeling_owlv2 import Owlv2ObjectDetectionOutput
+
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
 else:
     from torchvision.transforms import functional as F
 
 
-if TYPE_CHECKING:
-    from .modeling_owlv2 import Owlv2ObjectDetectionOutput
-
-
-class Owlv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with grey pixels.
-    """
-
-    do_pad: Optional[bool]
+class Owlv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs): ...
 
 
 @auto_docstring
@@ -278,7 +270,12 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         disable_grouping: Optional[bool],
         constant_value: float = 0.5,
+        **kwargs,
     ) -> list["torch.Tensor"]:
+        """
+        Unlike the Base class `self.pad` where all images are padded to the maximum image size,
+        Owlv2 pads an image to square.
+        """
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -378,7 +375,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
-            processed_images = self.pad(processed_images, disable_grouping=disable_grouping)
+            processed_images = self.pad(processed_images, constant_value=0.5, disable_grouping=disable_grouping)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             processed_images, disable_grouping=disable_grouping

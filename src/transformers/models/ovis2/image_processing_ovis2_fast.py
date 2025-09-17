@@ -198,6 +198,7 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         if crop_to_patches and max_patches > 1:
             grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

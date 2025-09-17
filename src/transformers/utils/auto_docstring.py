@@ -131,6 +131,23 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    do_pad = {
+        "description": """
+    Whether to pad the image. Padding is done either to the largest size in the batch
+    or to a fixed square size per image. The exact padding strategy depends on the model.
+    """,
+        "shape": None,
+    }
+
+    pad_size = {
+        "description": """
+    The size in `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+        height and width in the batch. Applied only when `do_pad=True.`
+    """,
+        "shape": None,
+    }
+
     do_rescale = {
         "description": """
     Whether to rescale the image.

@@ -48,14 +48,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class LlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        do_pad (`bool`, *optional*):
-            Whether to pad the image to a square based on the longest edge.
-    """
-
-    do_pad: Optional[bool]
+class LlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs): ...
 
 
 @auto_docstring
@@ -139,6 +132,7 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

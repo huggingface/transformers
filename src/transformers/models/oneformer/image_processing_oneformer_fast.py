@@ -526,24 +526,9 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `BatchFeature`: Padded images and optional pixel masks.
         """
-        pad_size = get_max_height_width(images)
-
-        padded_images = []
-        pixel_masks = []
-
-        for image in images:
-            padded_image = self._pad_image_fast(
-                image=image,
-                output_size=pad_size,
-                constant_values=0,
-            )
-            padded_images.append(padded_image)
-
-            if return_pixel_mask:
-                input_height, input_width = image.shape[1], image.shape[2]
-                mask = torch.zeros(pad_size, dtype=torch.int64, device=image.device)
-                mask[:input_height, :input_width] = 1
-                pixel_masks.append(mask)
+        outputs = super().pad(images, return_mask=return_pixel_mask)
+        padded_images = outputs[0] if return_pixel_mask else outputs
+        pixel_masks = outputs[1] if return_pixel_mask else None
 
         if return_tensors:
             padded_images = torch.stack(padded_images, dim=0)
