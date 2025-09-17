@@ -514,7 +514,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         for i, layer_module in enumerate(self.block):
             layer_head_mask = head_mask[i]
-            cross_attn_layer_head_mask = cross_attn_head_mask[i]d
+            cross_attn_layer_head_mask = cross_attn_head_mask[i]
 
             hidden_states, position_bias, encoder_decoder_position_bias = layer_module(
                 hidden_states,
