@@ -293,9 +293,7 @@ class GemmaPreTrainedModel(PreTrainedModel):
         if "RMSNorm" in module.__class__.__name__:
             # Norms can exist without weights (in which case they are None from torch primitives)
             if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(0.0)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
+                module.weight.data.zero_()
 
 
 class GemmaRotaryEmbedding(nn.Module):

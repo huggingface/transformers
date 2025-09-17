@@ -368,17 +368,15 @@ class GemmaMLP(LlamaMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
-class GemmaPreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
+class GemmaPreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
 
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         if "RMSNorm" in module.__class__.__name__:
             # Norms can exist without weights (in which case they are None from torch primitives)
             if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(0.0)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
+                module.weight.data.zero_()
 
 
 class GemmaModel(LlamaModel):

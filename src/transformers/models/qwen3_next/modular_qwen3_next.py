@@ -708,9 +708,7 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Qwen3NextRMSNorm):
             # Norms can exist without weights (in which case they are None from torch primitives)
             if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(0.0)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
+                module.weight.data.zero_()
 
 
 class Qwen3NextModel(Qwen3NextPreTrainedModel):
