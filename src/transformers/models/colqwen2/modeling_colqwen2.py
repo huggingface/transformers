@@ -22,15 +22,18 @@
 from dataclasses import dataclass
 from typing import Optional
 
-import torch
 from torch import nn
 
 from transformers import AutoModelForImageTextToText
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available
 from .configuration_colqwen2 import ColQwen2Config
+
+
+if is_torch_available():
+    import torch
 
 
 @auto_docstring

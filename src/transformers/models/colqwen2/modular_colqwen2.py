@@ -16,18 +16,19 @@
 from dataclasses import dataclass
 from typing import Optional, Union
 
-import torch
-
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
 from ..colpali.processing_colpali import ColPaliProcessor
 from .configuration_colqwen2 import ColQwen2Config
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 

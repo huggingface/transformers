@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
 import numpy as np
-import PIL
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -55,6 +54,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     filter_out_non_signature_kwargs,
+    is_vision_available,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -72,6 +72,9 @@ from ..llama.modeling_llama import eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
 
+
+if is_vision_available():
+    import PIL
 
 logger = logging.get_logger(__name__)
 

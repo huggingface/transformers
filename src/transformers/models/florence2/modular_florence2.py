@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
 import numpy as np
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -31,12 +30,7 @@ from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
 from ..beit.modeling_beit import BeitDropPath
@@ -44,6 +38,9 @@ from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
 from ..llava.processing_llava import LlavaProcessorKwargs
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 

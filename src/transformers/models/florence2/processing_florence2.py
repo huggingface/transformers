@@ -22,14 +22,16 @@ import re
 from typing import Any, Optional, Union
 
 import numpy as np
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import is_torch_available, logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 

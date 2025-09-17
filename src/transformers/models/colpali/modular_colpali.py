@@ -16,16 +16,17 @@
 
 from typing import Optional, Union
 
-import torch
-
 from transformers.models.paligemma.processing_paligemma import IMAGE_TOKEN, PaliGemmaProcessor, build_string_from_input
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import is_torch_available, logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 

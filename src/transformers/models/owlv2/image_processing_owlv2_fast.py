@@ -39,13 +39,14 @@ from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
 from .image_processing_owlv2 import _scale_boxes, box_iou
 
 
-if TYPE_CHECKING:
-    from .modeling_owlv2 import Owlv2ObjectDetectionOutput
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
 else:
     from torchvision.transforms import functional as F
+
+
+if TYPE_CHECKING:
+    from .modeling_owlv2 import Owlv2ObjectDetectionOutput
 
 
 class Owlv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs): ...

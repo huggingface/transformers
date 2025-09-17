@@ -23,7 +23,6 @@ from collections.abc import Iterable
 from typing import Optional, Union
 
 import numpy as np
-import PIL
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
@@ -41,7 +40,11 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+
+
+if is_vision_available():
+    import PIL
 
 
 logger = logging.get_logger(__name__)
