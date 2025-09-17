@@ -23,7 +23,8 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_masks_for_generate as create_masks_for_generate_base
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -345,7 +346,8 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
                 # The images cannot attend to future images, but can attend to all prev images and to itself
                 # bidirectionally
                 is_image = (token_type_ids == 1).to(cache_position.device)
-                new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+                is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+                new_image_start = is_image & ~is_previous_image
                 image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
                 image_group_ids = torch.where(
                     is_image, image_group_ids, torch.full_like(token_type_ids, -1, device=is_image.device)
@@ -550,6 +552,10 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             **kwargs,
         )
 
+        # position_ids in Paligemma are 1-indexed
+        if model_inputs.get("position_ids") is not None:
+            model_inputs["position_ids"] += 1
+
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
         # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
         if cache_position[0] == 0:
@@ -584,14 +590,15 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             # First find where a new image block starts: 1 if image and previous not image
             # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
             is_image = (token_type_ids == 1).to(cache_position.device)
-            new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+            is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+            new_image_start = is_image & ~is_previous_image
             image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
             image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
             mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
                 token_type_ids.to(cache_position.device), image_group_ids
             )
 
-        return create_masks_for_generate(**mask_kwargs)
+        return create_masks_for_generate_base(**mask_kwargs)
 
 
 __all__ = ["PaliGemmaForConditionalGeneration", "PaliGemmaPreTrainedModel", "PaliGemmaModel"]

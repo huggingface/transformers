@@ -825,7 +825,8 @@ class Gemma3Model(PaliGemmaModel):
                 # The images cannot attend to future images, but can attend to all prev images and to itself
                 # bidirectionally
                 is_image = (token_type_ids == 1).to(cache_position.device)
-                new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+                is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+                new_image_start = is_image & ~is_previous_image
                 image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
                 image_group_ids = torch.where(
                     is_image, image_group_ids, torch.full_like(token_type_ids, -1, device=is_image.device)
@@ -993,6 +994,42 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        pixel_values=None,
+        attention_mask=None,
+        token_type_ids=None,
+        use_cache=True,
+        logits_to_keep=None,
+        labels=None,
+        **kwargs,
+    ):
+        # Overwritten -- custom `position_ids` and `pixel_values` handling
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            cache_position=cache_position,
+            use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
+            token_type_ids=token_type_ids,
+            **kwargs,
+        )
+
+        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+        # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
+        if cache_position[0] == 0:
+            model_inputs["pixel_values"] = pixel_values
+
+        return model_inputs
 
 
 class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
