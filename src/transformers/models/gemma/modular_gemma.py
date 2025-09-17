@@ -34,6 +34,7 @@ from ..llama.modeling_llama import (
     LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
 )
 from ..llama.tokenization_llama import LlamaTokenizer
 
@@ -338,6 +339,10 @@ class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
                 current_sub_tokens.append(token)
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
+
+
+class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 class GemmaRMSNorm(nn.Module):
