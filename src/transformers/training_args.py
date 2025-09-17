@@ -1368,7 +1368,10 @@ class TrainingArguments:
     hub_private_repo: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists."
+            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the "
+            "organization's default is private. This value is ignored if the repo already exists. If reporting to "
+            "Trackio with deployment to Hugging Face Spaces enabled, the same logic determines whether the Space is "
+            "private."
         },
     )
     hub_always_push: bool = field(
