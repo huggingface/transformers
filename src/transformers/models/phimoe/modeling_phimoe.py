@@ -218,8 +218,22 @@ class PhimoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class PhieMoeMLP(MixtralMLP):
-    pass
+class PhieMoeMLP(nn.Module):
+    def __init__(self, config: PhimoeConfig):
+        super().__init__()
+        self.ffn_dim = config.intermediate_size
+        self.hidden_dim = config.hidden_size
+
+        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
+        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states):
+        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
+        current_hidden_states = self.w2(current_hidden_states)
+        return current_hidden_states
 
 
 class PhimoeMLP(nn.Module):

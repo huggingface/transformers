@@ -27,7 +27,7 @@ from ...modeling_layers import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .configuration_phimoe import PhimoeConfig
 from ..llama.modeling_llama import LlamaAttention
-from ..mixtral.modeling_mixtral import MixtralBlockSparseTop2MLP, MixtralDecoderLayer, MixtralForCausalLM, MixtralModel, MixtralExperts, MixtralPreTrainedModel 
+from ..mixtral.modeling_mixtral import MixtralMLP, MixtralDecoderLayer, MixtralForCausalLM, MixtralModel, MixtralExperts, MixtralPreTrainedModel 
 
 
 class PhimoeRotaryEmbedding(nn.Module):
