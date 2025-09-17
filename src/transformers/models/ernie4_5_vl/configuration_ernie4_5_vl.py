@@ -135,6 +135,7 @@ class Ernie4_5_VLConfig(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
+        # TODO: check these out
         image_start_token_id=101304,
         image_end_token_id=101305,
         image_token_id=100295,
