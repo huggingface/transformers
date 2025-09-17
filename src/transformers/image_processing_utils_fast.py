@@ -642,8 +642,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
             kwargs = {}
         if size is not None:
             size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
-        if pad_size is not None:
-            pad_size = SizeDict(**get_size_dict(size=pad_size, param_name="pad_size"))
         if crop_size is not None:
             crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
         if pad_size is not None:

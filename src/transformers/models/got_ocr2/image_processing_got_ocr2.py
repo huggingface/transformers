@@ -38,13 +38,12 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
     import PIL
-
-    from ...processing_utils import ImagesKwargs
 
 
 logger = logging.get_logger(__name__)
