@@ -23,7 +23,6 @@ class NormalizeTypeConfig(str, enum.Enum):
 
 @dataclass(frozen=True, kw_only=True)
 class TransformerConfig:
-    in_channels: int = 128
     dim: int = 1024
     n_heads: int = 8
     n_layers: int = 16
@@ -41,6 +40,11 @@ class TransformerConfig:
     max_positions: int = 10000
 
 
+@dataclass(frozen=True, kw_only=True)
+class TransformerWithInputProjectionConfig(TransformerConfig):
+    in_channels: int = 128
+
+
 class PerceptionEncoderAVTextEncoderConfig(PretrainedConfig):
     sub_configs = {"sub_config": AutoConfig}
     model_type = "modernbert"
@@ -54,15 +58,7 @@ class PerceptionEncoderAVTextEncoderConfig(PretrainedConfig):
 class VideoEncoderConfig:
     backbone: str = "PE-Core-L14-336"
     backbone_checkpoint: Optional[str] = None  # optional path to local checkpoint
-    transformer: TransformerConfig = field(
-        default_factory=lambda: TransformerConfig(
-            in_channels=1792,
-            dim=1792,
-            n_heads=14,
-            n_layers=4,
-            out_channels=1792,
-        )
-    )
+    transformer: TransformerWithInputProjectionConfig = field(default_factory=TransformerWithInputProjectionConfig)
 
 
 class DACVAEConfig(PretrainedConfig):
@@ -173,12 +169,12 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         video_encoder = video_encoder or {}
 
         if "transformer" in video_encoder:
-            video_encoder["transformer"] = TransformerConfig(**video_encoder["transformer"])
+            video_encoder["transformer"] = TransformerWithInputProjectionConfig(**video_encoder["transformer"])
 
         self.video_encoder = VideoEncoderConfig(**video_encoder)
         self.audio_codec = DACVAEConfig(**audio_codec)
-        self.audio_encoder = TransformerConfig(**audio_encoder)
-        self.audio_video_encoder = TransformerConfig(**audio_video_encoder)
+        self.audio_encoder = TransformerWithInputProjectionConfig(**audio_encoder)
+        self.audio_video_encoder = TransformerWithInputProjectionConfig(**audio_video_encoder)
         self.text_encoder = PerceptionEncoderAVTextEncoderConfig(**text_encoder)
         self.separate_text_heads = separate_text_heads
         self.output_dim = output_dim

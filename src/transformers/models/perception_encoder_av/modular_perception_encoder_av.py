@@ -22,7 +22,6 @@ class NormalizeTypeConfig(str, enum.Enum):
 
 @dataclass(frozen=True, kw_only=True)
 class TransformerConfig:
-    in_channels: int = 128
     dim: int = 1024
     n_heads: int = 8
     n_layers: int = 16
@@ -40,6 +39,11 @@ class TransformerConfig:
     max_positions: int = 10000
 
 
+@dataclass(frozen=True, kw_only=True)
+class TransformerWithInputProjectionConfig(TransformerConfig):
+    in_channels: int = 128
+
+
 class PerceptionEncoderAVTextEncoderConfig(PretrainedConfig):
     sub_configs = {"sub_config": AutoConfig}
     model_type = "modernbert"
@@ -53,15 +57,7 @@ class PerceptionEncoderAVTextEncoderConfig(PretrainedConfig):
 class VideoEncoderConfig:
     backbone: str = "PE-Core-L14-336"
     backbone_checkpoint: Optional[str] = None  # optional path to local checkpoint
-    transformer: TransformerConfig = field(
-        default_factory=lambda: TransformerConfig(
-            in_channels=1792,
-            dim=1792,
-            n_heads=14,
-            n_layers=4,
-            out_channels=1792,
-        )
-    )
+    transformer: TransformerWithInputProjectionConfig = field(default_factory=TransformerWithInputProjectionConfig)
 
 
 class DACVAEConfig(DacConfig): ...
@@ -89,12 +85,12 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         video_encoder = video_encoder or {}
 
         if "transformer" in video_encoder:
-            video_encoder["transformer"] = TransformerConfig(**video_encoder["transformer"])
+            video_encoder["transformer"] = TransformerWithInputProjectionConfig(**video_encoder["transformer"])
 
         self.video_encoder = VideoEncoderConfig(**video_encoder)
         self.audio_codec = DACVAEConfig(**audio_codec)
-        self.audio_encoder = TransformerConfig(**audio_encoder)
-        self.audio_video_encoder = TransformerConfig(**audio_video_encoder)
+        self.audio_encoder = TransformerWithInputProjectionConfig(**audio_encoder)
+        self.audio_video_encoder = TransformerWithInputProjectionConfig(**audio_video_encoder)
         self.text_encoder = PerceptionEncoderAVTextEncoderConfig(**text_encoder)
         self.separate_text_heads = separate_text_heads
         self.output_dim = output_dim
@@ -360,30 +356,7 @@ class TextType(enum.Enum):
     audio_visual = "audio_visual"
 
 
-class VideoEncoder(torch.nn.Module):
-    def __init__(self, cfg: VideoEncoderConfig):
-        super().__init__()
-        try:
-            from core.vision_encoder import pe
-        except ImportError:
-            raise RuntimeError(
-                "Please install perception_models: `pip install git+https://github.com/facebookresearch/perception_models`"
-            )
-
-        self.backbone = pe.CLIP.from_config(cfg.backbone)
-        self.proj = torch.nn.Linear(self.backbone.visual.output_dim, cfg.transformer.dim, bias=False)
-        self.transformer = Transformer(**asdict(cfg.transformer))
-
-    def forward(self, video: torch.Tensor) -> torch.Tensor:
-        B, N, C, H, W = video.shape
-        backbone_output = self.backbone.encode_image(video.view(B * N, C, H, W), normalize=True).view(B, N, -1)
-        projected = self.proj(backbone_output)
-        return self.transformer(projected)
-
-
 ## Audio Codec
-
-
 class VAEBottleneck(torch.nn.Module):
     def __init__(
         self,
@@ -820,7 +793,6 @@ class TransformerBlock(torch.nn.Module):
 class Transformer(torch.nn.Module):
     def __init__(
         self,
-        in_channels: int,
         dim: int,
         n_heads: int,
         n_layers: int,
@@ -887,7 +859,6 @@ class Transformer(torch.nn.Module):
             out_channels=dim,
         )
 
-        self.data_proj = torch.nn.Linear(in_channels, dim)
         self.cls_token = CLSToken(dim)
 
     def unpatchify(self, x):
@@ -899,8 +870,6 @@ class Transformer(torch.nn.Module):
         *,
         padding_mask: Optional[torch.Tensor] = None,
     ):
-        x = self.data_proj(x)
-
         # Prepend the cls token
         x = torch.cat([self.cls_token(x), x], dim=1)
         if padding_mask is not None:
@@ -932,8 +901,38 @@ class Transformer(torch.nn.Module):
         return output[:, 1:], output[:, 0]
 
 
+class TransformerWithInputProjection(Transformer):
+    def __init__(self, in_channels: int, dim: int, **kwargs):
+        super().__init__(dim=dim, **kwargs)
+        self.data_proj = torch.nn.Linear(in_channels, dim)
+
+    def forward(self, x: torch.Tensor, *args, **kwargs):
+        return super().forward(self.data_proj(x), *args, **kwargs)
+
+
+class VideoEncoder(torch.nn.Module):
+    def __init__(self, cfg: VideoEncoderConfig):
+        super().__init__()
+        try:
+            from core.vision_encoder import pe
+        except ImportError:
+            raise RuntimeError(
+                "Please install perception_models: `pip install git+https://github.com/facebookresearch/perception_models`"
+            )
+
+        self.backbone = pe.CLIP.from_config(cfg.backbone)
+        self.proj = torch.nn.Linear(self.backbone.visual.output_dim, cfg.transformer.dim, bias=False)
+        self.transformer = TransformerWithInputProjection(**asdict(cfg.transformer))
+
+    def forward(self, video: torch.Tensor) -> torch.Tensor:
+        B, N, C, H, W = video.shape
+        backbone_output = self.backbone.encode_image(video.view(B * N, C, H, W), normalize=True).view(B, N, -1)
+        projected = self.proj(backbone_output)
+        return self.transformer(projected)
+
+
 ## Audio Video Encoder
-class AudioVideoEncoder(Transformer):
+class AudioVideoEncoder(TransformerWithInputProjection):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.modality_aligner = AlignModalities(self.dim, self.dim, normalize=True, btc=True)
@@ -969,7 +968,7 @@ class PerceptionEncoderAVModel(PreTrainedModel):
     ):
         super().__init__(cfg)
         self.audio_codec = DacEncoderVAE(cfg.audio_codec)
-        self.audio_encoder = Transformer(**asdict(cfg.audio_encoder))
+        self.audio_encoder = TransformerWithInputProjection(**asdict(cfg.audio_encoder))
         self.audio_video_encoder = AudioVideoEncoder(**asdict(cfg.audio_video_encoder))
         self.video_encoder = VideoEncoder(cfg.video_encoder)
         self.text_encoder = PerceptionEncoderAVTextEncoder(cfg.text_encoder)
