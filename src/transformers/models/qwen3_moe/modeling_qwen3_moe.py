@@ -235,24 +235,6 @@ class Qwen3MoeRouter(nn.Linear):
         return router_logits, selected_experts, routing_weights
 
 
-class Qwen3MoeBlockSparseTop2MLP(nn.Module):
-    def __init__(self, config: Qwen3MoeConfig):
-        super().__init__()
-        self.ffn_dim = config.intermediate_size
-        self.hidden_dim = config.hidden_size
-
-        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
-        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states):
-        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
-        current_hidden_states = self.w2(current_hidden_states)
-        return current_hidden_states
-
-
 class Qwen3MoeExperts(nn.ModuleList):
     """
     ModuleList of experts.
@@ -260,13 +242,12 @@ class Qwen3MoeExperts(nn.ModuleList):
 
     def __init__(self, config: Qwen3MoeConfig):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
         for _ in range(self.num_experts):
-            self.append(Qwen3MoeBlockSparseTop2MLP(config))
+            self.append(Qwen3MoeMLP(config, intermediate_size=config.moe_intermediate_size))
 
     def forward(
-        self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
+        self, hidden_states: torch.Tensor, tok_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
         """
         Args:
@@ -277,13 +258,13 @@ class Qwen3MoeExperts(nn.ModuleList):
             (batch_size * sequence_length, hidden_dim)
         """
         final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
+            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 

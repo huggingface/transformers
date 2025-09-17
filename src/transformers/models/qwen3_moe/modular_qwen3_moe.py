@@ -73,10 +73,12 @@ class Qwen3MoeRouter(nn.Linear):
         return router_logits, selected_experts, routing_weights
 
 
-class Qwen3MoeExperts(MixtralExperts):
+class Qwen3MoeExperts(MixtralExperts, nn.ModuleList):
     def __init__(self, config: Qwen3MoeConfig):
-        super().__init__(config)
+        nn.ModuleList.__init__(self)
         self.num_experts = config.num_experts
+        for _ in range(self.num_experts):
+            self.append(Qwen3MoeMLP(config, intermediate_size=config.moe_intermediate_size))
 
 class Qwen3MoeSparseMoeBlock(MixtralSparseMoeBlock):
     pass

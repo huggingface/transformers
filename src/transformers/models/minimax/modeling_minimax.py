@@ -400,7 +400,7 @@ class MiniMaxAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MiniMaxBlockSparseTop2MLP(nn.Module):
+class MiniMaxMLP(nn.Module):
     def __init__(self, config: MiniMaxConfig):
         super().__init__()
         self.ffn_dim = config.intermediate_size
@@ -447,7 +447,7 @@ class MiniMaxRouter(nn.Linear):
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         routing_weights = routing_weights.to(hidden_states.dtype)
-        return router_logits, selected_experts, routing_weights
+        return router_logits, top_k_index, top_k_weights
 
 
 class MiniMaxExperts(nn.ModuleList):
@@ -460,10 +460,10 @@ class MiniMaxExperts(nn.ModuleList):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
-            self.append(MiniMaxBlockSparseTop2MLP(config))
+            self.append(MiniMaxMLP(config))
 
     def forward(
-        self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
+        self, hidden_states: torch.Tensor, tok_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
         """
         Args:
@@ -474,13 +474,13 @@ class MiniMaxExperts(nn.ModuleList):
             (batch_size * sequence_length, hidden_dim)
         """
         final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
+            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 

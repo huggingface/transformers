@@ -218,7 +218,11 @@ class PhimoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class PhimoeBlockSparseTop2MLP(nn.Module):
+class PhieMoeMLP(MixtralMLP):
+    pass
+
+
+class PhimoeMLP(nn.Module):
     def __init__(self, config: PhimoeConfig):
         super().__init__()
         self.ffn_dim = config.intermediate_size
@@ -246,10 +250,10 @@ class PhimoeExperts(nn.ModuleList):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
-            self.append(PhimoeBlockSparseTop2MLP(config))
+            self.append(PhimoeMLP(config))
 
     def forward(
-        self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
+        self, hidden_states: torch.Tensor, tok_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
         """
         Args:
@@ -260,13 +264,13 @@ class PhimoeExperts(nn.ModuleList):
             (batch_size * sequence_length, hidden_dim)
         """
         final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
+            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
@@ -491,12 +495,10 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
@@ -508,12 +510,10 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
         )
         hidden_states = residual + hidden_states
 
-        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states, _ = self.block_sparse_moe(hidden_states)
         hidden_states = residual + hidden_states
-
         return hidden_states
 
 
@@ -550,6 +550,7 @@ class PhimoeModel(PhimoePreTrainedModel):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
         self.rotary_emb = PhimoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self._attn_implementation = config._attn_implementation
 
         # Initialize weights and apply final processing
         self.post_init()

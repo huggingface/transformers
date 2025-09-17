@@ -65,7 +65,7 @@ class PhimoeRotaryEmbedding(nn.Module):
 class PhimoeAttention(LlamaAttention):
     pass
 
-class PhimoeBlockSparseTop2MLP(MixtralBlockSparseTop2MLP):
+class PhieMoeMLP(MixtralMLP):
     pass
 
 
