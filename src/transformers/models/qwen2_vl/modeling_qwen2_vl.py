@@ -25,7 +25,6 @@ from typing import Any, Callable, Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch.nn import LayerNorm
 
 from ...activations import ACT2FN

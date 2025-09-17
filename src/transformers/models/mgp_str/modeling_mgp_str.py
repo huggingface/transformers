@@ -20,7 +20,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_outputs import BaseModelOutput

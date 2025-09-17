@@ -22,7 +22,6 @@ from typing import Any, Callable, Optional, Union
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import Parameter
 

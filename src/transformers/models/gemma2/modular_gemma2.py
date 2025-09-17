@@ -17,7 +17,6 @@ from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache

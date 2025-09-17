@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...cache_utils import Cache, DynamicCache

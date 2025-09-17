@@ -22,7 +22,6 @@
 from typing import Optional, TypedDict, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from transformers.activations import ACT2FN

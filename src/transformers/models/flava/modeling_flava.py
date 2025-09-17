@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN

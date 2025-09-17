@@ -70,7 +70,7 @@ if is_torch_available():
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
-    import torch.utils.checkpoint
+
 
 if is_vision_available():
     import PIL

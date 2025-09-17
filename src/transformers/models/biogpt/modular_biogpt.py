@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
