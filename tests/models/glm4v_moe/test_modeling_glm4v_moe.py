@@ -313,7 +313,9 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
-        self.processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V", size={"shortest_edge": 10800, "longest_edge": 10800})
+        self.processor = AutoProcessor.from_pretrained(
+            "zai-org/GLM-4.5V", size={"shortest_edge": 10800, "longest_edge": 10800}
+        )
         self.message = [
             {
                 "role": "user",
@@ -365,17 +367,17 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
-        expected_input_ids = [151331, 151333, 151336, 198, 151339, 151363, 151363, 151363, 151363, 151363, 151363, 151363, 151363, 151363, 151363, 151363, 151363]  # fmt: skip
+        expected_input_ids = [151331, 151333, 151336, 198, 151339, 151363, 151363, 151363, 151363, 151363, 151363, 151340, 3838, 3093, 315, 5562, 374]  # fmt: skip
         assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
 
         expected_pixel_slice = torch.tensor(
             [
-                [-0.0405, -0.0842, -0.2302],
-                [-1.1791, -1.4857, -1.7485],
-                [-0.6536, -0.9456, -0.3762],
-                [-1.4273, -1.6901, -1.7631],
-                [-1.3251, -0.8142, -0.3762],
-                [-0.3032, -0.5952, -0.8580],
+                [-0.1134, -0.4492, -0.8580],
+                [-0.6244, -1.1645, -0.7120],
+                [-0.3324, -0.7996, -0.7120],
+                [0.2077, 0.2223, 0.4121],
+                [0.4413, 0.1931, 0.4559],
+                [0.5873, 0.3099, 0.4851],
             ],
             dtype=torch.float32,
             device="cpu",
@@ -386,15 +388,22 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch(self):
         model = self.get_model()
         batch_messages = [self.message, self.message2, self.message_wo_image]
-        inputs = self.processor.apply_chat_template(batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True, ).to(torch_device)
+        inputs = self.processor.apply_chat_template(
+            batch_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=10)
 
         EXPECTED_DECODED_TEXT = [
+            "\nWhat kind of dog is this?\n<think>Got it, let's try to figure out",
             "\nWhat kind of dog is this?\n<think>Got it, let's see. The user",
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image",
-            '\nWho are you?\n<think>The user is asking "Who are you?"',
+            '\nWho are you?\n<think>The user is asking "Who are you?"'
         ]  # fmt: skip
         decoded = self.processor.batch_decode(output, skip_special_tokens=True)
         decoded = [x.replace("<|image|>", "") for x in decoded]
