@@ -18,6 +18,7 @@ from collections import OrderedDict
 import torch
 from torch import Tensor, nn
 
+from .integrations.hub_kernels import use_kernel_forward_from_hub
 from .utils import logging
 from .utils.import_utils import is_torchdynamo_compiling
 
@@ -38,6 +39,7 @@ class PytorchGELUTanh(nn.Module):
         return nn.functional.gelu(input, approximate="tanh")
 
 
+@use_kernel_forward_from_hub("NewGELU")
 class NewGELUActivation(nn.Module):
     """
     Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT). Also see
@@ -70,6 +72,7 @@ class GELUActivation(nn.Module):
         return self.act(input)
 
 
+@use_kernel_forward_from_hub("FastGELU")
 class FastGELUActivation(nn.Module):
     """
     Applies GELU approximation that is slower than QuickGELU but more accurate. See: https://github.com/hendrycks/GELUs
@@ -79,6 +82,7 @@ class FastGELUActivation(nn.Module):
         return 0.5 * input * (1.0 + torch.tanh(input * 0.7978845608 * (1.0 + 0.044715 * input * input)))
 
 
+@use_kernel_forward_from_hub("QuickGELU")
 class QuickGELUActivation(nn.Module):
     """
     Applies GELU approximation that is fast but somewhat inaccurate. See: https://github.com/hendrycks/GELUs
