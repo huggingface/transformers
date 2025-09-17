@@ -766,6 +766,7 @@ def create_causal_mask_mapping(
     past_key_values: Optional[Cache],
     position_ids: Optional[torch.Tensor],
     token_type_ids: Optional[torch.Tensor] = None,
+    pixel_values: Optional[torch.FloatTensor] = None,
     **kwargs,
 ) -> dict:
     """
@@ -785,14 +786,14 @@ def create_causal_mask_mapping(
     # NOTE: this `may_have_image_input` logic is not flawless, it fails when we're using a cache eagerly initialized
     # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
     # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
-    may_have_image_input = (
-        past_key_values is None or not past_key_values.is_initialized or kwargs.get("pixel_values") is not None
-    )
+    may_have_image_input = past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
     if token_type_ids is not None and may_have_image_input:
-        # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
+        # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
+        # undo the causal masking)
 
         # First find where a new image block starts: 1 if image and previous not image
         # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
+        token_type_ids += 1
         is_image = (token_type_ids == 1).to(cache_position.device)
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image
@@ -1227,7 +1228,8 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             past_key_values,
             position_ids,
             token_type_ids,
-            **kwargs,
+            pixel_values=kwargs.get("pixel_values"),
+            **{k: v for k, v in kwargs.items() if k != "pixel_values"},
         )
 
 

@@ -158,6 +158,7 @@ class GemmaConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         layer_types=None,
+        use_bidirectional_attention=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -175,6 +176,7 @@ class GemmaConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.use_bidirectional_attention = use_bidirectional_attention
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -379,7 +381,30 @@ class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class GemmaAttention(LlamaAttention):
-    pass
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: GemmaConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = not config.use_bidirectional_attention
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
 
 
 class GemmaDecoderLayer(LlamaDecoderLayer):

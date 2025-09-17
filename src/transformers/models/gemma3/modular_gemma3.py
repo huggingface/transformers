@@ -22,7 +22,7 @@ import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
@@ -48,7 +48,7 @@ from ..paligemma.modeling_paligemma import (
     PaliGemmaForConditionalGeneration,
     PaliGemmaModel,
     PaligemmaModelOutputWithPast,
-    create_causal_mask_mapping,
+    token_type_ids_mask_function,
 )
 from ..siglip import SiglipVisionConfig
 
@@ -720,6 +720,54 @@ class Gemma3MultiModalProjector(nn.Module):
 
         projected_vision_outputs = torch.matmul(normed_vision_outputs, self.mm_input_projection_weight)
         return projected_vision_outputs.type_as(vision_outputs)
+
+
+def create_causal_mask_mapping(
+    config: PretrainedConfig,
+    input_embeds: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    cache_position: torch.Tensor,
+    past_key_values: Optional[Cache],
+    position_ids: Optional[torch.Tensor],
+    token_type_ids: Optional[torch.Tensor] = None,
+    pixel_values: Optional[torch.FloatTensor] = None,
+    **kwargs,
+) -> dict:
+    """
+    Overwrites the base `create_masks_for_generate` with `token_type_ids` masking to create the causal mask mapping
+    for all kinds of forward passes.
+
+    Uses `pixel_values` as an optional input to disambiguate edge cases.
+    """
+    mask_kwargs = {
+        "config": config.get_text_config(),
+        "input_embeds": input_embeds,
+        "attention_mask": attention_mask,
+        "cache_position": cache_position,
+        "past_key_values": past_key_values,
+        "position_ids": position_ids,
+    }
+    # NOTE: this `may_have_image_input` logic is not flawless, it fails when we're using a cache eagerly initialized
+    # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
+    # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
+    may_have_image_input = past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
+    if token_type_ids is not None and may_have_image_input:
+        # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
+        # undo the causal masking)
+
+        # First find where a new image block starts: 1 if image and previous not image
+        # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
+        token_type_ids += 1
+        is_image = (token_type_ids == 1).to(cache_position.device)
+        is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+        new_image_start = is_image & ~is_previous_image
+        image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
+        image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
+        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
+            token_type_ids.to(cache_position.device), image_group_ids
+        )
+
+    return create_masks_for_generate(**mask_kwargs)
 
 
 class Gemma3Model(PaliGemmaModel):

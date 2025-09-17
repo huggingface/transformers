@@ -217,7 +217,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         )
         suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
-        return_token_type_ids = suffix is not None
+        return_token_type_ids = True
 
         if images is None:
             raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")

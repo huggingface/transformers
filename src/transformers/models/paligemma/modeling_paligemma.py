@@ -159,11 +159,14 @@ def create_causal_mask_mapping(
     # NOTE: this `may_have_image_input` logic is not flawless, it fails when we're using a cache eagerly initialized
     # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
     # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
-    may_have_image_input = (
-        past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
-    )
+    may_have_image_input = past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
     if token_type_ids is not None and may_have_image_input:
-        # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
+        # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
+        # undo the causal masking)
+
+        # The logic bellow was originally written for gemma3, where `token_type_ids` is reversed. Let's reverse it to
+        # then use exactly the same logic.
+        token_type_ids = 1 - token_type_ids
 
         # First find where a new image block starts: 1 if image and previous not image
         # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
@@ -376,7 +379,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
                 past_key_values,
                 position_ids,
                 token_type_ids,
-                pixel_values
+                pixel_values,
             )
 
         outputs = self.language_model(
@@ -599,7 +602,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             past_key_values,
             position_ids,
             token_type_ids,
-            pixel_values=kwargs.get("pixel_values", None),
+            pixel_values=kwargs.get("pixel_values"),
             **{k: v for k, v in kwargs.items() if k != "pixel_values"},
         )
 
