@@ -14,7 +14,7 @@
 # limitations under the License.
 from collections import deque
 from math import floor, gcd, sqrt
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 
@@ -123,7 +123,6 @@ class PagedAttentionCache:
         generation_config: GenerationConfig,
         device: torch.device,
         dtype: torch.dtype = torch.float16,
-        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
         tp_size: Optional[int] = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage.
@@ -133,7 +132,6 @@ class PagedAttentionCache:
             generation_config: Generation configuration containing cache parameters
             device: Device for the cache tensors
             dtype: Data type of the cache
-            layer_device_map: Optional mapping of layer indices to devices
             tp_size: Tensor parallelism size
         """
         self.config = config

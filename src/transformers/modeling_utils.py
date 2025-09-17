@@ -3259,11 +3259,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 with deepspeed.zero.GatheredParameters([old_embeddings.weight], modifier_rank=None):
                     self._init_added_embeddings_weights_with_mean(
-                        old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
+                        old_embeddings, new_embeddings, old_num_tokens, added_num_tokens
                     )
             else:
                 self._init_added_embeddings_weights_with_mean(
-                    old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
+                    old_embeddings, new_embeddings, old_num_tokens, added_num_tokens
                 )
 
         # Copy token embeddings from the previous weights
@@ -3433,7 +3433,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return new_lm_head
 
     def _init_added_embeddings_weights_with_mean(
-        self, old_embeddings, new_embeddings, old_embedding_dim, old_num_tokens, added_num_tokens
+        self, old_embeddings, new_embeddings, old_num_tokens, added_num_tokens
     ):
         old_embeddings_weight = old_embeddings.weight.data.to(torch.float32)
         mean_embeddings = torch.mean(old_embeddings_weight, axis=0)
@@ -3472,9 +3472,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             old_lm_head.weight.data = old_lm_head.weight.data.T
 
         # The same initialization logic as Embeddings.
-        self._init_added_embeddings_weights_with_mean(
-            old_lm_head, new_lm_head, old_lm_head_dim, old_num_tokens, added_num_tokens
-        )
+        self._init_added_embeddings_weights_with_mean(old_lm_head, new_lm_head, old_num_tokens, added_num_tokens)
 
         if transposed:
             # Transpose again to the correct shape.
