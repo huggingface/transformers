@@ -23,23 +23,20 @@ from ...image_processing_utils_fast import (
     DefaultFastImageProcessorKwargs,
     Unpack,
 )
-from ...image_utils import ImageInput, SizeDict
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
     is_torchvision_v2_available,
-    is_vision_available,
     logging,
 )
 
 
-if is_vision_available():
-    from ...image_utils import PILImageResampling
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
+
 logger = logging.get_logger(__name__)
 
 

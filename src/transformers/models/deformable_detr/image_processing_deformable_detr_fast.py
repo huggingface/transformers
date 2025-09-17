@@ -7,6 +7,9 @@
 import pathlib
 from typing import Any, Optional, Union
 
+import torch
+from torchvision.io import read_image
+
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -32,8 +35,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
@@ -41,16 +42,10 @@ from ...utils.import_utils import requires
 from .image_processing_deformable_detr import get_size_with_aspect_ratio
 
 
-if is_torch_available():
-    import torch
-
-
 if is_torchvision_v2_available():
-    from torchvision.io import read_image
     from torchvision.transforms.v2 import functional as F
 
-elif is_torchvision_available():
-    from torchvision.io import read_image
+else:
     from torchvision.transforms import functional as F
 
 

@@ -20,6 +20,7 @@
 
 from typing import Optional, Union
 
+import torch
 import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
@@ -34,12 +35,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
 )
-
-
-if is_torch_available():
-    import torch
 
 
 class DeepseekVLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):

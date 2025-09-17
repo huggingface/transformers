@@ -42,14 +42,13 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 
 
 if is_torchvision_v2_available():
     from torchvision.ops.boxes import batched_nms
-elif is_torchvision_available():
+else:
     from torchvision.ops.boxes import batched_nms
 
 

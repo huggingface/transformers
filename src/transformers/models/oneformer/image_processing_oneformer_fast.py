@@ -16,6 +16,9 @@
 
 from typing import Optional, Union
 
+import torch
+from torch import nn
+
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
@@ -36,24 +39,18 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
 from .image_processing_oneformer import load_metadata, prepare_metadata
 
 
-logger = logging.get_logger(__name__)
-
-if is_torch_available():
-    import torch
-    from torch import nn
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
+
+logger = logging.get_logger(__name__)
 
 
 def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "torch.Tensor":

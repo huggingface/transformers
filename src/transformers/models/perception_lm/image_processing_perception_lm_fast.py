@@ -17,6 +17,8 @@ from functools import reduce
 from typing import Optional, Union
 
 import numpy as np
+import torch
+from torchvision.transforms import functional as F
 
 from ...image_processing_utils import (
     BatchFeature,
@@ -35,19 +37,7 @@ from ...image_utils import (
     PILImageResampling,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-)
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms import functional as F
+from ...utils import TensorType, auto_docstring
 
 
 class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):

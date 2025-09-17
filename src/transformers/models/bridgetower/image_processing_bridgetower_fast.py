@@ -17,6 +17,8 @@
 from collections.abc import Iterable
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
@@ -30,15 +32,12 @@ from ...image_processing_utils_fast import (
     reorder_images,
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available
+from ...utils import auto_docstring, is_torchvision_v2_available
 
-
-if is_torch_available():
-    import torch
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 
