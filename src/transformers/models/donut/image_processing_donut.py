@@ -215,10 +215,6 @@ class DonutImageProcessor(BaseImageProcessor):
         padding = ((pad_top, pad_bottom), (pad_left, pad_right))
         return pad(image, padding, data_format=data_format, input_data_format=input_data_format)
 
-    def pad(self, *args, **kwargs):
-        logger.info("pad is deprecated and will be removed in version 4.27. Please use pad_image instead.")
-        return self.pad_image(*args, **kwargs)
-
     def thumbnail(
         self,
         image: np.ndarray,
@@ -412,8 +408,6 @@ class DonutImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size,  # There is no pad divisibility in this processor, but pad requires the size arg.
             do_resize=do_resize,
             size=size,
             resample=resample,

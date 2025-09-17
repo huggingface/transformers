@@ -168,8 +168,6 @@ class ImagesKwargs(TypedDict, total=False):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
-        size_divisor (`int`, *optional*):
-            The size by which to make sure both the height and width can be divided.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
         resample (`PILImageResampling`, *optional*):
@@ -200,7 +198,6 @@ class ImagesKwargs(TypedDict, total=False):
 
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
-    size_divisor: Optional[int]
     crop_size: Optional[dict[str, int]]
     resample: Optional[Union["PILImageResampling", int]]
     do_rescale: Optional[bool]
@@ -229,8 +226,6 @@ class VideosKwargs(TypedDict, total=False):
             Resize the shorter side of the input to `size["shortest_edge"]`.
         default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
             Whether to default to a square when resizing, if size is an int.
-        size_divisor (`int`, *optional*):
-            The size by which to make sure both the height and width can be divided.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the video.
         do_rescale (`bool`, *optional*):
@@ -243,8 +238,6 @@ class VideosKwargs(TypedDict, total=False):
             Mean to use if normalizing the video.
         image_std (`float` or `list[float]`, *optional*):
             Standard deviation to use if normalizing the video.
-        do_pad (`bool`, *optional*):
-            Whether to pad the video to the `(max_height, max_width)` of the videos in the batch.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the video.
         do_sample_frames (`bool`, *optional*):
@@ -268,7 +261,6 @@ class VideosKwargs(TypedDict, total=False):
     do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
-    size_divisor: Optional[int]
     default_to_square: Optional[bool]
     resample: Optional["PILImageResampling"]
     do_rescale: Optional[bool]
@@ -276,7 +268,6 @@ class VideosKwargs(TypedDict, total=False):
     do_normalize: Optional[bool]
     image_mean: Optional[Union[float, list[float]]]
     image_std: Optional[Union[float, list[float]]]
-    do_pad: Optional[bool]
     do_center_crop: Optional[bool]
     crop_size: Optional[dict[str, int]]
     data_format: Optional[ChannelDimension]
@@ -655,6 +646,18 @@ class ProcessorMixin(PushToHubMixin):
         if "chat_template" in output:
             del output["chat_template"]
 
+        def cast_array_to_list(dictionary):
+            """
+            Numpy arrays are not serialiazable but can be in pre-processing dicts.
+            This function casts arrays to list, recusring through the nested configs as well.
+            """
+            for key, value in dictionary.items():
+                if isinstance(value, np.ndarray):
+                    dictionary[key] = value.tolist()
+                elif isinstance(value, dict):
+                    dictionary[key] = cast_array_to_list(value)
+            return dictionary
+
         # Serialize attributes as a dict
         output = {
             k: v.to_dict() if isinstance(v, PushToHubMixin) else v
@@ -667,6 +670,7 @@ class ProcessorMixin(PushToHubMixin):
                 )  # remove `PushToHubMixin` objects
             )
         }
+        output = cast_array_to_list(output)
 
         # Special case, add `audio_tokenizer` dict which points to model weights and path
         if not legacy_serialization and "audio_tokenizer" in output:

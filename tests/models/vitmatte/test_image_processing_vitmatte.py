@@ -60,7 +60,7 @@ class VitMatteImageProcessingTester:
         do_rescale=True,
         rescale_factor=0.5,
         do_pad=True,
-        size_divisibility=10,
+        size_divisor=10,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
@@ -74,7 +74,7 @@ class VitMatteImageProcessingTester:
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
-        self.size_divisibility = size_divisibility
+        self.size_divisor = size_divisor
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -87,7 +87,7 @@ class VitMatteImageProcessingTester:
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
             "do_pad": self.do_pad,
-            "size_divisibility": self.size_divisibility,
+            "size_divisor": self.size_divisor,
         }
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -125,6 +125,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_rescale"))
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
             self.assertTrue(hasattr(image_processing, "do_pad"))
+            self.assertTrue(hasattr(image_processing, "size_divisor"))
+            # Check size_divisibility for BC, the image proccessor has to have an atribute
             self.assertTrue(hasattr(image_processing, "size_divisibility"))
 
     def test_call_numpy(self):
@@ -141,8 +143,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
     def test_call_pytorch(self):
@@ -160,8 +162,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
         # create batched tensors
@@ -180,8 +182,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
     def test_call_pil(self):
@@ -198,8 +200,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
     def test_call_numpy_4_channels(self):
@@ -224,8 +226,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             ).pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 5)
 
     def test_padding_slow(self):

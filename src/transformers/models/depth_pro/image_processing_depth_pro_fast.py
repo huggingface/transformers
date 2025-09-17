@@ -78,6 +78,7 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched scaling
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

@@ -63,14 +63,11 @@ class NougatFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Whether to resize the image using thumbnail method.
     do_align_long_axis (`bool`, *optional*, defaults to `False`):
             Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-    do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the images to the largest image size in the batch.
     """
 
     do_crop_margin: Optional[bool]
     do_thumbnail: Optional[bool]
     do_align_long_axis: Optional[bool]
-    do_pad: Optional[bool]
 
 
 @auto_docstring

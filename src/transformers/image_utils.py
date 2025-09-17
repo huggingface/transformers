@@ -525,7 +525,7 @@ def validate_preprocess_arguments(
     image_mean: Optional[Union[float, list[float]]] = None,
     image_std: Optional[Union[float, list[float]]] = None,
     do_pad: Optional[bool] = None,
-    size_divisibility: Optional[int] = None,
+    pad_size: Optional[Union[dict[str, int], int]] = None,
     do_center_crop: Optional[bool] = None,
     crop_size: Optional[dict[str, int]] = None,
     do_resize: Optional[bool] = None,
@@ -544,10 +544,15 @@ def validate_preprocess_arguments(
     if do_rescale and rescale_factor is None:
         raise ValueError("`rescale_factor` must be specified if `do_rescale` is `True`.")
 
-    if do_pad and size_divisibility is None:
-        # Here, size_divisor might be passed as the value of size
+    if do_pad and pad_size is None:
+        # Processors pad images using different args depending on the model, so the below check is pointless
+        # but we keep it for BC for now. TODO: remove in v5
+        # Usually padding can be called with:
+        #   - "pad_size/size" if we're padding to specific values
+        #   - "size_divisor" if we're padding to any value divisible by X
+        #   - "None" if we're padding to the maximum size image in batch
         raise ValueError(
-            "Depending on the model, `size_divisibility`, `size_divisor`, `pad_size` or `size` must be specified if `do_pad` is `True`."
+            "Depending on the model, `size_divisor` or `pad_size` or `size` must be specified if `do_pad` is `True`."
         )
 
     if do_normalize and (image_mean is None or image_std is None):

@@ -480,8 +480,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size_divisor,
             do_center_crop=do_center_crop,
             crop_size=crop_size,
             do_resize=do_resize,

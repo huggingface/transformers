@@ -52,9 +52,6 @@ logger = logging.get_logger(__name__)
 
 class SmolVLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
     do_image_splitting (`bool`, *optional*, defaults to `True`):
         Whether to split the image into sub-images concatenated with the original image. They are split into patches
         such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
@@ -64,7 +61,6 @@ class SmolVLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         Whether to return the row and column information of the images.
     """
 
-    do_pad: Optional[bool]
     do_image_splitting: Optional[bool]
     max_image_size: Optional[dict[str, int]]
     return_row_col_info: Optional[bool]
