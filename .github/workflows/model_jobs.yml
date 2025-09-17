@@ -163,7 +163,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_captured_info.txt
-          path: /transformers/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}/captured_info.txt
+          path: /transformers/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}/captured_info.txt
 
   collated_reports:
     name: Collated Reports
