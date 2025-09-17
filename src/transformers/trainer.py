@@ -3340,7 +3340,7 @@ class Trainer:
             dist.barrier()
         elif is_sagemaker_mp_enabled():
             smp.barrier()
-            
+
         if self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH] and self.state.best_global_step:
             best_checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.best_global_step}"
             best_checkpoint_dir = os.path.join(run_dir, best_checkpoint_folder)
