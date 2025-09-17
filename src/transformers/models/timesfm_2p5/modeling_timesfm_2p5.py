@@ -37,29 +37,10 @@ from .configuration_timesfm_2p5 import Timesfm2P5Config
 
 @dataclass
 class Timesfm2P5Output(BaseModelOutput):
-    """
-    Base class for TimesFM 2.5 model outputs.
+    """Base class for TimesFM 2.5 model outputs."""
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            The last hidden state from the model.
-        loc (`torch.FloatTensor` of shape `(batch_size, num_patches)`):
-            The location parameters (means) for each patch.
-        scale (`torch.FloatTensor` of shape `(batch_size, num_patches)`):
-            The scale parameters (standard deviations) for each patch.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loc: torch.FloatTensor = None
-    scale: torch.FloatTensor = None
+    loc: Optional[torch.Tensor] = None
+    scale: Optional[torch.Tensor] = None
 
 
 @dataclass
@@ -118,19 +99,19 @@ class Timesfm2P5ResidualBlock(nn.Module):
 
 
 class Timesfm2P5RMSNorm(nn.Module):
-    """RMS normalization matching the original TimesFM 2.5 implementation."""
+    """RMS normalization for TimesFM 2.5."""
 
     def __init__(self, num_features: int, epsilon: float = 1e-6):
         super().__init__()
-        self.scale = nn.Parameter(torch.zeros(num_features))  # Initialize to zeros like original
-        self.num_features = num_features
-        self.epsilon = epsilon
+        self.weight = nn.Parameter(torch.ones(num_features))
+        self.eps = epsilon
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        var = torch.mean(torch.square(inputs), dim=-1, keepdim=True)
-        normed_inputs = inputs * torch.rsqrt(var + self.epsilon)
-        normed_inputs = normed_inputs * self.scale
-        return normed_inputs
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.eps)
+        return self.weight * hidden_states.to(input_dtype)
 
 
 class Timesfm2P5RotaryPositionalEmbedding(nn.Module):
@@ -480,8 +461,8 @@ class Timesfm2P5PreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, Timesfm2P5RMSNorm):
-            # Initialize scale to zeros like original
-            nn.init.zeros_(module.scale)
+            # Initialize weight to ones (standard RMSNorm initialization)
+            nn.init.ones_(module.weight)
         elif isinstance(module, Timesfm2P5PerDimScale):
             nn.init.zeros_(module.per_dim_scale)
         elif isinstance(module, Timesfm2P5Attention):
