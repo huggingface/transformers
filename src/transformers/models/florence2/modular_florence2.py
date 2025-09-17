@@ -36,7 +36,7 @@ from ...utils import (
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..bart.modeling_bart import eager_attention_forward
+from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
 from ..beit.modeling_beit import BeitDropPath
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
@@ -1709,6 +1709,15 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.text_config.pad_token_id, self.config.text_config.decoder_start_token_id
+                )
 
         outputs = self.model(
             input_ids=input_ids,
