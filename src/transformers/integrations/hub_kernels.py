@@ -114,27 +114,21 @@ try:
         "SiLU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation",
-                    layer_name="Silu",
-                    revision="add_more_act"
+                    repo_id="kernels-community/activation", layer_name="Silu", revision="add_more_act"
                 )
             }
         },
         "GeLU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation",
-                    layer_name="Gelu",
-                    revision="add_more_act"
+                    repo_id="kernels-community/activation", layer_name="Gelu", revision="add_more_act"
                 )
             }
         },
         "GeluTanh": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                    repo_id="kernels-community/activation",
-                    layer_name="GeluTanh",
-                    revision="add_more_act"
+                    repo_id="kernels-community/activation", layer_name="GeluTanh", revision="add_more_act"
                 )
             }
         },

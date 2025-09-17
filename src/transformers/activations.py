@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import math
 from collections import OrderedDict
-import functools
 
 import torch
 from torch import Tensor, nn
@@ -26,6 +26,7 @@ from .utils.import_utils import is_torchdynamo_compiling
 
 logger = logging.get_logger(__name__)
 
+
 @use_kernel_forward_from_hub("GeluTanh")
 class GELUTanh(nn.Module):
     """
@@ -35,6 +36,7 @@ class GELUTanh(nn.Module):
     This implementation is equivalent to NewGELU and FastGELU but much faster. However, it is not an exact numerical
     match due to rounding errors.
     """
+
     def __init__(self, use_gelu_tanh_python: bool = False):
         super().__init__()
         if use_gelu_tanh_python:
@@ -59,6 +61,7 @@ class NewGELUActivation(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
         return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
 
+
 @use_kernel_forward_from_hub("GeLU")
 class GELUActivation(nn.Module):
     """
@@ -81,6 +84,7 @@ class GELUActivation(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
         return self.act(input)
 
+
 @use_kernel_forward_from_hub("SiLU")
 class SiLUActivation(nn.Module):
     """
@@ -93,6 +97,7 @@ class SiLUActivation(nn.Module):
 
     def forward(self, input: Tensor) -> Tensor:
         return nn.functional.silu(input)
+
 
 @use_kernel_forward_from_hub("FastGELU")
 class FastGELUActivation(nn.Module):
