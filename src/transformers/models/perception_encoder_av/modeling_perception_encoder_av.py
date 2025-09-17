@@ -964,12 +964,6 @@ class PerceptionEncoderAVModel(PreTrainedModel):
         self.audio_encoder = Transformer(**asdict(cfg.audio_encoder))
         self.audio_video_encoder = AudioVideoEncoder(**asdict(cfg.audio_video_encoder))
         self.video_encoder = VideoEncoder(cfg.video_encoder)
-        self.ouptut_dim = cfg.output_dim
-        self.av_dim = self.audio_video_encoder.dim
-        self.text_dim = cfg.text_encoder.sub_config.hidden_size
-        self.context_length = self.video_encoder.backbone.context_length
-        self.image_size = self.video_encoder.backbone.image_size
-        self.fixed_len_video = cfg.fixed_len_video
         self.text_encoder = PerceptionEncoderAVTextEncoder(cfg.text_encoder)
 
         heads = ["video", "audio", "audio_visual"]
@@ -977,10 +971,10 @@ class PerceptionEncoderAVModel(PreTrainedModel):
             heads.extend(["audio_text", "visual_text", "audio_visual_text"])
 
         for head in heads:
-            indim = self.text_dim if head.endswith("text") else self.av_dim
+            indim = cfg.text_encoder.sub_config.hidden_size if head.endswith("text") else self.audio_video_encoder.dim
             self.add_module(
                 f"{head}_head",
-                ContrastiveHead(indim, self.ouptut_dim, norm_type=cfg.contrastive_head_norm_type),
+                ContrastiveHead(indim, cfg.output_dim, norm_type=cfg.contrastive_head_norm_type),
             )
 
     def encode_video(self, video):  # b n c h w
