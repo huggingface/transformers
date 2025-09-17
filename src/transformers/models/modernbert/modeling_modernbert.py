@@ -1077,6 +1077,10 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         if self.config._attn_implementation == "flash_attention_2":
             with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
+                hidden_states = tuple(
+                    _pad_modernbert_output(inputs=hidden_state, indices=indices, batch=batch_size, seqlen=seq_len)
+                    for hidden_state in outputs.hidden_states
+                )
 
         if not return_dict:
             output = (logits,)
@@ -1085,7 +1089,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         return MaskedLMOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
         )
 
