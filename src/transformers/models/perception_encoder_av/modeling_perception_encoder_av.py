@@ -15,14 +15,12 @@ import torch.nn.functional as F
 from einops import rearrange
 
 from ...modeling_utils import PreTrainedModel
-
-# from ..modernbert.modeling_modernbert import ModernBertModel
-from ..modernbert import ModernBertModel
+from ..auto import AutoModel
 from .configuration_perception_encoder_av import (
     DACVAEConfig,
     NormalizeTypeConfig,
     PerceptionEncoderAVConfig,
-    PerceptionEncoderAVModernBertConfig,
+    PerceptionEncoderAVTextEncoderConfig,
     VideoEncoderConfig,
 )
 
@@ -178,15 +176,12 @@ class Patcher(torch.nn.Module):
         return x
 
 
-# class PerceptionEncoderAVModernBertModel(ModernBertModel): ...
-
-
 ## Text Encoder
-class PerceptionEncoderAVTextEncoderModernBertModel(torch.nn.Module):
-    def __init__(self, config: PerceptionEncoderAVModernBertConfig):
+class PerceptionEncoderAVTextEncoder(torch.nn.Module):
+    def __init__(self, config: PerceptionEncoderAVTextEncoderConfig):
         super().__init__()
         self.nth_layer = config.nth_layer
-        self.model = ModernBertModel(config)
+        self.model = AutoModel.from_config(config.sub_config)
 
     def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         output = self.model(
@@ -971,11 +966,11 @@ class PerceptionEncoderAVModel(PreTrainedModel):
         self.video_encoder = VideoEncoder(cfg.video_encoder)
         self.ouptut_dim = cfg.output_dim
         self.av_dim = self.audio_video_encoder.dim
-        self.text_dim = cfg.text_encoder.hidden_size
+        self.text_dim = cfg.text_encoder.sub_config.hidden_size
         self.context_length = self.video_encoder.backbone.context_length
         self.image_size = self.video_encoder.backbone.image_size
         self.fixed_len_video = cfg.fixed_len_video
-        self.text_encoder = PerceptionEncoderAVTextEncoderModernBertModel(cfg.text_encoder)
+        self.text_encoder = PerceptionEncoderAVTextEncoder(cfg.text_encoder)
 
         heads = ["video", "audio", "audio_visual"]
         if cfg.separate_text_heads:
