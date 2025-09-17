@@ -248,9 +248,9 @@ _torch_available = False
 if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
     _torch_available, _torch_version = _is_package_available("torch", return_version=True)
     if _torch_available:
-        _torch_available = version.parse(_torch_version) >= version.parse("2.1.0")
+        _torch_available = version.parse(_torch_version) >= version.parse("2.2.0")
         if not _torch_available:
-            logger.warning(f"Disabling PyTorch because PyTorch >= 2.1 is required but found {_torch_version}")
+            logger.warning(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {_torch_version}")
 else:
     logger.info("Disabling PyTorch because USE_TF is set")
     _torch_available = False
