@@ -48,12 +48,11 @@ pipe("path/to/audio.wav")
 
 ```
 python
-from transformers import AutoProcessor, AutoModelForCTC
+from transformers import AutoProcessor, AutoModelForAudioClassification
 import torch
 import torchaudio
-
 processor = AutoProcessor.from_pretrained("facebook/data2vec-audio-base-960h")
-model = AutoModelForCTC.from_pretrained("facebook/data2vec-audio-base-960h")
+model = AutoModelForAudioClassification.from_pretrained("facebook/data2vec-audio-base-960h")
 
 waveform, sample_rate = torchaudio.load("path/to/audio.wav")
 inputs = processor(waveform, sampling_rate=sample_rate, return_tensors="pt")
@@ -61,8 +60,7 @@ inputs = processor(waveform, sampling_rate=sample_rate, return_tensors="pt")
 with torch.no_grad():
     logits = model(**inputs).logits
 
-predicted_ids = torch.argmax(logits, dim=-1)
-transcription = processor.batch_decode(predicted_ids)
+predicted_class_id = torch.argmax(logits).item()
 ```
 
 </hfoption>
