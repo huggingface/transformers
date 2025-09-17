@@ -13,15 +13,13 @@
 # limitations under the License.
 "SpQR (Sparse-Quantized Representation) integration file"
 
-from ..utils import is_accelerate_available, is_spqr_available, is_torch_available
+import torch.nn as nn
 
-
-if is_torch_available():
-    import torch.nn as nn
+from ..utils import is_accelerate_available, is_spqr_available
 
 
 def replace_with_spqr_linear(
-    model,
+    model: nn.Module,
     quantization_config=None,
     modules_to_not_convert=None,
     current_key_name=None,

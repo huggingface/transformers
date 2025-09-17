@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_torch_available, logging
+import torch
+from torch import nn
 
+from ..utils import is_accelerate_available, logging
 
-if is_torch_available():
-    import torch
-    from torch import nn
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -321,7 +320,7 @@ def should_convert_module(current_key_name, patterns):
     return False
 
 
-def dequantize(module, param_name, param_value, target_device, dq_param_name, **kwargs):
+def dequantize(module: nn.Module, param_name, param_value, target_device, dq_param_name, **kwargs):
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
     model = kwargs.get("model")

@@ -14,10 +14,6 @@ from ..utils import (
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
 
-if is_torch_available():
-    import torch
-    import torch.nn as nn
-
     from ..pytorch_utils import Conv1D
 
 if is_accelerate_available():

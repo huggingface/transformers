@@ -15,11 +15,13 @@
 
 import importlib
 
+import torch
+import torch.nn as nn
 from packaging import version
 
 from ..activations import ACT2FN
 from ..modeling_utils import PreTrainedModel
-from ..utils import is_auto_awq_available, is_ipex_available, is_torch_available, logging
+from ..utils import is_auto_awq_available, is_ipex_available, logging
 from ..utils.quantization_config import (
     AwqBackendPackingMethod,
     AwqConfig,
@@ -27,10 +29,6 @@ from ..utils.quantization_config import (
     ExllamaVersion,
 )
 
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
@@ -74,7 +72,7 @@ AWQ_SCALES_MAPPINGS = {
 }
 
 
-def replace_quantization_scales(model, model_type):
+def replace_quantization_scales(model: torch.nn.Module, model_type):
     from awq.modules.act import ScaledActivation
 
     if model_type not in AWQ_SCALES_MAPPINGS:
@@ -92,7 +90,7 @@ def replace_quantization_scales(model, model_type):
 
 
 def replace_with_awq_linear(
-    model,
+    model: torch.nn.Module,
     modules_to_not_convert=None,
     quantization_config=None,
     current_key_name=None,
@@ -301,7 +299,7 @@ def fuse_awq_modules(model, quantization_config):
     return model
 
 
-def _fuse_awq_layernorm(fuse_module_names, module, target_cls):
+def _fuse_awq_layernorm(fuse_module_names: list[str], module: torch.nn.Module, target_cls):
     """
     Fuse the LayerNorm layers into a target class using autoawq
 
