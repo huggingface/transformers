@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -1642,7 +1641,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
                 dim=1,
             )
 
-        return {
+        model_inputs = {
             "input_ids": input_ids,
             "image_embeds": image_embeds,
             "image_embeds_position_mask": image_embeds_position_mask,
@@ -1651,6 +1650,13 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
             "position_ids": position_ids,
             "use_cache": use_cache,
         }
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in model_kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
+        return model_inputs
 
 
 @add_start_docstrings(

@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -1442,13 +1441,20 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        return {
+        model_inputs = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": kwargs.get("pixel_values"),
             "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
+        return model_inputs
 
 
 __all__ = ["GitForCausalLM", "GitModel", "GitPreTrainedModel", "GitVisionModel"]

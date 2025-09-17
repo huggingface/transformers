@@ -18,6 +18,7 @@ from collections import OrderedDict
 import torch
 from torch import Tensor, nn
 
+from .integrations.hub_kernels import use_kernel_forward_from_hub
 from .utils import logging
 from .utils.import_utils import is_torchdynamo_compiling
 
@@ -38,6 +39,7 @@ class PytorchGELUTanh(nn.Module):
         return nn.functional.gelu(input, approximate="tanh")
 
 
+@use_kernel_forward_from_hub("NewGELU")
 class NewGELUActivation(nn.Module):
     """
     Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT). Also see
@@ -70,6 +72,7 @@ class GELUActivation(nn.Module):
         return self.act(input)
 
 
+@use_kernel_forward_from_hub("FastGELU")
 class FastGELUActivation(nn.Module):
     """
     Applies GELU approximation that is slower than QuickGELU but more accurate. See: https://github.com/hendrycks/GELUs
@@ -79,6 +82,7 @@ class FastGELUActivation(nn.Module):
         return 0.5 * input * (1.0 + torch.tanh(input * 0.7978845608 * (1.0 + 0.044715 * input * input)))
 
 
+@use_kernel_forward_from_hub("QuickGELU")
 class QuickGELUActivation(nn.Module):
     """
     Applies GELU approximation that is fast but somewhat inaccurate. See: https://github.com/hendrycks/GELUs
@@ -204,9 +208,9 @@ class XIELUActivation(nn.Module):
         with_vector_loads=False,
     ):
         super().__init__()
-        self.alpha_p = nn.Parameter(torch.log(torch.exp(torch.tensor(alpha_p_init, dtype=dtype)) - 1).unsqueeze(0))
+        self.alpha_p = nn.Parameter(torch.log(torch.expm1(torch.tensor(alpha_p_init, dtype=dtype))).unsqueeze(0))
         self.alpha_n = nn.Parameter(
-            torch.log(torch.exp(torch.tensor(alpha_n_init - beta, dtype=dtype)) - 1).unsqueeze(0)
+            torch.log(torch.expm1(torch.tensor(alpha_n_init - beta, dtype=dtype))).unsqueeze(0)
         )
         self.register_buffer("beta", torch.tensor(beta, dtype=dtype))
         self.register_buffer("eps", torch.tensor(eps, dtype=dtype))

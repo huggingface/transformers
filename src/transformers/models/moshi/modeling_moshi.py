@@ -20,7 +20,6 @@ from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
@@ -2242,7 +2241,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
 
         # we want to do it after a first token has been generated
         if model_inputs["input_ids"] is not None:
-            last_hidden_state = kwargs.get("last_hidden_state")
+            last_hidden_state = kwargs.pop("last_hidden_state")
             # (batch_size, sequence_length, dim) -> (batch_size * sequence_length, 1, dim)
             last_hidden_state = last_hidden_state.view(-1, 1, last_hidden_state.shape[-1])
 
@@ -2273,6 +2272,11 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
 
             model_inputs["input_ids"] = None
             model_inputs["inputs_embeds"] = inputs_embeds
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
 
         return model_inputs
 

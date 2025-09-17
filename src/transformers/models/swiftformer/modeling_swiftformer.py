@@ -18,7 +18,6 @@ import collections.abc
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2CLS

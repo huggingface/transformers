@@ -18,7 +18,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -1556,6 +1555,12 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
             model_inputs = {"input_ids": input_ids}
 
         model_inputs.update({"cache_params": cache_params, "use_cache": use_cache})
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
     @can_return_tuple

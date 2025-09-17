@@ -405,10 +405,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def center_crop(
         self,
         image: "torch.Tensor",
-        size: dict[str, int],
+        size: SizeDict,
         **kwargs,
     ) -> "torch.Tensor":
         """
+        Note: override torchvision's center_crop to have the same behavior as the slow processor.
         Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
         any edge, the image is padded with 0's and then center cropped.
 
@@ -423,7 +424,24 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         if size.height is None or size.width is None:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
-        return F.center_crop(image, (size["height"], size["width"]))
+        image_height, image_width = image.shape[-2:]
+        crop_height, crop_width = size.height, size.width
+
+        if crop_width > image_width or crop_height > image_height:
+            padding_ltrb = [
+                (crop_width - image_width) // 2 if crop_width > image_width else 0,
+                (crop_height - image_height) // 2 if crop_height > image_height else 0,
+                (crop_width - image_width + 1) // 2 if crop_width > image_width else 0,
+                (crop_height - image_height + 1) // 2 if crop_height > image_height else 0,
+            ]
+            image = F.pad(image, padding_ltrb, fill=0)  # PIL uses fill value 0
+            image_height, image_width = image.shape[-2:]
+            if crop_width == image_width and crop_height == image_height:
+                return image
+
+        crop_top = int((image_height - crop_height) / 2.0)
+        crop_left = int((image_width - crop_width) / 2.0)
+        return F.crop(image, crop_top, crop_left, crop_height, crop_width)
 
     def convert_to_rgb(
         self,

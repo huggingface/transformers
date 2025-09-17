@@ -19,7 +19,6 @@ from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
@@ -251,7 +250,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
                 "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 class Gemma3Config(PretrainedConfig):
@@ -756,6 +755,10 @@ class Gemma3Model(PaliGemmaModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
 
+    def __init__(self, config: Gemma3Config):
+        super().__init__(config)
+        del self.text_config_dtype
+
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Projects the last hidden state from the vision model into language model space.
@@ -838,11 +841,21 @@ class Gemma3Model(PaliGemmaModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            if token_type_ids is not None and inputs_embeds.shape[1] != 1:
+            # NOTE: this `is_prefill` logic is not flawless, it fails when we're using a cache eagerly initialized
+            # (e.g. compiled prefill) AND `pixel_values` are not provided. Determining prefill in that case requires
+            # checking data values, which is not compile-compatible.
+            is_prefill = (
+                not use_cache
+                or past_key_values is None
+                or not past_key_values.is_initialized
+                or pixel_values is not None
+            )
+            if token_type_ids is not None and is_prefill:
                 # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
 
                 # First find where a new image block starts: 1 if image and previous not image
-                # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
+                # The images cannot attend to future images, but can attend to all prev images and to itself
+                # bidirectionally
                 is_image = (token_type_ids == 1).to(cache_position.device)
                 new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
                 image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1

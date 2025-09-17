@@ -20,7 +20,6 @@ from typing import Any, Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
