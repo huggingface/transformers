@@ -118,7 +118,6 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
-
     "kenlm",
     "kernels>=0.10.2,<0.11",
     "librosa",
