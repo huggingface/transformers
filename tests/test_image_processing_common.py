@@ -322,7 +322,6 @@ class ImageProcessingTestMixin:
         dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
-        print(difference)
         self.assertTrue(
             all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
         )
