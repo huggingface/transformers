@@ -195,8 +195,5 @@ class FlexOlmoConfig(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
-        # Set this to None because it is needed by MixtralModel
-        self.sliding_window = None
-
 
 __all__ = ["FlexOlmoConfig"]

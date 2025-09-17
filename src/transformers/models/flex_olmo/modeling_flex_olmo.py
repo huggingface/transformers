@@ -25,13 +25,11 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from transformers.utils.generic import check_model_inputs
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -39,7 +37,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import OutputRecorder
+from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_flex_olmo import FlexOlmoConfig
 
 
@@ -449,8 +447,7 @@ class FlexOlmoModel(FlexOlmoPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
+        causal_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
