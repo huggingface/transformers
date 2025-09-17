@@ -37,14 +37,14 @@ class Timesfm2P5ModelTester:
         self,
         parent,
         patch_length: int = 32,
-        context_length: int = 512,
-        horizon_length: int = 128,
+        context_length: int = 128,  # Small but compatible context
+        horizon_length: int = 32,  # Small horizon
         freq_size: int = 3,
         num_hidden_layers: int = 1,
-        hidden_size: int = 16,
-        intermediate_size: int = 32,
-        head_dim: int = 8,
-        num_heads: int = 2,
+        hidden_size: int = 64,  # Small hidden size
+        intermediate_size: int = 64,
+        head_dim: int = 16,  # 64 / 4 = 16
+        num_heads: int = 4,
         tolerance: float = 1e-6,
         rms_norm_eps: float = 1e-6,
         quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
@@ -53,6 +53,8 @@ class Timesfm2P5ModelTester:
         initializer_factor: float = 0.0,
         is_training: bool = False,
         batch_size: int = 3,
+        output_patch_length: int = 32,  # Match horizon_length to make model smaller
+        output_quantile_len: int = 320,  # Small quantile output length
     ):
         self.parent = parent
         self.patch_length = patch_length
@@ -72,6 +74,8 @@ class Timesfm2P5ModelTester:
         self.initializer_factor = initializer_factor
         self.is_training = is_training
         self.batch_size = batch_size
+        self.output_patch_length = output_patch_length
+        self.output_quantile_len = output_quantile_len
 
         # The size of test input
         self.seq_length = context_length // patch_length
@@ -94,6 +98,8 @@ class Timesfm2P5ModelTester:
             rms_norm_eps=self.rms_norm_eps,
             use_positional_embedding=self.use_positional_embedding,
             initializer_factor=self.initializer_factor,
+            output_patch_length=self.output_patch_length,
+            output_quantile_len=self.output_quantile_len,
         )
 
     def get_pipeline_config(self):
