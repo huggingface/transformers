@@ -608,7 +608,9 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     # Override as Sam2Model doesn't have hidden states
-    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2):
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
         This test is only for inference and runs with `dtype=torch.bfloat16`.

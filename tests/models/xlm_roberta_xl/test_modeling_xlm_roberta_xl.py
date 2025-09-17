@@ -641,7 +641,9 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
-    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2):
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
         r"""
         Overwritten to enforce decoder behavior as the model is very easily influenced
         by slight changes in the mask. One major reason for the high fluctuations is
@@ -742,7 +744,6 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
                     _ = model_fa(**prepared_inputs)
                 else:
                     assert torch.allclose(logits_fa[:-1], logits[:-1], atol=atol, rtol=rtol)
-
 
     @unittest.skip("XLM Roberta XL has some higher fluctuations, skipping for now (norm issue)")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
