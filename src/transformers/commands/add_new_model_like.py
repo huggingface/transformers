@@ -17,9 +17,10 @@ import re
 import subprocess
 import textwrap
 from argparse import ArgumentParser, Namespace
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
