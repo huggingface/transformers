@@ -1092,19 +1092,28 @@ class TrackioCallback(TrainerCallback):
         """
         Setup the optional Trackio integration.
 
-        To customize the setup you can also override the following environment variables:
-
-        Environment:
-        - **TRACKIO_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
-            The name of the project (can be an existing project to continue tracking or a new project to start tracking
-            from scratch).
-        - **TRACKIO_SPACE_ID** (`str`, *optional*, defaults to `None`):
-            If set, the project will be logged to a Hugging Face Space instead of a local directory. Should be a
-            complete Space name like `"username/reponame"` or `"orgname/reponame"`, or just `"reponame" in which case
-            the Space will be created in the currently-logged-in Hugging Face user's namespace. If the Space does not
-            exist, it will be created. If the Space already exists, the project will be logged to it.
+        To customize the setup you can also set the arguments `project`, `trackio_space_id` and `hub_private_repo` in
+        [`TrainingArguments`]. Please refer to the docstring of for more details.
         """
         if state.is_world_process_zero:
+            if os.getenv("TRACKIO_PROJECT"):
+                logger.warning(
+                    "The `TRACKIO_PROJECT` environment variable is deprecated and will be removed in a future "
+                    "version. Use TrainingArguments.project instead."
+                )
+                project = os.getenv("TRACKIO_PROJECT")
+            else:
+                project = args.project
+
+            if os.getenv("TRACKIO_SPACE_ID"):
+                logger.warning(
+                    "The `TRACKIO_SPACE_ID` environment variable is deprecated and will be removed in a future "
+                    "version. Use TrainingArguments.trackio_space_id instead."
+                )
+                space_id = os.getenv("TRACKIO_SPACE_ID")
+            else:
+                space_id = args.trackio_space_id
+
             combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
@@ -1115,9 +1124,9 @@ class TrackioCallback(TrainerCallback):
                 combined_dict = {**{"peft_config": peft_config}, **combined_dict}
 
             self._trackio.init(
-                project=os.getenv("TRACKIO_PROJECT", "huggingface"),
+                project=project,
                 name=args.run_name,
-                space_id=os.getenv("TRACKIO_SPACE_ID", None),
+                space_id=space_id,
                 resume="allow",
                 private=args.hub_private_repo,
             )
