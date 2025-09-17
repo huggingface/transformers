@@ -116,7 +116,6 @@ gpt_oss_schema = {
 }
 
 
-@require_jinja
 @require_jmespath
 class ChatSchemaParserTest(unittest.TestCase):
     def test_schema_save_load(self):
