@@ -36,6 +36,7 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
+    pil_torch_interpolation_mapping,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -51,7 +52,6 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     filter_out_non_signature_kwargs,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
@@ -71,12 +71,8 @@ from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-
-    from ...image_utils import pil_torch_interpolation_mapping
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
-
-    from ...image_utils import pil_torch_interpolation_mapping
 
 
 logger = logging.get_logger(__name__)
@@ -513,6 +509,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
             number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to square or not.
     """
 
     model_input_names = ["pixel_values", "high_res_pixel_values"]
@@ -534,6 +532,7 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         high_res_image_mean: Optional[Union[float, list[float]]] = None,
         high_res_image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
+        do_pad: bool = True,
         **kwargs,
     ) -> None:
         high_res_size = high_res_size if high_res_size is not None else {"height": 1024, "width": 1024}
@@ -557,6 +556,7 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_convert_rgb=do_convert_rgb,
+            do_pad=do_pad,
             **kwargs,
         )
 
@@ -585,6 +585,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_convert_rgb: Optional[bool] = None,
+        do_pad: Optional[bool] = None,
+        background_color: Optional[tuple[int, int, int]] = None,
     ):
         """
         Preprocess an image or batch of images.
@@ -641,6 +643,10 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the image to square or not.
+            background_color (`tuple[int, int, int]`):
+                The background color to use for the padding.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -653,6 +659,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         high_res_image_mean = high_res_image_mean if high_res_image_mean is not None else self.high_res_image_mean
         high_res_image_std = high_res_image_std if high_res_image_std is not None else self.high_res_image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_pad = do_pad if do_pad is not None else self.do_pad
+        background_color = background_color if background_color is not None else self.background_color
 
         size = size if size is not None else self.size
         size_dict = get_size_dict(size)
@@ -704,17 +712,28 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
                 high_res_image = self.resize(
                     image=high_res_image,
                     size=high_res_size_dict,
-                    background_color=self.high_res_background_color,
                     resample=high_res_resample,
                     input_data_format=input_data_format,
                 )
+                if do_pad:
+                    # Expand and pad the images to obtain a square image of dimensions `size x size`
+                    high_res_image = self.pad_to_square(
+                        image=high_res_image,
+                        background_color=background_color,
+                        input_data_format=input_data_format,
+                    )
                 image = self.resize(
                     image=high_res_image,
                     size=size_dict,
-                    background_color=self.background_color,
                     resample=resample,
                     input_data_format=input_data_format,
                 )
+                if do_pad:
+                    image = self.pad_to_square(
+                        image=image,
+                        background_color=background_color,
+                        input_data_format=input_data_format,
+                    )
 
             if do_rescale:
                 image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)

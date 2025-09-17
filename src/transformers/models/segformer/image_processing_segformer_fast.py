@@ -21,6 +21,8 @@
 
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -43,12 +45,10 @@ from ...utils import (
 from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
-if is_torch_available():
-    import torch
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 

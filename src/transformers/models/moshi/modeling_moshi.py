@@ -20,7 +20,6 @@ from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN

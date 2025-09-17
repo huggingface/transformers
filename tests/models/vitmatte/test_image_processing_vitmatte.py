@@ -126,6 +126,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
             self.assertTrue(hasattr(image_processing, "do_pad"))
             self.assertTrue(hasattr(image_processing, "size_divisor"))
+            # Check size_divisibility for BC, the image proccessor has to have an atribute
+            self.assertTrue(hasattr(image_processing, "size_divisibility"))
 
     def test_call_numpy(self):
         # create random numpy tensors
@@ -140,7 +142,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
-            # Verify that width and height can be divided by size_divisor and that correct dimensions got merged
+            # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
             self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
@@ -159,7 +161,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
-            # Verify that width and height can be divided by size_divisor and that correct dimensions got merged
+            # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
             self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
@@ -179,7 +181,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
-            # Verify that width and height can be divided by size_divisor and that correct dimensions got merged
+            # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
             self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
@@ -197,7 +199,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
-            # Verify that width and height can be divided by size_divisor and that correct dimensions got merged
+            # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
             self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
@@ -223,7 +225,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 return_tensors="pt",
             ).pixel_values
 
-            # Verify that width and height can be divided by size_divisor and that correct dimensions got merged
+            # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
             self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 5)

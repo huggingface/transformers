@@ -35,6 +35,7 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -97,7 +98,22 @@ class VitMatteImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.size_divisor = size_divisor
+        size_divisibility = kwargs.get("size_divisibility")
+        self.size_divisor = size_divisibility if size_divisibility is not None else size_divisor
+
+    @property
+    def size_divisibility(self):
+        logger.warning(
+            "`self.size_divisibility` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead"
+        )
+        return self.size_divisor
+
+    @size_divisibility.setter
+    def size_divisibility(self, value):
+        logger.warning(
+            "`self.size_divisibility` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead"
+        )
+        self.size_divisor = value
 
     def pad_image(
         self,
@@ -141,6 +157,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
         return image
 
     @filter_out_non_signature_kwargs()
+    @deprecate_kwarg("size_divisibility", version="v5", new_name="size_divisor")
     def preprocess(
         self,
         images: ImageInput,
@@ -226,8 +243,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size_divisor,
         )
 
         # All transformations expect numpy arrays.
@@ -269,7 +284,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         if do_pad:
             images = [
-                self.pad_image(image, size_divisor=size_divisor, input_data_format=input_data_format)
+                self.pad_image(image, size_divisibility=size_divisor, input_data_format=input_data_format)
                 for image in images
             ]
 

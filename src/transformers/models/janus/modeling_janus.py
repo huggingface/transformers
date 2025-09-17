@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
@@ -34,21 +35,10 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torch_available,
-    logging,
-    torch_int,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfig
-
-
-if is_torch_available():
-    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)

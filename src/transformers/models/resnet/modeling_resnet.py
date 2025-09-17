@@ -18,7 +18,6 @@ import math
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN

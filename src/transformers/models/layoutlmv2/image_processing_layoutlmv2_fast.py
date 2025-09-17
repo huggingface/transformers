@@ -17,14 +17,14 @@
 from typing import Optional, Union
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
+import torch
+
 from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
     requires_backends,
@@ -32,16 +32,12 @@ from ...utils import (
 from .image_processing_layoutlmv2 import LayoutLMv2ImageProcessorKwargs, apply_tesseract
 
 
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
+
 logger = logging.get_logger(__name__)
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
 
 
 LayoutLMv2FastImageProcessorKwargs = LayoutLMv2ImageProcessorKwargs

@@ -17,6 +17,8 @@
 import warnings
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils_fast import (
     BatchFeature,
 )
@@ -31,20 +33,14 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 from ..owlvit.image_processing_owlvit_fast import OwlViTImageProcessorFast
 
 
-if is_torch_available():
-    import torch
-
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 
@@ -80,7 +76,12 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         images: list["torch.Tensor"],
         disable_grouping: Optional[bool],
         constant_value: float = 0.5,
+        **kwargs,
     ) -> list["torch.Tensor"]:
+        """
+        Unlike the Base class `self.pad` where all images are padded to the maximum image size,
+        Owlv2 pads an image to square.
+        """
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -180,7 +181,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
-            processed_images = self.pad(processed_images, disable_grouping=disable_grouping)
+            processed_images = self.pad(processed_images, constant_value=0.5, disable_grouping=disable_grouping)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             processed_images, disable_grouping=disable_grouping

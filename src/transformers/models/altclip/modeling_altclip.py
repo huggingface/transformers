@@ -20,7 +20,6 @@ from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer

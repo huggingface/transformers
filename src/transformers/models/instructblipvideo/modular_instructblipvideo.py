@@ -16,7 +16,6 @@
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 
 from transformers.models.instructblip.configuration_instructblip import (
     InstructBlipQFormerConfig,

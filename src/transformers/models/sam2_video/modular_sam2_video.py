@@ -24,7 +24,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import Tensor
 from tqdm import tqdm
 
@@ -37,7 +36,6 @@ from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import (
     ModelOutput,
     auto_docstring,
-    is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     logging,
@@ -61,12 +59,9 @@ from ..sam2.modeling_sam2 import (
 from ..sam2.processing_sam2 import Sam2Processor
 
 
-if is_torch_available():
-    import torch
-
 if is_torchvision_available() and is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 

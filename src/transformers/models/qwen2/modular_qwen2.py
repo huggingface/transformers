@@ -1,7 +1,6 @@
 from typing import Callable, Optional
 
 import torch
-import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 

@@ -17,7 +17,6 @@
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ....transformers.models.dinov2.modeling_dinov2 import (

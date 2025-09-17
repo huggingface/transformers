@@ -16,6 +16,8 @@
 
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -41,14 +43,11 @@ from ...utils import (
 from .image_processing_tvp import TvpImageProcessorKwargs
 
 
-if is_torch_available():
-    import torch
 
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 
 TvpFastImageProcessorKwargs = TvpImageProcessorKwargs
@@ -101,31 +100,6 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
             `ImageInput`: The images with a valid nesting.
         """
         return make_nested_list_of_images(images, **kwargs)
-
-    def _pad_frames(
-        self,
-        frames: "torch.Tensor",
-        pad_size: Union[SizeDict, dict],
-        constant_values: Union[float, list[float]],
-        pad_mode: str,
-    ) -> "torch.Tensor":
-        """Pad frames to the specified size."""
-        height, width = pad_size.height, pad_size.width
-
-        if frames.shape[-2:] == (height, width):
-            return frames
-
-        # Calculate padding
-        current_height, current_width = frames.shape[-2:]
-        pad_bottom = height - current_height
-        pad_right = width - current_width
-
-        if pad_bottom < 0 or pad_right < 0:
-            raise ValueError("The padding size must be greater than frame size")
-
-        # Apply padding
-        padding = [0, 0, pad_right, pad_bottom]  # [left, top, right, bottom]
-        return F.pad(frames, padding, fill=constant_values, padding_mode=pad_mode)
 
     def resize(
         self,
@@ -205,7 +179,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_pad: bool,
-        pad_size: Union[SizeDict, dict],
+        pad_size: SizeDict,
         constant_values: Union[float, list[float]],
         pad_mode: str,
         do_normalize: bool,
@@ -242,7 +216,8 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
 
             # Pad if needed
             if do_pad:
-                stacked_frames = self._pad_frames(stacked_frames, pad_size, constant_values, pad_mode)
+                stacked_frames = self.pad(stacked_frames, pad_size, fill_value=constant_values, pad_mode=pad_mode)
+                stacked_frames = torch.stack(stacked_frames, dim=0)
 
             # Flip channel order if needed (RGB to BGR)
             if do_flip_channel_order:

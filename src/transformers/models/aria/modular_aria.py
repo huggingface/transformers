@@ -16,6 +16,8 @@ from collections.abc import Iterable
 from typing import Optional, Union
 
 import numpy as np
+import torch
+from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -39,7 +41,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -61,10 +62,6 @@ from ..llava_next.image_processing_llava_next import divide_to_patches
 
 
 logger = logging.get_logger(__name__)
-
-if is_torch_available():
-    import torch
-    from torch import nn
 
 
 def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):

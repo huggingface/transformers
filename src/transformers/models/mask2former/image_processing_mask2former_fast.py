@@ -21,6 +21,9 @@
 import math
 from typing import Any, Optional, Union
 
+import torch
+from torch import nn
+
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -38,14 +41,7 @@ from ...image_utils import (
     PILImageResampling,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    logging,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, logging
 from .image_processing_mask2former import (
     Mask2FormerImageProcessorKwargs,
     compute_segments,
@@ -55,17 +51,10 @@ from .image_processing_mask2former import (
 )
 
 
-if is_torch_available():
-    import torch
-    from torch import nn
-
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
-
 
 logger = logging.get_logger(__name__)
 
@@ -304,8 +293,8 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps: Optional["torch.Tensor"],
         instance_id_to_semantic_id: Optional[dict[int, int]],
         do_resize: Optional[bool],
-        size: Optional[dict[str, int]],
-        pad_size: Optional[dict[str, int]],
+        size: Optional[SizeDict],
+        pad_size: Optional[SizeDict],
         size_divisor: Optional[int],
         interpolation: Optional[Union["PILImageResampling", "F.InterpolationMode"]],
         do_rescale: Optional[bool],
@@ -353,7 +342,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
                 resized_segmentation_maps_grouped, grouped_segmentation_maps_index
             )
         if pad_size is not None:
-            padded_size = (pad_size["height"], pad_size["width"])
+            padded_size = (pad_size.height, pad_size.width)
         else:
             padded_size = get_max_height_width(resized_images)
 

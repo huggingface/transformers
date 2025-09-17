@@ -19,7 +19,6 @@ from typing import Callable, Optional
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.arcee.modeling_arcee import ArceeMLP

@@ -17,6 +17,8 @@ from functools import reduce
 from typing import Optional, Union
 
 import numpy as np
+import torch
+from torchvision.transforms import functional as F
 
 from ...image_processing_utils import (
     BatchFeature,
@@ -41,12 +43,6 @@ from ...utils import (
     is_torchvision_available,
 )
 
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 
 class PerceptionLMFastImageProcessorKwargs(ImagesKwargs):

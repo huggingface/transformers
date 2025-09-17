@@ -19,7 +19,6 @@ from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation

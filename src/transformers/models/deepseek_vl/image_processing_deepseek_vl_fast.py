@@ -20,6 +20,7 @@
 
 from typing import Optional, Union
 
+import torch
 import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
@@ -52,6 +53,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     do_rescale = True
     do_normalize = True
+    do_pad = True
     valid_kwargs = DeepseekVLFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[DeepseekVLFastImageProcessorKwargs]):

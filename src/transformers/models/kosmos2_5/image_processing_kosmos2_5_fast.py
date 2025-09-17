@@ -17,6 +17,8 @@
 import math
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -28,9 +30,6 @@ from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 from .image_processing_kosmos2_5 import Kosmos2_5ImageProcessorKwargs
 
-
-if is_torch_available():
-    import torch
 
 
 # Similar to transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches but dealing with a batch of images directly.

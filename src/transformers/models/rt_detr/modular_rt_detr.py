@@ -2,6 +2,8 @@ import pathlib
 from typing import Optional, Union
 
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
+import torch
+
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
@@ -20,8 +22,6 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
     requires_backends,
@@ -29,13 +29,9 @@ from ...utils import (
 from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
-if is_torch_available():
-    import torch
-
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 
@@ -175,7 +171,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        pad_size: Optional[dict[str, int]],
+        pad_size: Optional[SizeDict],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
@@ -234,7 +230,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
-                padded_size = (pad_size["height"], pad_size["width"])
+                padded_size = (pad_size.height, pad_size.width)
             else:
                 padded_size = get_max_height_width(images)
 

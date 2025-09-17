@@ -21,6 +21,9 @@
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
+import torch
+from torch import nn
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -35,14 +38,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
-from ...utils.import_utils import is_torch_available
 from ..auto import AutoModel
 from .configuration_aria import AriaConfig, AriaTextConfig
-
-
-if is_torch_available():
-    import torch
-    from torch import nn
 
 
 @use_kernel_forward_from_hub("RMSNorm")
