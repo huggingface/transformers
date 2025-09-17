@@ -16,7 +16,7 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
@@ -55,10 +55,6 @@ class TvpFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     r"""
     do_flip_channel_order (`bool`, *optional*):
         Whether to flip the channel order of the image from RGB to BGR.
-    do_pad (`bool`, *optional*):
-        Whether to pad the image.
-    pad_size (`Dict[str, int]` or `SizeDict`, *optional*):
-        Size dictionary specifying the desired height and width for padding.
     constant_values (`float` or `List[float]`, *optional*):
         Value used to fill the padding area when `pad_mode` is `'constant'`.
     pad_mode (`str`, *optional*):
@@ -66,8 +62,6 @@ class TvpFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
 
     do_flip_channel_order: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[SizeDict]
     constant_values: Optional[Union[float, list[float]]]
     pad_mode: Optional[str]
 
@@ -101,25 +95,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         videos: Union[ImageInput, list[ImageInput], list[list[ImageInput]]],
         **kwargs: Unpack[TvpFastImageProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Preprocess videos using the fast image processor.
-        """
         return super().preprocess(videos, **kwargs)
-
-    def _further_process_kwargs(
-        self,
-        pad_size: Optional[SizeDict] = None,
-        **kwargs,
-    ) -> dict:
-        """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
-        """
-        if pad_size is not None:
-            pad_size = SizeDict(**get_size_dict(pad_size, param_name="pad_size"))
-        kwargs["pad_size"] = pad_size
-
-        return super()._further_process_kwargs(**kwargs)
 
     def _prepare_images_structure(
         self,
@@ -138,36 +114,11 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         """
         return make_nested_list_of_images(images, **kwargs)
 
-    def _pad_frames(
-        self,
-        frames: "torch.Tensor",
-        pad_size: Union[SizeDict, dict],
-        constant_values: Union[float, list[float]],
-        pad_mode: str,
-    ) -> "torch.Tensor":
-        """Pad frames to the specified size."""
-        height, width = pad_size.height, pad_size.width
-
-        if frames.shape[-2:] == (height, width):
-            return frames
-
-        # Calculate padding
-        current_height, current_width = frames.shape[-2:]
-        pad_bottom = height - current_height
-        pad_right = width - current_width
-
-        if pad_bottom < 0 or pad_right < 0:
-            raise ValueError("The padding size must be greater than frame size")
-
-        # Apply padding
-        padding = [0, 0, pad_right, pad_bottom]  # [left, top, right, bottom]
-        return F.pad(frames, padding, fill=constant_values, padding_mode=pad_mode)
-
     def resize(
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -241,7 +192,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_pad: bool,
-        pad_size: Union[SizeDict, dict],
+        pad_size: SizeDict,
         constant_values: Union[float, list[float]],
         pad_mode: str,
         do_normalize: bool,
@@ -278,7 +229,8 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
 
             # Pad if needed
             if do_pad:
-                stacked_frames = self._pad_frames(stacked_frames, pad_size, constant_values, pad_mode)
+                stacked_frames = self.pad(stacked_frames, pad_size, fill_value=constant_values, pad_mode=pad_mode)
+                stacked_frames = torch.stack(stacked_frames, dim=0)
 
             # Flip channel order if needed (RGB to BGR)
             if do_flip_channel_order:

@@ -1,9 +1,6 @@
-import io
 import tempfile
 import unittest
 from shutil import rmtree
-
-import requests
 
 from transformers import (
     AutoProcessor,
@@ -11,15 +8,11 @@ from transformers import (
     FuyuImageProcessor,
     FuyuProcessor,
     is_torch_available,
-    is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from PIL import Image
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
@@ -44,8 +37,10 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         processor.save_pretrained(cls.tmpdirname)
 
         cls.text_prompt = "Generate a coco-style caption.\\n"
-        bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
-        cls.bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
+        bus_image_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
+        )
+        cls.bus_image_pil = load_image(bus_image_url)
 
     @classmethod
     def tearDownClass(cls):
@@ -346,6 +341,28 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         self.assertEqual(len(inputs["input_ids"][0]), 7)
+
+    def test_processor_text_has_no_visual(self):
+        # Overwritten: Fuyu has a complicated processing so we don't check id values
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(batch_size=3, modalities="image")
+        image_inputs = self.prepare_image_inputs(batch_size=3)
+        processing_kwargs = {"return_tensors": "pt", "padding": True, "multi_page": True}
+
+        # Call with nested list of vision inputs
+        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+        inputs_dict_nested = {"text": text, "images": image_inputs_nested}
+        inputs = processor(**inputs_dict_nested, **processing_kwargs)
+        self.assertTrue(self.text_input_name in inputs)
+
+        # Call with one of the samples with no associated vision input
+        plain_text = "lower newer"
+        image_inputs_nested[0] = []
+        text[0] = plain_text
+        inputs_dict_no_vision = {"text": text, "images": image_inputs_nested}
+        inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
+        self.assertTrue(self.text_input_name in inputs_nested)
 
 
 @require_torch

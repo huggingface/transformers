@@ -221,7 +221,7 @@ class FlaxGenerationMixin:
     def _adapt_logits_for_beam_search(self, logits):
         """
         This function can be overwritten in the specific modeling_flax_<model-name>.py classes to allow for custom beam
-        search behavior. Note that the only model that overwrites this method is [`~transformes.FlaxMarianMTModel`].
+        search behavior. Note that the only model that overwrites this method is [`~transformers.FlaxMarianMTModel`].
         """
         return logits
 

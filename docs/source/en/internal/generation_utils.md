@@ -108,9 +108,6 @@ generation.
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] HammingDiversityLogitsProcessor
-    - __call__
-
 [[autodoc]] InfNanRemoveLogitsProcessor
     - __call__
 
@@ -219,10 +216,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - process
     - finalize
 
-[[autodoc]] BeamSearchScorer
-    - process
-    - finalize
-
 [[autodoc]] ConstrainedBeamSearchScorer
     - process
     - finalize
@@ -257,7 +250,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - update
     - lazy_initialization
 
-[[autodoc]] SlidingWindowLayer
+[[autodoc]] StaticSlidingWindowLayer
     - update
     - lazy_initialization
 

@@ -16,7 +16,14 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import (
+    AddedToken,
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+    UMT5Config,
+    UMT5EncoderModel,
+)
 from transformers.testing_utils import (
     require_gguf,
     require_read_token,
@@ -279,7 +286,7 @@ class GgufModelTests(unittest.TestCase):
     falcon7b_model_id_fp16 = "medmekk/falcon-7b-gguf"
     falcon40b_model_id = "maddes8cht/tiiuae-falcon-40b-gguf"
     original_flacon7b_model_id = "tiiuae/falcon-7b"
-    t5_model_id = "repetitio/flan-t5-small"
+    t5_model_id = "Felladrin/gguf-flan-t5-small"
     original_t5_model_id = "google/flan-t5-small"
     stablelm_model_id = "afrideva/stablelm-3b-4e1t-GGUF"
     stablelm2_model_id = "afrideva/stablelm-2-1_6b-GGUF"
@@ -303,6 +310,7 @@ class GgufModelTests(unittest.TestCase):
     gemma3_vision_model_id = "unsloth/gemma-3-4b-it-GGUF"
     qwen3_model_id = "Qwen/Qwen3-0.6B-GGUF"
     qwen3moe_model_id = "Qwen/Qwen3-30B-A3B-GGUF"
+    umt5_encoder_model_id = "city96/umt5-xxl-encoder-gguf"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -317,8 +325,8 @@ class GgufModelTests(unittest.TestCase):
     q2_k_falcon7b_model_id = "falcon-7b-q2_k.gguf"
     fp16_falcon7b_model_id = "falcon-7b-fp16.gguf"
     q2_k_falcon40b_model_id = "tiiuae-falcon-40b-Q2_K.gguf"
-    fp16_t5_model_id = "flan-t5-small-f16.gguf"
-    q8_0_t5_model_id = "flan-t5-small-q8_0.gguf"
+    fp16_t5_model_id = "flan-t5-small.F16.gguf"
+    q8_0_t5_model_id = "flan-t5-small.Q8_0.gguf"
     fp16_qwen2moe_model_id = "Qwen1.5-MoE-A2.7B.gguf"
     fp16_gpt2_model_id = "gpt2.f16.gguf"
     q8_gpt2_model_id = "gpt2.Q8_0.gguf"
@@ -341,6 +349,7 @@ class GgufModelTests(unittest.TestCase):
     fp16_deci_model_id = "decilm-7b-uniform-gqa-f16.gguf"
     q8_0_qwen3_model_id = "Qwen3-0.6B-Q8_0.gguf"
     q4_k_m_qwen3moe_model_id = "Qwen3-30B-A3B-Q4_K_M.gguf"
+    q8_0_umt5_encoder_model_id = "umt5-xxl-encoder-Q8_0.gguf"
 
     example_text = "Hello"
 
@@ -825,8 +834,8 @@ class GgufModelTests(unittest.TestCase):
             gguf_file=self.q6_k_nemotron_model_id,
             dtype=torch.float16,
         )
-
-        tokenizer = AutoTokenizer.from_pretrained(self.nemotron_model_id, gguf_file=self.q6_k_nemotron_model_id)
+        # use the original tokenizer from nvidia to avoid long load times
+        tokenizer = AutoTokenizer.from_pretrained("nvidia/Nemotron-Mini-4B-Instruct")
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=16)
 
@@ -952,7 +961,7 @@ class GgufModelTests(unittest.TestCase):
             self.gemma3_vision_model_id,
             gguf_file=self.bf16_gemma3_vision_model_id,
             dtype=torch.float16,
-        )
+        ).model
 
         converted_state_dict = converted_model.state_dict()
         original_state_dict = original_model.state_dict()
@@ -1072,3 +1081,38 @@ class GgufModelTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello, I am a 20 year old male"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_umt5_encoder_q8_0(self):
+        """
+        Verifies that a UMT5 encoder loads directly from a GGUF file using
+        UMT5EncoderModel.from_pretrained(...), and the config is correctly UMT5.
+        """
+        model = UMT5EncoderModel.from_pretrained(
+            self.umt5_encoder_model_id,
+            gguf_file=self.q8_0_umt5_encoder_model_id,
+            dtype=torch.float16,
+            device_map="auto",
+        )
+        model.eval()
+
+        self.assertIsInstance(model, UMT5EncoderModel)
+        self.assertIsInstance(model.config, UMT5Config)
+        self.assertEqual(model.config.model_type, "umt5")
+        self.assertIn("UMT5EncoderModel", getattr(model.config, "architectures", []))
+
+        input_ids = torch.tensor([[1, 2, 3, 4]], dtype=torch.long).to(torch_device)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids)
+
+        self.assertTrue(hasattr(outputs, "last_hidden_state"))
+        self.assertEqual(outputs.last_hidden_state.dim(), 3)  # (batch, seq_len, hidden)
+
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                [-0.0010, -0.0145, 0.0133],
+                [-0.0006, 0.1814, 0.1132],
+                [0.0005, 0.0083, -0.0285],
+            ]
+        ).to(torch_device)
+
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], EXPECTED_OUTPUT, rtol=6e-3, atol=4e-4)

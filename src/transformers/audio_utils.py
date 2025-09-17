@@ -17,14 +17,17 @@ and remove unnecessary dependencies.
 """
 
 import base64
+import importlib
 import io
 import os
 import warnings
+from collections.abc import Sequence
 from io import BytesIO
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import requests
+from packaging import version
 
 from .utils import (
     is_librosa_available,
@@ -46,8 +49,7 @@ if is_librosa_available():
     import soxr
 
 if is_torchcodec_available():
-    from torchcodec.decoders import AudioDecoder
-
+    TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]  # noqa: F821
 
@@ -71,8 +73,8 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
     if isinstance(audio, str):
         # Try to load with `torchcodec` but do not enforce users to install it. If not found
         # fallback to `librosa`. If using an audio-only model, most probably `torchcodec` won't be
-        # needed.
-        if is_torchcodec_available():
+        # needed. Do not raise any errors if not installed or versions do not match
+        if is_torchcodec_available() and TORCHCODEC_VERSION >= version.parse("0.3.0"):
             audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate)
         else:
             audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
@@ -99,7 +101,9 @@ def load_audio_torchcodec(audio: Union[str, np.ndarray], sampling_rate=16000) ->
     Returns:
         `np.ndarray`: A numpy array representing the audio.
     """
-    requires_backends(load_audio, ["torchcodec"])
+    # Lazy import so that issues in torchcodec compatibility don't crash the whole library
+    requires_backends(load_audio_torchcodec, ["torchcodec"])
+    from torchcodec.decoders import AudioDecoder
 
     # Set `num_channels` to `1` which is what most models expects and the default in librosa
     decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
@@ -123,7 +127,7 @@ def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeo
     Returns:
         `np.ndarray`: A numpy array representing the audio.
     """
-    requires_backends(load_audio, ["librosa"])
+    requires_backends(load_audio_librosa, ["librosa"])
 
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
     if audio.startswith("http://") or audio.startswith("https://"):

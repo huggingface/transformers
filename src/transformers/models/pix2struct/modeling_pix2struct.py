@@ -18,7 +18,6 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -1127,9 +1126,11 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         if use_cache and past_key_values is None:
             if self.config.is_encoder_decoder:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                past_key_values = EncoderDecoderCache(
+                    DynamicCache(config=self.config), DynamicCache(config=self.config)
+                )
             else:
-                past_key_values = DynamicCache()
+                past_key_values = DynamicCache(config=self.config)
 
         past_key_values_length = 0
         if cache_position is not None:

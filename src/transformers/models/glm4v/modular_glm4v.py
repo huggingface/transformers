@@ -387,7 +387,7 @@ class Glm4VisionMlp(Qwen2_5_VLMLP):
 
 class Glm4vVisionPatchEmbed(Qwen2_5_VisionPatchEmbed):
     def __init__(self, config: Glm4vVisionConfig) -> None:
-        Qwen2_5_VisionPatchEmbed.__init__()
+        nn.Module.__init__(self)
         self.patch_size = config.patch_size
         self.temporal_patch_size = config.temporal_patch_size
         self.in_channels = config.in_channels
@@ -507,7 +507,7 @@ class Glm4vVisionEmbeddings(nn.Module):
 
 class Glm4vVisionAttention(Qwen2_5_VLVisionAttention):
     def __init__(self, config: Glm4vVisionConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         self.attention_dropout = config.attention_dropout
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
@@ -515,7 +515,7 @@ class Glm4vVisionAttention(Qwen2_5_VLVisionAttention):
 
 class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
     def __init__(self, config) -> None:
-        super().__init__()
+        super().__init__(config)
         self.norm1 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = Glm4vVisionAttention(config)
@@ -686,7 +686,7 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -862,7 +862,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -873,7 +873,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
         # torch.jit.trace() doesn't support cache objects in the output
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1150,11 +1150,11 @@ class Glm4vModel(Qwen2_5_VLModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
+        image_features: Optional[torch.FloatTensor] = None,
+        video_features: Optional[torch.FloatTensor] = None,
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -1191,10 +1191,10 @@ class Glm4vModel(Qwen2_5_VLModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
         pixel_values_videos: Optional[torch.FloatTensor] = None,
@@ -1304,10 +1304,10 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1508,6 +1508,7 @@ class Glm4vProcessorKwargs(Qwen2_VLProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_token_type_ids": False,
             "return_mm_token_type_ids": False,
         },
         "videos_kwargs": {"return_metadata": True},
@@ -1538,9 +1539,9 @@ class Glm4vProcessor(Qwen2_VLProcessor):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
         """

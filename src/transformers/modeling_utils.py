@@ -44,12 +44,6 @@ from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
-from transformers.utils import is_torchao_available
-
-
-if is_torchao_available():
-    from torchao.quantization import Int4WeightOnlyConfig
-
 from .configuration_utils import PretrainedConfig
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
@@ -61,6 +55,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
+from .integrations.hub_kernels import is_kernel, load_and_register_kernel
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
@@ -73,17 +68,8 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from .modeling_flash_attention_utils import lazy_import_flash_attention
-from .pytorch_utils import (  # noqa: F401
-    Conv1D,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    id_tensor_storage,
-    prune_conv1d_layer,
-    prune_layer,
-    prune_linear_layer,
-)
+from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
 from .quantizers.quantizers_utils import get_module_from_name
@@ -124,6 +110,7 @@ from .utils import (
     is_torch_npu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
+    is_torchao_available,
     logging,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
@@ -138,9 +125,8 @@ from .utils.import_utils import (
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 
-XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
-XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
-
+if is_torchao_available():
+    from torchao.quantization import Int4WeightOnlyConfig
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map
@@ -164,31 +150,13 @@ if is_safetensors_available():
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
 
+if is_peft_available():
+    from .utils import find_adapter_config_file
 
-if is_kernels_available():
-    from kernels import get_kernel
-
-
-logger = logging.get_logger(__name__)
-
-
-_init_weights = True
-_is_quantized = False
-_is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
-
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
-
-
-def is_local_dist_rank_0():
-    return (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and int(os.environ.get("LOCAL_RANK", "-1")) == 0
-    )
-
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -198,11 +166,24 @@ if is_sagemaker_mp_enabled():
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
 
-if is_peft_available():
-    from .utils import find_adapter_config_file
 
+logger = logging.get_logger(__name__)
 
+XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
+XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
+_init_weights = True
+_is_quantized = False
+_is_ds_init_called = False
+
+
+def is_local_dist_rank_0():
+    return (
+        torch.distributed.is_available()
+        and torch.distributed.is_initialized()
+        and int(os.environ.get("LOCAL_RANK", "-1")) == 0
+    )
+
 
 TORCH_INIT_FUNCTIONS = {
     "uniform_": nn.init.uniform_,
@@ -1615,8 +1596,8 @@ def _find_mismatched_keys(
 
 
 class PipelineParallel(Enum):
-    inputs: 0
-    outputs: 1
+    inputs = 0
+    outputs = 1
 
 
 class ModuleUtilsMixin:
@@ -1738,7 +1719,11 @@ class ModuleUtilsMixin:
         return extended_attention_mask
 
     def get_extended_attention_mask(
-        self, attention_mask: Tensor, input_shape: tuple[int], device: torch.device = None, dtype: torch.float = None
+        self,
+        attention_mask: Tensor,
+        input_shape: tuple[int],
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
     ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -2792,61 +2777,45 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
-        # Register kernel if relevant
-        if attn_implementation is not None and re.match(
-            r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation
+        applicable_attn_implementation = attn_implementation
+        # If FA not installed, do not fail but use kernels instead
+        if (
+            applicable_attn_implementation == "flash_attention_2"
+            and self._supports_flash_attn
+            and not is_flash_attn_2_available()
+            and is_kernels_available()
         ):
-            if not is_kernels_available():
-                raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
-            attention_wrapper = None
-            # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-            actual_attn_name = attn_implementation
-            if "|" in attn_implementation:
-                attention_wrapper, actual_attn_name = attn_implementation.split("|")
-                # `transformers` has wrapper for sdpa, paged, flash, flex etc.
-                attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
-            # Extract repo_id and kernel_name from the string
-            if ":" in actual_attn_name:
-                repo_id, kernel_name = actual_attn_name.split(":")
-                kernel_name = kernel_name.strip()
-            else:
-                repo_id = actual_attn_name
-                kernel_name = None
-            repo_id = repo_id.strip()
-            # extract the rev after the @ if it exists
-            repo_id, _, rev = repo_id.partition("@")
-            repo_id = repo_id.strip()
-            rev = rev.strip() if rev else None
+            applicable_attn_implementation = "kernels-community/flash-attn"
+        if is_kernel(applicable_attn_implementation):
             try:
-                kernel = get_kernel(repo_id, revision=rev)
-                if hasattr(kernel, "flash_attn_varlen_func"):
-                    if attention_wrapper is None:
-                        attention_wrapper = flash_attention_forward
-                    kernel_function = partial(attention_wrapper, implementation=kernel)
-                    lazy_import_flash_attention(kernel)
-                elif kernel_name is not None:
-                    kernel_function = getattr(kernel, kernel_name)
-                ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
-                ALL_MASK_ATTENTION_FUNCTIONS.register(
-                    attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
-                )
+                load_and_register_kernel(applicable_attn_implementation)
+                # log that we used kernel fallback if successful
+                if attn_implementation == "flash_attention_2":
+                    logger.warning_once(
+                        "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` "
+                        "library instead!"
+                    )
             except Exception as e:
+                if attn_implementation == "flash_attention_2":
+                    self._flash_attn_2_can_dispatch()  # will fail as fa2 is not available but raise the proper exception
                 logger.warning_once(
-                    f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
-                    "default attention implementation instead (sdpa if available, eager otherwise)."
+                    f"Could not find a kernel matching `{applicable_attn_implementation}` compatible with your device in the "
+                    f"hub:\n{e}.\nUsing default attention implementation instead (sdpa if available, eager otherwise)."
                 )
                 try:
                     self._sdpa_can_dispatch(is_init_check)
-                    attn_implementation = "sdpa"
+                    applicable_attn_implementation = "sdpa"
                 except (ValueError, ImportError) as e:
-                    attn_implementation = "eager"
+                    applicable_attn_implementation = "eager"
         else:
-            attn_implementation = self.get_correct_attn_implementation(attn_implementation, is_init_check)
+            applicable_attn_implementation = self.get_correct_attn_implementation(
+                applicable_attn_implementation, is_init_check
+            )
             # preload flash attention here to allow compile with fullgraph
-            if attn_implementation.startswith("flash_attention"):
-                lazy_import_flash_attention(attn_implementation)
+            if applicable_attn_implementation.startswith("flash_attention"):
+                lazy_import_flash_attention(applicable_attn_implementation)
 
-        return attn_implementation
+        return applicable_attn_implementation
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
@@ -3035,11 +3004,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hasattr(self, "model"):
             inner = self.model
-            if hasattr(inner, "get_decoder"):
+            # See: https://github.com/huggingface/transformers/issues/40815
+            if hasattr(inner, "get_decoder") and type(inner) is not type(self):
                 return inner.get_decoder()
             return inner
 
-        return None  # raise AttributeError(f"{self.__class__.__name__} has no decoder; override `get_decoder()` if needed.")
+        # If this is a base transformer model (no decoder/model attributes), return self
+        # This handles cases like MistralModel which is itself the decoder
+        return self
 
     def set_decoder(self, decoder):
         """
@@ -3058,7 +3030,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self.model = decoder
             return
 
-        return  # raise AttributeError(f"{self.__class__.__name__} cannot accept a decoder; override `set_decoder()`.")
+        return
 
     def _init_weights(self, module):
         """
@@ -4043,8 +4015,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
+        metadata = {}
         if hf_quantizer is not None:
-            state_dict = hf_quantizer.get_state_dict(self)
+            state_dict, metadata = hf_quantizer.get_state_dict_and_metadata(self, safe_serialization)
+        metadata["format"] = "pt"
+
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
@@ -4053,7 +4028,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model_to_save.config.dtype = str(dtype).split(".")[1]
 
         # Attach architecture to the config
-        model_to_save.config.architectures = [model_to_save.__class__.__name__]
+        # When using FSDP2, unwrapping is a noop, so the model name doesn't change back to the original model name
+        model_to_save.config.architectures = [model_to_save.__class__.__name__.removeprefix("FSDP")]
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
@@ -4321,7 +4297,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough.
-                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
+                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
 
@@ -4934,11 +4910,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if device_map is None and not is_deepspeed_zero3_enabled():
             device_in_context = get_torch_context_manager_or_global_device()
             if device_in_context == torch.device("meta"):
-                # TODO Cyril: raise an error instead of the warning in v4.53 (and change the test to check for raise instead of success)
-                logger.warning(
-                    "We detected that you are using `from_pretrained` with a meta device context manager or `torch.set_default_device('meta')`\n"
-                    "This is an anti-pattern and will raise an Error in version v4.53\nIf you want to initialize a model on the meta device, use "
-                    "the context manager or global device with `from_config`, or `ModelClass(config)`"
+                raise RuntimeError(
+                    "You are using `from_pretrained` with a meta device context manager or `torch.set_default_device('meta')`.\n"
+                    "This is an anti-pattern as `from_pretrained` wants to load existing weights.\nIf you want to initialize an "
+                    "empty model on the meta device, use the context manager or global device with `from_config`, or `ModelClass(config)`"
                 )
             device_map = device_in_context
 
@@ -5233,14 +5208,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # check if using kernels
         if use_kernels:
-            if not is_kernels_available():
-                raise ValueError(
-                    "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
-                )
-
-            from kernels import Device, kernelize
-
-            kernelize(model, device=Device(type=model.device.type))
+            model.use_kernels = True
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
@@ -6001,6 +5969,36 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def loss_function(self, value):
         self._loss_function = value
 
+    def kernelize(self):
+        if not is_kernels_available():
+            raise ValueError(
+                "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+            )
+        from kernels import Device, Mode, kernelize
+
+        mode = Mode.INFERENCE if not self.training else Mode.TRAINING
+        kernelize(self, device=Device(type=self.device.type), mode=mode)
+        self._use_kernels = True
+
+    @property
+    def use_kernels(self) -> bool:
+        return getattr(self, "_use_kernels", False)
+
+    @use_kernels.setter
+    def use_kernels(self, value: bool) -> None:
+        # Avoid re-kernelizing if already enabled
+        if bool(value) and getattr(self, "_use_kernels", False):
+            return
+
+        if value:
+            self.kernelize()
+        else:
+            if getattr(self, "_use_kernels", False):
+                logger.warning_once(
+                    "Disabling kernels at runtime is a no-op as there is no 'unkernelize' routine; keeping current kernels active."
+                )
+            self._use_kernels = False
+
     def get_compiled_call(self, compile_config: Optional[CompileConfig]) -> Callable:
         """Return a `torch.compile`'d version of `self.__call__`. This is useful to dynamically choose between
         non-compiled/compiled `forward` during inference, especially to switch between prefill (where we don't
@@ -6122,6 +6120,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return module.get_extra_state()
 
         raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
+
+    def train(self, mode: bool = True):
+        out = super().train(mode)
+        if self.use_kernels:
+            self.kernelize()
+        return out
+
+    def eval(self):
+        return self.train(False)
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

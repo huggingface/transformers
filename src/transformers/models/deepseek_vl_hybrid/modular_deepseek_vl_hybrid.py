@@ -19,6 +19,7 @@ import torch.nn as nn
 
 from ...cache_utils import Cache
 from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
     get_size_dict,
@@ -129,9 +130,9 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
 
     def __init__(
         self,
-        text_config: AutoConfig = None,
-        vision_config: AutoConfig = None,
-        high_res_vision_config: AutoConfig = None,
+        text_config: Optional[AutoConfig] = None,
+        vision_config: Optional[AutoConfig] = None,
+        high_res_vision_config: Optional[AutoConfig] = None,
         image_token_id: int = 100015,
         **kwargs,
     ):
@@ -294,9 +295,9 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        high_res_pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        high_res_pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -357,9 +358,9 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        high_res_pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        high_res_pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -487,6 +488,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
             number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to square or not.
     """
 
     model_input_names = ["pixel_values", "high_res_pixel_values"]
@@ -507,6 +510,7 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         high_res_image_mean: Optional[Union[float, list[float]]] = None,
         high_res_image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
+        do_pad: bool = True,
         **kwargs,
     ) -> None:
         high_res_size = high_res_size if high_res_size is not None else {"height": 1024, "width": 1024}
@@ -530,6 +534,7 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_convert_rgb=do_convert_rgb,
+            do_pad=do_pad,
             **kwargs,
         )
 
@@ -545,8 +550,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         high_res_size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        high_res_resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
+        high_res_resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -558,6 +563,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_convert_rgb: Optional[bool] = None,
+        do_pad: Optional[bool] = None,
+        background_color: Optional[tuple[int, int, int]] = None,
     ):
         """
         Preprocess an image or batch of images.
@@ -614,6 +621,10 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the image to square or not.
+            background_color (`tuple[int, int, int]`):
+                The background color to use for the padding.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -626,6 +637,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         high_res_image_mean = high_res_image_mean if high_res_image_mean is not None else self.high_res_image_mean
         high_res_image_std = high_res_image_std if high_res_image_std is not None else self.high_res_image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_pad = do_pad if do_pad is not None else self.do_pad
+        background_color = background_color if background_color is not None else self.background_color
 
         size = size if size is not None else self.size
         size_dict = get_size_dict(size)
@@ -677,17 +690,28 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
                 high_res_image = self.resize(
                     image=high_res_image,
                     size=high_res_size_dict,
-                    background_color=self.high_res_background_color,
                     resample=high_res_resample,
                     input_data_format=input_data_format,
                 )
+                if do_pad:
+                    # Expand and pad the images to obtain a square image of dimensions `size x size`
+                    high_res_image = self.pad_to_square(
+                        image=high_res_image,
+                        background_color=background_color,
+                        input_data_format=input_data_format,
+                    )
                 image = self.resize(
                     image=high_res_image,
                     size=size_dict,
-                    background_color=self.background_color,
                     resample=resample,
                     input_data_format=input_data_format,
                 )
+                if do_pad:
+                    image = self.pad_to_square(
+                        image=image,
+                        background_color=background_color,
+                        input_data_format=input_data_format,
+                    )
 
             if do_rescale:
                 image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
@@ -760,7 +784,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
             high_res_background_color = (127, 127, 127)
         else:
             high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
-        DeepseekVLImageProcessorFast().__init__(**kwargs)
+        BaseImageProcessorFast.__init__(self, **kwargs)
         self.background_color = tuple(background_color)
         self.high_res_background_color = tuple(high_res_background_color)
 
@@ -919,13 +943,13 @@ class DeepseekVLHybridProcessor(DeepseekVLProcessor):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         **kwargs: Unpack[DeepseekVLHybridProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         DeepseekVLHybridImageProcessor's [`~DeepseekVLHybridImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 

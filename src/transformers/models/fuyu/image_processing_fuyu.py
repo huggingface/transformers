@@ -455,8 +455,6 @@ class FuyuImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size,  # There is no pad divisibility in this processor, but pad requires the size arg.
             do_resize=do_resize,
             size=size,
             resample=resample,
@@ -464,7 +462,11 @@ class FuyuImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         batch_images = [[to_numpy_array(image) for image in images] for images in batch_images]
 
-        if do_rescale and is_scaled_image(batch_images[0][0]):
+        # Search for the first image in the image list.
+        # NOTE: we can't slice the first image with images_list[0][0] if the first batch contains no images. See #36682
+        first_image_in_list = [images for images in batch_images if images][0][0]
+
+        if do_rescale and is_scaled_image(first_image_in_list):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -472,9 +474,11 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(batch_images[0][0])
+            input_data_format = infer_channel_dimension_format(first_image_in_list)
 
-        original_image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
+        original_image_sizes = [
+            get_image_size(images[0], channel_dim=input_data_format) for images in batch_images if images
+        ]
         size = get_size_dict(size)  # for BC
 
         if do_resize:
@@ -483,7 +487,7 @@ class FuyuImageProcessor(BaseImageProcessor):
                 for images in batch_images
             ]
 
-        image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
+        image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images if images]
         image_unpadded_heights = [[image_size[0]] for image_size in image_sizes]
         image_unpadded_widths = [[image_size[1]] for image_size in image_sizes]
 

@@ -68,23 +68,12 @@ class GroundingDinoFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         Controls whether to convert the annotations to the format expected by the GROUNDING_DINO model. Converts the
         bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
         Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-        If `pad_size` is provided, the image will be padded to the specified dimensions.
-        Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-        height and width in the batch.
     return_segmentation_masks (`bool`, *optional*, defaults to `False`):
         Whether to return segmentation masks.
     """
 
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
     return_segmentation_masks: Optional[bool]
 
 
@@ -407,7 +396,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -463,7 +452,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         orig_size: tuple[int, int],
         target_size: tuple[int, int],
         threshold: float = 0.5,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Resizes an annotation to a target size.
@@ -651,7 +640,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        pad_size: Optional[dict[str, int]],
+        pad_size: Optional[SizeDict],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
@@ -720,7 +709,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
-                padded_size = (pad_size["height"], pad_size["width"])
+                padded_size = (pad_size.height, pad_size.width)
             else:
                 padded_size = get_max_height_width(images)
 

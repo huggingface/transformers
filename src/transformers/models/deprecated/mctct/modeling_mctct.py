@@ -18,7 +18,6 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ....activations import ACT2FN
@@ -28,12 +27,8 @@ from ....integrations.fsdp import is_fsdp_managed_module
 from ....modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutput, CausalLMOutput
-from ....modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ....modeling_utils import PreTrainedModel
+from ....pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ....utils import logging
 from .configuration_mctct import MCTCTConfig
 

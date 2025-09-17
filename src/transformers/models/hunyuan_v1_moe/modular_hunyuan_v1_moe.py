@@ -18,7 +18,6 @@ from typing import Callable, Optional
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from transformers.cache_utils import Cache
@@ -187,7 +186,7 @@ class HunYuanMoEV1Moe(nn.Module):
 
 class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
         self.self_attn = HunYuanMoEV1Attention(config=config, layer_idx=layer_idx)
         self.mlp = HunYuanMoEV1Moe(config, layer_idx=layer_idx)

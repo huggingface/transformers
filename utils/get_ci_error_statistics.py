@@ -62,14 +62,16 @@ def get_job_links(workflow_run_id, token=None):
     return {}
 
 
-def get_artifacts_links(worflow_run_id, token=None):
+def get_artifacts_links(workflow_run_id, token=None):
     """Get all artifact links from a workflow run"""
 
     headers = None
     if token is not None:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
-    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{worflow_run_id}/artifacts?per_page=100"
+    url = (
+        f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts?per_page=100"
+    )
     result = requests.get(url, headers=headers).json()
     artifacts = {}
 

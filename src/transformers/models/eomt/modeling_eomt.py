@@ -77,7 +77,7 @@ class EomtForUniversalSegmentationOutput(ModelOutput):
         Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Self and Cross Attentions weights from transformer decoder.
     patch_offsets (`list[torch.Tensor]`, *optional*):
-        list of tuples indicating the image index and start and end positions of patches for semantic segementation.
+        list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -994,7 +994,6 @@ class EomtPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
-    _supports_flash_attn = True
     _can_record_outputs = {
         "hidden_states": EomtLayer,
         "attentions": EomtAttention,
@@ -1105,7 +1104,7 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
         patch_offsets (`list[torch.Tensor]`, *optional*):
-            list of tuples indicating the image index and start and end positions of patches for semantic segementation.
+            list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
         """
 
         masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()

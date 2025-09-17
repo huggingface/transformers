@@ -17,7 +17,6 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -332,6 +331,8 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextForImageClassification with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,convnext->convnextv2
 class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config):
         super().__init__(config)
 

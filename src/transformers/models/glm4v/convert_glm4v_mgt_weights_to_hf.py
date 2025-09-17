@@ -417,7 +417,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             )
             layer_i += 1
 
-    # Embedd Model, LM Head, and Norm
+    # Embedded Model, LM Head, and Norm
     embed_tokens = merge_tensors(
         tp_sd=mgt_sd[0],
         keys=["model", "embedding.word_embeddings.weight"],

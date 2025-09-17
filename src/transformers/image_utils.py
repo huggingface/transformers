@@ -21,7 +21,6 @@ from typing import Optional, Union
 
 import numpy as np
 import requests
-from packaging import version
 
 from .utils import (
     ExplicitEnum,
@@ -51,10 +50,7 @@ if is_vision_available():
     import PIL.Image
     import PIL.ImageOps
 
-    if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
-        PILImageResampling = PIL.Image.Resampling
-    else:
-        PILImageResampling = PIL.Image
+    PILImageResampling = PIL.Image.Resampling
 
     if is_torchvision_available():
         from torchvision.transforms import InterpolationMode
@@ -233,7 +229,7 @@ def make_flat_list_of_images(
     if (
         isinstance(images, (list, tuple))
         and all(isinstance(images_i, (list, tuple)) for images_i in images)
-        and all(is_valid_list_of_images(images_i) for images_i in images)
+        and all(is_valid_list_of_images(images_i) or not images_i for images_i in images)
     ):
         return [img for img_list in images for img in img_list]
 
@@ -255,7 +251,7 @@ def make_flat_list_of_images(
 def make_nested_list_of_images(
     images: Union[list[ImageInput], ImageInput],
     expected_ndims: int = 3,
-) -> ImageInput:
+) -> list[ImageInput]:
     """
     Ensure that the output is a nested list of images.
     Args:
@@ -270,7 +266,7 @@ def make_nested_list_of_images(
     if (
         isinstance(images, (list, tuple))
         and all(isinstance(images_i, (list, tuple)) for images_i in images)
-        and all(is_valid_list_of_images(images_i) for images_i in images)
+        and all(is_valid_list_of_images(images_i) or not images_i for images_i in images)
     ):
         return images
 
@@ -363,7 +359,7 @@ def get_channel_dimension_axis(
     raise ValueError(f"Unsupported data format: {input_data_format}")
 
 
-def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
+def get_image_size(image: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
 
@@ -529,7 +525,7 @@ def validate_preprocess_arguments(
     image_mean: Optional[Union[float, list[float]]] = None,
     image_std: Optional[Union[float, list[float]]] = None,
     do_pad: Optional[bool] = None,
-    size_divisibility: Optional[int] = None,
+    pad_size: Optional[Union[dict[str, int], int]] = None,
     do_center_crop: Optional[bool] = None,
     crop_size: Optional[dict[str, int]] = None,
     do_resize: Optional[bool] = None,
@@ -548,10 +544,15 @@ def validate_preprocess_arguments(
     if do_rescale and rescale_factor is None:
         raise ValueError("`rescale_factor` must be specified if `do_rescale` is `True`.")
 
-    if do_pad and size_divisibility is None:
-        # Here, size_divisor might be passed as the value of size
+    if do_pad and pad_size is None:
+        # Processors pad images using different args depending on the model, so the below check is pointless
+        # but we keep it for BC for now. TODO: remove in v5
+        # Usually padding can be called with:
+        #   - "pad_size/size" if we're padding to specific values
+        #   - "size_divisor" if we're padding to any value divisible by X
+        #   - "None" if we're padding to the maximum size image in batch
         raise ValueError(
-            "Depending on the model, `size_divisibility`, `size_divisor`, `pad_size` or `size` must be specified if `do_pad` is `True`."
+            "Depending on the model, `size_divisor` or `pad_size` or `size` must be specified if `do_pad` is `True`."
         )
 
     if do_normalize and (image_mean is None or image_std is None):

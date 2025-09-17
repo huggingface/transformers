@@ -22,7 +22,6 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -234,6 +233,7 @@ class BertSelfAttention(nn.Module):
             1, 2
         )
 
+        is_updated = False
         is_cross_attention = encoder_hidden_states is not None
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
@@ -268,7 +268,7 @@ class BertSelfAttention(nn.Module):
                     key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
@@ -363,6 +363,7 @@ class BertSdpaSelfAttention(BertSelfAttention):
             self.query(hidden_states).view(bsz, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
         )
 
+        is_updated = False
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if past_key_values is not None:
@@ -400,7 +401,7 @@ class BertSdpaSelfAttention(BertSelfAttention):
                     key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
@@ -611,7 +612,7 @@ class BertEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
@@ -630,7 +631,7 @@ class BertEncoder(nn.Module):
                 use_cache = False
 
         if use_cache and self.config.is_decoder and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if use_cache and self.config.is_decoder and isinstance(past_key_values, tuple):
             logger.warning_once(
@@ -885,7 +886,7 @@ class BertModel(BertPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1169,7 +1170,7 @@ class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

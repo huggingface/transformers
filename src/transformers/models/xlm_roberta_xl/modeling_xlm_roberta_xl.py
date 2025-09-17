@@ -18,7 +18,6 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -181,6 +180,7 @@ class XLMRobertaXLSelfAttention(nn.Module):
             1, 2
         )
 
+        is_updated = False
         is_cross_attention = encoder_hidden_states is not None
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
@@ -215,7 +215,7 @@ class XLMRobertaXLSelfAttention(nn.Module):
                     key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
@@ -311,6 +311,7 @@ class XLMRobertaXLSdpaSelfAttention(XLMRobertaXLSelfAttention):
             self.query(hidden_states).view(bsz, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
         )
 
+        is_updated = False
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if past_key_values is not None:
@@ -348,7 +349,7 @@ class XLMRobertaXLSdpaSelfAttention(XLMRobertaXLSelfAttention):
                     key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
@@ -576,7 +577,7 @@ class XLMRobertaXLEncoder(nn.Module):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
@@ -730,7 +731,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -908,7 +909,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1011,12 +1012,22 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
             if position_ids is not None:
                 position_ids = position_ids[:, remove_prefix_length:]
 
-        return {
+        model_inputs = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
             "past_key_values": past_key_values,
         }
+
+        # They are calculated on the fly on XLMRobertaXLModel.forward()
+        model_kwargs.pop("token_type_ids", None)
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in model_kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
+        return model_inputs
 
 
 @auto_docstring

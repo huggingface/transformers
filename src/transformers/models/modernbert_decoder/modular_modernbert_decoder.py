@@ -459,9 +459,9 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
             init_weight(module.Wo, stds["out"])
         elif isinstance(module, ModernBertDecoderPredictionHead):
             init_weight(module.dense, stds["out"])
-        elif module.__class__.__name__ == "ModernBertDecoderForSequenceClassification":
+        elif isinstance(module, ModernBertDecoderForSequenceClassification):
             init_weight(module.classifier, stds["final_out"])
-        elif module.__class__.__name__ == "ModernBertDecoderForCausalLM":
+        elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)

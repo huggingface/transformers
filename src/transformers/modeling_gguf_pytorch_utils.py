@@ -300,6 +300,8 @@ def get_gguf_hf_weights_map(
         model_type = "qwen3moe"
     elif model_type == "gemma3_text":
         model_type = "gemma3"
+    elif model_type == "umt5":
+        model_type = "t5"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -386,9 +388,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
         parsed_parameters["config"]["is_gated_act"] = True
-        if "t5encoder" in architecture:
-            parsed_parameters["config"]["architectures"] = ["T5EncoderModel"]
-        updated_architecture = "t5"
+        if model_name and "umt5" in model_name[0].lower():
+            updated_architecture = "umt5"
+            if "t5encoder" in architecture:
+                parsed_parameters["config"]["architectures"] = ["UMT5EncoderModel"]
+        else:
+            if "t5encoder" in architecture:
+                parsed_parameters["config"]["architectures"] = ["T5EncoderModel"]
+            updated_architecture = "t5"
     else:
         updated_architecture = architecture
 

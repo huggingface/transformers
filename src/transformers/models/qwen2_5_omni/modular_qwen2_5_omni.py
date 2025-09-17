@@ -22,7 +22,6 @@ from typing import Any, Callable, Optional, Union
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import Parameter
 
@@ -442,7 +441,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 class Qwen2_5OmniThinkerConfig(PretrainedConfig):
@@ -822,7 +821,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
@@ -1320,8 +1319,8 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         mrope_position_deltas = []
         if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
             total_input_ids = input_ids
-            if attention_mask is None:
-                attention_mask = torch.ones_like(total_input_ids)
+            if attention_mask is not None:
+                attention_mask = attention_mask == 1
             position_ids = torch.ones(
                 3,
                 input_ids.shape[0],
@@ -1330,9 +1329,9 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
                 device=input_ids.device,
             )
             image_idx, video_idx, audio_idx = 0, 0, 0
-            attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
-                input_ids = input_ids[attention_mask[i] == 1]
+                if attention_mask is not None:
+                    input_ids = input_ids[attention_mask[i]]
                 image_nums, video_nums, audio_nums = 0, 0, 0
                 vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
                 vision_tokens = input_ids[vision_start_indices + 1]
@@ -1513,9 +1512,12 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
 
                 llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
 
-                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
+                if attention_mask is not None:
+                    position_ids[..., i, attention_mask[i]] = llm_positions.to(position_ids.device)
+                else:
+                    position_ids[..., i, :] = llm_positions.to(position_ids.device)
                 mrope_position_deltas.append(llm_positions.max() + 1 - len(input_ids))
-            mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+            mrope_position_deltas = torch.tensor(mrope_position_deltas).unsqueeze(1).to(device=input_ids.device)
 
             return position_ids, mrope_position_deltas
         else:
@@ -1546,8 +1548,7 @@ class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -1557,7 +1558,7 @@ class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
@@ -2061,7 +2062,7 @@ class Qwen2_5OmniRotaryEmbedding(Qwen2VLRotaryEmbedding):
 
 # It's same as `Qwen2_5_VLAttention`, but talker model's hidden_size isn't divisible by num_heads.
 # Removes the value error as a workaround.
-class Qwen2_5OmniAttention(Qwen2_5_VLAttention, nn.Module):
+class Qwen2_5OmniAttention(Qwen2_5_VLAttention):
     def __init__(self, config: Qwen2_5OmniConfig, layer_idx: Optional[int] = None):
         nn.Module.__init__(self)
         self.config = config
@@ -2206,11 +2207,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
+        image_features: Optional[torch.FloatTensor] = None,
+        video_features: Optional[torch.FloatTensor] = None,
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -2501,8 +2502,7 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -2514,12 +2514,12 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
-    thinker_reply_part: torch.FloatTensor = None
+    thinker_reply_part: Optional[torch.FloatTensor] = None
 
 
 class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
@@ -2567,7 +2567,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -4258,13 +4258,11 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             dim=1,
         )
 
-        eos_embedding = thinker_embed_tokens(
-            torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=input_ids.device)
-        )
+        eos_token = torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=input_ids.device)
+        eos_embedding = thinker_embed_tokens(eos_token).to(input_ids.device)
 
-        pad_embedding = thinker_embed_tokens(
-            torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=input_ids.device)
-        )
+        pad_token = torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=input_ids.device)
+        pad_embedding = thinker_embed_tokens(pad_token).to(input_ids.device)
 
         thinker_reply_part = torch.cat(
             [

@@ -26,14 +26,15 @@ from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .image_utils import is_valid_image, load_image
 from .utils import (
     IMAGE_PROCESSOR_NAME,
+    PROCESSOR_NAME,
     PushToHubMixin,
-    cached_file,
     copy_func,
     download_url,
     is_offline_mode,
     is_remote_url,
     logging,
 )
+from .utils.hub import cached_file
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -329,19 +330,28 @@ class ImageProcessingMixin(PushToHubMixin):
             image_processor_file = image_processor_filename
             try:
                 # Load from local folder or from cache or download from model Hub and cache
-                resolved_image_processor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    image_processor_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                )
+                resolved_image_processor_files = [
+                    resolved_file
+                    for filename in [image_processor_file, PROCESSOR_NAME]
+                    if (
+                        resolved_file := cached_file(
+                            pretrained_model_name_or_path,
+                            filename=filename,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            resume_download=resume_download,
+                            local_files_only=local_files_only,
+                            token=token,
+                            user_agent=user_agent,
+                            revision=revision,
+                            subfolder=subfolder,
+                            _raise_exceptions_for_missing_entries=False,
+                        )
+                    )
+                    is not None
+                ]
+                resolved_image_processor_file = resolved_image_processor_files[0]
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -360,6 +370,7 @@ class ImageProcessingMixin(PushToHubMixin):
             with open(resolved_image_processor_file, encoding="utf-8") as reader:
                 text = reader.read()
             image_processor_dict = json.loads(text)
+            image_processor_dict = image_processor_dict.get("image_processor", image_processor_dict)
 
         except json.JSONDecodeError:
             raise OSError(

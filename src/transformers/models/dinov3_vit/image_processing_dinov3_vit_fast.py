@@ -53,7 +53,7 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
 
-    # Overriden for DINOv3 to preserve order of transforms
+    # Overridden for DINOv3 to preserve order of transforms
     # rescale -> resize -> normalize
     def _preprocess(
         self,
@@ -70,6 +70,7 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

@@ -532,7 +532,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
                 Float values of the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
                 the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_values`, the [`AutoFeatureExtractor`] should be used for padding
                 and conversion into a tensor of type `torch.FloatTensor`.
@@ -636,7 +636,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -904,7 +904,7 @@ class MoonshineModel(MoonshinePreTrainedModel):
         input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
             Float values of the raw speech waveform. Raw speech waveform can be
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
@@ -1026,7 +1026,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
             Float values of the raw speech waveform. Raw speech waveform can be
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
