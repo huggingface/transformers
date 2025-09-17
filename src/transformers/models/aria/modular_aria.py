@@ -49,6 +49,8 @@ from ..llama.modeling_llama import (
     LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
+    repeat_kv,
+    eager_attention_forward,
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import (
@@ -95,6 +97,52 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
 
         out = torch.matmul(tokens, expert_weights[expert_num])
         output[start:end] = out
+    return output
+
+
+def grouped_experts_gemm(token_states, expert_weights, tokens_per_expert):
+    """
+    Compute the matrix multiplication (GEMM) for each expert using torch._grouped_mm.
+    This is more efficient than the sequential approach for multiple experts.
+
+    Args:
+        token_states (torch.Tensor): Input tensor of shape (num_tokens, in_features).
+        expert_weights (torch.Tensor): Weight tensor of shape (num_experts, in_features, out_features).
+        tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
+
+    Returns:
+        torch.Tensor: Output tensor of shape (num_tokens, out_features).
+    """
+    # Check if torch._grouped_mm is available
+    if not hasattr(torch, '_grouped_mm'):
+        logger.warning(
+            "torch._grouped_mm is not available. Falling back to sequential implementation. "
+            "Consider upgrading to a newer version of PyTorch for better performance."
+        )
+        return sequential_experts_gemm(token_states, expert_weights, tokens_per_expert)
+    
+    device = token_states.device
+    dtype = token_states.dtype
+    num_tokens, in_features = token_states.shape
+    num_experts, _, out_features = expert_weights.shape
+    
+    # Prepare inputs for torch._grouped_mm
+    # token_states: (num_tokens, in_features) - already in correct format
+    a = token_states
+    
+    # expert_weights: (num_experts, in_features, out_features) -> (num_experts, out_features, in_features)
+    # Need to transpose the last two dimensions for grouped_mm
+    b = expert_weights.transpose(-2, -1)
+    
+    # Create offsets tensor - cumulative sum of tokens per expert
+    cumsum_tokens = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
+    # Insert zero at the beginning
+    zero_tensor = torch.zeros(1, dtype=torch.int32, device=device)
+    offs = torch.cat((zero_tensor, cumsum_tokens))
+    
+    # Use torch._grouped_mm for efficient computation
+    output = torch._grouped_mm(a, b, offs=offs, out_dtype=dtype)
+    
     return output
 
 
@@ -339,57 +387,52 @@ class AriaProjectorMLP(nn.Module):
 
 class AriaCrossAttention(nn.Module):
     """
-    Aria Cross-Attention module.
-
-    Args:
-        config (`AriaConfig`):
-            The configuration to use.
+    Aria Cross-Attention module (refactored to explicit projections, GQA/MQA, no nn.MultiheadAttention).
     """
-
-    def __init__(self, config: AriaConfig, dropout_rate: float = 0):
+    def __init__(self, config: "AriaConfig", dropout_rate: float = 0):
         super().__init__()
         hidden_size = config.vision_config.hidden_size
         num_heads = config.vision_config.num_attention_heads
+        num_kv_heads = getattr(config.vision_config, "num_key_value_heads", num_heads)
         self.num_heads = num_heads
-        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.num_key_value_heads = num_kv_heads
+        self.num_key_value_groups = num_heads // num_kv_heads
+        self.head_dim = hidden_size // num_heads
+        self.scaling = self.head_dim ** -0.5
+        self.dropout_p = dropout_rate
 
-        # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
-        self.multihead_attn = nn.MultiheadAttention(hidden_size, num_heads, batch_first=True)
-        self.linear = nn.Linear(hidden_size, hidden_size)
-        self.dropout = nn.Dropout(dropout_rate)
+        self.q_proj = nn.Linear(hidden_size, num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(hidden_size, num_kv_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(hidden_size, num_kv_heads * self.head_dim, bias=False)
+        self.linear = nn.Linear(num_heads * self.head_dim, hidden_size, bias=False)
 
         self.layer_norm = nn.LayerNorm(hidden_size)
         self.layer_norm_kv = nn.LayerNorm(hidden_size)
 
-    def forward(self, key_value_states, hidden_states, attn_mask=None):
-        """
-        Forward pass of the AriaCrossAttention module.
+    def forward(self, key_value_states, hidden_states, attention_mask=None, **kwargs: Unpack[TransformersKwargs]):
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        Args:
-            key_value_states (`torch.Tensor`):
-                Input tensor for key and value.
-            hidden_states (`torch.Tensor`):
-                Input tensor for query.
-            attn_mask (`torch.Tensor`, *optional*, defaults to None):
-                Attention mask.
-
-        Returns:
-            torch.Tensor:
-                Output tensor after cross-attention.
-        """
-        query = self.q_proj(self.layer_norm(hidden_states))
-
+        query = self.q_proj(self.layer_norm(hidden_states)).view(*hidden_shape).transpose(1, 2)
         key_value_states = self.layer_norm_kv(key_value_states)
-        key = self.k_proj(key_value_states)
-        value = self.v_proj(key_value_states)
+        key = self.k_proj(key_value_states).view(*hidden_shape).transpose(1, 2)
+        value = self.v_proj(key_value_states).view(*hidden_shape).transpose(1, 2)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, _ = self.multihead_attn(query, key, value, attn_mask=attn_mask)
-
-        attn_output = self.dropout(self.linear(attn_output))
-
-        return attn_output
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attn_mask,
+            scaling=self.scaling,
+            dropout=self.dropout_p,
+        )
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.linear(attn_output)
+        return attn_output, attn_weights
 
 
 class AriaProjector(nn.Module):
@@ -1099,8 +1142,9 @@ class AriaGroupedExpertsGemm(nn.Module):
             Number of expert groups.
     """
 
-    def __init__(self, in_features, out_features, groups):
+    def __init__(self, config, in_features, out_features, groups):
         super().__init__()
+        self.config = config
         self.in_features = in_features
         self.out_features = out_features
         self.groups = groups
@@ -1119,10 +1163,17 @@ class AriaGroupedExpertsGemm(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (num_tokens, out_features).
         """
+        # Use the optimized grouped_experts_gemm which has fallback built-in
+        if self.config.use_grouped_gemm:
+            return grouped_experts_gemm(
+                input,
+                self.weight,
+                tokens_per_expert,
+            )
         return sequential_experts_gemm(
             input,
             self.weight,
-            tokens_per_expert.cpu(),
+            tokens_per_expert,
         )
 
 
@@ -1138,8 +1189,8 @@ class AriaGroupedExpertsMLP(nn.Module):
     def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
         self.config = config
-        self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
-        self.fc2 = AriaGroupedExpertsGemm(config.intermediate_size, config.hidden_size, config.moe_num_experts)
+        self.fc1 = AriaGroupedExpertsGemm(config, config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
+        self.fc2 = AriaGroupedExpertsGemm(config, config.intermediate_size, config.hidden_size, config.moe_num_experts)
 
     def forward(self, permuted_tokens, tokens_per_expert):
         """
