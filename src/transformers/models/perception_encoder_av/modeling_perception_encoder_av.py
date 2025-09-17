@@ -433,7 +433,7 @@ class DACVAEEncoder(nn.Module):
         return hidden_state
 
 
-class DACVAE(torch.nn.Module):
+class DacEncoderVAE(torch.nn.Module):
     def __init__(self, config: DACVAEConfig) -> None:
         super().__init__()
         self.encoder = DACVAEEncoder(config)
@@ -950,7 +950,7 @@ class PerceptionEncoderAVModel(PreTrainedModel):
         cfg: PerceptionEncoderAVConfig,
     ):
         super().__init__(cfg)
-        self.audio_codec = DACVAE(cfg.audio_codec)
+        self.audio_codec = DacEncoderVAE(cfg.audio_codec)
         self.audio_encoder = Transformer(**asdict(cfg.audio_encoder))
         self.audio_video_encoder = AudioVideoEncoder(**asdict(cfg.audio_video_encoder))
         self.video_encoder = VideoEncoder(cfg.video_encoder)
