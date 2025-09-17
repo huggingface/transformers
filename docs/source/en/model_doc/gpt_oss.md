@@ -30,6 +30,56 @@ rendered properly in your Markdown viewer.
 [GptOss](https://huggingface.co/papers/2508.10925) is a mixture-of-experts (MoEs) model released by OpenAI designed for powerful reasoning, agentic tasks, and versatile developer use cases.It comprises of two models:gpt-oss-120b and gpt-oss-20b.
 
 
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`] and from the command line.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+# install optimized MXFP4
+#pip install --upgrade transformers kernels accelerate "triton>=3.4"
+from transformers import pipeline
+
+pipe = pipeline("text-generation", model="openai/gpt-oss-20b")
+messages = [
+    {"role": "user", "content": "Plants create energy through a process known as"},
+]
+pipe(messages)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
+model = AutoModelForCausalLM.from_pretrained("openai/gpt-oss-20b" device_map="auto",
+    torch_dtype="auto")
+messages = [
+    {"role": "user", "content": "Plants create energy through a process known as"},
+]
+inputs = tokenizer.apply_chat_template(
+	messages,
+	add_generation_prompt=True,
+	tokenize=True,
+	return_dict=True,
+	return_tensors="pt",
+).to(model.device)
+
+outputs = model.generate(**inputs, max_new_tokens=40)
+print(tokenizer.decode(outputs[0][inputs["input_ids"].shape[-1]:]))
+```
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model openai/gpt-oss-20b --device 0
+```
+
+</hfoption>
+</hfoptions>
+
 > [!TIP]
 > Click on the GptOss models in the right sidebar for more examples of how to apply GptOss to different language tasks.
 
