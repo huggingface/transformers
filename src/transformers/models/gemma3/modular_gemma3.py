@@ -856,7 +856,7 @@ class Gemma3Model(PaliGemmaModel):
                 past_key_values,
                 position_ids,
                 token_type_ids,
-                pixel_values=pixel_values,  # Used to determine if we have image data
+                pixel_values,
             )
 
         outputs = self.language_model(

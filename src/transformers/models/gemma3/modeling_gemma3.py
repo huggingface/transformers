@@ -24,6 +24,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
 
+from numpy import nonzero
 import torch
 import torch.nn as nn
 
@@ -1228,7 +1229,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             past_key_values,
             position_ids,
             token_type_ids,
-            pixel_values=kwargs.get("pixel_values"),
+            pixel_values=kwargs.get("pixel_values", None),
             **{k: v for k, v in kwargs.items() if k != "pixel_values"},
         )
 
