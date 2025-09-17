@@ -21,15 +21,15 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
-from ...utils.deprecation import deprecate_kwarg
+from ...modeling_utils import PreTrainedModel
 from .configuration_granitemoe import GraniteMoeConfig
+from ..granite.modeling_granite import (
+    GraniteRMSNorm,
+    GraniteRotaryEmbedding)
+from ..llama.modeling_llama import LlamaAttention
+from ..jetmoe.modeling_jetmoe import (JetMoeParallelExperts, JetMoeTopKGating)
+
 
 class GraniteMoeRMSNorm(GraniteRMSNorm):
     pass
@@ -72,19 +72,6 @@ class GraniteMoeMoE(nn.Module):
         )
 
     def forward(self, layer_input):
-        """
-        Forward pass of the mixture of experts layer.
-
-        Args:
-            layer_input (Tensor):
-                Input tensor.
-
-        Returns:
-            Tensor:
-                Output tensor.
-            Tensor:
-                Router logits.
-        """
         bsz, length, emb_size = layer_input.size()
         layer_input = layer_input.reshape(-1, emb_size)
         _, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input)
@@ -103,34 +90,19 @@ class GraniteMoeMoE(nn.Module):
         return layer_output, router_logits
 
 
-# Copied from transformers.models.granite.modeling_granite.repeat_kv with Granite->GraniteMoe
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 class GraniteMoeAttention(LlamaAttention):
     pass
 
 
-class GraniteMoeDecoderLayer(GradientCheckpointingLayer):
+class GraniteMoeDecoderLayer(MixtralDecoderLayer):
     def __init__(self, config: GraniteMoeConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
+        super().__init__(config, layer_idx)
         self.self_attn = GraniteMoeAttention(config=config, layer_idx=layer_idx)
         self.block_sparse_moe = GraniteMoeMoE(config)
         self.input_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.residual_multiplier = config.residual_multiplier
+        self.residual_multiplier = config.residual_multiplier # Only diff with mixtral!
 
     def forward(
         self,
@@ -146,11 +118,8 @@ class GraniteMoeDecoderLayer(GradientCheckpointingLayer):
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -163,11 +132,9 @@ class GraniteMoeDecoderLayer(GradientCheckpointingLayer):
         )
 
         hidden_states = residual + hidden_states * self.residual_multiplier
-
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states, _ = self.block_sparse_moe(hidden_states)
-
         hidden_states = residual + hidden_states * self.residual_multiplier
         return hidden_states
 
@@ -204,7 +171,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         self.norm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        self.embedding_multiplier = config.embedding_multiplier
+        self.embedding_multiplier = config.embedding_multiplier # only diff with Mixtral
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads

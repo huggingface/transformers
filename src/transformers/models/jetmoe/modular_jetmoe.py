@@ -25,20 +25,17 @@ from torch.nn import functional as F
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import (
     GenericForSequenceClassification,
     GradientCheckpointingLayer,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_jetmoe import JetMoeConfig
-
+from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel, load_balancing_loss_func
 
 logger = logging.get_logger(__name__)
-
-
 
 class JetMoeParallelExperts(nn.Module):
     def __init__(self, num_experts: int, input_size: int, output_size: int) -> None:

@@ -3074,7 +3074,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         if getattr(module, "_is_hf_initialized", False):
             return
-        self._init_weights(module)
+        # self._init_weights(module)
         module._is_hf_initialized = True
 
     @torch.no_grad()
