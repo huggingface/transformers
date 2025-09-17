@@ -215,6 +215,7 @@ class Qwen3MoeRouter(nn.Linear):
         self.num_experts = config.num_experts
         super().__init__(config.hidden_size, self.num_experts, bias=False)
         self.top_k = config.num_experts_per_tok
+        self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
