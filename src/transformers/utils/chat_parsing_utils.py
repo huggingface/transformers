@@ -1,5 +1,6 @@
 import json
 import re
+from typing import Optional
 
 from transformers.utils import is_jmespath_available
 
@@ -10,7 +11,7 @@ else:
     jmespath = None
 
 
-def _parse_re_match(node_match, require_groups: list[str] | None = None):
+def _parse_re_match(node_match, require_groups: Optional[list[str]] = None):
     if require_groups:
         if not node_match.groupdict():
             raise ValueError(f"Regex has no named groups, but require_groups was set to {require_groups}")
