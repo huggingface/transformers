@@ -199,6 +199,8 @@
     title: HIGGS
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/mxfp4
+    title: MXFP4
   - local: quantization/optimum
     title: Optimum
   - local: quantization/quanto

@@ -4015,8 +4015,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
+        metadata = {}
         if hf_quantizer is not None:
-            state_dict = hf_quantizer.get_state_dict(self)
+            state_dict, metadata = hf_quantizer.get_state_dict_and_metadata(self, safe_serialization)
+        metadata["format"] = "pt"
+
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
@@ -4294,7 +4297,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough.
-                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
+                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
 
