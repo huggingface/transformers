@@ -30,7 +30,15 @@ from ...generation.configuration_utils import GenerationConfig
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
-from .requests import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
+from .requests import (
+    GenerationOutput,
+    MemoryAdmission,
+    RequestState,
+    RequestStatus,
+    get_device_and_memory_breakdown,
+    headroom_blocks,
+    logger,
+)
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
@@ -592,6 +600,24 @@ class ContinuousBatchingManager:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
 
+    def is_ready(self):
+        """Check if the manager is ready to process requests."""
+        return self.is_running() and self.batch_processor is not None
+
+    def wait_until_ready(self, timeout: Optional[float] = None):
+        """Wait until the manager is ready to process requests.
+
+        Args:
+            timeout: Maximum time to wait for readiness
+        """
+        start_time = perf_counter()
+        while not self.is_ready():
+            if timeout is not None and (perf_counter() - start_time) > timeout:
+                raise TimeoutError("Manager did not become ready within the specified timeout.")
+            if self._generation_thread is None or not self._generation_thread.is_alive():
+                raise RuntimeError("Manager thread has stopped unexpectedly.")
+            threading.Event().wait(0.1)
+
     def stop(self, block: bool = False, timeout: Optional[float] = None):
         """Signal the background thread to stop.
 
@@ -625,13 +651,19 @@ class ContinuousBatchingManager:
                 self._generation_thread = None
 
     def add_request(
-        self, input_ids: list[int], request_id: Optional[str] = None, max_new_tokens: Optional[int] = None
-    ) -> str:
+        self,
+        input_ids: list[int],
+        request_id: Optional[str] = None,
+        max_new_tokens: Optional[int] = None,
+        memory_admission: MemoryAdmission = "off",
+    ) -> Optional[str]:
         """Add a new generation request to the queue.
 
         Args:
             input_ids: Input token IDs to use as prompt
             request_id: Optional custom request ID (auto-generated if None)
+            max_new_tokens: Maximum number of new tokens to generate for this request
+            memory_admission: Memory admission policy for this request
             **kwargs: Additional generation parameters
 
         Returns:
@@ -642,6 +674,23 @@ class ContinuousBatchingManager:
                 request_id = f"req_{self._request_counter}"
                 self._request_counter += 1
 
+        requested_headroom_blocks = headroom_blocks(memory_admission)
+        if requested_headroom_blocks >= 0:
+            if self.batch_processor is None:
+                raise ValueError("Batch processor not initialized yet")
+            block_size = self.batch_processor.cache.block_size
+            blocks_requested = requested_headroom_blocks + len(input_ids) // block_size
+            memory_budget = self.batch_processor.cache.get_num_free_blocks()
+            self.batch_processor._get_new_requests()  # Pull new requests to have an up-to-date view of memory usage
+            for waiting_req in self.batch_processor.scheduler.waiting_requests.values():
+                memory_budget -= (
+                    headroom_blocks(waiting_req.memory_admission) + len(waiting_req.full_prompt_ids) // block_size
+                )
+            if memory_budget < blocks_requested:
+                logger.debug(
+                    f"Not enough memory to admit request {request_id} with memory admission {memory_admission}"
+                )
+                return None
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
 
         # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
@@ -651,6 +700,7 @@ class ContinuousBatchingManager:
             full_prompt_ids=list(input_ids),
             max_new_tokens=max_new_tokens,
             eos_token_id=self.generation_config.eos_token_id,
+            memory_admission=memory_admission,
         )
 
         # Use block=True with timeout to handle backpressure if queue is full

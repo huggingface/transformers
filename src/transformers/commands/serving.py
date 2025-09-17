@@ -244,12 +244,9 @@ class ConversationCacheManager:
     by setting the CBM's `manual_eviction` flag to `True` and using the `evict_callback` of this cache's entries.
     """
 
-    def __init__(self, entry_timeout_seconds: float, max_entries: int = 512):
-        if max_entries <= 0:
-            raise ValueError("max_entries must be greater than 0")
+    def __init__(self, entry_timeout_seconds: float):
         self._closed = False
         self.conversation_cache: dict[str, Entry] = {}
-        self.max_entries = max_entries
         self.time_to_live = entry_timeout_seconds
 
     def acquire_lease(self, conversation_id: str, evict_callback: Optional[EvictCallback] = None):
@@ -290,12 +287,6 @@ class ConversationCacheManager:
                 self.evict_entry_after_expiry(conversation_id, self.time_to_live), name=f"ttl-{conversation_id}"
             )
         else:
-            while len(self.conversation_cache) >= self.max_entries:
-                # Evict the least recently used entry
-                lru_conversation_id = next((cid for cid, e in self.conversation_cache.items() if e.lease <= 0), None)
-                if lru_conversation_id is None:
-                    raise RuntimeError("All conversation cache entries are in use, cannot evict")
-                self.evict_entry(lru_conversation_id)
             entry = Entry(
                 conversation_id=conversation_id,
                 expiry_task=asyncio.create_task(
@@ -333,6 +324,12 @@ class ConversationCacheManager:
                 except Exception as e:
                     logger.error(f"Error in evict callback for conversation {conversation_id}: {e}")
             logger.info(f"Evicted conversation {conversation_id} from cache")
+
+    def clear_cache(self):
+        """Clear the entire conversation cache."""
+        for conversation_id in list(self.conversation_cache.keys()):
+            self.evict_entry(conversation_id)
+        self.conversation_cache.clear()
 
     def close(self) -> None:
         self._closed = True
@@ -829,7 +826,8 @@ class ServeCommand(BaseTransformersCLICommand):
                 model.delete_model()
             if self.running_continuous_batching_manager is not None:
                 self.running_continuous_batching_manager.stop(block=True, timeout=5)
-            self.conversation_cache.close()
+            if self.conversation_cache is not None:
+                self.conversation_cache.close()
 
         self.conversation_cache = ConversationCacheManager(entry_timeout_seconds=self.args.cache_timeout)
 
@@ -893,7 +891,11 @@ class ServeCommand(BaseTransformersCLICommand):
 
         @app.get("/health")
         def healthcheck():
-            return JSONResponse({"status": "ok"})
+            is_ready = (
+                self.running_continuous_batching_manager is not None
+                and self.running_continuous_batching_manager.is_ready()
+            )
+            return JSONResponse({"status": "ok", "ready": is_ready})
 
         @app.middleware("http")
         async def extract_request_id(request: Request, call_next):
@@ -991,6 +993,7 @@ class ServeCommand(BaseTransformersCLICommand):
         if must_discard_cache:
             # When switching models, terminate a continuous batching manager if it is running.
             if self.running_continuous_batching_manager is not None:
+                self.conversation_cache.clear_cache()
                 self.running_continuous_batching_manager.stop(block=True, timeout=2)
                 self.running_continuous_batching_manager = None
         model, processor = self.load_model_and_processor(model_id_and_revision)
@@ -1016,6 +1019,7 @@ class ServeCommand(BaseTransformersCLICommand):
             # and correctly applied in non-cb
             self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
             self.running_continuous_batching_manager.start()
+            self.running_continuous_batching_manager.wait_until_ready()
 
         # TODO (Joao, Lysandre): this should also work with tool support
         inputs = processor.apply_chat_template(req["messages"], return_tensors="pt", add_generation_prompt=True).to(
@@ -1055,8 +1059,14 @@ class ServeCommand(BaseTransformersCLICommand):
                 decode_stream = DecodeStream(_inputs.tolist(), False)
                 # XXX: using returned request_id as safety in case it is None
                 request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens
+                    _inputs,
+                    request_id=request_id,
+                    max_new_tokens=generation_config.max_new_tokens,
+                    memory_admission={"headroom_blocks": 1},
                 )
+                if request_id is None:
+                    yield 'data: {{"error": "Not enough memory to run the request"}}'
+                    return
                 self.conversation_cache.acquire_lease(
                     request_id, self.running_continuous_batching_manager.cancel_request
                 )
