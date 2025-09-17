@@ -621,6 +621,7 @@ class XLMRobertaXLEncoder(nn.Module):
                 **kwargs,
             )
 
+        # Extra layernorm at the end (causes high fluctuations between different attentions)
         hidden_states = self.LayerNorm(hidden_states)
 
         return BaseModelOutputWithPastAndCrossAttentions(

@@ -608,7 +608,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     # Override as Sam2Model doesn't have hidden states
-    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
+    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
         This test is only for inference and runs with `dtype=torch.bfloat16`.
@@ -661,7 +661,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 logits = outputs.vision_hidden_states[-1]
                 logits_fa = outputs_fa.vision_hidden_states[-1]
 
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+                assert torch.allclose(logits_fa, logits, atol=atol, rtol=rtol)
 
                 if model.config.is_encoder_decoder:
                     other_inputs = {
@@ -688,13 +688,13 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 logits_fa = outputs_fa.vision_hidden_states[-1]
 
                 if padding_side == "left":
-                    assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
+                    assert torch.allclose(logits_fa[1:], logits[1:], atol=atol, rtol=rtol)
 
                     # check with inference + dropout
                     model.train()
                     _ = model_fa(dummy_input, **other_inputs)
                 else:
-                    assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+                    assert torch.allclose(logits_fa[:-1], logits[:-1], atol=atol, rtol=rtol)
 
     # Override as difference slightly higher than the threshold
     def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
