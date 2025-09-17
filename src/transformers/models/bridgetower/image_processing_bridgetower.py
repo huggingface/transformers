@@ -129,13 +129,9 @@ class BridgeTowerImageProcessorKwargs(ImagesKwargs):
         size_divisor (`int`, *optional*, defaults to 32):
             The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
             is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
-            the `do_pad` parameter in the `preprocess` method.
     """
 
     size_divisor: Optional[int]
-    do_pad: Optional[bool]
 
 
 class BridgeTowerImageProcessor(BaseImageProcessor):

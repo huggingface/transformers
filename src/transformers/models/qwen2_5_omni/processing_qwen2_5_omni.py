@@ -31,7 +31,7 @@ from ...video_utils import VideoInput
 
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
-# and does not use in video processor class
+# and does not use them in video processor class
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
