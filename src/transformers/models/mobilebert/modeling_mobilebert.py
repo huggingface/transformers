@@ -522,7 +522,6 @@ class MobileBertEncoder(nn.Module):
         super().__init__()
         self.layer = nn.ModuleList([MobileBertLayer(config) for _ in range(config.num_hidden_layers)])
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -848,6 +847,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         sequence_output, pooled_output = outputs[:2]
@@ -922,6 +922,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1020,6 +1021,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1088,6 +1090,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1161,6 +1164,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1275,6 +1279,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1338,6 +1343,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 

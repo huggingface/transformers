@@ -666,7 +666,6 @@ class XmodEncoder(nn.Module):
         if self.is_pre_norm:
             self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -911,9 +910,6 @@ class XmodModel(XmodPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
-        if self.config.is_decoder and encoder_hidden_states is not None and encoder_attention_mask is None:
-            encoder_attention_mask = torch.ones(encoder_hidden_states.shape[:2], device=device)
-
         if attention_mask is not None and attention_mask.dim() == 2:
             if self.config.is_decoder:
                 attention_mask = create_causal_mask(
@@ -1134,6 +1130,7 @@ class XmodForCausalLM(XmodPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1222,6 +1219,7 @@ class XmodForMaskedLM(XmodPreTrainedModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -1322,6 +1320,7 @@ class XmodForSequenceClassification(XmodPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -1439,6 +1438,7 @@ class XmodForMultipleChoice(XmodPreTrainedModel):
             attention_mask=flat_attention_mask,
             head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = outputs[1]
@@ -1506,6 +1506,7 @@ class XmodForTokenClassification(XmodPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1591,6 +1592,7 @@ class XmodForQuestionAnswering(XmodPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 

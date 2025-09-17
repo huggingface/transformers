@@ -595,7 +595,6 @@ class XLMRobertaXLEncoder(nn.Module):
         self.layer = nn.ModuleList([XLMRobertaXLLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -848,7 +847,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
             position_ids=position_ids,
             **kwargs,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if return_legacy_cache:
@@ -1051,6 +1050,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1131,6 +1131,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -1192,6 +1193,7 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -1295,6 +1297,7 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
             attention_mask=flat_attention_mask,
             head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = outputs[1]
@@ -1355,6 +1358,7 @@ class XLMRobertaXLForTokenClassification(XLMRobertaXLPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1417,6 +1421,7 @@ class XLMRobertaXLForQuestionAnswering(XLMRobertaXLPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 

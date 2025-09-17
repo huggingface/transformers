@@ -643,7 +643,6 @@ class ElectraEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([ElectraLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1152,6 +1151,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1256,6 +1256,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
@@ -1334,6 +1335,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         generator_sequence_output = generator_hidden_states[0]
@@ -1400,6 +1402,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
@@ -1456,6 +1459,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1566,6 +1570,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1669,6 +1674,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 

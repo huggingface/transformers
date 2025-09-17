@@ -657,7 +657,6 @@ class XLMRobertaEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([XLMRobertaLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -863,7 +862,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
             position_ids=position_ids,
             **kwargs,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if return_legacy_cache:
@@ -1021,6 +1020,7 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1112,6 +1112,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -1207,6 +1208,7 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -1320,6 +1322,7 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
             attention_mask=flat_attention_mask,
             head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = outputs[1]
@@ -1392,6 +1395,7 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1459,6 +1463,7 @@ class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 

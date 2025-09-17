@@ -865,7 +865,6 @@ class BridgeTowerTextEncoder(nn.Module):
             [BridgeTowerTextLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
         )
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -626,7 +626,6 @@ class Data2VecTextEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([Data2VecTextLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -832,7 +831,7 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
             position_ids=position_ids,
             **kwargs,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if return_legacy_cache:
@@ -1036,6 +1035,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1116,6 +1116,7 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -1180,6 +1181,7 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -1292,6 +1294,7 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
             attention_mask=flat_attention_mask,
             head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = outputs[1]
@@ -1355,6 +1358,7 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1411,6 +1415,7 @@ class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 

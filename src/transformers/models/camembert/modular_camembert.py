@@ -97,6 +97,7 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -159,6 +160,7 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]
@@ -267,6 +269,7 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
             attention_mask=flat_attention_mask,
             head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = outputs[1]
@@ -330,6 +333,7 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -392,6 +396,7 @@ class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -499,6 +504,7 @@ class CamembertForCausalLM(RobertaForCausalLM):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 

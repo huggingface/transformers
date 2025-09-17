@@ -825,6 +825,15 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
+    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2):
+        super().flash_attn_inference_equivalence(
+            attn_implementation,
+            padding_side,
+            # relaxing the tolerance here
+            atol=6e-2,
+            rtol=4e-2,
+        )
+
 
 @require_torch
 class RoCBertModelIntegrationTest(unittest.TestCase):

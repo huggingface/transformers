@@ -469,6 +469,7 @@ class ErnieForPreTraining(BertForPreTraining):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -538,6 +539,7 @@ class ErnieForCausalLM(BertLMHeadModel):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 
@@ -603,6 +605,7 @@ class ErnieForMaskedLM(BertForMaskedLM):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            return_dict=True,
             **kwargs,
         )
 
@@ -685,6 +688,7 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -739,6 +743,7 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -848,6 +853,7 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -902,6 +908,7 @@ class ErnieForTokenClassification(BertForTokenClassification):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 
@@ -954,6 +961,7 @@ class ErnieForQuestionAnswering(BertForQuestionAnswering):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
 

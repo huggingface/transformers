@@ -3402,7 +3402,7 @@ class ModelTesterMixin:
                 f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
             )
 
-    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
+    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
         This test is only for inference and runs with `dtype=torch.bfloat16`.
@@ -3490,8 +3490,9 @@ class ModelTesterMixin:
                     k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in second_inputs.items()
                 }
 
+                attention = "sdpa" if model_class._supports_sdpa else "eager"
                 model = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attention, device_map=torch_device
                 )
 
                 # First run without attention mask
@@ -3537,14 +3538,14 @@ class ModelTesterMixin:
                 )
 
                 # Check the results
-                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=4e-2, rtol=4e-2)
+                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
                 if padding_side == "left":
-                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=4e-2, rtol=4e-2)
+                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
                     # Check it can run in training mode
                     model.train()
                     _ = model(**second_inputs)
                 else:
-                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=4e-2, rtol=4e-2)
+                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
 
         # In this case, the test should appear as skipped, not successful
         if not _has_run_at_least_one_model:
