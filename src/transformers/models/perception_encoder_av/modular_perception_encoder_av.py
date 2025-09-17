@@ -45,7 +45,6 @@ class TransformerConfig(Config):
     non_linearity: str = "swiglu"
     use_rope: bool = True
     max_positions: int = 10000
-    patch_size: int = 1
 
 
 class PerceptionEncoderAVTextEncoderConfig(PretrainedConfig):
@@ -246,21 +245,17 @@ class Patcher(torch.nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        patch_size: int,
     ):
         super().__init__()
-        assert_message = f"out_channels must be divisible by patch_size ({patch_size})"
-        assert out_channels % patch_size == 0, assert_message
-        self.patch_size = patch_size
         self.block = ResnetBlock1d(
             in_channels=in_channels,
-            out_channels=out_channels // patch_size,
+            out_channels=out_channels,
             num_groups=1,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.block(x)
-        x = rearrange(x, "b c (l p) -> b (c p) l", p=self.patch_size)
+        x = rearrange(x, "b c (l 1) -> b (c 1) l")
         return x
 
 
@@ -848,11 +843,8 @@ class Transformer(torch.nn.Module):
         non_linearity: str = "swiglu",
         use_rope: bool = True,
         max_positions: int = 10000,
-        patch_size: int = 1,
     ):
-        self.patch_size = patch_size
         self.out_channels = out_channels
-        self.output_size = (self.patch_size**2) * self.out_channels
 
         super().__init__()
         self.n_layers = n_layers
@@ -900,7 +892,6 @@ class Transformer(torch.nn.Module):
         self.x_embedder = Patcher(
             in_channels=dim,
             out_channels=dim,
-            patch_size=self.patch_size,
         )
 
         self.data_proj = torch.nn.Linear(in_channels, dim)

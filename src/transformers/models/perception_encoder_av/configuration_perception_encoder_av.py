@@ -46,7 +46,6 @@ class TransformerConfig(Config):
     non_linearity: str = "swiglu"
     use_rope: bool = True
     max_positions: int = 10000
-    patch_size: int = 1
 
 
 class PerceptionEncoderAVTextEncoderConfig(PretrainedConfig):
