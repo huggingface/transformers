@@ -1146,15 +1146,15 @@ class AriaExperts(nn.Module):
         self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
         self.fc2 = AriaGroupedExpertsGemm(config.intermediate_size, config.hidden_size, config.moe_num_experts)
 
-    def forward(self, hidden_states, top_indices, scores):
-        original_dtype = top_indices.dtype
+    def forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
+        original_dtype = top_k_index.dtype
         tokens_per_expert = torch.histc(
-            top_indices.flatten().to(torch.float32),
+            top_k_index.flatten().to(torch.float32),
             bins=self.config.moe_num_experts,
             min=0,
             max=self.config.moe_num_experts - 1,
         ).to(original_dtype)
-        indices = top_indices
+        indices = top_k_index
 
         flatten_indices = indices.view(-1)
         sorted_indices = torch.argsort(flatten_indices)
@@ -1166,14 +1166,14 @@ class AriaExperts(nn.Module):
         expert_output = self.fc2(fc1_output, tokens_per_expert)
 
         unpermuted_tokens = torch.zeros(
-            (scores.shape[0] * self.config.moe_topk, expert_output.size(1)),
+            (top_k_weights.shape[0] * self.config.moe_topk, expert_output.size(1)),
             dtype=expert_output.dtype,
             device=expert_output.device,
         )
         unpermuted_tokens.index_copy_(0, sorted_indices, expert_output)
         unpermuted_tokens = unpermuted_tokens.view(-1, self.config.moe_topk, expert_output.size(1))
 
-        output = (unpermuted_tokens * scores.unsqueeze(-1)).sum(dim=1)
+        output = (unpermuted_tokens * top_k_weights.unsqueeze(-1)).sum(dim=1)
         return output
 
 
@@ -1189,8 +1189,8 @@ class AriaTextMoELayer(nn.Module):
         original_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.size(-1))
 
-        _, top_indices, scores = self.gate(hidden_states)
-        expert_output = self.experts(hidden_states, top_indices, scores).view(original_shape)
+        _, top_k_index, top_k_weights = self.gate(hidden_states)
+        expert_output = self.experts(hidden_states, top_k_index, top_k_weights).view(original_shape)
 
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
         return expert_output + shared_expert_output
