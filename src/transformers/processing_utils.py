@@ -1083,7 +1083,7 @@ class ProcessorMixin(PushToHubMixin):
         if isinstance(chat_templates, dict) and "default" in chat_templates and len(chat_templates) == 1:
             chat_templates = chat_templates["default"]  # Flatten when we just have a single template/file
 
-        if chat_templates:
+        if chat_templates and "chat_template" not in kwargs:
             kwargs["chat_template"] = chat_templates
 
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
