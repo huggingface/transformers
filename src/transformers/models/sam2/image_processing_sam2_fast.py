@@ -28,7 +28,7 @@ import torch
 import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -38,7 +38,7 @@ from ...image_utils import (
     SizeDict,
     pil_torch_interpolation_mapping,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -53,7 +53,7 @@ elif is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
 
 
-class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Sam2FastImageProcessorKwargs(ImagesKwargs):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.

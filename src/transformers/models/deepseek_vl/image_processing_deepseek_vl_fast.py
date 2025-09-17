@@ -23,12 +23,7 @@ from typing import Optional, Union
 import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
@@ -36,20 +31,14 @@ from ...utils import (
     auto_docstring,
     is_torch_available,
 )
+from .image_processing_deepseek_vl import DeepseekVLImageProcessorKwargs
 
 
 if is_torch_available():
     import torch
 
 
-class DeepseekVLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-    """
-
-    min_size: int
+DeepseekVLFastImageProcessorKwargs = DeepseekVLImageProcessorKwargs
 
 
 @auto_docstring

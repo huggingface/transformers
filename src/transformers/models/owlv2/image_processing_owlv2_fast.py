@@ -24,13 +24,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import center_to_corners_format, group_images_by_shape, reorder_images
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
 from ...utils import (
     TensorType,
     auto_docstring,

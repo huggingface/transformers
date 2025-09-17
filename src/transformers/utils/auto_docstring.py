@@ -102,6 +102,27 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    do_pad = {
+        "description": """
+    Whether to pad the image.
+    """,
+        "shape": None,
+    }
+
+    pad_size = {
+        "description": """
+    Describes the padding size as a dictionary with keys for height, width.
+    """,
+        "shape": None,
+    }
+
+    size_divisor = {
+        "description": """
+    The size by which to make sure both the height and width can be divided.
+    """,
+        "shape": None,
+    }
+
     default_to_square = {
         "description": """
     Whether to default to a square image when resizing, if size is an int.

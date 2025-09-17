@@ -49,10 +49,6 @@ if is_torchvision_v2_available():
 elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
-
-RTDetrFastImageProcessorKwargs = RTDetrImageProcessorKwargs
-
-
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
@@ -113,6 +109,9 @@ def prepare_coco_detection_annotation(
         new_target["keypoints"] = keypoints
 
     return new_target
+
+
+RTDetrFastImageProcessorKwargs = RTDetrImageProcessorKwargs
 
 
 @auto_docstring

@@ -65,10 +65,6 @@ elif is_torchvision_available():
 
 logger = logging.get_logger(__name__)
 
-
-ConditionalDetrFastImageProcessorKwargs = ConditionalDetrImageProcessorKwargs
-
-
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
@@ -267,6 +263,9 @@ def prepare_coco_panoptic_annotation(
         )
 
     return new_target
+
+
+ConditionalDetrFastImageProcessorKwargs = ConditionalDetrImageProcessorKwargs
 
 
 @auto_docstring

@@ -1,7 +1,7 @@
 import pathlib
 from typing import Optional, Union
 
-from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
+from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
@@ -26,6 +26,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
 if is_torch_available():
@@ -102,8 +103,7 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-class RTDetrFastImageProcessorKwargs(DetrFastImageProcessorKwargs):
-    pass
+RTDetrFastImageProcessorKwargs = RTDetrImageProcessorKwargs
 
 
 class RTDetrImageProcessorFast(DetrImageProcessorFast):

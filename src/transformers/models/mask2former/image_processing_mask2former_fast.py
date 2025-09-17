@@ -70,9 +70,6 @@ elif is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-Mask2FormerFastImageProcessorKwargs = Mask2FormerImageProcessorKwargs
-
-
 def convert_segmentation_map_to_binary_masks_fast(
     segmentation_map: "torch.Tensor",
     instance_id_to_semantic_id: Optional[dict[int, int]] = None,
@@ -106,6 +103,9 @@ def convert_segmentation_map_to_binary_masks_fast(
     else:
         labels = all_labels
     return binary_masks.float(), labels.long()
+
+
+Mask2FormerFastImageProcessorKwargs = Mask2FormerImageProcessorKwargs
 
 
 @auto_docstring
