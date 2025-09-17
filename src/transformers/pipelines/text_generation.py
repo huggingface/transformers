@@ -483,16 +483,16 @@ class TextGenerationPipeline(Pipeline):
         generated_sequence = generated_sequence.numpy().tolist()
         records = []
         other_outputs = model_outputs.get("additional_outputs", {})
-        splitted_keys = {}
+        split_keys = {}
         if other_outputs:
             if self.framework == "pt":
                 for k, v in other_outputs.items():
                     if isinstance(v, torch.Tensor) and v.shape[0] == len(generated_sequence):
-                        splitted_keys[k] = v.numpy().tolist()
+                        split_keys[k] = v.numpy().tolist()
             elif self.framework == "tf":
                 for k, v in other_outputs.items():
                     if isinstance(v, tf.Tensor) and v.shape[0] == len(generated_sequence):
-                        splitted_keys[k] = v.numpy().tolist()
+                        split_keys[k] = v.numpy().tolist()
 
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
         for idx, sequence in enumerate(generated_sequence):
@@ -539,7 +539,7 @@ class TextGenerationPipeline(Pipeline):
                             # When we're not starting from a prefill, the output is a new assistant message
                             all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
                 record = {"generated_text": all_text}
-                for key, values in splitted_keys.items():
+                for key, values in split_keys.items():
                     record[key] = values[idx]
             records.append(record)
 

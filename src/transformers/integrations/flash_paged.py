@@ -56,18 +56,19 @@ def paged_attention_forward(
     if cache is not None:
         k, v = cache.update(k, v, module.layer_idx, **kwargs)
 
-        # Check if we are in a sliding window context
+    # Retrieve the cumulative sequence lengths for the current layer
+    if isinstance(cu_seq_lens_k, dict):
         cu_seq_lens_k = cu_seq_lens_k[layer_type].clone()
         max_seqlen_k = max_seqlen_k[layer_type]
-
-    # If there is no cache, we assume this is full attention, and we check if cu_seq_lens_k is a list of tensors
-    elif isinstance(cu_seq_lens_k, list):
-        cu_seq_lens_k = cu_seq_lens_k[layer_type].clone()
-        max_seqlen_k = max_seqlen_k[layer_type]
+    else:
+        cu_seq_lens_k = cu_seq_lens_k.clone()
+        max_seqlen_k = max_seqlen_k
 
     if implementation is not None and hasattr(implementation, "flash_attn_varlen_func"):
         flash_attn_varlen_func = implementation.flash_attn_varlen_func
+
     custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
+
     attn_output = flash_attn_varlen_func(
         q.transpose(1, 2).squeeze(0).contiguous(),
         k.contiguous(),

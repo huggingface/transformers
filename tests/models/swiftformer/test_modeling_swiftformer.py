@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch SwiftFormer model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import SwiftFormerConfig
 from transformers.testing_utils import (
@@ -22,7 +23,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor

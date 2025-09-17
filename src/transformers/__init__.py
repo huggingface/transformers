@@ -32,6 +32,7 @@ from .utils import (
     is_g2p_en_available,
     is_librosa_available,
     is_mistral_common_available,
+    is_mlx_available,
     is_pretty_midi_available,
 )
 
@@ -239,6 +240,7 @@ _import_structure = {
         "is_flax_available",
         "is_keras_nlp_available",
         "is_matplotlib_available",
+        "is_mlx_available",
         "is_phonemizer_available",
         "is_psutil_available",
         "is_py3nvml_available",
@@ -376,6 +378,7 @@ else:
         "CacheLayerMixin",
         "DynamicLayer",
         "StaticLayer",
+        "StaticSlidingWindowLayer",
         "SlidingWindowLayer",
         "ChunkedSlidingLayer",
         "QuantoQuantizedLayer",
@@ -477,11 +480,14 @@ else:
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
         "get_cosine_with_hard_restarts_schedule_with_warmup",
+        "get_cosine_with_min_lr_schedule_with_warmup",
+        "get_cosine_with_min_lr_schedule_with_warmup_lr_rate",
         "get_inverse_sqrt_schedule",
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
         "get_wsd_schedule",
+        "get_reduce_on_plateau_schedule",
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",
@@ -595,6 +601,7 @@ if TYPE_CHECKING:
     from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticLayer as StaticLayer
+    from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
@@ -795,6 +802,12 @@ if TYPE_CHECKING:
     from .optimization import get_cosine_schedule_with_warmup as get_cosine_schedule_with_warmup
     from .optimization import (
         get_cosine_with_hard_restarts_schedule_with_warmup as get_cosine_with_hard_restarts_schedule_with_warmup,
+    )
+    from .optimization import (
+        get_cosine_with_min_lr_schedule_with_warmup as get_cosine_with_min_lr_schedule_with_warmup,
+    )
+    from .optimization import (
+        get_cosine_with_min_lr_schedule_with_warmup_lr_rate as get_cosine_with_min_lr_schedule_with_warmup_lr_rate,
     )
     from .optimization import get_inverse_sqrt_schedule as get_inverse_sqrt_schedule
     from .optimization import get_linear_schedule_with_warmup as get_linear_schedule_with_warmup

@@ -71,6 +71,8 @@ PRIVATE_MODELS = [
     "Qwen2AudioEncoder",
     "Qwen2VisionTransformerPretrainedModel",
     "Qwen2_5_VisionTransformerPretrainedModel",
+    "Qwen3VLVisionModel",
+    "Qwen3VLMoeVisionModel",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -151,6 +153,10 @@ IGNORE_NON_TESTED = (
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
+        "Qwen3VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLForConditionalGeneration.
+        "Qwen3VLMoeModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLMoeForConditionalGeneration.
+        "Qwen3VLTextModel",  # Building part of bigger (tested) model.
+        "Qwen3VLMoeTextModel",  # Building part of bigger (tested) model.
         "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Testted in Qwen2_5OmniModelIntergrationTest
         "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
@@ -891,7 +897,7 @@ def check_all_auto_mappings_importable():
 
 def check_objects_being_equally_in_main_init():
     """
-    Check if a (TensorFlow or Flax) object is in the main __init__ iif its counterpart in PyTorch is.
+    Check if a (TensorFlow or Flax) object is in the main __init__ if its counterpart in PyTorch is.
     """
     attrs = dir(transformers)
 

@@ -14,10 +14,11 @@
 
 import warnings
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Optional
 
 from .training_args import TrainingArguments
-from .utils import cached_property, is_tf_available, logging, requires_backends
+from .utils import is_tf_available, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)

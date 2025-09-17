@@ -384,7 +384,7 @@ class FlaxConvLayersCollection(nn.Module):
                 for i in range(self.config.num_feat_extract_layers)
             ]
         elif self.config.feat_extract_norm == "group":
-            raise NotImplementedError("At the moment only ``config.feat_extact_norm == 'layer'`` is supported")
+            raise NotImplementedError("At the moment only ``config.feat_extract_norm == 'layer'`` is supported")
         else:
             raise ValueError(
                 f"`config.feat_extract_norm` is {self.config.feat_extract_norm}, but has to be one of ['group',"

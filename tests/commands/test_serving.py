@@ -72,7 +72,7 @@ class ServeCLITest(unittest.TestCase):
 
     def test_build_chat_completion_chunk(self):
         """
-        Tests that the chunks are correctly built for the Chat Completion API. The `choices` checks implictly
+        Tests that the chunks are correctly built for the Chat Completion API. The `choices` checks implicitly
         confirm that empty fields are not emitted.
         """
         dummy = ServeCommand.__new__(ServeCommand)

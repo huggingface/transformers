@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 import numpy as np
 import pytest
@@ -38,7 +39,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -867,6 +867,14 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @is_flaky(max_attempts=5, description="flaky on some models.")
     def test_save_load(self):
         super().test_save_load()
+
+    @pytest.mark.generate
+    @unittest.skip(reason="Moshi requires setting `model.generated_audio_codes` in generate() before preparing inputs")
+    def test_prepare_inputs_for_generation_kwargs_forwards(self):
+        # If in the future `model.generated_audio_codes` is not required, this test can be re-enabled
+        super().test_prepare_inputs_for_generation_kwargs_forwards(
+            last_hidden_state=torch.randn(2, 3, 32), kwargs_depth_decoder={}
+        )
 
 
 def place_dict_on_device(dict_to_place, device):

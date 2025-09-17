@@ -110,9 +110,9 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", points_per_batch=256)
 
         # Shortening by hashing
-        new_outupt = []
+        new_output = []
         for i, o in enumerate(outputs["masks"]):
-            new_outupt += [{"mask": mask_to_test_readable(o), "scores": outputs["scores"][i]}]
+            new_output += [{"mask": mask_to_test_readable(o), "scores": outputs["scores"][i]}]
 
         # fmt: off
         last_output = Expectations({
@@ -121,7 +121,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         }).get_expectation()
 
         self.assertEqual(
-            nested_simplify(new_outupt, decimals=4),
+            nested_simplify(new_output, decimals=4),
             [
                 {'mask': {'hash': '115ad19f5f', 'shape': (480, 640)}, 'scores': 1.0444},
                 {'mask': {'hash': '6affa964c6', 'shape': (480, 640)}, 'scores': 1.021},
@@ -168,12 +168,12 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         )
 
         # Shortening by hashing
-        new_outupt = []
+        new_output = []
         for i, o in enumerate(outputs["masks"]):
-            new_outupt += [{"mask": mask_to_test_readable(o), "scores": outputs["scores"][i]}]
+            new_output += [{"mask": mask_to_test_readable(o), "scores": outputs["scores"][i]}]
 
         self.assertEqual(
-            nested_simplify(new_outupt, decimals=4),
+            nested_simplify(new_output, decimals=4),
             [
                 {"mask": {"hash": "115ad19f5f", "shape": (480, 640)}, "scores": 1.0444},
                 {"mask": {"hash": "6affa964c6", "shape": (480, 640)}, "scores": 1.0210},

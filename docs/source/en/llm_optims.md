@@ -184,36 +184,6 @@ text
 ```
 
 </hfoption>
-<hfoption id="3. compile entire generate function">
-
-Compiling the entire [`~GenerationMixin.generate`] function also compiles the input preparation logit processor operations, and more, in addition to the forward pass. With this approach, you don't need to initialize [`StaticCache`] or set the [cache_implementation](https://hf.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.cache_implementation) parameter.
-
-```py
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
-import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
-
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", dtype="auto", device_map="auto")
-
-model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
-input_text = "The theory of special relativity states "
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device.type)
-
-outputs = model.generate(**input_ids)
-print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['The theory of special relativity states 1. The speed of light is constant in all inertial reference']
-```
-
-This usage pattern is more appropriate for unique hardware or use cases, but there are several drawbacks to consider.
-
-1. Compilation is much slower.
-2. Parameters must be configured through [`GenerationConfig`].
-3. Many warnings and exceptions are suppressed. We recommend testing the uncompiled model first.
-4. Many features are unavailable at the moment. For example, generation does not stop if an `EOS` token is selected.
-
-</hfoption>
 </hfoptions>
 
 ## Decoding strategies

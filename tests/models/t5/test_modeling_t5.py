@@ -18,6 +18,7 @@ import os
 import pickle
 import tempfile
 import unittest
+from functools import cached_property
 
 import pytest
 
@@ -35,7 +36,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 from transformers.utils.fx import symbolic_trace
 
 from ...generation.test_utils import GenerationTesterMixin

@@ -15,10 +15,11 @@
 
 import unittest
 import warnings
+from functools import cached_property
 from math import ceil, floor
 
 from transformers import LevitConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester

@@ -53,6 +53,11 @@ class CacheAllocator(ABC):
         """Returns the physical indices of where to write request_id's cache in the cache tensor."""
         pass
 
+    @abstractmethod
+    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
+        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
+        pass
+
 
 class FullAttentionCacheAllocator(CacheAllocator):
     """Cache manager for a group of full attention layers."""
@@ -107,6 +112,11 @@ class FullAttentionCacheAllocator(CacheAllocator):
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
         return physical_indices
+
+    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
+        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
+        seqlens_k = past_length + query_length
+        return "full_attention", seqlens_k
 
 
 class SlidingAttentionCacheAllocator(CacheAllocator):
@@ -190,6 +200,11 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         if padding_length > 0:
             physical_indices = [-1] * padding_length + physical_indices
         return physical_indices
+
+    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
+        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
+        seqlens_k = query_length + min(past_length, self.sliding_window - 1)
+        return "sliding_attention", seqlens_k
 
 
 # TODO: test the impact of this

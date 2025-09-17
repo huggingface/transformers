@@ -18,6 +18,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 from unittest.mock import patch
 
 import numpy as np
@@ -37,7 +38,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
+from transformers.utils import is_datasets_available, is_faiss_available, is_torch_available
 
 from ..bart.test_modeling_bart import BartModelTester
 from ..dpr.test_modeling_dpr import DPRModelTester

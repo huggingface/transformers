@@ -16,9 +16,9 @@
 import inspect
 import math
 import unittest
+from functools import cached_property
 
 from transformers import DeformableDetrConfig, ResNetConfig, is_torch_available, is_vision_available
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,

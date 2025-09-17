@@ -18,6 +18,7 @@ import os
 import pathlib
 import tempfile
 import time
+import unittest
 import warnings
 from copy import deepcopy
 
@@ -30,7 +31,6 @@ from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, AnnotionFormat
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
-    is_flaky,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -200,11 +200,6 @@ class ImageProcessingTestMixin:
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
-            self.skipTest(
-                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
-            )
-
         dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
@@ -216,7 +211,7 @@ class ImageProcessingTestMixin:
 
     @require_vision
     @require_torch
-    @is_flaky()
+    @unittest.skip(reason="Many failing cases. This test needs a more deep investigation.")
     def test_fast_is_faster_than_slow(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping speed test")

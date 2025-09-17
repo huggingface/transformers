@@ -597,7 +597,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_pruning = False
     _is_stateful = True
     is_encoder_decoder = True
-    model_split_percents = [0.5, 0.6]
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = T5GemmaForConditionalGeneration if is_torch_available() else None
@@ -1460,7 +1459,6 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     _is_stateful = True
     is_encoder_decoder = False
-    model_split_percents = [0.4, 0.5]
 
     # won't fix
     test_torchscript = False

@@ -594,3 +594,15 @@ class AutoModelTest(unittest.TestCase):
         # More precisely, it directly inherits from GenerationMixin. This check would fail prior to v4.45 (inheritance
         # patching was added in v4.45)
         self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))
+
+    def test_model_with_dotted_name_and_relative_imports(self):
+        """
+        Test for issue #40496: AutoModel.from_pretrained() doesn't work for models with '.' in their name
+        when there's a relative import.
+
+        Without the fix, this raises: ModuleNotFoundError: No module named 'transformers_modules.test-model_v1'
+        """
+        model_id = "hf-internal-testing/remote_code_model_with_dots"
+
+        model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
+        self.assertIsNotNone(model)

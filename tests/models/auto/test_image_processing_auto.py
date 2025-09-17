@@ -91,7 +91,7 @@ class AutoImageProcessorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model_config = CLIPConfig()
 
-            # Create a dummy config file with image_proceesor_type
+            # Create a dummy config file with image_processor_type
             processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(

@@ -563,7 +563,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
         This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
 
@@ -696,7 +696,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 else:
                     assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
-    # Override as diffence slightly higher than the threshold
+    # Override as difference slightly higher than the threshold
     def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
@@ -901,7 +901,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_masks.shape, (2, 4, 1, 256, 256))
         torch.testing.assert_close(
             outputs.iou_scores,
-            torch.tensor([[[0.9873], [0.9264], [0.9496], [0.9208]], [[0.9445], [0.9496], [0.9497], [0.9481]]]).to(
+            torch.tensor([[[0.9904], [0.9689], [0.9770], [0.9079]], [[0.9739], [0.9816], [0.9838], [0.9781]]]).to(
                 torch_device
             ),
             atol=1e-4,
@@ -912,16 +912,16 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [
-                        [[[-7.6204, -11.9286], [-8.7747, -10.5662]]],
-                        [[[-17.1070, -23.4025], [-20.9608, -19.5600]]],
-                        [[[-20.5766, -29.4410], [-26.0739, -24.3225]]],
-                        [[[-19.7201, -29.0836], [-24.4915, -23.6377]]],
+                        [[[-11.1540, -18.3994], [-12.4230, -17.4403]]],
+                        [[[-19.3144, -29.3947], [-24.6341, -24.1144]]],
+                        [[[-24.2983, -37.6470], [-31.6659, -31.0893]]],
+                        [[[-25.4313, -44.0231], [-34.0903, -34.7447]]],
                     ],
                     [
-                        [[[-18.5259, -23.5202], [-25.1906, -17.2518]]],
-                        [[[-20.1214, -25.4215], [-25.7877, -19.1169]]],
-                        [[[-21.0878, -24.7938], [-27.5625, -19.2650]]],
-                        [[[-20.5210, -22.5343], [-26.0968, -17.7544]]],
+                        [[[-22.5539, -30.4633], [-32.8940, -21.6813]]],
+                        [[[-23.6637, -31.3489], [-32.5095, -22.4442]]],
+                        [[[-25.2987, -30.9999], [-34.6243, -24.1717]]],
+                        [[[-26.3150, -30.5313], [-35.0152, -24.0271]]],
                     ],
                 ]
             ).to(torch_device),

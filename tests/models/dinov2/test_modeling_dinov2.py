@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Dinov2 model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import Dinov2Config
 from transformers.testing_utils import (
@@ -23,7 +24,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester

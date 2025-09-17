@@ -16,11 +16,11 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
 from transformers.testing_utils import require_speech, require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (

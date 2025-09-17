@@ -148,6 +148,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "marian",
     "mbart",
     "megatron-bert",
+    "ministral",
     "mistral",
     "mixtral",
     "mobilebert",
@@ -1345,7 +1346,7 @@ class HFTracer(Tracer):
 
         return self.graph
 
-    def _stateless_mod_instanciation_depends_on_proxies(self, mod: nn.Module) -> bool:
+    def _stateless_mod_instantiation_depends_on_proxies(self, mod: nn.Module) -> bool:
         """
         Whether the module was instantiated with Proxies. If that is the case, such module cannot be a leaf module
         because its attributes are input-dependent.
@@ -1358,7 +1359,7 @@ class HFTracer(Tracer):
         """
         # If one of the module attributes is a Proxy, it means that its instantiation is input-dependent.
         # It is not possible to insert such modules, those should be traced through.
-        if self._stateless_mod_instanciation_depends_on_proxies(mod):
+        if self._stateless_mod_instantiation_depends_on_proxies(mod):
             return ""
         idx = 0
         mod_name = mod.__class__.__name__.lower()
@@ -1394,7 +1395,7 @@ class HFTracer(Tracer):
             raise e
 
     def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-        return (not self._stateless_mod_instanciation_depends_on_proxies(m)) and super().is_leaf_module(
+        return (not self._stateless_mod_instantiation_depends_on_proxies(m)) and super().is_leaf_module(
             m, module_qualified_name
         )
 

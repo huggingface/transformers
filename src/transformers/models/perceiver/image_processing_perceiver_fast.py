@@ -81,7 +81,7 @@ class PerceiverImageProcessorFast(BaseImageProcessorFast):
         min_dim = min(height, width)
         cropped_height = int((size.height / crop_size.height) * min_dim)
         cropped_width = int((size.width / crop_size.width) * min_dim)
-        return F.center_crop(image, (cropped_height, cropped_width))
+        return super().center_crop(image, SizeDict(height=cropped_height, width=cropped_width))
 
     def _preprocess(
         self,
