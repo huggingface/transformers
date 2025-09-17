@@ -15,7 +15,7 @@
 """PyTorch NLLB-MoE model."""
 
 import math
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -26,7 +26,6 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     MoEModelOutput,
@@ -34,16 +33,13 @@ from ...modeling_outputs import (
     Seq2SeqMoEModelOutput,
     Seq2SeqMoEOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
-from .configuration_nllb_moe import NllbMoeConfig
-from ..m2m_100.modeling_m2m_100 import (
-    M2M100ScaledWordEmbedding,
-    M2M100SinusoidalPositionalEmbedding
-)
+from ..m2m_100.modeling_m2m_100 import M2M100ScaledWordEmbedding, M2M100SinusoidalPositionalEmbedding
 from ..musicgen.modeling_musicgen import MusicgenAttention, MusicgenDecoder
+from .configuration_nllb_moe import NllbMoeConfig
 
 
 logger = logging.get_logger(__name__)
@@ -255,7 +251,7 @@ class NllbMoeExperts(nn.ModuleDict):
                     expert_output *= 1 - self.moe_token_dropout
             masked_hidden_states[idx, token_indices] = torch.einsum("b,be->be", combining_weights, expert_output)
         hidden_states = masked_hidden_states.sum(dim=0).reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states 
+        return hidden_states
 
 class NllbMoeSparseMLP(nn.Module):
     r"""

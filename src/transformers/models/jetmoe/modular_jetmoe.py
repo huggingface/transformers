@@ -32,8 +32,9 @@ from ...modeling_layers import (
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
-from .configuration_jetmoe import JetMoeConfig
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel, load_balancing_loss_func
+from .configuration_jetmoe import JetMoeConfig
+
 
 logger = logging.get_logger(__name__)
 

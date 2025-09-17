@@ -19,7 +19,13 @@ from ...modeling_layers import (
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_causal_conv1d_available, is_mamba_ssm_available, logging
+from ...utils import (
+    TransformersKwargs,
+    can_return_tuple,
+    is_causal_conv1d_available,
+    is_mamba_ssm_available,
+    logging,
+)
 from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
 from .configuration_jamba import JambaConfig

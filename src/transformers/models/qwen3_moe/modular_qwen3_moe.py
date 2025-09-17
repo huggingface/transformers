@@ -29,10 +29,15 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaRMSNorm,
 )
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
+from ..mixtral.modeling_mixtral import (
+    MixtralExperts,
+    MixtralForCausalLM,
+    MixtralModel,
+    MixtralSparseMoeBlock,
+    load_balancing_loss_func,
+)
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeMLP
 from ..qwen3.modeling_qwen3 import Qwen3Attention
-from ..mixtral.modeling_mixtral import MixtralSparseMoeBlock, MixtralExperts
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
 

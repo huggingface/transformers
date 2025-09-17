@@ -26,12 +26,15 @@ from ....modeling_utils import PreTrainedModel
 from ....utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
-    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
     logging,
 )
 from ....utils.deprecation import deprecate_kwarg
+from ..switch_transformers.modeling_switch_transformers import (
+    SwitchTransformersSparseMLP,
+    SwitchTransformersTop1Router,
+)
 from .configuration_gptsan_japanese import GPTSanJapaneseConfig
 
 
@@ -139,97 +142,8 @@ class GPTSanJapaneseDenseActDense(nn.Module):
         return hidden_states
 
 
-class GPTSanJapaneseTop1Router(nn.Module):
-    """
-    Router using tokens choose top-1 experts assignment.
-
-    This router uses the same mechanism as in Switch Transformer (https://huggingface.co/papers/2101.03961) and V-MoE
-    (https://huggingface.co/papers/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
-    routed to their choice of expert until the expert's expert_capacity is reached. **There is no guarantee that each
-    token is processed by an expert**, or that each expert receives at least one token.
-
-    """
-
-    def __init__(self, config: GPTSanJapaneseConfig):
-        super().__init__()
-        self.num_experts = config.num_experts
-        self.expert_capacity = config.expert_capacity
-        self.classifier = nn.Linear(config.hidden_size, self.num_experts, bias=config.router_bias)
-        self.jitter_noise = config.router_jitter_noise
-        self.ignore_padding_tokens = config.router_ignore_padding_tokens
-        self.dtype = getattr(torch, config.router_dtype)
-
-    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        r"""
-        Computes router probabilities from input hidden states.
-
-        Args:
-            hidden_states (`torch.Tensor`):
-                (batch_size, sequence_length, hidden_dim) from which router probabilities are computed.
-        Returns:
-            router_probabilities (`torch.Tensor`):
-                Tensor of shape (batch_size, sequence_length, num_experts) corresponding to the probabilities for each
-                token and expert. Used for routing tokens to experts.
-            router_logits (`torch.Tensor`):
-                Logits tensor of shape (batch_size, sequence_length, num_experts) corresponding to raw router logits.
-                This is used later for computing router z-loss.
-        """
-        # float32 is used to ensure stability. See the discussion of "selective precision" in
-        # https://huggingface.co/papers/2101.03961.
-        # We also store the previous dtype to cast back the output to the previous dtype
-        self.input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(self.dtype)
-
-        if self.training and self.jitter_noise > 0:
-            # Multiply the token inputs by the uniform distribution - adding some noise
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
-
-        # Shape: [num_groups, tokens_per_group, num_experts]
-        self._cast_classifier()
-        router_logits = self.classifier(hidden_states)
-
-        # Apply Softmax and cast back to the original `dtype`
-        router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
-        return router_probabilities, router_logits
-
-    def _cast_classifier(self):
-        r"""
-        `bitsandbytes` `Linear8bitLt` layers does not support manual casting Therefore we need to check if they are an
-        instance of the `Linear8bitLt` class by checking special attributes.
-        """
-        if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
-            self.classifier = self.classifier.to(self.dtype)
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple:
-        r"""
-        Generic forward function for every Router class. Each Router expects to have the same input hidden states
-        (`hidden_states`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
-        number of tokens the Router will send to each expert, some Routers can send up to few tokens to each expert.
-
-        Each Router works as the following: it expects the hidden states for each token, gets the `router_probs` and
-        `router_logits` from the `router_weights`. This will assign for each token, the raw probability to be assigned
-        to an expert. Then each Router class will have to define its own `_compute_routing_instructions`.
-
-        Args:
-            hidden_states (`torch.Tensor`) :
-                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
-        Returns:
-            tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
-            and the router logits. The router probabilities and logits are required to compute the loss.
-        """
-        router_probs, router_logits = self._compute_router_probabilities(hidden_states)
-
-        expert_index = torch.argmax(router_probs, dim=-1)
-        expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
-
-        # Mask tokens outside expert capacity. Sum over each sequence
-        token_priority = torch.cumsum(expert_index, dim=-2)
-        # mask if the token routed to to the expert will overflow
-        expert_capacity_mask = token_priority <= self.expert_capacity
-        expert_index = expert_index * expert_capacity_mask
-
-        router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        return expert_index, router_probs, router_logits
+class GPTSanJapaneseTop1Router(SwitchTransformersTop1Router):
+    pass
 
 class GPTSanExperts(nn.ModuleDict):
     def __init__(self, config: GPTSanJapaneseConfig, expert_class: nn.Module = GPTSanJapaneseDenseActDense):
@@ -237,28 +151,11 @@ class GPTSanExperts(nn.ModuleDict):
         for idx in range(config.num_experts):
             self.add_module(f"expert_{idx}", expert_class(config))
 
-# FIXME: update moduledict
-class GPTSanJapaneseSparseMLP(SwitchTransformerSparseMLP):
+class GPTSanJapaneseSparseMLP(SwitchTransformersSparseMLP):
     def __init__(self, config: GPTSanJapaneseConfig, expert_class: nn.Module = GPTSanJapaneseDenseActDense):
         super().__init__()
         self.router = GPTSanJapaneseTop1Router(config)
         self.experts = GPTSanExperts(config, expert_class)
-
-    def forward(self, hidden_states):
-        # Step 1: Get the router_mask from the router as well as the probabilities
-        router_mask, router_probs, router_logits = self.router(hidden_states)
-        expert_index = torch.argmax(router_mask, dim=-1)
-
-        # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
-        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the selected ones.
-
-        next_states = hidden_states.clone()
-        for idx, expert in enumerate(self.experts.values()):
-            token_indices = router_mask[:, :, idx].bool()
-            next_states[token_indices] = expert(hidden_states[token_indices]).to(next_states.dtype)
-
-        hidden_states = router_probs * next_states
-        return hidden_states, (router_logits, expert_index)
 
 
 class GPTSanJapaneseLayerSparseFF(nn.Module):

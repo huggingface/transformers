@@ -58,8 +58,9 @@ from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
-from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
 from ..bart.modeling_bart import eager_attention_forward
+from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
+
 
 if is_torch_flex_attn_available():
     from ...integrations.flex_attention import make_flex_block_causal_mask

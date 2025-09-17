@@ -13,22 +13,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Union
+from typing import Optional
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from .configuration_granitemoe import GraniteMoeConfig
-from ..granite.modeling_granite import (
-    GraniteRMSNorm,
-    GraniteRotaryEmbedding)
+from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
+from ..jetmoe.modeling_jetmoe import JetMoeParallelExperts, JetMoeTopKGating
 from ..llama.modeling_llama import LlamaAttention
-from ..jetmoe.modeling_jetmoe import (JetMoeParallelExperts, JetMoeTopKGating)
+from .configuration_granitemoe import GraniteMoeConfig
 
 
 class GraniteMoeRMSNorm(GraniteRMSNorm):

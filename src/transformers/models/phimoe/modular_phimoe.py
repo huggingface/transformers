@@ -25,9 +25,16 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from .configuration_phimoe import PhimoeConfig
 from ..llama.modeling_llama import LlamaAttention
-from ..mixtral.modeling_mixtral import MixtralMLP, MixtralDecoderLayer, MixtralForCausalLM, MixtralModel, MixtralExperts, MixtralPreTrainedModel 
+from ..mixtral.modeling_mixtral import (
+    MixtralDecoderLayer,
+    MixtralExperts,
+    MixtralForCausalLM,
+    MixtralMLP,
+    MixtralModel,
+    MixtralPreTrainedModel,
+)
+from .configuration_phimoe import PhimoeConfig
 
 
 class PhimoeRotaryEmbedding(nn.Module):
@@ -274,7 +281,7 @@ class PhimoeRouter(nn.Linear):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = super().forward(hidden_states)
         return router_logits
-        
+
 
 class PhimoeSparseMoeBlock(nn.Module):
     """
@@ -331,7 +338,7 @@ class PhimoeModel(MixtralModel):
 
 
 class PhimoeForCausalLM(MixtralForCausalLM):
-    
+
     # Copied from transformers.models.phi3.modeling_phi3.Phi3ForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,

@@ -18,11 +18,14 @@ import copy
 from typing import Optional, Union
 
 import torch
+import torch.fx
 import torch.nn as nn
+import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     MoEModelOutput,
@@ -31,39 +34,18 @@ from ...modeling_outputs import (
     Seq2SeqMoEOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
+    is_torch_flex_attn_available,
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
     logging,
 )
+from ...utils.generic import OutputRecorder
+from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerCrossAttention, T5LayerNorm, T5LayerSelfAttention
 from .configuration_switch_transformers import SwitchTransformersConfig
-from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerNorm, T5LayerSelfAttention, T5LayerCrossAttention
-import warnings
-from typing import Optional, Union
-
-import torch
-import torch.fx
-import torch.utils.checkpoint
-from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
-from ...modeling_layers import GradientCheckpointingLayer
-
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    is_torch_fx_proxy,
-    logging,
-)
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
-
 
 
 if is_torch_flex_attn_available():
@@ -72,8 +54,6 @@ if is_torch_flex_attn_available():
     from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
-if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -281,7 +261,7 @@ class SwitchTransformersLayerFF(nn.Module):
 
 class SwitchTransformersAttention(T5Attention):
     pass
-    
+
 class SwitchTransformersLayerSelfAttention(T5LayerSelfAttention):
     pass
 
@@ -320,6 +300,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
         output_router_logits=True,
         return_dict=True,
         cache_position=None,
+        **kwargs
     ):
         hidden_states, _ = self.layer[0](
             hidden_states,
@@ -330,6 +311,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
+            **kwargs
         )
 
         # clamp inf values to enable fp16 training
@@ -349,6 +331,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                **kwargs
             )
             hidden_states = cross_attention_outputs[0]
 
@@ -372,7 +355,12 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
-
+    _can_record_outputs = {
+        "hidden_states": SwitchTransformersBlock,
+        "encoder_hidden_states": OutputRecorder(SwitchTransformersBlock, 0, layer_name="encoder"),
+        "attentions": SwitchTransformersLayerSelfAttention,
+        "cross_attentions": SwitchTransformersLayerCrossAttention,
+    }
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -441,6 +429,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         past_key_values=None,
         use_cache=None,
         cache_position=None,
+        **kwargs: Unpack[TransformersKwargs]
     ):
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -528,6 +517,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                **kwargs
             )
 
         hidden_states = self.final_layer_norm(hidden_states)
