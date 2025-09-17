@@ -813,21 +813,22 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         all_attentions = []
         all_hidden_states = []
 
-        for layer in self.stacked_xf:
-            if output_hidden_states:
-                all_hidden_states.append(hidden_states)
+        # Always add input embeddings as first hidden state if requested
+        if output_hidden_states:
+            all_hidden_states.append(hidden_states)
 
+        for layer in self.stacked_xf:
             scores, hidden_states = layer(
                 input_embeddings=hidden_states,
                 patch_mask=patched_masks[..., -1],
                 output_attentions=output_attentions,
             )
+            if output_hidden_states:
+                all_hidden_states.append(hidden_states)
             if output_attentions:
                 all_attentions.append(scores)
 
-        if output_hidden_states:
-            all_hidden_states = [input_embeddings] + all_hidden_states + [hidden_states]
-        else:
+        if not output_hidden_states:
             all_hidden_states = None
 
         output_embeddings = hidden_states
@@ -865,7 +866,7 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
             config,
             input_dims=config.hidden_size,
             hidden_dims=config.hidden_size,
-            output_dims=config.hidden_size,
+            output_dims=config.output_patch_length * (len(config.quantiles) + 1),
             use_bias=False,  # Original uses bias=False for output projections
         )
 
