@@ -52,21 +52,14 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         hop_length (`int`, *optional*, defaults to 160):
             Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
-        chunk_length (`int`, *optional*, defaults to 30):
-            The maximum number of chunks of `sampling_rate` samples used to trim and pad longer or shorter audio
-            sequences.
-        n_fft (`int`, *optional*, defaults to 400):
+        n_fft (`int`, *optional*, defaults to 512):
             Size of the Fourier transform.
+        win_length (`int`, *optional*, defaults to 400):
+            The window length for the STFT computation.
+        preemphasis (`float`, *optional*, defaults to 0.97):
+            A preemphasis filter coefficient. 0.0 means no preemphasis filter.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
-        dither (`float`, *optional*, defaults to 0.0):
-            Adds dithering. In other words, adds a small Gaussian noise to each frame.
-            E.g. use 0.0001 to add dithering with a normal distribution centered
-            around 0.0 with standard deviation 0.0001 (assuming [-1,+1] range of raw_speech).
-            The value 0.0 means no dithering.
-            Dithering has similar effect as `spectrogram(mel_floor=...)`. It reduces
-            the high log_mel_fbank values for signals with hard-zero sections,
-            when VAD cutoff is present in the signal.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -99,7 +92,6 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         #     sampling_rate=sampling_rate,
         #     norm="slaney",
         #     mel_scale="slaney",
-        #     dtype=np.float32,
         # )
         self.mel_filters = librosa.filters.mel(
             sr=sampling_rate, n_fft=n_fft, n_mels=feature_size, fmin=0.0, fmax=sampling_rate / 2, norm="slaney"

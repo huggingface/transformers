@@ -152,23 +152,18 @@ class ParakeetEncoderConfig(PretrainedConfig):
 
 class ParakeetCTCConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ParakeetCTC`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`ParakeetForCTC`]. It is used to instantiate a
     Parakeet CTC model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 1025):
-            Vocabulary size of the CTC head. Defines the number of different tokens that can be predicted by the model.
-        pad_token_id (`int`, *optional*, defaults to 1024):
-            The id of the padding token. Note that in this case (CTC), it will also be used to identify the blank token.
-        ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-            The reduction method for CTC loss. Can be "mean", "sum", or "none".
-        ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
-            Whether to set infinite losses to zero in CTC loss computation.
-        encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
-            Configuration for the ParakeetEncoder encoder.
+            vocab_size (`<fill_type>`, *optional*, defaults to 1025): <fill_docstring>
+            ctc_loss_reduction (`<fill_type>`, *optional*, defaults to `"mean"`): <fill_docstring>
+            ctc_zero_infinity (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            encoder_config (`Union`, *optional*): <fill_docstring>
+            pad_token_id (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
 
     Example:
         ```python
@@ -178,7 +173,7 @@ class ParakeetCTCConfig(PretrainedConfig):
         >>> configuration = ParakeetCTCConfig()
 
         >>> # Initializing a model from the configuration
-        >>> model = ParakeetCTCConfig(configuration)
+        >>> model = ParakeetForCTC(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config

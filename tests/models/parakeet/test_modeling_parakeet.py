@@ -187,7 +187,7 @@ class ParakeetEncoderModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class ParakeetForCTCModelTester:
-    def __init__(self, parent, encoder_kwargs=None, is_training=True, vocab_size=128, blank_token_id=0):
+    def __init__(self, parent, encoder_kwargs=None, is_training=True, vocab_size=128, pad_token_id=0):
         if encoder_kwargs is None:
             encoder_kwargs = {}
 
@@ -202,7 +202,7 @@ class ParakeetForCTCModelTester:
         self.hidden_size = self.encoder_model_tester.hidden_size
 
         self.vocab_size = vocab_size
-        self.blank_token_id = blank_token_id
+        self.pad_token_id = pad_token_id
 
     def prepare_config_and_inputs(self):
         _, input_features, attention_mask = self.encoder_model_tester.prepare_config_and_inputs()
@@ -213,7 +213,7 @@ class ParakeetForCTCModelTester:
         return ParakeetCTCConfig.from_encoder_config(
             encoder_config=self.encoder_model_tester.get_config(),
             vocab_size=self.vocab_size,
-            blank_token_id=self.blank_token_id,
+            pad_token_id=self.pad_token_id,
         )
 
     def create_and_check_model(self, config, input_features, attention_mask):
@@ -306,9 +306,9 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = "bezzam/parakeet-ctc-1.1b-hf"
+        cls.checkpoint_name = "eustlb/parakeet-ctc-1.1b"
         cls.dtype = torch.bfloat16
-        cls.processor = AutoProcessor.from_pretrained("/home/eustache_lebihan/add-parakeet/tmp2")
+        cls.processor = AutoProcessor.from_pretrained("eustlb/parakeet-ctc-1.1b")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -346,9 +346,7 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         # -- apply
-        inputs = self.processor(
-            samples, sampling_rate=self.processor.feature_extractor.sampling_rate, return_tensors="pt", padding=True
-        )
+        inputs = self.processor(samples)
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
@@ -374,9 +372,7 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         # -- apply
-        inputs = self.processor(
-            samples, sampling_rate=self.processor.feature_extractor.sampling_rate, return_tensors="pt", padding=True
-        )
+        inputs = self.processor(samples)
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
