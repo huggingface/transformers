@@ -50,7 +50,7 @@ from .utils import (
     is_torchvision_v2_available,
     logging,
 )
-from .utils.hub import cached_files
+from .utils.hub import cached_file
 from .utils.import_utils import requires
 from .video_utils import (
     VideoInput,
@@ -305,10 +305,14 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         # Only sample frames if an array video is passed, otherwise first decode -> then sample
         if is_valid_video(videos[0]) and do_sample_frames:
             sampled_videos = []
+            sampled_metadata = []
             for video, metadata in zip(videos, video_metadata):
                 indices = sample_indices_fn(metadata=metadata)
+                metadata.frames_indices = indices
                 sampled_videos.append(video[indices])
+                sampled_metadata.append(metadata)
             videos = sampled_videos
+            video_metadata = sampled_metadata
         elif not is_valid_video(videos[0]):
             if isinstance(videos[0], list):
                 # Videos sometimes are passed as a list of image URLs, especially through templates
@@ -677,22 +681,29 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         else:
             video_processor_file = VIDEO_PROCESSOR_NAME
             try:
-                # Try to load with a new config name first and if not successfull try with the old file name
+                # Try to load with a new config name first and if not successful try with the old file name
                 # NOTE: we will gradually change to saving all processor configs as nested dict in PROCESSOR_NAME
-                resolved_video_processor_files = cached_files(
-                    pretrained_model_name_or_path,
-                    filenames=[VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME, PROCESSOR_NAME],
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                    _raise_exceptions_for_missing_entries=False,
-                )
+                resolved_video_processor_files = [
+                    resolved_file
+                    for filename in [VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME, PROCESSOR_NAME]
+                    if (
+                        resolved_file := cached_file(
+                            pretrained_model_name_or_path,
+                            filename=filename,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            resume_download=resume_download,
+                            local_files_only=local_files_only,
+                            token=token,
+                            user_agent=user_agent,
+                            revision=revision,
+                            subfolder=subfolder,
+                            _raise_exceptions_for_missing_entries=False,
+                        )
+                    )
+                    is not None
+                ]
                 resolved_video_processor_file = resolved_video_processor_files[0]
             except OSError:
                 # Raise any OS error raise by `cached_file`. It will have a helpful error message adapted to

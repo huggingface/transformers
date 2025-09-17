@@ -353,6 +353,19 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 )
         return config
 
+    def update_ep_plan(self, config):
+        if "GptOssConfig" in config.__class__.__name__:
+            if getattr(config, "base_model_ep_plan", None) is not None:
+                config.base_model_ep_plan.update(
+                    {
+                        "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
+                        "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
+                        "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
+                        "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
+                    }
+                )
+        return config
+
     def update_param_name(self, param_name: str) -> str:
         if self.quantization_config.dequantize:
             if "_blocks" in param_name:
@@ -366,7 +379,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 return param_name.replace("down_proj", "down_proj_blocks")
         return param_name
 
-    def get_state_dict(self, model):
+    def get_state_dict_and_metadata(self, model):
         from ..integrations import Mxfp4GptOssExperts
 
         state_dict = model.state_dict()
@@ -398,7 +411,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     ).transpose(-1, -2)
                 )
 
-        return state_dict
+        metadata = {}
+        return state_dict, metadata
 
     def is_serializable(self, safe_serialization=None):
         return True

@@ -22,44 +22,28 @@
 import math
 from typing import Optional, Union
 
-from ...image_processing_utils import (
-    BatchFeature,
-)
+import torch
+
+from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
+    PILImageResampling,
     SizeDict,
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import (
-    TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
-)
-from ...utils.import_utils import requires
-from ...video_processing_utils import (
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    BaseVideoProcessor,
-)
+from ...utils import TensorType, add_start_docstrings, is_torchvision_v2_available
+from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+from .image_processing_qwen2_vl import smart_resize
 
-
-if is_vision_available():
-    from ...image_utils import PILImageResampling
-    from .image_processing_qwen2_vl import smart_resize
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
-
-if is_torch_available():
-    import torch
 
 
 class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
@@ -92,7 +76,6 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
             The maximum number of frames that can be sampled.
     """,
 )
-@requires(backends=("torchvision",))
 class Qwen2VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}

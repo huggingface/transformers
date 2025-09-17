@@ -14,6 +14,8 @@
 # limitations under the License.
 """Fast Image processor class for LeViT."""
 
+from typing import Optional
+
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
 from ...image_transforms import (
     ChannelDimension,
@@ -50,7 +52,7 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """

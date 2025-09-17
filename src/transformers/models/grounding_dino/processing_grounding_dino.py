@@ -20,7 +20,6 @@ import pathlib
 import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
-from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
 from ...image_utils import AnnotationFormat, ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
@@ -144,16 +143,15 @@ class GroundingDinoProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "GroundingDinoImageProcessor"
     tokenizer_class = "AutoTokenizer"
+    valid_processor_kwargs = GroundingDinoProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[GroundingDinoProcessorKwargs],
     ) -> BatchEncoding:
         """
@@ -170,33 +168,9 @@ class GroundingDinoProcessor(ProcessorMixin):
                 - A merged candidate labels string to be detected on the image, separated by "." (e.g. "a cat. a dog.").
                 - A batch of merged candidate labels text to be detected on the batch of images (e.g. ["a cat. a dog.", "a car. a person."]).
         """
-        if images is None and text is None:
-            raise ValueError("You must specify either text or images.")
-
-        output_kwargs = self._merge_kwargs(
-            GroundingDinoProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        # Get only text
-        if images is not None:
-            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
-        else:
-            encoding_image_processor = BatchFeature()
-
         if text is not None:
             text = self._preprocess_input_text(text)
-            text_encoding = self.tokenizer(
-                text=text,
-                **output_kwargs["text_kwargs"],
-            )
-        else:
-            text_encoding = BatchEncoding()
-
-        text_encoding.update(encoding_image_processor)
-
-        return text_encoding
+        return super().__call__(images=images, text=text, **kwargs)
 
     def _preprocess_input_text(self, text):
         """

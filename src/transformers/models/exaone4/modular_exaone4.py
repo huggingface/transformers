@@ -248,7 +248,7 @@ class Exaone4Config(PretrainedConfig):
             ]
         if "sliding_window" in self.layer_types:
             self.cache_implementation = "hybrid"
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
@@ -368,7 +368,7 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
