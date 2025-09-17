@@ -454,7 +454,6 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
-            patch_size=56,
         ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
