@@ -21,17 +21,16 @@ import torch
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    SizeDict,
     group_images_by_shape,
     reorder_images,
 )
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
     is_torchvision_v2_available,
     logging,
 )
-from ...processing_utils import ImagesKwargs
 from ...utils.deprecation import deprecate_kwarg
 
 
@@ -48,7 +47,6 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
     do_pad = True
-    pad_size = 8
     size_divisor = 8
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):

@@ -30,9 +30,8 @@ from ...image_processing_utils_fast import (
     reorder_images,
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available
+from ...utils import auto_docstring, is_torchvision_v2_available
 from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs
-
 
 
 if is_torchvision_v2_available():

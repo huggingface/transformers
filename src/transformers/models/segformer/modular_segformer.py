@@ -16,9 +16,9 @@
 
 from typing import Optional, Union
 
-from transformers.models.beit.image_processing_beit_fast import BeitImageProcessorFast
 import torch
 
+from transformers.models.beit.image_processing_beit_fast import BeitImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (

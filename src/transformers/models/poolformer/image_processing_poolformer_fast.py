@@ -16,9 +16,9 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 import torch
 
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import (
     ChannelDimension,
     get_resize_output_image_size,

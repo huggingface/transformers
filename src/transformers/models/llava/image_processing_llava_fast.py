@@ -44,6 +44,7 @@ if is_torchvision_v2_available():
 else:
     from torchvision.transforms import functional as F
 
+
 @auto_docstring
 class LlavaImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC

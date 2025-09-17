@@ -22,8 +22,8 @@ from ...image_processing_utils_fast import (
     BatchFeature,
     Unpack,
 )
-from ...processing_utils import ImagesKwargs
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     auto_docstring,

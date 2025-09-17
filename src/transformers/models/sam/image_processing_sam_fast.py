@@ -27,8 +27,6 @@ from torchvision.ops.boxes import batched_nms
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
 )
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -41,14 +39,10 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
-    TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 from .image_processing_sam import SamImageProcessorKwargs
-
 
 
 if is_torchvision_v2_available():

@@ -35,15 +35,8 @@ from ...image_utils import (
     is_torch_tensor,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
 from .image_processing_segformer import SegformerImageProcessorKwargs
-
 
 
 if is_torchvision_v2_available():

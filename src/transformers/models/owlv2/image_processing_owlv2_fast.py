@@ -22,19 +22,12 @@
 import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
+import torch
+
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import center_to_corners_format, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-)
-
-
-import torch
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
 from .image_processing_owlv2 import _scale_boxes, box_iou
 
 

@@ -27,9 +27,8 @@ from ...image_processing_utils_fast import (
 )
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils import TensorType, auto_docstring
 from .image_processing_kosmos2_5 import Kosmos2_5ImageProcessorKwargs
-
 
 
 # Similar to transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches but dealing with a batch of images directly.

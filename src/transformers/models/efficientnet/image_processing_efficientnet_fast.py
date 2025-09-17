@@ -17,9 +17,9 @@
 from functools import lru_cache
 from typing import Optional, Union
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 import torch
 
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack

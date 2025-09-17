@@ -1,9 +1,9 @@
 import pathlib
 from typing import Optional, Union
 
-from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 import torch
 
+from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width

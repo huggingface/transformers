@@ -39,10 +39,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
 )
-
 
 
 class PerceptionLMFastImageProcessorKwargs(ImagesKwargs):

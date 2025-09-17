@@ -37,9 +37,9 @@ from ...image_utils import (
     SizeDict,
     pil_torch_interpolation_mapping,
 )
-from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorKwargs
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
+from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorKwargs
 
 
 if is_torchvision_v2_available():

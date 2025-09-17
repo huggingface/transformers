@@ -27,16 +27,8 @@ from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-)
+from ...utils import TensorType, auto_docstring
 from .image_processing_deepseek_vl import DeepseekVLImageProcessorKwargs
-
-
-if is_torch_available():
-    import torch
 
 
 DeepseekVLFastImageProcessorKwargs = DeepseekVLImageProcessorKwargs
@@ -53,7 +45,6 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     do_rescale = True
     do_normalize = True
-    do_pad = True
     valid_kwargs = DeepseekVLFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[DeepseekVLFastImageProcessorKwargs]):

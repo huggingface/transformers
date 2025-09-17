@@ -36,12 +36,9 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 from .image_processing_tvp import TvpImageProcessorKwargs
-
 
 
 if is_torchvision_v2_available():

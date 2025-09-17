@@ -39,14 +39,7 @@ from ...image_utils import (
     is_torch_tensor,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, requires_backends
 from .image_processing_dpt import DPTImageProcessorKwargs
 
 
