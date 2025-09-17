@@ -58,11 +58,11 @@ class Florence2VisionText2TextModelTester:
         vocab_size=99,
         max_position_embeddings=64,
         encoder_layers=1,
-        encoder_ffn_dim=8,
+        encoder_ffn_dim=16,
         decoder_layers=1,
-        decoder_ffn_dim=8,
+        decoder_ffn_dim=16,
         num_attention_heads=1,
-        d_model=8,
+        d_model=16,
         activation_function="gelu",
         dropout=0.1,
         eos_token_id=2,
@@ -74,12 +74,12 @@ class Florence2VisionText2TextModelTester:
         patch_stride=[4],
         patch_padding=[3],
         patch_prenorm=[False],
-        embed_dim=[8],
+        embed_dim=[16],
         num_heads=[1],
         num_groups=[1],
         window_size=12,
         drop_path_rate=0.1,
-        projection_dim=8,
+        projection_dim=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -215,6 +215,10 @@ class Florence2VisionText2TextModelTester:
     def test_load_save_without_tied_weights(self):
         pass
 
+    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported qkv stride")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 @require_torch
 class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -271,7 +275,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_base_model_inference_eager(self):
-        model_name = "ducviet00/Florence-2-base-hf"
+        model_name = "florence-community/Florence-2-base"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="eager").to(
             torch_device
@@ -295,7 +299,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
 
     def test_base_model_batching_inference_eager(self):
-        model_name = "ducviet00/Florence-2-base-hf"
+        model_name = "florence-community/Florence-2-base"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="eager").to(
             torch_device
@@ -343,7 +347,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(parsed_answer_1, EXPECTED_PARSED_ANSWER_1)
 
     def test_base_model_inference_sdpa(self):
-        model_name = "ducviet00/Florence-2-base-hf"
+        model_name = "florence-community/Florence-2-base"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="sdpa").to(
             torch_device
@@ -375,7 +379,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
 
     def test_base_model_batching_inference_sdpa(self):
-        model_name = "ducviet00/Florence-2-base-hf"
+        model_name = "florence-community/Florence-2-base"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="sdpa").to(
             torch_device
@@ -415,7 +419,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
 
     def test_large_model_inference_eager(self):
-        model_name = "ducviet00/Florence-2-large-hf"
+        model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="eager").to(
             torch_device
@@ -439,7 +443,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
 
     def test_large_model_batching_inference_eager(self):
-        model_name = "ducviet00/Florence-2-large-hf"
+        model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="eager").to(
             torch_device
@@ -485,7 +489,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(parsed_answer_1, EXPECTED_PARSED_ANSWER_1)
 
     def test_large_model_inference_sdpa(self):
-        model_name = "ducviet00/Florence-2-large-hf"
+        model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="sdpa").to(
             torch_device
@@ -517,7 +521,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
 
     def test_large_model_batching_inference_sdpa(self):
-        model_name = "ducviet00/Florence-2-large-hf"
+        model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
         model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="sdpa").to(
             torch_device

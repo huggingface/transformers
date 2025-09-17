@@ -44,7 +44,7 @@ from transformers import pipeline
 
 pipeline = pipeline(
     "image-text-to-text",
-    model="ducviet00/Florence-2-base-hf",
+    model="florence-community/Florence-2-base",
     device=0,
     dtype=torch.bfloat16
 )
