@@ -134,9 +134,7 @@ class Text2TextGenerationPipeline(Pipeline):
 
     def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int):
         """
-        This logic has been removed since we now use `max_new_tokens`, which makes the previous checks irrelevant.
-        The previous checks were mainly useful when `max_length` was roughly equal to `input_length`,
-        which typically indicated unreasonable values set by the user.
+        Checks whether there might be something wrong with given input with regard to the model.
         """
         return True
 
