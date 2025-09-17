@@ -341,10 +341,6 @@ class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
         return out_string
 
 
-class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
-
-
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -371,6 +367,10 @@ class GemmaMLP(LlamaMLP):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+
+
+class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 class GemmaPreTrainedModel(LlamaPreTrainedModel):
