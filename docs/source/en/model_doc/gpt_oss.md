@@ -29,7 +29,8 @@ rendered properly in your Markdown viewer.
 
 [GptOss](https://huggingface.co/papers/2508.10925) is a mixture-of-experts (MoEs) model released by OpenAI designed for powerful reasoning, agentic tasks, and versatile developer use cases. It comprises of two model variants, namely gpt-oss-120b and gpt-oss-20b.
 
-GptOss architecture enables sparse computation by activating only a subset of parameters for each token and has a
+GptOss architecture enables sparse computation by activating only a subset of parameters for each token, reasoning, text-only models; with chain-of-thought and adjustable reasoning effort levels. It also has instruction following and tool use support.
+
 You can find all the original GptOss checkpoints under the [State Space Models](https://huggingface.co/openai) organization.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`] and from the command line.
@@ -38,8 +39,8 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```py
-# install optimized MXFP4
-#pip install --upgrade transformers kernels accelerate "triton>=3.4"
+# install optimized MXFP4 kernels
+# pip install --upgrade transformers kernels accelerate "triton>=3.4"
 from transformers import pipeline
 
 pipe = pipeline("text-generation", model="openai/gpt-oss-20b")
@@ -107,7 +108,7 @@ openai/gpt-oss-20b               model            13.8G
 
 This indicates the MXFP4 kernels were fetched and are available for execution.
 
-- You can view additional info here in this blogpost as well.
+- For more information, you can view this [blogpost](https://huggingface.co/blog/faster-transformers).
 
 
 ## GptOssConfig
