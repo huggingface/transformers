@@ -177,7 +177,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
     size = None
     default_to_square = True
     crop_size = None
+    pad_size = None
     do_resize = None
+    do_pad = None
     do_center_crop = None
     do_rescale = None
     rescale_factor = 1 / 255
@@ -201,6 +203,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         )
         crop_size = kwargs.pop("crop_size", self.crop_size)
         self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
+        pad_size = kwargs.pop("pad_size", self.pad_size)
+        self.pad_size = get_size_dict(pad_size, param_name="pad_size") if pad_size is not None else None
         for key in self.valid_kwargs.__annotations__:
             kwarg = kwargs.pop(key, None)
             if kwarg is not None:

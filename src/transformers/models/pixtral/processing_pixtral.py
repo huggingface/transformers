@@ -166,7 +166,8 @@ class PixtralProcessor(ProcessorMixin):
         patch_size = self.patch_size * self.spatial_merge_size
 
         if images is not None:
-            image_inputs = self.image_processor(images, patch_size=patch_size, **output_kwargs["images_kwargs"])
+            output_kwargs["images_kwargs"]["patch_size"] = patch_size
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 

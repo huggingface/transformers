@@ -16,7 +16,7 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     group_images_by_shape,
@@ -84,21 +84,6 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         **kwargs: Unpack[TvpFastImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(videos, **kwargs)
-
-    def _further_process_kwargs(
-        self,
-        pad_size: Optional[SizeDict] = None,
-        **kwargs,
-    ) -> dict:
-        """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
-        """
-        if pad_size is not None:
-            pad_size = SizeDict(**get_size_dict(pad_size, param_name="pad_size"))
-        kwargs["pad_size"] = pad_size
-
-        return super()._further_process_kwargs(**kwargs)
 
     def _prepare_images_structure(
         self,
