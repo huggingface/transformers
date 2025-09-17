@@ -250,6 +250,19 @@ GGUF_CONFIG_MAPPING = {
         "attention.sliding_window": "sliding_window",
         "vocab_size": "vocab_size",
     },
+    "umt5": {
+        "context_length": "n_positions",
+        "block_count": "num_layers",
+        "feed_forward_length": "d_ff",
+        "embedding_length": "d_model",
+        "attention.key_length": "d_kv",
+        "attention.head_count": "num_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
+        "attention.relative_buckets_count": "relative_attention_num_buckets",
+        "decoder_start_token_id": "decoder_start_token_id",
+        "vocab_size": "vocab_size",
+    },
     "deci": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
@@ -728,6 +741,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "nemotron": GGUFGPTConverter,
     "gemma2": GGUFGemmaConverter,
     "gemma3_text": GGUFGemmaConverter,
+    "umt5": GGUFT5Converter,
     "deci": GGUFLlamaConverter,
     "decilm": GGUFLlamaConverter,
 }
