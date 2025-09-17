@@ -139,6 +139,7 @@ def create_causal_mask_mapping(
     past_key_values: Optional[Cache],
     position_ids: Optional[torch.Tensor],
     token_type_ids: Optional[torch.Tensor] = None,
+    pixel_values: Optional[torch.FloatTensor] = None,
     **kwargs,
 ) -> dict:
     """
@@ -159,7 +160,7 @@ def create_causal_mask_mapping(
     # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
     # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
     may_have_image_input = (
-        past_key_values is None or not past_key_values.is_initialized or kwargs.get("pixel_values") is not None
+        past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
     )
     if token_type_ids is not None and may_have_image_input:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
@@ -375,7 +376,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
                 past_key_values,
                 position_ids,
                 token_type_ids,
-                pixel_values=pixel_values,  # Used to determine if we have image data
+                pixel_values
             )
 
         outputs = self.language_model(
@@ -598,7 +599,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             past_key_values,
             position_ids,
             token_type_ids,
-            **kwargs,
+            pixel_values=kwargs.get("pixel_values", None),
+            **{k: v for k, v in kwargs.items() if k != "pixel_values"},
         )
 
 

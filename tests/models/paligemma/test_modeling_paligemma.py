@@ -555,7 +555,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 ("rocm", (9, 5)): "detect shoe\n<loc0051><loc0309><loc0708><loc0644> shoe",
                 (None, None): "detect shoe\n<loc0051><loc0309><loc0708><loc0646> shoe",
-                ("cuda", 8): "detect shoe\n<loc0045><loc0309><loc0708><loc0646> shoe",
+                ("cuda", 8): "detect shoe\n<loc0049><loc0309><loc0708><loc0644> shoe",
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
