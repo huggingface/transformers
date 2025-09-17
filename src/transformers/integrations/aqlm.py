@@ -13,15 +13,13 @@
 # limitations under the License.
 "AQLM (Additive Quantization of Language Model) integration file"
 
-from ..utils import ACCELERATE_MIN_VERSION, is_accelerate_available, is_aqlm_available, is_torch_available
+import torch.nn as nn
 
-
-if is_torch_available():
-    import torch.nn as nn
+from ..utils import ACCELERATE_MIN_VERSION, is_accelerate_available, is_aqlm_available
 
 
 def replace_with_aqlm_linear(
-    model,
+    model: nn.Module,
     quantization_config=None,
     linear_weights_not_to_quantize=None,
     current_key_name=None,

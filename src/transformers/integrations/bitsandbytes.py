@@ -4,6 +4,8 @@ import warnings
 from copy import deepcopy
 from inspect import signature
 
+import torch
+import torch.nn as nn
 from packaging import version
 
 from ..utils import (
@@ -18,8 +20,6 @@ from ..utils import (
 
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
-    import torch
-    import torch.nn as nn
 
     from ..pytorch_utils import Conv1D
 
@@ -32,7 +32,9 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
-def set_module_quantized_tensor_to_device(module, tensor_name, device, value=None, quantized_stats=None):
+def set_module_quantized_tensor_to_device(
+    module: nn.Module, tensor_name: str, device, value=None, quantized_stats=None
+):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
     `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). The
