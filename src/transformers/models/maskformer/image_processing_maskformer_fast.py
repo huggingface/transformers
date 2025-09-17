@@ -120,23 +120,12 @@ class MaskFormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         The background label will be replaced by `ignore_index`.
     num_labels (`int`, *optional*):
         The number of labels in the segmentation map.
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-        If `pad_size` is provided, the image will be padded to the specified dimensions.
-        Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`Dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-        height and width in the batch.
     """
 
     size_divisor: Optional[int]
     ignore_index: Optional[int]
     do_reduce_labels: Optional[bool]
     num_labels: Optional[int]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
 
 
 @auto_docstring
@@ -335,8 +324,8 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps: Optional["torch.Tensor"],
         instance_id_to_semantic_id: Optional[dict[int, int]],
         do_resize: Optional[bool],
-        size: Optional[dict[str, int]],
-        pad_size: Optional[dict[str, int]],
+        size: Optional[SizeDict],
+        pad_size: Optional[SizeDict],
         size_divisor: Optional[int],
         interpolation: Optional[Union["PILImageResampling", "F.InterpolationMode"]],
         do_rescale: Optional[bool],
@@ -384,7 +373,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
                 resized_segmentation_maps_grouped, grouped_segmentation_maps_index
             )
         if pad_size is not None:
-            padded_size = (pad_size["height"], pad_size["width"])
+            padded_size = (pad_size.height, pad_size.width)
         else:
             padded_size = get_max_height_width(resized_images)
 

@@ -194,8 +194,6 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         pan_and_scan_max_num_crops: Optional[int],
         pan_and_scan_min_ratio_to_activate: Optional[float],
         interpolation: Optional["F.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -203,6 +201,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched processing
         processed_images_grouped = {}
