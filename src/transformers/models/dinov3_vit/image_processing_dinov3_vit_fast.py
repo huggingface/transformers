@@ -16,30 +16,26 @@
 
 from typing import Optional, Union
 
+import torch
+
 from transformers.image_processing_base import BatchFeature
 from transformers.image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict
 from transformers.utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
 from transformers.utils.import_utils import requires
 
 
-logger = logging.get_logger(__name__)
-
-
-if is_torch_available():
-    import torch
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
