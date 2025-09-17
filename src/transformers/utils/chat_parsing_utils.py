@@ -1,7 +1,8 @@
-from transformers.utils import is_jmespath_available
-
 import json
 import re
+
+from transformers.utils import is_jmespath_available
+
 
 if is_jmespath_available():
     import jmespath
@@ -115,7 +116,9 @@ def recursive_parse(
                 )
             if "transform" in parser_args:
                 if jmespath is None:
-                    raise ImportError("Chat response schema includes a jmespath transformation, but jmespath is not installed. You can install it with `pip install jmespath`.")
+                    raise ImportError(
+                        "Chat response schema includes a jmespath transformation, but jmespath is not installed. You can install it with `pip install jmespath`."
+                    )
                 parsed_json = jmespath.search(parser_args["transform"], parsed_json)
             node_content = parsed_json
         else:
