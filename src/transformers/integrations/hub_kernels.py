@@ -86,25 +86,28 @@ try:
         },
         "FastGELU": {
             "cuda": {
-                Mode.INFERENCE: LayerRepository(
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="FastGELU",
+                    version=">=0.0.4,<0.1.0",
                 )
             }
         },
         "QuickGELU": {
             "cuda": {
-                Mode.INFERENCE: LayerRepository(
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="QuickGELU",
+                    version=">=0.0.4,<0.1.0",
                 )
             }
         },
         "NewGELU": {
             "cuda": {
-                Mode.INFERENCE: LayerRepository(
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                     repo_id="kernels-community/activation",
                     layer_name="NewGELU",
+                    version=">=0.0.4,<0.1.0",
                 )
             }
         },
