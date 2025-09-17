@@ -247,16 +247,17 @@ class Qwen3MoeExperts(nn.Module):
                 config.moe_intermediate_size,
             )
         )
-        self._use_grouped_gemm = os.environ.get("USE_GROUPED_MM", "true") == "true"
+        self._forward_fn = {
+            "for_loop": self._for_loop_forward,
+            "torch_grouped_mm": self._torch_grouped_mm_forward,
+        }[os.environ.get("QWEN3_MOE_EXPERTS_FORWARD", "torch_grouped_mm")]
+
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, *args):
-        if self._use_grouped_gemm:
-            return self._grouped_gemm_forward(*args)
-        else:
-            return self._for_loop_forward(*args)
+        return self._forward_fn(*args)
 
-    def _grouped_gemm_forward(self, x, num_tokens_per_expert):
+    def _torch_grouped_mm_forward(self, x, num_tokens_per_expert):
         gate_proj, up_proj, down_proj = self.gate_proj, self.up_proj, self.down_proj
         if isinstance(self.gate_proj, torch.distributed.tensor.DTensor):
             gate_proj = self.gate_proj.to_local()
@@ -286,6 +287,8 @@ class Qwen3MoeExperts(nn.Module):
         start = 0
 
         gate_proj, up_proj, down_proj = self.gate_proj, self.up_proj, self.down_proj
+
+        # this is needed if we do expert-parallelism for some reason
         if isinstance(self.gate_proj, torch.distributed.tensor.DTensor):
             gate_proj = self.gate_proj.to_local()
             up_proj = self.up_proj.to_local()
@@ -302,11 +305,8 @@ class Qwen3MoeExperts(nn.Module):
             current_x = x[start : start + num_tokens_for_expert]
 
             gate = self.act_fn(torch.matmul(current_x, expert_gate_proj.T))
-
             up_output = torch.matmul(current_x, expert_up_proj.T)
-
             current_y = gate * up_output
-
             expert_output = torch.matmul(current_y, expert_down_proj.T)
 
             out[start : start + num_tokens_for_expert] = expert_output
@@ -335,7 +335,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
 
-        if self.norm_topk_prob: # only diff with mixtral sparse moe block!
+        if self.norm_topk_prob:  # only diff with mixtral sparse moe block!
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
 
         tokens_per_expert = torch.histc(
@@ -353,8 +353,10 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         sorted_token_indices = sorted_token_indices_expanded // self.top_k
 
         # gather the input based on the sorted token indices
+        # shape (batch * sequence_length * top_k, hidden_size)
         routed_input = torch.gather(hidden_states, dim=0, index=sorted_token_indices.view(-1, 1).expand(-1, H))
 
+        # shape (batch * sequence_length * top_k, hidden_size)
         experts_output = self.experts(routed_input, tokens_per_expert) * sorted_routing_weights.view(-1, 1).type_as(
             hidden_states
         )
@@ -362,6 +364,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         out = torch.zeros_like(hidden_states)
 
         # reorder the output to the original token order
+        # shape (batch * sequence_length, hidden_size)
         out = out.scatter_add(dim=0, index=sorted_token_indices.view(-1, 1).expand(-1, H), src=experts_output)
 
         hidden_states = out.reshape(B, S, H)
