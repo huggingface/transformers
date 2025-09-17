@@ -42,7 +42,6 @@ from ...utils import (
     ModelOutput,
     TensorType,
     auto_docstring,
-    is_torch_available,
     logging,
 )
 from ...utils.generic import TransformersKwargs, check_model_inputs
@@ -67,11 +66,6 @@ from .configuration_sam2 import (
     Sam2PromptEncoderConfig,
     Sam2VisionConfig,
 )
-
-
-if is_torch_available():
-    import torch
-    from torch.nn import functional as F
 
 
 logger = logging.get_logger(__name__)

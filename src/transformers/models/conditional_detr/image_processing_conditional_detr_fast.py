@@ -33,12 +33,7 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torchvision_v2_available,
-    logging,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, logging
 from ...utils.import_utils import requires
 from .image_processing_conditional_detr import (
     compute_segments,

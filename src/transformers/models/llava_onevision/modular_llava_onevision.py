@@ -50,7 +50,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
@@ -58,7 +57,7 @@ from ...utils import (
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)

@@ -40,11 +40,7 @@ from ...image_utils import (
     is_torch_tensor,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torchvision_v2_available,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
 
 
 if is_torchvision_v2_available():

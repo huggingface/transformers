@@ -32,10 +32,7 @@ from ...image_processing_utils_fast import (
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-)
+from ...utils import TensorType, auto_docstring
 
 
 class DeepseekVLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):

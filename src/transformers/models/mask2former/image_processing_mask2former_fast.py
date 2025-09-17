@@ -42,12 +42,7 @@ from ...image_utils import (
     PILImageResampling,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torchvision_v2_available,
-    logging,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, logging
 from .image_processing_mask2former import (
     compute_segments,
     convert_segmentation_to_rle,
@@ -60,7 +55,6 @@ if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
 else:
     from torchvision.transforms import functional as F
-
 
 logger = logging.get_logger(__name__)
 

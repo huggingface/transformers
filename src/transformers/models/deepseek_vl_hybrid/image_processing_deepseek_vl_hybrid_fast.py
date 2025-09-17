@@ -39,11 +39,7 @@ from ...image_utils import (
     pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torchvision_v2_available,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
 
 
 if is_torchvision_v2_available():

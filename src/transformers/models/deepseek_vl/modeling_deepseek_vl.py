@@ -21,24 +21,17 @@
 from dataclasses import dataclass
 from typing import Optional, Union
 
+import torch
+import torch.nn as nn
+
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torch_available,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_deepseek_vl import DeepseekVLConfig
-
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
 
 
 @dataclass

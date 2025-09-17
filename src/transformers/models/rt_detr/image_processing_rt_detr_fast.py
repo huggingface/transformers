@@ -31,12 +31,7 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torchvision_v2_available,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, requires_backends
 from ...utils.import_utils import requires
 from .image_processing_rt_detr import get_size_with_aspect_ratio
 

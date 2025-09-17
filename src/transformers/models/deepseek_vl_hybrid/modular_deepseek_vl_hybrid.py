@@ -37,6 +37,7 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
+    pil_torch_interpolation_mapping,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -52,7 +53,6 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     filter_out_non_signature_kwargs,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
@@ -72,12 +72,8 @@ from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-
-    from ...image_utils import pil_torch_interpolation_mapping
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
-
-    from ...image_utils import pil_torch_interpolation_mapping
 
 
 logger = logging.get_logger(__name__)

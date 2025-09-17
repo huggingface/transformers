@@ -19,13 +19,17 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
 import numpy as np
+import PIL
 import torch
+import torch.nn.functional as F
+import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.blip.image_processing_blip import BlipImageProcessor
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...configuration_utils import PretrainedConfig
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -46,11 +50,9 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_available,
-    is_vision_available,
     logging,
 )
-from ..auto import AutoModel
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
 from ..chameleon.modeling_chameleon import (
@@ -64,19 +66,6 @@ from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCa
 from ..llama.modeling_llama import eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
-
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    import torch.utils.checkpoint
-
-if is_vision_available():
-    import PIL
-
-from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)

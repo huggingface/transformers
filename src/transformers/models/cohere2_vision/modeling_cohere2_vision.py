@@ -30,10 +30,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-)
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_cohere2_vision import Cohere2VisionConfig

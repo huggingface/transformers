@@ -39,17 +39,11 @@ from ...image_utils import (
     is_torch_tensor,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torchvision_v2_available,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, requires_backends
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
-
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
