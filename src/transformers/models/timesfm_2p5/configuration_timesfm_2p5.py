@@ -5,7 +5,7 @@
 #                          modular_timesfm_2p5.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2025 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,65 +18,48 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 
 
 class Timesfm2P5Config(PretrainedConfig):
-    """
+    r"""
     This is the configuration class to store the configuration of a [`Timesfm2P5ModelForPrediction`]. It is used to
-    instantiate a TimesFM 2.5 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the TimesFM 2.5
-    [google/timesfm-2.5-200m-pytorch](https://huggingface.co/google/timesfm-2.5-200m-pytorch) architecture.
+    instantiate a TimesFM 2.5 model according to the specified arguments, defining the model architecture.
+    Inherits from [`TimesFmConfig`] but with different defaults for TimesFM 2.5.
 
-    Configuration objects inherit from [`TimesFmConfig`] and can be used to control the model outputs. Read the
-    documentation from [`TimesFmConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs.
 
-    Args:
+    Arguments:
         patch_length (`int`, *optional*, defaults to 32):
             The length of one patch in the input sequence.
         context_length (`int`, *optional*, defaults to 512):
-            The length of the input context.
+            The maximum length of the input context.
         horizon_length (`int`, *optional*, defaults to 128):
             The length of the prediction horizon.
-        freq_size (`int`, *optional*, defaults to 3):
-            The number of frequency embeddings.
-        num_hidden_layers (`int`, *optional*, defaults to 50):
+        output_patch_length (`int`, *optional*, defaults to 128):
+            The length of the output patches for point predictions.
+        output_quantile_len (`int`, *optional*, defaults to 1024):
+            The length of the output for quantile predictions.
+        num_hidden_layers (`int`, *optional*, defaults to 20):
             Number of Transformer layers.
         hidden_size (`int`, *optional*, defaults to 1280):
             Size of the hidden layers in the feed-forward networks.
         intermediate_size (`int`, *optional*, defaults to 1280):
             Dimension of the MLP representations.
         head_dim (`int`, *optional*, defaults to 80):
-            Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
-            be defined as `num_attention_heads * head_dim`.
+            Size of the key, query, value projections per attention head.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        tolerance (`float`, *optional*, defaults to 1e-06):
-            The tolerance for the quantile loss.
+        quantiles (`list[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
+            The quantiles to predict.
+        decode_index (`int`, *optional*, defaults to 5):
+            The index used for decoding quantiles (corresponds to median, quantile 0.5).
+        use_rotary_position_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to use rotary position embeddings.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the RMS normalization layers.
-        quantiles (`list`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
-            The quantiles to predict.
-        pad_val (`float`, *optional*, defaults to 1123581321.0):
-            The value used to pad the predictions.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the attention scores.
-        use_positional_embedding (`bool`, *optional*, defaults to `False`):
-            Whether to add positional embeddings.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        min_timescale (`int`, *optional*, defaults to 1):
-            The start of the geometric positional index. Determines the periodicity of
-            the added signal.
-        max_timescale (`int`, *optional*, defaults to 10000):
-            The end of the geometric positional index. Determines the frequency of the
-            added signal.
-        use_rotary_position_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to use rotary positional embeddings instead of traditional sinusoidal embeddings.
-        use_revin_normalization (`bool`, *optional*, defaults to `True`):
-            Whether to use reversible instance normalization (RevIN) for input preprocessing.
     """
 
     model_type = "timesfm_2p5"
@@ -88,32 +71,33 @@ class Timesfm2P5Config(PretrainedConfig):
         patch_length: int = 32,
         context_length: int = 512,
         horizon_length: int = 128,
-        freq_size: int = 3,
-        num_hidden_layers: int = 50,
+        output_patch_length: int = 128,
+        output_quantile_len: int = 1024,
+        num_hidden_layers: int = 20,
         hidden_size: int = 1280,
         intermediate_size: int = 1280,
         head_dim: int = 80,
         num_attention_heads: int = 16,
-        tolerance: float = 1e-6,
+        quantiles: Optional[list[float]] = None,
+        decode_index: int = 5,
+        use_rotary_position_embeddings: bool = True,
         rms_norm_eps: float = 1e-6,
-        quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        freq_size: int = 3,
+        tolerance: float = 1e-6,
         pad_val: float = 1123581321.0,
         attention_dropout: float = 0.0,
         use_positional_embedding: bool = False,
         initializer_range: float = 0.02,
         min_timescale: int = 1,
-        max_timescale: int = 10_000,
-        use_rotary_position_embeddings: bool = True,
-        use_revin_normalization: bool = True,
+        max_timescale: int = 10000,
         **kwargs,
     ):
         super().__init__(
             is_encoder_decoder=self.is_encoder_decoder,
             **kwargs,
         )
-        # TimesFM 2.5 specific parameters
-        self.use_rotary_position_embeddings = use_rotary_position_embeddings
-        self.use_revin_normalization = use_revin_normalization
+        if quantiles is None:
+            quantiles = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
         self.patch_length = patch_length
         self.context_length = context_length
         self.horizon_length = horizon_length
@@ -132,6 +116,12 @@ class Timesfm2P5Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.min_timescale = min_timescale
         self.max_timescale = max_timescale
+
+        # TimesFM 2.5 specific parameters
+        self.output_patch_length = output_patch_length
+        self.output_quantile_len = output_quantile_len
+        self.decode_index = decode_index
+        self.use_rotary_position_embeddings = use_rotary_position_embeddings
 
 
 __all__ = ["Timesfm2P5Config"]
