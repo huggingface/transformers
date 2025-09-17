@@ -21,7 +21,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature, get_size_dict
