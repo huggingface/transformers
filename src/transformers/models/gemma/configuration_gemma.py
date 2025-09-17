@@ -132,6 +132,7 @@ class GemmaConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         layer_types=None,
+        use_bidirectional_attention=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -150,6 +151,7 @@ class GemmaConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.use_bidirectional_attention = use_bidirectional_attention
 
         self.layer_types = layer_types
         if self.layer_types is None:
