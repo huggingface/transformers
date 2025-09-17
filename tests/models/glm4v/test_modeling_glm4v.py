@@ -159,7 +159,7 @@ class Glm4vVisionText2TextModelTester:
 
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, patches_per_side, patches_per_side]] * self.batch_size),
+            "image_grid_thw": torch.tensor([[1, patches_per_side, patches_per_side]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
