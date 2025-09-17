@@ -35,7 +35,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
-from .image_processing_idefics3 import Idefics3mageProcessorKwargs
+from .image_processing_idefics3 import Idefics3ImageProcessorKwargs
 
 
 if is_torchvision_available():
@@ -169,7 +169,7 @@ def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "tor
     return mask
 
 
-Idefics3FastImageProcessorKwargs = Idefics3mageProcessorKwargs
+Idefics3FastImageProcessorKwargs = Idefics3ImageProcessorKwargs
 
 
 @auto_docstring

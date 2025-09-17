@@ -48,7 +48,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class Idefics3mageProcessorKwargs(ImagesKwargs):
+class Idefics3ImageProcessorKwargs(ImagesKwargs):
     """
     do_image_splitting (`bool`, *optional*, defaults to `True`):
         Whether to split the image into sub-images concatenated with the original image. They are split into patches
@@ -308,6 +308,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask"]
+    valid_kwargs = Idefics3ImageProcessorKwargs
 
     def __init__(
         self,
