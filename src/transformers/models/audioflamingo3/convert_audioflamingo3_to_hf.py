@@ -98,14 +98,14 @@ def write_main_config(src_root: Path, dst_root: Path) -> None:
         _load_json(src_root / "llm" / "config.json"),
         keys=("_name_or_path", "architectures"),
     )
-    enc_cfg = _strip_keys(
+    audio_cfg = _strip_keys(
         _load_json(src_root / "sound_tower" / "config.json"),
         keys=("_name_or_path", "architectures"),
     )
-    enc_cfg["model_type"] = "audioflamingo3_encoder"
+    audio_cfg["model_type"] = "audioflamingo3_encoder"
 
     final_cfg["text_config"] = text_cfg
-    final_cfg["encoder_config"] = enc_cfg
+    final_cfg["audio_config"] = audio_cfg
 
     _save_json(final_cfg, dst_root / "config.json")
     logger.info("config.json")

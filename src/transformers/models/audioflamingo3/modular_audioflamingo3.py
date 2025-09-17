@@ -109,8 +109,8 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         # Initialize modules following config.initializer_range; used for fine-tuning/inference scaffolding.
         std = getattr(self.config, "initializer_range", None)
-        if std is None and hasattr(self.config, "encoder_config"):
-            std = getattr(self.config.encoder_config, "initializer_range", 0.02)
+        if std is None and hasattr(self.config, "audio_config"):
+            std = getattr(self.config.audio_config, "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -242,7 +242,7 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
 
     def __init__(self, config: AudioFlamingo3Config) -> None:
         super().__init__()
-        d_audio = config.encoder_config.d_model
+        d_audio = config.audio_config.d_model
         d_text = config.text_config.hidden_size
         self.layers = nn.ModuleList([nn.Linear(d_audio, d_text), nn.GELU(), nn.Linear(d_text, d_text)])
 
@@ -273,7 +273,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         # Language model
         self.llm = AutoModelForCausalLM.from_config(config.text_config)
         # Audio encoder (explicitly instantiate our class to guarantee helper availability)
-        self.sound_tower = AudioFlamingo3Encoder(config.encoder_config)
+        self.sound_tower = AudioFlamingo3Encoder(config.audio_config)
         # Projection to LM hidden size
         self.sound_mm_projector = AudioFlamingo3MultiModalProjector(config)
 
