@@ -51,12 +51,12 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         ByT5Tokenizer,
+        T5EncoderForSequenceClassification,
         T5EncoderModel,
         T5ForConditionalGeneration,
         T5ForQuestionAnswering,
         T5ForSequenceClassification,
         T5ForTokenClassification,
-        T5EncoderForSequenceClassification,
         T5Model,
         T5Tokenizer,
     )
