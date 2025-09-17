@@ -346,6 +346,9 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     return_name = "translation"
 
     def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int):
+        """
+        Removed input length check - unnecessary with max_new_tokens (previously relevant for max_length)
+        """
         return True
 
     def preprocess(self, *args, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None):
