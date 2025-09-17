@@ -330,7 +330,7 @@ generation_output[:2]
 [[autodoc]] StaticLayer
     - update
 
-[[autodoc]] SlidingWindowLayer
+[[autodoc]] StaticSlidingWindowLayer
     - update
 
 [[autodoc]] QuantoQuantizedLayer

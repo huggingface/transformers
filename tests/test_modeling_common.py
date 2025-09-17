@@ -100,7 +100,6 @@ from transformers.testing_utils import (
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
-    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -224,8 +223,6 @@ def _test_eager_matches_sdpa_inference(
             ("cuda", True, torch.bfloat16): 3e-2,  # (different from others)
             ("cuda", True, torch.float16): 5e-3,
         }
-
-    set_model_tester_for_less_flaky_test(self)
 
     def _can_output_attn(model):
         parameters = inspect.signature(model.forward).parameters
@@ -1094,8 +1091,6 @@ class ModelTesterMixin:
                     msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
                     msg += str(e)
                     raise AssertionError(msg)
-
-        set_model_tester_for_less_flaky_test(self)
 
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
@@ -4493,7 +4488,7 @@ class ModelTesterMixin:
                 unique_devices, {device}, f"All parameters should be on {device}, but found {unique_devices}."
             )
 
-    def test_can_load_with_meta_device_context_manager(self):
+    def test_cannot_load_with_meta_device_context_manager(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             # Need to deepcopy here as it is modified in-place in save_pretrained (it sets sdpa for default attn, which
@@ -4502,18 +4497,11 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-
                 with torch.device("meta"):
-                    new_model = model_class.from_pretrained(tmpdirname)
-                unique_devices = {param.device for param in new_model.parameters()} | {
-                    buffer.device for buffer in new_model.buffers()
-                }
-
-            self.assertEqual(
-                unique_devices,
-                {torch.device("meta")},
-                f"All parameters should be on meta device, but found {unique_devices}.",
-            )
+                    with self.assertRaisesRegex(
+                        RuntimeError, "You are using `from_pretrained` with a meta device context manager"
+                    ):
+                        _ = model_class.from_pretrained(tmpdirname)
 
     def test_config_attn_implementation_setter(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
