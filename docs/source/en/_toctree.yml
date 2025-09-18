@@ -485,6 +485,8 @@
         title: FLAN-UL2
       - local: model_doc/flaubert
         title: FlauBERT
+      - local: model_doc/flex_olmo
+        title: FlexOlmo
       - local: model_doc/fnet
         title: FNet
       - local: model_doc/fsmt
