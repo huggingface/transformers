@@ -1905,7 +1905,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_use_liger_kernel_patching(self):
         # Ensure any monkey patching is cleaned up for subsequent tests
         with patch("transformers.models.llama.modeling_llama"):
-            from liger_kernel.transformers import LigerRMSNorm, liger_rotary_pos_emb
+            from liger_kernel.transformers import liger_rotary_pos_emb
 
             from transformers.models.llama import modeling_llama
 
@@ -1914,7 +1914,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Spot check that modeling code and model instance variables are not yet patched
             self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+            self.assertFalse("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
 
             args = TrainingArguments(
                 self.get_auto_remove_tmp_dir(),
@@ -1924,7 +1924,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Spot check that modeling code and model instance variables are patched
             self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+            self.assertTrue("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
 
     @require_liger_kernel
     def test_use_liger_kernel_custom_config_patching(self):
@@ -3241,7 +3241,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model_wrapped_after = trainer.model_wrapped
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
 
-    @require_torch_up_to_2_accelerators
+    @require_torch_non_multi_accelerator
     def test_can_resume_training(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3542,8 +3542,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
         trainer.train()
-        # After `auto_find_batch_size` is ran we should now be at 16*0.9=14
-        self.assertEqual(trainer._train_batch_size, 14)
+        previous_batch_size = trainer._train_batch_size
+        # Depends on the number of gpus so it is easier to just check that the batch_size decreased as expected
+        self.assertEqual(trainer._train_batch_size < 16, True)
 
         # We can then make a new Trainer
         trainer = Trainer(model, args, train_dataset=train_dataset)
@@ -3551,7 +3552,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
         trainer.train(resume_from_checkpoint=True)
         # We should be back to 14 again, picking up based upon the last ran Trainer
-        self.assertEqual(trainer._train_batch_size, 14)
+        self.assertEqual(trainer._train_batch_size, previous_batch_size)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
@@ -5157,11 +5158,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             training_args = TrainingArguments(
-                output_dir=tmpdir,
-                report_to="none",
-                max_steps=5,
-                per_device_train_batch_size=1,
-                remove_unused_columns=False,
+                output_dir=tmpdir, report_to="none", max_steps=5, per_device_train_batch_size=1, use_cpu=True
             )
             trainer = Trainer(
                 model=model,
@@ -5397,7 +5394,7 @@ class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
@@ -5443,7 +5440,7 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
@@ -5491,7 +5488,7 @@ class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
@@ -5536,7 +5533,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
                 b = config["b"]
             model_config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(model_config)
+            return RegressionPreTrainedModel(model_config).to(torch_device)
 
         def hp_name(params):
             return MyTrialShortNamer.shortname(params)
@@ -5599,7 +5596,7 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.assignments)
@@ -6178,7 +6175,7 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
                 b = config["b"]
             model_config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(model_config)
+            return RegressionPreTrainedModel(model_config).to(torch_device)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(

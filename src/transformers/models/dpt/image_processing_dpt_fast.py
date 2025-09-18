@@ -24,6 +24,8 @@ import math
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Optional, Union
 
+import torch
+
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -37,25 +39,15 @@ from ...image_utils import (
     is_torch_tensor,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, requires_backends
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-if is_torch_available():
-    import torch
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 
@@ -64,9 +56,6 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     ensure_multiple_of (`int`, *optional*, defaults to 1):
         If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
         by `ensure_multiple_of` in `preprocess`.
-    do_pad (`bool`, *optional*, defaults to `False`):
-        Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
-        combination with DPT.
     size_divisor (`int`, *optional*):
         If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
         DINOv2 paper, which uses the model in combination with DPT.
@@ -81,7 +70,6 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
     ensure_multiple_of: Optional[int]
     size_divisor: Optional[int]
-    do_pad: Optional[bool]
     keep_aspect_ratio: Optional[bool]
     do_reduce_labels: Optional[bool]
 
