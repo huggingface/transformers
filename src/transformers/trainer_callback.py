@@ -622,14 +622,6 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_save = True
 
         return control
-    
-    def on_log(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-         """
-         Event called after logging the last logs.
-         """
-         return control
-
-         
 
 
 class ProgressCallback(TrainerCallback):
