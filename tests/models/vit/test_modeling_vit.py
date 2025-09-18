@@ -270,23 +270,24 @@ class ViTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
-
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-33.2744, 0.8215, -0.0836]).to(torch_device)
-
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        assert 1 == 2
+        # model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
+        #
+        # image_processor = self.default_image_processor
+        # image = prepare_img()
+        # inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+        #
+        # # forward pass
+        # with torch.no_grad():
+        #     outputs = model(**inputs)
+        #
+        # # verify the logits
+        # expected_shape = torch.Size((1, 1000))
+        # self.assertEqual(outputs.logits.shape, expected_shape)
+        #
+        # expected_slice = torch.tensor([-33.2744, 0.8215, -0.0836]).to(torch_device)
+        #
+        # torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
