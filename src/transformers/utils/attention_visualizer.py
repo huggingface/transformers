@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-import requests
+import httpx
 from PIL import Image
 
 from ..masking_utils import create_causal_mask
@@ -180,7 +180,7 @@ class AttentionMaskVisualizer:
         image_seq_length = None
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
-            img = Image.open(requests.get(img, stream=True).raw)
+            img = Image.open(httpx.get(img, follow_redirects=True).content)
             image_seq_length = 5
             processor = AutoProcessor.from_pretrained(self.repo_id, image_seq_length=image_seq_length)
             if hasattr(processor, "image_token"):

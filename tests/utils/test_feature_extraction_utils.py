@@ -19,7 +19,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from requests.exceptions import HTTPError
+import httpx
 
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
@@ -39,13 +39,13 @@ class FeatureExtractorUtilTester(unittest.TestCase):
         response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = {}
-        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.raise_for_status.side_effect = httpx.HTTPError("failed")
         response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = Wav2Vec2FeatureExtractor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
             _ = Wav2Vec2FeatureExtractor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
             # This check we did call the fake head request
             mock_head.assert_called()
