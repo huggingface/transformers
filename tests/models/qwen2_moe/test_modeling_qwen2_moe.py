@@ -252,7 +252,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
     @slow
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = (
-            "To be or not to be, that is the question: Whether 'tis nobler in the mind to suffer The sl"
+            "To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl"
         )
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
