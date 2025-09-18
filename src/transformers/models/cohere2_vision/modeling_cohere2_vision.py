@@ -213,7 +213,7 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
             )
         return special_image_mask
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -306,7 +306,7 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
     def multi_modal_projector(self):
         return self.model.multi_modal_projector
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

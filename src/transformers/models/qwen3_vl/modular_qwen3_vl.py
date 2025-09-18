@@ -749,7 +749,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
         hidden_states[visual_pos_masks, :] = local_this
         return hidden_states
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

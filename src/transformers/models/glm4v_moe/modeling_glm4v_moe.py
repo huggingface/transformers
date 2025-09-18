@@ -922,7 +922,7 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

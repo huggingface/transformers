@@ -444,7 +444,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
         return self.embeddings.patch_embed
 
     @deprecate_kwarg("attention_mask", version="v4.58.0")
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -520,7 +520,7 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.token_embedding = value
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

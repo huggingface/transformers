@@ -462,7 +462,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings = value
 
-    @check_model_inputs
+    @check_model_inputs(post_ln_hiddens=False)
     @auto_docstring
     def forward(
         self,

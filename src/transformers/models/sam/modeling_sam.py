@@ -1059,7 +1059,7 @@ class SamVisionEncoder(SamPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs
+    @check_model_inputs(post_ln_hiddens=False)
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
     ) -> SamVisionEncoderOutput:
@@ -1197,7 +1197,7 @@ class SamModel(SamPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

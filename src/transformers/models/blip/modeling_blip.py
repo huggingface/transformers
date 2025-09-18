@@ -508,7 +508,7 @@ class BlipVisionModel(BlipPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs(post_ln_hiddens=False)
     @auto_docstring
     def forward(
         self,

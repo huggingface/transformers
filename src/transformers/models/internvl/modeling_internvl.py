@@ -380,7 +380,6 @@ class InternVLVisionEncoder(nn.Module):
         self.layer = nn.ModuleList([InternVLVisionLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @check_model_inputs
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -443,7 +442,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @can_return_tuple
+    @check_model_inputs(post_ln_hiddens=False)
     @auto_docstring
     def forward(
         self,

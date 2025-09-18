@@ -641,7 +641,7 @@ class SiglipTextModel(SiglipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @check_model_inputs
+    @check_model_inputs(post_ln_hiddens=False)
     @auto_docstring
     def forward(
         self,
@@ -688,7 +688,6 @@ class SiglipVisionTransformer(nn.Module):
         if self.use_head:
             self.head = SiglipMultiheadAttentionPoolingHead(config)
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -758,7 +757,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @check_model_inputs
+    @check_model_inputs()(post_ln_hiddens=False)
     @auto_docstring
     def forward(
         self,
@@ -1024,7 +1023,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

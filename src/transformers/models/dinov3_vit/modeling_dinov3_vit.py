@@ -499,7 +499,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs
+    @check_model_inputs(post_ln_hiddens=False)
     @auto_docstring
     def forward(
         self,
