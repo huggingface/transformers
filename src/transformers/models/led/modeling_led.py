@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -812,6 +811,7 @@ class LEDDecoderAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
 
+        is_updated = False
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
@@ -841,7 +841,7 @@ class LEDDecoderAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
@@ -1026,7 +1026,7 @@ class LEDDecoderLayer(GradientCheckpointingLayer):
                 *(decoder_attention_heads,)*.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for encoder attention heads in a given layer of
                 size *(decoder_attention_heads,)*.
-            past_key_values (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_values (`Cache`): cached past key and value projection states
             output_attentions (`bool`): Whether the base model outputs attentions.
                 This requires the attentions tensor to be reshaped in this function.
         """
@@ -1189,9 +1189,8 @@ class LEDSeq2SeqModelOutput(ModelOutput):
 
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
-        num_heads, sequence_length, embed_size_per_head)`).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
         used (see `past_key_values` input) to speed up sequential decoding.
@@ -1205,7 +1204,7 @@ class LEDSeq2SeqModelOutput(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1227,9 +1226,8 @@ class LEDSeq2SeqLMOutput(ModelOutput):
         Language modeling loss.
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
-        num_heads, sequence_length, embed_size_per_head)`).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
         used (see `past_key_values` input) to speed up sequential decoding.
@@ -1244,7 +1242,7 @@ class LEDSeq2SeqLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1266,9 +1264,8 @@ class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
         Classification (or regression if config.num_labels==1) loss.
     logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
         Classification (or regression if config.num_labels==1) scores (before SoftMax).
-    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
-        num_heads, sequence_length, embed_size_per_head)`).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
         used (see `past_key_values` input) to speed up sequential decoding.
@@ -1283,7 +1280,7 @@ class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1303,9 +1300,8 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-    past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
-        num_heads, sequence_length, embed_size_per_head)`).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
         used (see `past_key_values` input) to speed up sequential decoding.
@@ -1321,7 +1317,7 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     start_logits: Optional[torch.FloatTensor] = None
     end_logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1708,10 +1704,8 @@ class LEDDecoder(LEDPreTrainedModel):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+            past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+                It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
                 cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
@@ -1761,7 +1755,7 @@ class LEDDecoder(LEDPreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
@@ -1886,9 +1880,6 @@ class LEDModel(LEDPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     @auto_docstring
     def forward(
         self,
@@ -1901,7 +1892,7 @@ class LEDModel(LEDPreTrainedModel):
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         global_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -2066,7 +2057,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         global_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,

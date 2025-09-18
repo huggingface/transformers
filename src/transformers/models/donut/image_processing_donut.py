@@ -35,7 +35,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -215,10 +215,6 @@ class DonutImageProcessor(BaseImageProcessor):
         padding = ((pad_top, pad_bottom), (pad_left, pad_right))
         return pad(image, padding, data_format=data_format, input_data_format=input_data_format)
 
-    def pad(self, *args, **kwargs):
-        logger.info("pad is deprecated and will be removed in version 4.27. Please use pad_image instead.")
-        return self.pad_image(*args, **kwargs)
-
     def thumbnail(
         self,
         image: np.ndarray,
@@ -314,7 +310,7 @@ class DonutImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_thumbnail: Optional[bool] = None,
         do_align_long_axis: Optional[bool] = None,
         do_pad: Optional[bool] = None,
@@ -399,7 +395,7 @@ class DonutImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -412,8 +408,6 @@ class DonutImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size,  # There is no pad divisibility in this processor, but pad requires the size arg.
             do_resize=do_resize,
             size=size,
             resample=resample,

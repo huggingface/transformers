@@ -1297,6 +1297,104 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_trained_model(trainer.model)
 
+    def test_include_num_input_tokens_seen(self):
+        model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=2)
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenizer.pad_token = "[PAD]"
+        model.config.pad_token_id = tokenizer.pad_token_id
+
+        sentences = ["This is a short sentence.", "This is a much longer sentence that will require padding."]
+        labels = torch.tensor([0, 1])
+
+        # 1. Test with attention_mask
+        tokenized_dataset_with_mask = tokenizer(sentences, truncation=True, padding="longest", return_tensors="pt")
+        tokenized_dataset_with_mask["labels"] = labels
+        dataset_with_mask = datasets.Dataset.from_dict(tokenized_dataset_with_mask)
+
+        # 2. Test without attention_mask
+        tokenized_dataset_no_mask = {k: v for k, v in tokenized_dataset_with_mask.items() if k != "attention_mask"}
+        dataset_no_mask = datasets.Dataset.from_dict(tokenized_dataset_no_mask)
+
+        # 3. Test with no padding information
+        tokenizer_no_pad = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenizer_no_pad.pad_token = None
+
+        data_collator = default_data_collator
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Test case 1: "non_padding" with attention_mask
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                include_num_input_tokens_seen="non_padding",
+                per_device_train_batch_size=2,
+                max_steps=1,
+                report_to="none",
+            )
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=dataset_with_mask,
+                data_collator=data_collator,
+                processing_class=tokenizer,
+            )
+            trainer.train()
+            attention_mask = tokenized_dataset_with_mask["attention_mask"]
+            non_padded_tokens_with_mask = attention_mask.sum().item()
+            self.assertEqual(trainer.state.num_input_tokens_seen, non_padded_tokens_with_mask)
+
+            # Test case 2: "non_padding" without attention_mask (fallback to pad_token_id)
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=dataset_no_mask,
+                data_collator=data_collator,
+                processing_class=tokenizer,
+            )
+            trainer.train()
+            input_ids = tokenized_dataset_with_mask["input_ids"]  # use original to compute expected
+            non_padded_tokens_no_mask = (input_ids != tokenizer.pad_token_id).sum().item()
+            self.assertEqual(trainer.state.num_input_tokens_seen, non_padded_tokens_no_mask)
+
+            # Test case 3: "non_padding" with no padding info (fallback to numel)
+            with self.assertLogs("transformers.trainer", level="WARNING") as cm:
+                trainer = Trainer(
+                    model=model,
+                    args=args,
+                    train_dataset=dataset_no_mask,  # still has input_ids
+                    data_collator=data_collator,
+                    processing_class=tokenizer_no_pad,  # tokenizer without pad token
+                )
+                trainer.train()
+                self.assertTrue(
+                    any("Could not determine method to count non-padding tokens" in log for log in cm.output)
+                )
+            total_tokens = input_ids.numel()
+            self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
+
+            # Test case 4: "all"
+            args.include_num_input_tokens_seen = "all"
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=dataset_with_mask,
+                data_collator=data_collator,
+                processing_class=tokenizer,
+            )
+            trainer.train()
+            self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
+
+            # Test case 5: True (backward compatibility)
+            args.include_num_input_tokens_seen = True
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=dataset_with_mask,
+                data_collator=data_collator,
+                processing_class=tokenizer,
+            )
+            trainer.train()
+            self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
+
 
 @require_torch
 @require_sentencepiece
@@ -1652,7 +1750,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         if torch_device in ["cuda"]:
             n_gpu = max(1, backend_device_count(torch_device))
         else:
-            # DP is decprecated by PyTorch, accelerators like XPU doesn't support DP
+            # DP is deprecated by PyTorch, accelerators like XPU doesn't support DP
             n_gpu = 1
 
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -1797,7 +1895,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_use_liger_kernel_patching(self):
         # Ensure any monkey patching is cleaned up for subsequent tests
         with patch("transformers.models.llama.modeling_llama"):
-            from liger_kernel.transformers import LigerRMSNorm, liger_rotary_pos_emb
+            from liger_kernel.transformers import liger_rotary_pos_emb
 
             from transformers.models.llama import modeling_llama
 
@@ -1806,7 +1904,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Spot check that modeling code and model instance variables are not yet patched
             self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+            self.assertFalse("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
 
             args = TrainingArguments(
                 self.get_auto_remove_tmp_dir(),
@@ -1816,7 +1914,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Spot check that modeling code and model instance variables are patched
             self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+            self.assertTrue("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
 
     @require_liger_kernel
     def test_use_liger_kernel_custom_config_patching(self):
@@ -3133,7 +3231,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model_wrapped_after = trainer.model_wrapped
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
 
-    @require_torch_up_to_2_accelerators
+    @require_torch_non_multi_accelerator
     def test_can_resume_training(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3434,8 +3532,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
         trainer.train()
-        # After `auto_find_batch_size` is ran we should now be at 16*0.9=14
-        self.assertEqual(trainer._train_batch_size, 14)
+        previous_batch_size = trainer._train_batch_size
+        # Depends on the number of gpus so it is easier to just check that the batch_size decreased as expected
+        self.assertEqual(trainer._train_batch_size < 16, True)
 
         # We can then make a new Trainer
         trainer = Trainer(model, args, train_dataset=train_dataset)
@@ -3443,7 +3542,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
         trainer.train(resume_from_checkpoint=True)
         # We should be back to 14 again, picking up based upon the last ran Trainer
-        self.assertEqual(trainer._train_batch_size, 14)
+        self.assertEqual(trainer._train_batch_size, previous_batch_size)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
@@ -4562,10 +4661,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
             self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
 
-    def test_torch_dtype_to_json(self):
+    def test_dtype_to_json(self):
         @dataclasses.dataclass
         class TorchDtypeTrainingArguments(TrainingArguments):
-            torch_dtype: torch.dtype = dataclasses.field(
+            dtype: torch.dtype = dataclasses.field(
                 default=torch.float32,
             )
 
@@ -4585,11 +4684,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         ]:
             torch_dtype = getattr(torch, dtype)
             with tempfile.TemporaryDirectory() as tmp_dir:
-                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, torch_dtype=torch_dtype)
+                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, dtype=torch_dtype)
 
                 args_dict = args.to_dict()
-                self.assertIn("torch_dtype", args_dict)
-                self.assertEqual(args_dict["torch_dtype"], dtype)
+                self.assertIn("dtype", args_dict)
+                self.assertEqual(args_dict["dtype"], dtype)
 
     @require_accelerate_version_min_0_30
     def test_eval_use_gather_object(self):
@@ -4980,7 +5079,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             assert len(os.listdir(tmpdir)) == trainer.state.global_step // 2
 
-    def test_special_token_aligment(self):
+    def test_special_token_alignment(self):
         """
         Tests that special token changes in the tokenizer result in model configs updates when using the trainer, to
         ensure special tokens are aligned across configs
@@ -5049,11 +5148,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             training_args = TrainingArguments(
-                output_dir=tmpdir,
-                report_to="none",
-                max_steps=5,
-                per_device_train_batch_size=1,
-                remove_unused_columns=False,
+                output_dir=tmpdir, report_to="none", max_steps=5, per_device_train_batch_size=1, use_cpu=True
             )
             trainer = Trainer(
                 model=model,
@@ -5289,7 +5384,7 @@ class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
@@ -5335,7 +5430,7 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
@@ -5383,7 +5478,7 @@ class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
@@ -5428,7 +5523,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
                 b = config["b"]
             model_config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(model_config)
+            return RegressionPreTrainedModel(model_config).to(torch_device)
 
         def hp_name(params):
             return MyTrialShortNamer.shortname(params)
@@ -5491,7 +5586,7 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.assignments)
@@ -6070,7 +6165,7 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
                 b = config["b"]
             model_config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(model_config)
+            return RegressionPreTrainedModel(model_config).to(torch_device)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(

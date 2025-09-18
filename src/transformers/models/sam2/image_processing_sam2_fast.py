@@ -26,6 +26,7 @@ from typing import Any, Optional, Union
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torchvision.ops.boxes import batched_nms
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
@@ -42,15 +43,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.ops.boxes import batched_nms
-elif is_torchvision_available():
-    from torchvision.ops.boxes import batched_nms
 
 
 class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -427,10 +420,18 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
 
         kwargs["size"] = size
         kwargs["mask_size"] = mask_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["data_format"] = data_format
+
+        # torch resize uses interpolation instead of resample
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
 
         return kwargs
 
@@ -495,14 +496,6 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             data["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> "torch.Tensor":
-        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def generate_crop_boxes(
         self,
@@ -704,6 +697,17 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
                 Threshold for NMS (Non Maximum Suppression) algorithm.
         """
         return _post_process_for_mask_generation(all_masks, all_scores, all_boxes, crops_nms_thresh)
+
+    def pad_image(self):
+        raise NotImplementedError("No pad_image for SAM 2.")
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
+    ) -> "torch.Tensor":
+        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
         """

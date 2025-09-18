@@ -82,16 +82,6 @@ class DiaProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer)
 
-    @property
-    def model_input_names(self):
-        """
-        We no longer pass the raw audio values but the codebooks encoded by the `audio_tokenizer`.
-        Conventions may differ between audio models due to architectural choices.
-        """
-        tokenizer_input_names = self.tokenizer.model_input_names
-        audio_tokenizer_input_names = ["decoder_input_ids", "decoder_attention_mask"]
-        return list(dict.fromkeys(tokenizer_input_names + audio_tokenizer_input_names))
-
     def __call__(
         self,
         text: Union[str, list[str]],

@@ -87,9 +87,22 @@ def import_protobuf_decode_error(error_message=""):
         raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
 
 
+def flatten(arr: list):
+    res = []
+    if len(arr) > 0:
+        for sub_arr in arr:
+            if isinstance(arr[0], (list, tuple)):
+                res.extend(flatten(sub_arr))
+            else:
+                res.append(sub_arr)
+    return res
+
+
+if is_tokenizers_available() or TYPE_CHECKING:
+    from tokenizers import Encoding as EncodingFast
+
 if is_tokenizers_available():
     from tokenizers import AddedToken
-    from tokenizers import Encoding as EncodingFast
 else:
 
     @dataclass(frozen=False, eq=True)
@@ -117,12 +130,6 @@ else:
 
         def __str__(self):
             return self.content
-
-    @dataclass
-    class EncodingFast:
-        """This is dummy class because without the `tokenizers` library we don't have these objects anyway"""
-
-        pass
 
 
 logger = logging.get_logger(__name__)
@@ -227,7 +234,8 @@ class BatchEncoding(UserDict):
     ):
         super().__init__(data)
 
-        if isinstance(encoding, EncodingFast):
+        # If encoding is not None, the fast tokenization is used
+        if encoding is not None and isinstance(encoding, EncodingFast):
             encoding = [encoding]
 
         self._encodings = encoding
@@ -714,26 +722,37 @@ class BatchEncoding(UserDict):
                 )
             import tensorflow as tf
 
-            as_tensor = tf.constant
+            def as_tensor(value, dtype=None):
+                if len(flatten(value)) == 0 and dtype is None:
+                    dtype = tf.int32
+                return tf.constant(value, dtype=dtype)
+
             is_tensor = tf.is_tensor
+
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
-            is_tensor = torch.is_tensor
-
             def as_tensor(value, dtype=None):
-                if isinstance(value, list) and isinstance(value[0], np.ndarray):
+                if isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
                     return torch.from_numpy(np.array(value))
-                return torch.tensor(value)
+                if len(flatten(value)) == 0 and dtype is None:
+                    dtype = torch.int64
+                return torch.tensor(value, dtype=dtype)
+
+            is_tensor = torch.is_tensor
 
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             import jax.numpy as jnp  # noqa: F811
 
-            as_tensor = jnp.array
+            def as_tensor(value, dtype=None):
+                if len(flatten(value)) == 0 and dtype is None:
+                    dtype = jnp.int32
+                return jnp.array(value, dtype=dtype)
+
             is_tensor = is_jax_tensor
 
         elif tensor_type == TensorType.MLX:
@@ -741,18 +760,27 @@ class BatchEncoding(UserDict):
                 raise ImportError("Unable to convert output to MLX tensors format, MLX is not installed.")
             import mlx.core as mx
 
-            as_tensor = mx.array
+            def as_tensor(value, dtype=None):
+                if len(flatten(value)) == 0 and dtype is None:
+                    dtype = mx.int32
+                return mx.array(value, dtype=dtype)
 
             def is_tensor(obj):
                 return isinstance(obj, mx.array)
         else:
 
             def as_tensor(value, dtype=None):
-                if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
+                if (
+                    isinstance(value, (list, tuple))
+                    and len(value) > 0
+                    and isinstance(value[0], (list, tuple, np.ndarray))
+                ):
                     value_lens = [len(val) for val in value]
                     if len(set(value_lens)) > 1 and dtype is None:
                         # we have a ragged list so handle explicitly
                         value = as_tensor([np.asarray(val) for val in value], dtype=object)
+                if len(flatten(value)) == 0 and dtype is None:
+                    dtype = np.int64
                 return np.asarray(value, dtype=dtype)
 
             is_tensor = is_numpy_array
@@ -2015,6 +2043,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             revision=revision,
                             cache_dir=cache_dir,
                         ):
+                            template = template.removesuffix(".jinja")
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
         # Get files from url, cache, or disk depending on the case

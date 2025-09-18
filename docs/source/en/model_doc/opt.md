@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 # OPT
 
-[OPT](https://huggingface.co/papers/2205.01068) is a suite of open-source decoder-only pre-trained transformers whose parameters range from 125M to 175B. OPT models are designed for casual language modeling and aim to enable responsible and reproducible research at scale. OPT-175B is comparable in performance to GPT-3 with only 1/7th the carbon footprint.
+[OPT](https://huggingface.co/papers/2205.01068) is a suite of open-source decoder-only pre-trained transformers whose parameters range from 125M to 175B. OPT models are designed for causal language modeling and aim to enable responsible and reproducible research at scale. OPT-175B is comparable in performance to GPT-3 with only 1/7th the carbon footprint.
 
 You can find all the original OPT checkpoints under the [OPT](https://huggingface.co/collections/facebook/opt-66ed00e15599f02966818844) collection.
 
@@ -44,7 +44,7 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="facebook/opt-125m", torch_dtype=torch.float16, device=0)
+pipeline = pipeline(task="text-generation", model="facebook/opt-125m", dtype=torch.float16, device=0)
 pipeline("Once upon a time, in a land far, far away,", max_length=50, num_return_sequences=1)
 ```
 
@@ -55,7 +55,7 @@ pipeline("Once upon a time, in a land far, far away,", max_length=50, num_return
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 
 prompt = ("Once upon a time, in a land far, far away, ")
@@ -85,7 +85,7 @@ from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 device = infer_device()
 
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-13b", torch_dtype=torch.float16, attn_implementation="sdpa", quantization_config=bnb_config).to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-13b", dtype=torch.float16, attn_implementation="sdpa", quantization_config=bnb_config).to(device)
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-13b")
 
 prompt = ("Once upon a time, in a land far, far away, ")

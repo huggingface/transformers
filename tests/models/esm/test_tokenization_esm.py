@@ -16,14 +16,11 @@
 import os
 import tempfile
 import unittest
-from functools import lru_cache
 
 from transformers.models.esm.tokenization_esm import VOCAB_FILES_NAMES, EsmTokenizer
 from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-
-from ...test_tokenization_common import use_cache_if_possible
 
 
 @require_tokenizers
@@ -44,8 +41,6 @@ class ESMTokenizationTest(unittest.TestCase):
         return [cls.get_tokenizer(**kwargs)]
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)

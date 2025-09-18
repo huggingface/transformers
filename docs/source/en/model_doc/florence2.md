@@ -13,6 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-06-16 and added to Hugging Face Transformers on 2025-08-20.*
+
+# Florence-2
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -21,9 +24,9 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# Florence-2
+## Overview
 
-[Florence-2](https://arxiv.org/abs/2311.06242) is an advanced vision foundation model that uses a prompt-based approach to handle a wide range of vision and vision-language tasks. Florence-2 can interpret simple text prompts to perform tasks like captioning, object detection, and segmentation. It leverages the FLD-5B dataset, containing 5.4 billion annotations across 126 million images, to master multi-task learning. The model's sequence-to-sequence architecture enables it to excel in both zero-shot and fine-tuned settings, proving to be a competitive vision foundation model.
+[Florence-2](https://huggingface.co/papers/2311.06242) is an advanced vision foundation model that uses a prompt-based approach to handle a wide range of vision and vision-language tasks. Florence-2 can interpret simple text prompts to perform tasks like captioning, object detection, and segmentation. It leverages the FLD-5B dataset, containing 5.4 billion annotations across 126 million images, to master multi-task learning. The model's sequence-to-sequence architecture enables it to excel in both zero-shot and fine-tuned settings, proving to be a competitive vision foundation model.
 
 You can find all the original Florence-2 checkpoints under the [Florence-2](https://huggingface.co/models?other=florence-2) collection.
 
@@ -44,9 +47,9 @@ from transformers import pipeline
 
 pipeline = pipeline(
     "image-text-to-text",
-    model="ducviet00/Florence-2-base-hf",
+    model="florence-community/Florence-2-base",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 pipeline(
@@ -67,7 +70,7 @@ from transformers import AutoProcessor, Florence2ForConditionalGeneration
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base", torch_dtype=torch.bfloat16, device_map="auto")
+model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base", dtype=torch.bfloat16, device_map="auto")
 processor = AutoProcessor.from_pretrained("microsoft/Florence-2-base")
 
 task_prompt = "<OD>"
@@ -103,7 +106,7 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model = Florence2ForConditionalGeneration.from_pretrained(
     "microsoft/Florence-2-large",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -154,7 +157,7 @@ print(parsed_answer)
 
 ## Resources
 
-- [Florence-2 technical report](https://arxiv.org/abs/2311.06242)
+- [Florence-2 technical report](https://huggingface.co/papers/2311.06242)
 - [Jupyter Notebook for inference and visualization of Florence-2-large model](https://huggingface.co/microsoft/Florence-2-large/blob/main/sample_inference.ipynb)
 
 ## Florence2VisionConfig

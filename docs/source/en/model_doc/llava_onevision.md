@@ -123,7 +123,7 @@ device = f"{infer_device}:0"
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf") 
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     "llava-hf/llava-onevision-qwen2-7b-ov-hf",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map=device
 )
 
@@ -158,7 +158,7 @@ import torch
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 
 # Load the model in half-precision
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
 # Prepare a batch of two prompts, where the first one is a multi-turn conversation and the second is not
@@ -221,7 +221,7 @@ import torch
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 
 # Load the model in half-precision
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
 video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
@@ -288,7 +288,7 @@ from transformers import LlavaOnevisionForConditionalGeneration
 
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     model_id,
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     use_flash_attention_2=True
 ).to(0)
 ```

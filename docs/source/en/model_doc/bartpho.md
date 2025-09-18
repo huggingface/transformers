@@ -46,7 +46,7 @@ from transformers import pipeline
 pipeline = pipeline(
    task="summarization",
    model="vinai/bartpho-word",
-   torch_dtype=torch.float16,
+   dtype=torch.float16,
    device=0
 )
 
@@ -70,7 +70,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = BartForConditionalGeneration.from_pretrained(
     "vinai/bartpho-word",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
 )
 

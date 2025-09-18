@@ -43,7 +43,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text2text-generation",
     model="google/roberta2roberta_L-24_discofuse",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create energy through ")
@@ -56,7 +56,7 @@ pipeline("Plants create energy through ")
 import torch
 from transformers import EncoderDecoderModel, AutoTokenizer
 
-model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse", torch_dtype="auto")
+model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
 
 input_ids = tokenizer(
@@ -94,7 +94,7 @@ quantization_config = BitsAndBytesConfig(
 model = EncoderDecoderModel.from_pretrained(
     "google/roberta2roberta_L-24_discofuse",
     quantization_config=quantization_config,
-    torch_dtype="auto"
+    dtype="auto"
 )
 tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
 

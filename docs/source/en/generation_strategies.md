@@ -39,7 +39,7 @@ device = infer_device()
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to(device)
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
 # explicitly set to default length because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=20)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -61,7 +61,7 @@ device = infer_device()
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to(device)
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
 # explicitly set to 100 because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=50, do_sample=True, num_beams=1)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -86,7 +86,7 @@ device = infer_device()
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to(device)
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to(device)
 # explicitly set to 100 because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=50, num_beams=2)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -131,7 +131,7 @@ pipe = pipeline(
     "text-generation",
     model="meta-llama/Llama-3.1-8B",
     assistant_model="meta-llama/Llama-3.2-1B",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipe_output = pipe("Once upon a time, ", max_new_tokens=50, do_sample=False)
 pipe_output[0]["generated_text"]
@@ -171,8 +171,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", torch_dtype=torch.float16).to(device)
-assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", torch_dtype=torch.float16).to(device)
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to(device)
+assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", dtype=torch.float16).to(device)
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
 
 outputs = model.generate(**inputs, assistant_model=assistant_model, max_new_tokens=20, prompt_lookup_num_tokens=5)
@@ -225,111 +225,6 @@ outputs = model.generate(**inputs, assistant_model=assistant_model, tokenizer=to
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
-
-### Contrastive search
-
-[Contrastive search](https://huggingface.co/papers/2202.06417) is a decoding strategy that aims to reduce repetition even while generating longer sequences. This strategy compares how similar a generated token is against previous tokens, and if they're more similar, a penalty is applied.
-
-Enable contrastive search with the `penalty_alpha` and `top_k` parameters. The `penalty_alpha` manages the penalty applied and `top_k` is the number of most likely tokens to return.
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
-
-device = infer_device()
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
-
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to(device)
-# explicitly set to 100 because Llama2 generation length is 4096
-outputs = model.generate(**inputs, max_new_tokens=100, penalty_alpha=0.6, top_k=4)
-tokenizer.batch_decode(outputs, skip_special_tokens=True)
-'Hugging Face is an open-source company that provides a platform for building and deploying AI models.\nHugging Face is an open-source company that provides a platform for building and deploying AI models. The platform allows developers to build and deploy AI models, as well as collaborate with other developers.\nHugging Face was founded in 2019 by Thibault Wittemberg and Clément Delangue. The company is based in Paris, France.\nHugging Face has'
-```
-
-### DoLa
-
-[Decoding by Contrasting Layers (DoLa)](https://hf.co/papers/2309.03883) is a contrastive decoding strategy for improving factuality and reducing hallucination. This strategy works by contrasting the logit differences between the final and early layers. As a result, factual knowledge localized to particular layers are amplified. DoLa is not recommended for smaller models like GPT-2.
-
-Enable DoLa with the following parameters.
-
-- `dola_layers` are the candidate layers to be contrasted with the final layer. It can be a string (`low` or `high`) to contrast the lower or higher parts of a layer. `high` is recommended for short-answer tasks like TruthfulQA. `low` is recommended for long-answer reasoning tasks like GSM8K, StrategyQA, FACTOR, and VicunaQA.
-
-  When a model has tied word embeddings, layer 0 is skipped and it begins from layer 2.
-
-  It can also be a list of integers that represent the layer indices between 0 and the total number of layers. Layer 0 is the word embedding, 1 is the first transformer layer, and so on. Refer to the table below for the range of layer indices depending on the number of model layers.
-
-  | layers | low | high |
-  |---|---|---|
-  | > 40 | (0, 20, 2) | (N - 20, N, 2) |
-  | <= 40 | range(0, N // 2, 2) | range(N // 2, N, 2) |
-
-- `repetition_penalty` reduces repetition and it is recommended to set it to 1.2.
-
-<hfoptions id="dola">
-<hfoption id="contrast higher layers">
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
-
-device = infer_device()
-
-tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", torch_dtype=torch.float16).to(device)
-inputs = tokenizer("What is the highest peak in the world??", return_tensors="pt").to(device)
-
-outputs = model.generate(**inputs, max_new_tokens=50, dola_layers="high", do_sample=False)
-tokenizer.batch_decode(outputs, skip_special_tokens=True)
-" Mount EverestMount Everest, called Himalaya in Nepali, is the world's highest peak, lying almost 9.5 kilometers above the sea level and the tallest mountain from 19,036.91 ft. The mountain was"
-```
-
-</hfoption>
-<hfoption id="contrast specific layers">
-
-Contrast layers 18 and 20 with the final layer.
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
-
-device = infer_device()
-
-tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", torch_dtype=torch.float16).to(device)
-inputs = tokenizer("What is the highest peak in the world?", return_tensors="pt").to(device)
-
-outputs = model.generate(**inputs, max_new_tokens=50, dola_layers=[18,20], do_sample=False, repetition_penalty=1.2)
-tokenizer.batch_decode(outputs[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
-" Mount EverestMount Everest, called Himalaya in Nepali, is the world's highest peak above sea level and it rises to an incredible height of 29,028 feet above the ocean. Its summit is over a mile taller than Mt"
-```
-
-</hfoption>
-</hfoptions>
-
-### Diverse beam search
-
-[Diverse beam search](https://hf.co/papers/1610.02424) is a variant of beam search that produces more diverse output candidates to choose from. This strategy measures the dissimilarity of sequences and a penalty is applied if sequences are too similar. To avoid high computation costs, the number of beams is divided into groups.
-
-Enable diverse beam search with the `num_beams`, `num_beam_groups` and `diversity_penalty` parameters (the `num_beams` parameter should be divisible by `num_beam_groups`).
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
-
-device = infer_device()
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
-
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to(device)
-# explicitly set to 100 because Llama2 generation length is 4096
-outputs = model.generate(**inputs, max_new_tokens=50, num_beams=6, num_beam_groups=3, diversity_penalty=1.0, do_sample=False)
-tokenizer.batch_decode(outputs, skip_special_tokens=True)
-'Hugging Face is an open-source company 🤗\nWe are an open-source company. Our mission is to democratize AI and make it accessible to everyone. We believe that AI should be used for the benefit of humanity, not for the benefit of a'
-```
-
 
 ## Custom generation methods
 

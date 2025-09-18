@@ -20,7 +20,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_outputs import BaseModelOutput
@@ -91,7 +90,7 @@ class MgpstrModelOutput(ModelOutput):
         heads.
     """
 
-    logits: tuple[torch.FloatTensor] = None
+    logits: Optional[tuple[torch.FloatTensor]] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     a3_attentions: Optional[tuple[torch.FloatTensor]] = None

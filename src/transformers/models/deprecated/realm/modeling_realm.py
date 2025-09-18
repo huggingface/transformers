@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ....activations import ACT2FN
+from ....cache_utils import Cache
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -256,7 +257,7 @@ class RealmSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
@@ -405,7 +406,7 @@ class RealmAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
@@ -474,7 +475,7 @@ class RealmLayer(GradientCheckpointingLayer):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -552,7 +553,7 @@ class RealmEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
@@ -719,12 +720,12 @@ class RealmReaderOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     retriever_loss: Optional[torch.FloatTensor] = None
     reader_loss: Optional[torch.FloatTensor] = None
-    retriever_correct: torch.BoolTensor = None
-    reader_correct: torch.BoolTensor = None
+    retriever_correct: Optional[torch.BoolTensor] = None
+    reader_correct: Optional[torch.BoolTensor] = None
     block_idx: Optional[torch.LongTensor] = None
     candidate: Optional[torch.LongTensor] = None
-    start_pos: torch.int32 = None
-    end_pos: torch.int32 = None
+    start_pos: Optional[torch.IntTensor] = None
+    end_pos: Optional[torch.IntTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -742,7 +743,7 @@ class RealmForOpenQAOutput(ModelOutput):
             Predicted answer ids.
     """
 
-    reader_output: dict = None
+    reader_output: Optional[dict] = None
     predicted_answer_ids: Optional[torch.LongTensor] = None
 
 

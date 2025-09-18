@@ -26,7 +26,7 @@ from requests.exceptions import HTTPError
 
 from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
 from transformers.configuration_utils import PretrainedConfig
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test
+from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -39,7 +39,7 @@ config_common_kwargs = {
     "output_hidden_states": True,
     "output_attentions": True,
     "torchscript": True,
-    "torch_dtype": "float16",
+    "dtype": "float16",
     "use_bfloat16": True,
     "tf_legacy_loss": True,
     "pruned_heads": {"a": 1},
@@ -332,3 +332,29 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertNotEqual(encoder_config, config)
         self.assertEqual(encoder_config.num_hidden_layers, config.encoder_layers)
         self.assertTrue(getattr(encoder_config, "decoder_layers", None) is None)  # decoder_layers is removed
+
+    @require_torch
+    def test_bc_torch_dtype(self):
+        import torch
+
+        config = PretrainedConfig(dtype="bfloat16")
+        self.assertEqual(config.dtype, torch.bfloat16)
+
+        config = PretrainedConfig(torch_dtype="bfloat16")
+        self.assertEqual(config.dtype, torch.bfloat16)
+
+        # Check that if we pass both, `dtype` is used
+        config = PretrainedConfig(dtype="bfloat16", torch_dtype="float32")
+        self.assertEqual(config.dtype, torch.bfloat16)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+
+            config = PretrainedConfig.from_pretrained(tmpdirname)
+            self.assertEqual(config.dtype, torch.bfloat16)
+
+            config = PretrainedConfig.from_pretrained(tmpdirname, dtype="float32")
+            self.assertEqual(config.dtype, "float32")
+
+            config = PretrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
+            self.assertEqual(config.dtype, "float32")
