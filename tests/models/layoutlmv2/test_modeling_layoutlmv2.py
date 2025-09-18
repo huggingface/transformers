@@ -106,6 +106,12 @@ class LayoutLMv2ModelTester:
         self.num_choices = num_choices
         self.scope = scope
         self.range_bbox = range_bbox
+        detectron2_config = LayoutLMv2Config.get_default_detectron2_config()
+        # We need to make the model smaller
+        detectron2_config["MODEL.RESNETS.DEPTH"] = 50
+        detectron2_config["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 4
+        detectron2_config["MODEL.RESNETS.STEM_OUT_CHANNELS"] = 4
+        self.detectron2_config = detectron2_config
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -158,12 +164,8 @@ class LayoutLMv2ModelTester:
             image_feature_pool_shape=self.image_feature_pool_shape,
             coordinate_size=self.coordinate_size,
             shape_size=self.shape_size,
+            detectron2_config_args=self.detectron2_config,
         )
-
-        # use smaller resnet backbone to make tests faster
-        config.detectron2_config_args["MODEL.RESNETS.DEPTH"] = 18
-        config.detectron2_config_args["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 64
-        config.detectron2_config_args["MODEL.RESNETS.NUM_GROUPS"] = 1
 
         return config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
 
@@ -421,10 +423,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    @unittest.skip(reason="We cannot configure detectron2 to output a smaller backbone")
-    def test_model_is_small(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):
