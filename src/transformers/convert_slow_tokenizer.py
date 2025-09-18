@@ -1540,41 +1540,6 @@ class HeliumConverter(SpmConverter):
         )
 
 
-class BltConverter(Converter):
-    def converted(self) -> Tokenizer:
-        byte_encoder = bytes_to_unicode()
-
-        vocab = {}
-
-        vocab["<boe>"] = 0
-        vocab["<s>"] = 1
-        vocab["</s>"] = 2
-        vocab["<pad>"] = 3
-
-        # Add byte tokens using unicode characters (compatible with ByteLevel)
-        offset = 4  # Start after special tokens
-        for byte_val, unicode_char in byte_encoder.items():
-            vocab[unicode_char] = byte_val + offset
-
-        tokenizer = Tokenizer(BPE(vocab, [], continuing_subword_prefix="", end_of_word_suffix=""))
-
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
-        tokenizer.decoder = decoders.ByteLevel()
-
-        bos = str(self.original_tokenizer.bos_token)
-        bos_token_id = self.original_tokenizer.bos_token_id
-
-        tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{bos}:0 $A:0",
-            pair=f"{bos}:0 $A:0 $B:1",
-            special_tokens=[
-                (bos, bos_token_id),
-            ],
-        )
-
-        return tokenizer
-
-
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
@@ -1688,7 +1653,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "BertTokenizer": BertConverter,
     "BigBirdTokenizer": BigBirdConverter,
     "BlenderbotTokenizer": BlenderbotConverter,
-    "BltTokenizer": BltConverter,
     "CamembertTokenizer": CamembertConverter,
     "CLIPTokenizer": CLIPConverter,
     "CodeGenTokenizer": GPT2Converter,

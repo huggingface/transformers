@@ -7,7 +7,11 @@ from typing import Any, Optional
 import torch
 from huggingface_hub import hf_hub_download, upload_folder
 from safetensors.torch import load_file, save_file
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers.models import BPE
 
+from transformers import PreTrainedTokenizerFast
+from transformers.convert_slow_tokenizer import bytes_to_unicode
 from transformers.utils import logging as transformers_logging
 
 
@@ -275,9 +279,10 @@ def merge_weights(weights_path: str, entropy_weights_path: str) -> dict[str, tor
 
 def create_tokenizer_config(output_dir: str, config: dict[str, Any]):
     tokenizer_config = {
-        "tokenizer_class": "BltTokenizer",
+        "tokenizer_class": "PreTrainedTokenizerFast",
         "vocab_size": config.get("vocab_size", 256),
         "model_max_length": config.get("max_seqlen", 1024),
+        "model_input_names": ["input_ids", "attention_mask"],
         "add_bos_token": True,
         "add_eos_token": True,
         "bos_token": "<s>",
@@ -289,6 +294,47 @@ def create_tokenizer_config(output_dir: str, config: dict[str, Any]):
     tokenizer_path = os.path.join(output_dir, "tokenizer_config.json")
     with open(tokenizer_path, "w") as f:
         json.dump(tokenizer_config, f, indent=2)
+
+
+def create_tokenizer_json(output_dir: str, config: dict[str, Any]):
+    byte_encoder = bytes_to_unicode()
+
+    vocab: dict[str, int] = {}
+    vocab["<boe>"] = 0
+    vocab["<s>"] = 1
+    vocab["</s>"] = 2
+    vocab["<pad>"] = 3
+
+    offset = 4
+    for byte_val, unicode_char in byte_encoder.items():
+        vocab[unicode_char] = byte_val + offset
+
+    backend = Tokenizer(
+        BPE(vocab=vocab, merges=[], continuing_subword_prefix="", end_of_word_suffix="", fuse_unk=False)
+    )
+    backend.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+    backend.decoder = decoders.ByteLevel()
+
+    bos = config.get("bos_token", "<s>")
+    backend.post_processor = processors.TemplateProcessing(
+        single=f"{bos}:0 $A:0",
+        pair=f"{bos}:0 $A:0 $B:1",
+        special_tokens=[(bos, 1)],
+    )
+
+    tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=backend,
+        bos_token=config.get("bos_token", "<s>"),
+        eos_token=config.get("eos_token", "</s>"),
+        pad_token=config.get("pad_token", "<pad>"),
+        unk_token=config.get("unk_token", "<unk>"),
+    )
+
+    tokenizer.add_bos_token = bool(config.get("add_bos_token", True))
+    tokenizer.add_eos_token = bool(config.get("add_eos_token", True))
+
+    tokenizer.save_pretrained(output_dir)
+    logger.info(f"Saved tokenizer.json to {os.path.join(output_dir, 'tokenizer.json')}")
 
 
 def push_to_hub(
@@ -347,6 +393,8 @@ def convert_hf_blt_to_unified(
 
     weights_path = os.path.join(output_dir, weights_name)
     save_file(unified_weights, weights_path)
+
+    create_tokenizer_json(output_dir=output_dir, config=unified_config)
 
     create_tokenizer_config(output_dir, unified_config)
 
