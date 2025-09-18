@@ -41,7 +41,7 @@ class TimmWrapperConfig(PretrainedConfig):
     imagenet models is set to `None` due to occlusions in the label descriptions.
 
     Args:
-        architecture (`str`, *optional*):
+        architecture (`str`, *optional*, defaults to `"resnet50"`):
             The timm architecture to load.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
