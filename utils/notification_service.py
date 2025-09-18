@@ -1240,7 +1240,6 @@ if __name__ == "__main__":
                             "captured_info": artifact["captured_info"],
                         }
 
-                # TODO: ???
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
                         # Avoid the extra `FAILED` entry given by `run_test_using_subprocess` causing issue when calling
