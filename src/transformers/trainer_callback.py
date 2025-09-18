@@ -622,6 +622,9 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_save = True
 
         return control
+    def onlog(self, args, state, control, logs, **kwargs):
+         control.shouldlog = False
+         return self.callevent("on_log", args, state, control, logs=logs)
 
 
 class ProgressCallback(TrainerCallback):
