@@ -2387,6 +2387,7 @@ class GenerationTesterMixin:
             "zamba",
             "zamba2",
             "lfm2",
+            "lfm2-vl",
         )
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
