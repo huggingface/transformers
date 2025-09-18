@@ -138,10 +138,16 @@ jobs:
       - name: Run all tests on GPU
         working-directory: /transformers
         run: |
-          PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports tests/${{ matrix.folders }}
+          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports tests/${{ matrix.folders }}" test_outputs.txt
+          ls -la
+          # Extract the exit code from the output file
+          PYTEST_EXIT_CODE=$(tail -1 test_outputs.txt | grep "PYTEST_EXIT_CODE:" | cut -d: -f2)
+          exit ${PYTEST_EXIT_CODE:-1}
 
       - name: Failure short reports
         if: ${{ failure() }}
+        # This step is only to show information on Github Actions log.
+        # Always mark this step as successful, even if the report directory or the file `failures_short.txt` in it doesn't exist
         continue-on-error: true
         run: cat /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports/failures_short.txt
 
@@ -150,6 +156,12 @@ jobs:
         continue-on-error: true
         run: |
           cat /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports/captured_info.txt
+
+      - name: Copy test_outputs.txt
+        if: ${{ always() }}
+        continue-on-error: true
+        run: |
+          cp /transformers/test_outputs.txt /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
