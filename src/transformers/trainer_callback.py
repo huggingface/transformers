@@ -623,13 +623,13 @@ class DefaultFlowCallback(TrainerCallback):
 
         return control
     
-    def onlog(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+    def on_log(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
          """
          Event called after logging the last logs.
          """
-         control.should_log = False
-         return self.call_event("on_log", args, state, control, **kwargs)
-    on_log = onlog
+         return control
+
+         
 
 
 class ProgressCallback(TrainerCallback):
