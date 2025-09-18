@@ -3280,7 +3280,7 @@ class Trainer:
             self._globalstep_last_logged = self.state.global_step
             self.store_flos()
 
-            self.log(logs, start_time)
+            self.log(logs)
 
         metrics = None
         if self.control.should_evaluate:
