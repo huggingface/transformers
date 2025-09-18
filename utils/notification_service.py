@@ -1196,6 +1196,15 @@ if __name__ == "__main__":
             "time_spent": [],
             "failures": {},
             "job_link": {},
+            "captured_info": {},
+        }
+        for matrix_name in job_matrix
+        if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
+    }
+
+    matrix_job_results_extra = {
+        matrix_name: {
+            "captured_info": {},
         }
         for matrix_name in job_matrix
         if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
@@ -1225,7 +1234,21 @@ if __name__ == "__main__":
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
-                # TODO: ???
+                # Add the captured actual outputs for patched methods (`torch.testing.assert_close`, `assertEqual` etc.)
+                if "captured_info" in artifact:
+                    step_number = None
+                    for step in job.get("steps", []):
+                        if step["name"] == "Captured information":
+                            step_number = step["number"]
+                            break
+                    if step_number is not None:
+                        step_link = f"{job['html_url']}#step:{step_number}:1"
+                        matrix_job_results[matrix_name]["captured_info"][artifact_gpu] = step_link
+                        matrix_job_results_extra[matrix_name]["captured_info"][artifact_gpu] = {
+                            "link": step_link,
+                            "captured_info": artifact["captured_info"],
+                        }
+
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
                         # Avoid the extra `FAILED` entry given by `run_test_using_subprocess` causing issue when calling
@@ -1427,6 +1450,20 @@ if __name__ == "__main__":
         api.upload_file(
             path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[test_name]}_results.json",
             path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{test_to_result_name[test_name]}_results.json",
+            repo_id=report_repo_id,
+            repo_type="dataset",
+            token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+        )
+
+    if len(matrix_job_results_extra) > 0:
+        with open(
+            f"ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json", "w", encoding="UTF-8"
+        ) as fp:
+            json.dump(matrix_job_results_extra, fp, indent=4, ensure_ascii=False)
+
+        api.upload_file(
+            path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json",
+            path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json",
             repo_id=report_repo_id,
             repo_type="dataset",
             token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
