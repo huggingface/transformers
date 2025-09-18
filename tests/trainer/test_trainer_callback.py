@@ -220,7 +220,7 @@ class TrainerCallbackTest(unittest.TestCase):
     def test_event_flow(self):
         import warnings
 
-        # XXX: for now ignore scatter_gather warnings in this test since it's not relevant to what's being tested
+        # for now ignore scatter_gather warnings in this test since it's not relevant to what's being tested
         with warnings.catch_warnings():
             warnings.simplefilter(action="ignore", category=UserWarning)
 

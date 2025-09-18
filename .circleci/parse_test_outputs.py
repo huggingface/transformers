@@ -56,8 +56,8 @@ def main():
     parser.add_argument("--errors", action="store_true", help="show failed tests")
     args = parser.parse_args()
 
-    # if args.skip:
-        # parse_pytest_output(args.file)
+    if args.skip:
+        parse_pytest_output(args.file)
 
     if args.fail:
         parse_pytest_failure_output(args.file)

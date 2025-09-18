@@ -45,7 +45,7 @@ FLAKY_TEST_FAILURE_PATTERNS = [
     "PIL.UnidentifiedImageError",  # Raised by `PIL.Image.open` on connection issues
     "HTTPError",  # Also catches HfHubHTTPError
     "AssertionError: Tensor-likes are not close!",  # `torch.testing.assert_close`, we might have unlucky random values
-    # TODO: error downloading tokenizer's `merged.txt` from hub can cause all the exceptions below. Throw and handle
+    # error downloading tokenizer's `merged.txt` from hub can cause all the exceptions below. Throw and handle
     # them under a single message.
     "TypeError: expected str, bytes or os.PathLike object, not NoneType",
     "TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType",
