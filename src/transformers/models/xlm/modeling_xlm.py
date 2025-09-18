@@ -619,7 +619,6 @@ class TransformerFFN(nn.Module):
 @auto_docstring
 class XLMPreTrainedModel(PreTrainedModel):
     config: XLMConfig
-    load_tf_weights = None
     base_model_prefix = "transformer"
 
     def __init__(self, *inputs, **kwargs):

@@ -96,12 +96,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         bnb_multibackend_is_enabled = is_bitsandbytes_multi_backend_available()
         validate_bnb_backend_availability(raise_exception=True)
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Converting into 4-bit or 8-bit weights from tf/flax weights is currently not supported, please make"
-                " sure the weights are in PyTorch format."
-            )
-
         device_map = kwargs.get("device_map")
         if (
             device_map is not None

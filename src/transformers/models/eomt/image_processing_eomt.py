@@ -557,7 +557,7 @@ class EomtImageProcessor(BaseImageProcessor):
                 Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
                 denoted with 0 (background) will be replaced with `ignore_index`.
             return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be `"pt"`, `"tf"`, `"np"`, or `"jax"`.
+                The type of tensors to return. Can be `"pt"` or `"np"`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 Channel format of the output image. Either `"channels_first"` or `"channels_last"`.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -581,10 +581,7 @@ class EomtImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

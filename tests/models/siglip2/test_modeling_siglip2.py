@@ -332,7 +332,7 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip2 uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -474,7 +474,7 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip2 uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -591,7 +591,7 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip2 uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -689,7 +689,7 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip2 uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 

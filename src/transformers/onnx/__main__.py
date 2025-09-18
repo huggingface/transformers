@@ -53,7 +53,6 @@ def export_with_optimum(args):
         "optimum.exporters.onnx",
         f"--model {args.model}",
         f"--task {args.feature}",
-        f"--framework {args.framework}" if args.framework is not None else "",
         f"{args.output}",
     ]
     proc = subprocess.Popen(cmd_line, stdout=subprocess.PIPE)
@@ -72,9 +71,7 @@ def export_with_transformers(args):
         args.output.parent.mkdir(parents=True)
 
     # Allocate the model
-    model = FeaturesManager.get_model_from_feature(
-        args.feature, args.model, framework=args.framework, cache_dir=args.cache_dir
-    )
+    model = FeaturesManager.get_model_from_feature(args.feature, args.model, cache_dir=args.cache_dir)
 
     model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
     onnx_config = model_onnx_config(model.config)
@@ -198,17 +195,6 @@ def main():
     parser.add_argument("--opset", type=int, default=None, help="ONNX opset version to export the model with.")
     parser.add_argument(
         "--atol", type=float, default=None, help="Absolute difference tolerance when validating the model."
-    )
-    parser.add_argument(
-        "--framework",
-        type=str,
-        choices=["pt", "tf"],
-        default=None,
-        help=(
-            "The framework to use for the ONNX export."
-            " If not provided, will attempt to use the local checkpoint's original framework"
-            " or what is available in the environment."
-        ),
     )
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
     parser.add_argument("--cache_dir", type=str, default=None, help="Path indicating where to store cache.")

@@ -68,10 +68,6 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        if self.framework != "pt":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-        # No specific FOR_XXX available yet
-
     def __call__(self, audios: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
         """
         Assign labels to the audio(s) passed as inputs.
@@ -127,11 +123,10 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         inputs = self.feature_extractor(
             [audio], sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
-        if self.framework == "pt":
-            inputs = inputs.to(self.dtype)
+        inputs = inputs.to(self.dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
-        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)
+        text_inputs = self.tokenizer(sequences, return_tensors="pt", padding=True)
         inputs["text_inputs"] = [text_inputs]
         return inputs
 
@@ -156,11 +151,8 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         candidate_labels = model_outputs.pop("candidate_labels")
         logits = model_outputs["logits"][0]
 
-        if self.framework == "pt":
-            probs = logits.softmax(dim=0)
-            scores = probs.tolist()
-        else:
-            raise ValueError("`tf` framework not supported.")
+        probs = logits.softmax(dim=0)
+        scores = probs.tolist()
 
         result = [
             {"score": score, "label": candidate_label}

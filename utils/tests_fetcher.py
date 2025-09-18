@@ -307,16 +307,7 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
         # Get the corresponding modeling file path
         for model_class in impacted_model_classes:
             module = reversed_structure[model_class]
-            framework = ""
-            if model_class.startswith("TF"):
-                framework = "tf"
-            elif model_class.startswith("Flax"):
-                framework = "flax"
-            fn = (
-                f"modeling_{module.split('.')[-1]}.py"
-                if framework == ""
-                else f"modeling_{framework}_{module.split('.')[-1]}.py"
-            )
+            fn = f"modeling_{module.split('.')[-1]}.py"
             files.add(f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py"))
 
     return sorted(files)
@@ -808,7 +799,7 @@ def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
     """
     The test examples do not import from the examples (which are just scripts, not modules) so we need some extra
     care initializing the dependency map, which is the goal of this function. It initializes the dependency map for
-    example files by linking each example to the example test file for the example framework.
+    example files by linking each example to the example test file for the example folder.
 
     Returns:
         `Tuple[Dict[str, List[str]], List[str]]`: A tuple with two elements: the initialized dependency map which is a
@@ -817,26 +808,22 @@ def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
     """
     test_example_deps = {}
     all_examples = []
-    for framework in ["flax", "pytorch", "tensorflow"]:
-        test_files = list((PATH_TO_EXAMPLES / framework).glob("test_*.py"))
-        all_examples.extend(test_files)
-        # Remove the files at the root of examples/framework since they are not proper examples (they are either utils
-        # or example test files).
-        examples = [
-            f for f in (PATH_TO_EXAMPLES / framework).glob("**/*.py") if f.parent != PATH_TO_EXAMPLES / framework
+
+    test_files = list((PATH_TO_EXAMPLES / "pytorch").glob("test_*.py"))
+    all_examples.extend(test_files)
+    # Remove the files at the root of examples/pytorch since they are not proper examples (they are either utils
+    # or example test files).
+    examples = [f for f in (PATH_TO_EXAMPLES / "pytorch").glob("**/*.py") if f.parent != PATH_TO_EXAMPLES / "pytorch"]
+    all_examples.extend(examples)
+    for test_file in test_files:
+        with open(test_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Map all examples to the test files found in examples/pytorch.
+        test_example_deps[str(test_file.relative_to(PATH_TO_REPO))] = [
+            str(e.relative_to(PATH_TO_REPO)) for e in examples if e.name in content
         ]
-        all_examples.extend(examples)
-        for test_file in test_files:
-            with open(test_file, "r", encoding="utf-8") as f:
-                content = f.read()
-            # Map all examples to the test files found in examples/framework.
-            test_example_deps[str(test_file.relative_to(PATH_TO_REPO))] = [
-                str(e.relative_to(PATH_TO_REPO)) for e in examples if e.name in content
-            ]
-            # Also map the test files to themselves.
-            test_example_deps[str(test_file.relative_to(PATH_TO_REPO))].append(
-                str(test_file.relative_to(PATH_TO_REPO))
-            )
+        # Also map the test files to themselves.
+        test_example_deps[str(test_file.relative_to(PATH_TO_REPO))].append(str(test_file.relative_to(PATH_TO_REPO)))
     return test_example_deps, all_examples
 
 
@@ -1105,15 +1092,15 @@ def parse_commit_message(commit_message: str) -> dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
-    "tests_generate": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
+    "tests_torch": r"tests/models/.*/test_modeling_.*",
+    "tests_generate": r"tests/models/.*/test_modeling_.*",
     "tests_tokenization": r"tests/(?:models/.*/test_tokenization.*|test_tokenization_mistral_common\.py)",
     "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
-    "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
+    "pipelines_torch": r"tests/models/.*/test_modeling_.*",
     "tests_hub": r"tests/.*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",
 }

@@ -23,8 +23,6 @@
     title: Compartilhando modelos customizados 
   - local: run_scripts
     title: Treinamento a partir de um script
-  - local: converting_tensorflow_models
-    title: Convertendo checkpoints do TensorFlow para Pytorch
   - local: serialization
     title: Exportando modelos para ONNX
   - sections:

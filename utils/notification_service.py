@@ -37,7 +37,6 @@ job_to_test_map = {
     "run_models_gpu": "Models",
     "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
     "run_pipelines_torch_gpu": "PyTorch pipelines",
-    "run_pipelines_tf_gpu": "TensorFlow pipelines",
     "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
     "run_quantization_torch_gpu": "Quantization",
@@ -48,7 +47,6 @@ test_to_result_name = {
     "Models": "model",
     "Trainer & FSDP": "trainer_and_fsdp",
     "PyTorch pipelines": "torch_pipeline",
-    "TensorFlow pipelines": "tf_pipeline",
     "Examples directory": "example",
     "DeepSpeed": "deepspeed",
     "Quantization": "quantization",
@@ -394,12 +392,10 @@ class Message:
                 # Model job has a special form for reporting
                 if job_name == "run_models_gpu":
                     pytorch_specific_failures = dict_failed.pop("PyTorch")
-                    tensorflow_specific_failures = dict_failed.pop("TensorFlow")
                     other_failures = dicts_to_sum(dict_failed.values())
 
                     failures[k] = {
                         "PyTorch": pytorch_specific_failures,
-                        "TensorFlow": tensorflow_specific_failures,
                         "other": other_failures,
                     }
 
@@ -433,8 +429,6 @@ class Message:
                 device_report_values = [
                     value["PyTorch"]["single"],
                     value["PyTorch"]["multi"],
-                    value["TensorFlow"]["single"],
-                    value["TensorFlow"]["multi"],
                     sum(value["other"].values()),
                 ]
 
@@ -455,7 +449,7 @@ class Message:
 
         # (Possibly truncated) reports for the current workflow run - to be sent to Slack channels
         if job_name == "run_models_gpu":
-            model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
+            model_header = "Single PT |  Multi PT |     Other | Category\n"
         else:
             model_header = "Single |  Multi | Category\n"
 
@@ -1172,8 +1166,6 @@ if __name__ == "__main__":
 
     test_categories = [
         "PyTorch",
-        "TensorFlow",
-        "Flax",
         "Tokenizers",
         "Pipelines",
         "Trainer",
@@ -1282,12 +1274,6 @@ if __name__ == "__main__":
                         if re.search("tests/quantization", line):
                             matrix_job_results[matrix_name]["failed"]["Quantization"][artifact_gpu] += 1
 
-                        elif re.search("test_modeling_tf_", line):
-                            matrix_job_results[matrix_name]["failed"]["TensorFlow"][artifact_gpu] += 1
-
-                        elif re.search("test_modeling_flax_", line):
-                            matrix_job_results[matrix_name]["failed"]["Flax"][artifact_gpu] += 1
-
                         elif re.search("test_modeling", line):
                             matrix_job_results[matrix_name]["failed"]["PyTorch"][artifact_gpu] += 1
 
@@ -1313,7 +1299,6 @@ if __name__ == "__main__":
     # Additional runs
     additional_files = {
         "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
-        "TensorFlow pipelines": "run_pipelines_tf_gpu_test_reports",
         "Examples directory": "run_examples_gpu_test_reports",
         "DeepSpeed": "run_torch_cuda_extensions_gpu_test_reports",
     }
@@ -1321,9 +1306,7 @@ if __name__ == "__main__":
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
-        del additional_files["TensorFlow pipelines"]
     elif ci_event.startswith("Scheduled CI (AMD)"):
-        del additional_files["TensorFlow pipelines"]
         del additional_files["DeepSpeed"]
     elif ci_event.startswith("Push CI (AMD)"):
         additional_files = {}

@@ -676,7 +676,6 @@ class FlaubertSequenceSummary(nn.Module):
 # Copied from transformers.models.xlm.modeling_xlm.XLMPreTrainedModel with XLM->Flaubert
 class FlaubertPreTrainedModel(PreTrainedModel):
     config: FlaubertConfig
-    load_tf_weights = None
     base_model_prefix = "transformer"
 
     def __init__(self, *inputs, **kwargs):

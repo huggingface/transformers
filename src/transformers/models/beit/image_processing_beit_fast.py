@@ -186,7 +186,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
-        Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+        Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps.
 
         Args:
             outputs ([`BeitForSemanticSegmentation`]):
@@ -200,7 +200,6 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
-        # TODO: add support for other frameworks
         logits = outputs.logits
 
         # Resize logits and compute semantic segmentation maps

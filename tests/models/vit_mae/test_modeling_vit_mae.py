@@ -358,7 +358,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_pretraining(self):
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model
@@ -367,8 +366,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
-        # prepare a noise vector that will be also used for testing the TF model
-        # (this way we can ensure that the PT and TF models operate on the same inputs)
         vit_mae_config = ViTMAEConfig()
         num_patches = int((vit_mae_config.image_size // vit_mae_config.patch_size) ** 2)
         noise = torch.from_numpy(np.random.uniform(size=(1, num_patches))).to(device=torch_device)
@@ -394,7 +391,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
 
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model
@@ -403,8 +399,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt", do_resize=False).to(torch_device)
 
-        # prepare a noise vector that will be also used for testing the TF model
-        # (this way we can ensure that the PT and TF models operate on the same inputs)
         vit_mae_config = ViTMAEConfig()
         num_patches = (image.height // vit_mae_config.patch_size) * (image.width // vit_mae_config.patch_size)
         noise = torch.from_numpy(np.random.uniform(size=(1, num_patches))).to(device=torch_device)
@@ -421,7 +415,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
     def test_inference_interpolate_pos_encoding_custom_sizes(self):
         # Ensure custom sizes are correctly handled when interpolating the position embeddings
 
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model

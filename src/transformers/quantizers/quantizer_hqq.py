@@ -65,12 +65,6 @@ class HqqHfQuantizer(HfQuantizer):
                 "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
             )
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Converting weights from tf/flax weights is currently not supported, please make"
-                " sure the weights are in PyTorch format."
-            )
-
         if self.dtype is None:
             if "dtype" in kwargs:
                 self.dtype = kwargs["dtype"]

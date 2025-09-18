@@ -38,12 +38,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Converting into FP8 weights from tf/flax weights is currently not supported, "
-                "please make sure the weights are in PyTorch format."
-            )
-
         if not (torch.cuda.is_available() or is_torch_xpu_available()):
             raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
 
