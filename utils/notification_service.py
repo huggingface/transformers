@@ -1456,6 +1456,11 @@ if __name__ == "__main__":
         )
 
     if len(matrix_job_results_extra) > 0:
+        with open(
+            f"ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json", "w", encoding="UTF-8"
+        ) as fp:
+            json.dump(matrix_job_results_extra, fp, indent=4, ensure_ascii=False)
+
         api.upload_file(
             path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json",
             path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json",
