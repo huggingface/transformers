@@ -19,14 +19,12 @@ from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
-from ...utils import is_tf_available, is_torch_available, logging
+from ...utils import is_torch_available, logging
 
 
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
-    if is_tf_available():
-        import tensorflow as tf
 
 
 from ...tokenization_utils_base import BatchEncoding
@@ -160,7 +158,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
 
     def decode(
         self,
-        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         truncate_before_pattern: Optional[list[str]] = None,
@@ -173,7 +171,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.

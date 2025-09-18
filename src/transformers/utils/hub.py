@@ -64,9 +64,7 @@ from . import __version__, logging
 from .generic import working_or_temp_dir
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
-    _tf_version,
     _torch_version,
-    is_tf_available,
     is_torch_available,
     is_training_run_on_sagemaker,
 )
@@ -155,6 +153,7 @@ def list_repo_templates(
     local_files_only: bool,
     revision: Optional[str] = None,
     cache_dir: Optional[str] = None,
+    token: Union[bool, str, None] = None,
 ) -> list[str]:
     """List template files from a repo.
 
@@ -171,6 +170,7 @@ def list_repo_templates(
                     revision=revision,
                     path_in_repo=CHAT_TEMPLATE_DIR,
                     recursive=False,
+                    token=token,
                 )
                 if entry.path.endswith(".jinja")
             ]
@@ -230,8 +230,6 @@ def http_user_agent(user_agent: Union[dict, str, None] = None) -> str:
     ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if is_torch_available():
         ua += f"; torch/{_torch_version}"
-    if is_tf_available():
-        ua += f"; tensorflow/{_tf_version}"
     if constants.HF_HUB_DISABLE_TELEMETRY:
         return ua + "; telemetry/off"
     if is_training_run_on_sagemaker():
@@ -1018,7 +1016,7 @@ def send_example_telemetry(example_name, *example_args, framework="pytorch"):
             data["dataset_name"] = args_as_dict["dataset_name"]
         elif "task_name" in args_as_dict:
             # Extract script name from the example_name
-            script_name = example_name.replace("tf_", "").replace("flax_", "").replace("run_", "")
+            script_name = example_name.replace("run_", "")
             script_name = script_name.replace("_no_trainer", "")
             data["dataset_name"] = f"{script_name}-{args_as_dict['task_name']}"
 

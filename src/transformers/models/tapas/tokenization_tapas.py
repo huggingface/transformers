@@ -142,7 +142,6 @@ TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
 """
@@ -1897,9 +1896,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         Args:
             data (`dict`):
                 Dictionary mapping features to actual values. Should be created using [`TapasTokenizer`].
-            logits (`torch.Tensor` or `tf.Tensor` of shape `(batch_size, sequence_length)`):
+            logits (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Tensor containing the logits at the token level.
-            logits_agg (`torch.Tensor` or `tf.Tensor` of shape `(batch_size, num_aggregation_labels)`, *optional*):
+            logits_agg (`torch.Tensor` of shape `(batch_size, num_aggregation_labels)`, *optional*):
                 Tensor containing the aggregation logits.
             cell_classification_threshold (`float`, *optional*, defaults to 0.5):
                 Threshold to be used for cell selection. All table cells for which their probability is larger than
@@ -1914,7 +1913,6 @@ class TapasTokenizer(PreTrainedTokenizer):
             - predicted_aggregation_indices (`list[int]`of length `batch_size`, *optional*, returned when
               `logits_aggregation` is provided): Predicted aggregation operator indices of the aggregation head.
         """
-        # converting to numpy arrays to work with PT/TF
         logits = logits.numpy()
         if logits_agg is not None:
             logits_agg = logits_agg.numpy()
@@ -2207,7 +2205,7 @@ class WordpieceTokenizer:
         return output_tokens
 
 
-# Below: utilities for TAPAS tokenizer (independent from PyTorch/Tensorflow).
+# Below: utilities for TAPAS tokenizer
 # This includes functions to parse numeric values (dates and numbers) from both the table and questions in order
 # to create the column_ranks, inv_column_ranks, numeric_values, numeric values_scale and numeric_relations in
 # prepare_for_model of TapasTokenizer.

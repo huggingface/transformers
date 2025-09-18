@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     require_vision,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
-    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -359,8 +358,6 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
                         msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
                         msg += str(e)
                         raise AssertionError(msg)
-
-        set_model_tester_for_less_flaky_test(self)
 
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)

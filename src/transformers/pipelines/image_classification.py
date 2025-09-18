@@ -18,7 +18,6 @@ import numpy as np
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,
-    is_tf_available,
     is_torch_available,
     is_vision_available,
     logging,
@@ -31,9 +30,6 @@ if is_vision_available():
     from PIL import Image
 
     from ..image_utils import load_image
-
-if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 
 if is_torch_available():
     import torch
@@ -107,11 +103,7 @@ class ImageClassificationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        self.check_model_type(
-            TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
-            if self.framework == "tf"
-            else MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES)
 
     def _sanitize_parameters(self, top_k=None, function_to_apply=None, timeout=None):
         preprocess_params = {}
@@ -190,9 +182,8 @@ class ImageClassificationPipeline(Pipeline):
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
-        model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-        if self.framework == "pt":
-            model_inputs = model_inputs.to(self.dtype)
+        model_inputs = self.image_processor(images=image, return_tensors="pt")
+        model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -214,7 +205,7 @@ class ImageClassificationPipeline(Pipeline):
             top_k = self.model.config.num_labels
 
         outputs = model_outputs["logits"][0]
-        if self.framework == "pt" and outputs.dtype in (torch.bfloat16, torch.float16):
+        if outputs.dtype in (torch.bfloat16, torch.float16):
             outputs = outputs.to(torch.float32).numpy()
         else:
             outputs = outputs.numpy()

@@ -477,17 +477,6 @@ class RemBertModelIntegrationTest(unittest.TestCase):
             ]
         )
 
-        # Running on the original tf implementation gives slightly different results here.
-        # Not clear why this variations is present
-        # TODO: Find reason for discrepancy
-        # expected_original_implementation = [[
-        #     [0.07630594074726105, -0.20146065950393677, 0.19107051193714142],
-        #     [-0.3405614495277405, -0.36971670389175415, -0.4808273911476135],
-        #     [-0.22587086260318756, -0.6656315922737122, -0.07844287157058716],
-        #     [-0.04145475849509239, -0.3077218234539032, -0.42316967248916626],
-        #     [-0.15887849032878876, -0.054529931396245956, 0.5356100797653198]
-        # ]]
-
         torch.testing.assert_close(
             output["last_hidden_state"][:, :, :3], expected_implementation, rtol=1e-4, atol=1e-4
         )

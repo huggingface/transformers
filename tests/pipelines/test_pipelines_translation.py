@@ -18,7 +18,6 @@ import pytest
 
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MBart50TokenizerFast,
     MBartConfig,
     MBartForConditionalGeneration,
@@ -33,7 +32,6 @@ from .test_pipelines_common import ANY
 @is_pipeline_test
 class TranslationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(
         self,
@@ -81,7 +79,7 @@ class TranslationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="pt")
+        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random")
         outputs = translator("This is a test string", max_length=20)
         self.assertEqual(
             outputs,
@@ -97,7 +95,7 @@ class TranslationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_en_to_de_pt(self):
-        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="pt")
+        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random")
         outputs = translator("This is a test string", max_length=20)
         self.assertEqual(
             outputs,

@@ -201,7 +201,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         try:
             vocab_dict = None
             if pretrained_vocab_file is not None:
-                # Priority on pickle files (support PyTorch and TF)
                 if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
                     raise ValueError(
                         "This part uses `pickle.load` which is insecure and will execute arbitrary code that is "

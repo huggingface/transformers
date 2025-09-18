@@ -295,7 +295,7 @@ def register_quantizer(name: str):
     return register_quantizer_fn
 
 
-def get_hf_quantizer(config, quantization_config, dtype, from_tf, from_flax, device_map, weights_only, user_agent):
+def get_hf_quantizer(config, quantization_config, dtype, device_map, weights_only, user_agent):
     pre_quantized = hasattr(config, "quantization_config")
     if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
         pre_quantized = False
@@ -318,8 +318,6 @@ def get_hf_quantizer(config, quantization_config, dtype, from_tf, from_flax, dev
     if hf_quantizer is not None:
         hf_quantizer.validate_environment(
             dtype=dtype,
-            from_tf=from_tf,
-            from_flax=from_flax,
             device_map=device_map,
             weights_only=weights_only,
         )

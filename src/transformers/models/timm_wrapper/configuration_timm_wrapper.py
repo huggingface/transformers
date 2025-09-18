@@ -41,6 +41,8 @@ class TimmWrapperConfig(PretrainedConfig):
     imagenet models is set to `None` due to occlusions in the label descriptions.
 
     Args:
+        architecture (`str`, *optional*, defaults to `"resnet50"`):
+            The timm architecture to load.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         do_pooling (`bool`, *optional*, defaults to `True`):
@@ -65,11 +67,13 @@ class TimmWrapperConfig(PretrainedConfig):
 
     def __init__(
         self,
+        architecture: str = "resnet50",
         initializer_range: float = 0.02,
         do_pooling: bool = True,
         model_args: Optional[dict[str, Any]] = None,
         **kwargs,
     ):
+        self.architecture = architecture
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
         self.model_args = model_args  # named "model_args" for BC with timm
