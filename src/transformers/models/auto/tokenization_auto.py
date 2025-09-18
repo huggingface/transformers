@@ -305,6 +305,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("gpt_oss", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("gptsan-japanese", ("GPTSanJapaneseTokenizer", None)),
+        (
+            "blueberry",
+            (
+                "BlueberryTokenizer",
+                "BlueberryTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("granite", ("GPT2Tokenizer", None)),
         ("granitemoe", ("GPT2Tokenizer", None)),
         ("granitemoehybrid", ("GPT2Tokenizer", None)),

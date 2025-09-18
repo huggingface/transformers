@@ -186,6 +186,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("granitemoe", "GraniteMoeConfig"),
         ("granitemoehybrid", "GraniteMoeHybridConfig"),
         ("granitemoeshared", "GraniteMoeSharedConfig"),
+        ("blueberry", "BlueberryConfig"),
         ("granitevision", "LlavaNextConfig"),
         ("graphormer", "GraphormerConfig"),
         ("grounding-dino", "GroundingDinoConfig"),
