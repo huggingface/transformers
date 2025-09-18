@@ -73,7 +73,9 @@ class TimmWrapperModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return TimmWrapperConfig.from_pretrained(self.model_name)
+        config = TimmWrapperConfig.from_pretrained(self.model_name)
+        print(config)
+        return config
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
