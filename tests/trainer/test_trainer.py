@@ -5355,7 +5355,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 url = trainer.push_to_hub(revision=branch)
 
             # Extract branch from the url
-            re_search = re.search(r"tree/([^/]+)/", url)
+            re_search = re.search(r"commit/([^/]+)/", url)
             self.assertIsNotNone(re_search)
 
             branch_name = re_search.groups()[0]
