@@ -757,7 +757,6 @@ def create_causal_mask_mapping(
 
         # First find where a new image block starts: 1 if image and previous not image
         # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
-        token_type_ids += 1
         is_image = (token_type_ids == 1).to(cache_position.device)
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image

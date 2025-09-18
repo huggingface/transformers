@@ -24,7 +24,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
 
-from numpy import nonzero
 import torch
 import torch.nn as nn
 
@@ -794,7 +793,6 @@ def create_causal_mask_mapping(
 
         # First find where a new image block starts: 1 if image and previous not image
         # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
-        token_type_ids += 1
         is_image = (token_type_ids == 1).to(cache_position.device)
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image
@@ -970,7 +968,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
                 past_key_values,
                 position_ids,
                 token_type_ids,
-                pixel_values=pixel_values,  # Used to determine if we have image data
+                pixel_values,
             )
 
         outputs = self.language_model(
@@ -1229,7 +1227,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             past_key_values,
             position_ids,
             token_type_ids,
-            pixel_values=kwargs.get("pixel_values", None),
+            pixel_values=kwargs.get("pixel_values"),
             **{k: v for k, v in kwargs.items() if k != "pixel_values"},
         )
 

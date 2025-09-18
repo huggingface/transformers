@@ -911,7 +911,6 @@ class GenerationTesterMixin:
         self.assertTrue(output_prompt_lookup.shape[-1] == 10)
 
     @pytest.mark.generate
-<<<<<<< HEAD
     def test_left_padding_compatibility(
         self, unpadded_custom_inputs: Optional[dict] = None, padded_custom_inputs: Optional[dict] = None
     ):
@@ -920,27 +919,16 @@ class GenerationTesterMixin:
         inputs for overwrites, to prevent full rewrites of the test when all we need is model-specific input handling.
 
         ! If you overwrite this test, make sure to document why you need to overwrite it !
-=======
-    def test_left_padding_compatibility(self, can_randomly_mask=True):
-        """
-        Tests that adding left-padding yields the same logits as the original input.
->>>>>>> 81b923598d (tmp commit)
 
         NOTE: left-padding results in small numerical differences. This is expected.
         See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
 
         Args:
-<<<<<<< HEAD
             unpadded_custom_inputs (`dict`, *optional*):
                 Used in test overwrites. Custom inputs to add/overwrite over the default test inputs.
             padded_custom_inputs (`dict`, *optional*):
                 Used in test overwrites. Custom inputs to add/overwrite over the padded test input handcrafted in this
                 test. Commonly used e.g. with multimodal cross attention masks.
-=======
-            can_randomly_mask (`bool`, *optional*, defaults to `True`):
-                Whether to use the default random test attention mask. In some models don't support left-padding with
-                these exotic masks, and overwrite this parameter to False. The overwrite should document why.
->>>>>>> 81b923598d (tmp commit)
         """
 
         # First, filter out models that don't support left padding
@@ -990,16 +978,6 @@ class GenerationTesterMixin:
 
         for model_class in decoder_only_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-<<<<<<< HEAD
-=======
-            input_ids = inputs_dict["input_ids"]
-            if can_randomly_mask:
-                attention_mask = inputs_dict.get("attention_mask", torch.ones_like(input_ids))
-            else:
-                attention_mask = torch.ones_like(input_ids)
-            token_type_ids = inputs_dict.get("token_type_ids", None)
-
->>>>>>> 81b923598d (tmp commit)
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
