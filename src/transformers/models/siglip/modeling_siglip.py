@@ -757,7 +757,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @check_model_inputs()(post_ln_hiddens=False)
+    @check_model_inputs(post_ln_hiddens=False)
     @auto_docstring
     def forward(
         self,

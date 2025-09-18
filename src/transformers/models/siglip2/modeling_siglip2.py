@@ -395,7 +395,6 @@ class Siglip2VisionTransformer(nn.Module):
         if self.use_head:
             self.head = Siglip2MultiheadAttentionPoolingHead(config)
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
