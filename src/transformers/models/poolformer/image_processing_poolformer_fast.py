@@ -18,7 +18,7 @@ from typing import Optional, Union
 
 import torch
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import (
     ChannelDimension,
     get_resize_output_image_size,
@@ -40,6 +40,7 @@ from ...utils import (
     auto_docstring,
     is_torchvision_v2_available,
 )
+from .image_processing_poolformer import PoolFormerImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -48,14 +49,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class PoolFormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
-            Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
-    """
-
-    crop_pct: Optional[float]
+PoolFormerFastImageProcessorKwargs = PoolFormerImageProcessorKwargs
 
 
 @auto_docstring

@@ -21,7 +21,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -34,7 +33,12 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torchvision_v2_available,
+)
+from .image_processing_tvp import TvpImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -43,19 +47,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class TvpFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_flip_channel_order (`bool`, *optional*):
-        Whether to flip the channel order of the image from RGB to BGR.
-    constant_values (`float` or `List[float]`, *optional*):
-        Value used to fill the padding area when `pad_mode` is `'constant'`.
-    pad_mode (`str`, *optional*):
-        Padding mode to use — `'constant'`, `'edge'`, `'reflect'`, or `'symmetric'`.
-    """
-
-    do_flip_channel_order: Optional[bool]
-    constant_values: Optional[Union[float, list[float]]]
-    pad_mode: Optional[str]
+TvpFastImageProcessorKwargs = TvpImageProcessorKwargs
 
 
 @auto_docstring

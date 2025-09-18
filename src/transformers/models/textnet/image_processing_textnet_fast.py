@@ -19,7 +19,7 @@ from typing import Optional, Union
 import torch
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import (
     get_resize_output_image_size,
     group_images_by_shape,
@@ -39,6 +39,7 @@ from ...utils import (
     auto_docstring,
     is_torchvision_v2_available,
 )
+from .image_processing_textnet import TextNetImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -47,13 +48,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class TextNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    size_divisor (`int`, *optional*, defaults to 32):
-        Ensures height and width are rounded to a multiple of this value after resizing.
-    """
-
-    size_divisor: Optional[int]
+TextNetFastImageProcessorKwargs = TextNetImageProcessorKwargs
 
 
 @auto_docstring

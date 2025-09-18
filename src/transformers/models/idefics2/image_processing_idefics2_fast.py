@@ -21,7 +21,6 @@ import torch
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     group_images_by_shape,
     reorder_images,
@@ -35,7 +34,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
-from .image_processing_idefics2 import convert_to_rgb
+from .image_processing_idefics2 import Idefics2ImageProcessorKwargs, convert_to_rgb
 
 
 if is_torchvision_available():
@@ -105,13 +104,7 @@ def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "tor
     return mask
 
 
-class Idefics2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_image_splitting (`bool`, *optional*, defaults to `False`):
-        Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
-    """
-
-    do_image_splitting: Optional[bool]
+Idefics2FastImageProcessorKwargs = Idefics2ImageProcessorKwargs
 
 
 @auto_docstring

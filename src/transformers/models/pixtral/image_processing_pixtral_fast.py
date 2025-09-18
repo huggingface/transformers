@@ -21,7 +21,6 @@ import torch
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -33,7 +32,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from .image_processing_pixtral import get_resize_output_image_size
+from .image_processing_pixtral import PixtralImageProcessorKwargs, get_resize_output_image_size
 
 
 if is_torchvision_v2_available():
@@ -44,13 +43,7 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class PixtralFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    patch_size (`dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
-        Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
-    """
-
-    patch_size: Optional[dict[str, int]]
+PixtralFastImageProcessorKwargs = PixtralImageProcessorKwargs
 
 
 @auto_docstring

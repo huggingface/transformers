@@ -18,7 +18,7 @@ from typing import Optional, Union
 
 import torch
 
-from transformers.models.beit.image_processing_beit_fast import BeitFastImageProcessorKwargs, BeitImageProcessorFast
+from transformers.models.beit.image_processing_beit_fast import BeitImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -38,6 +38,7 @@ from ...utils import (
     TensorType,
     is_torchvision_v2_available,
 )
+from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -46,8 +47,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class SegformerFastImageProcessorKwargs(BeitFastImageProcessorKwargs):
-    pass
+SegformerFastImageProcessorKwargs = SegformerImageProcessorKwargs
 
 
 class SegformerImageProcessorFast(BeitImageProcessorFast):

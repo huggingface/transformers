@@ -21,7 +21,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -42,6 +41,7 @@ from ...utils import (
     auto_docstring,
     is_torchvision_v2_available,
 )
+from .image_processing_nougat import NougatImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -50,20 +50,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class NougatFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-    do_crop_margin (`bool`, *optional*, defaults to `True`):
-            Whether to crop the image margins.
-    do_thumbnail (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image using thumbnail method.
-    do_align_long_axis (`bool`, *optional*, defaults to `False`):
-            Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-    """
-
-    do_crop_margin: Optional[bool]
-    do_thumbnail: Optional[bool]
-    do_align_long_axis: Optional[bool]
+NougatFastImageProcessorKwargs = NougatImageProcessorKwargs
 
 
 @auto_docstring

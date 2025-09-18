@@ -19,7 +19,7 @@ from typing import Optional, Union
 
 import torch
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
@@ -28,6 +28,7 @@ from ...utils import (
     auto_docstring,
     is_torchvision_v2_available,
 )
+from .image_processing_efficientnet import EfficientNetImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -36,17 +37,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class EfficientNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
-            Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
-        include_top (`bool`, *optional*, defaults to `self.include_top`):
-            Normalize the image again with the standard deviation only for image classification if set to True.
-    """
-
-    rescale_offset: bool
-    include_top: bool
+EfficientNetFastImageProcessorKwargs = EfficientNetImageProcessorKwargs
 
 
 @auto_docstring

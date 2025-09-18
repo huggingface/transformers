@@ -19,21 +19,13 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import AudioKwargs, ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
-class Gemma3nImagesKwargs(ImagesKwargs):
-    do_convert_rgb: Optional[bool]
-
-
 class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
-    audio_kwargs: AudioKwargs
-    images_kwargs: Gemma3nImagesKwargs
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
+        "text_kwargs": {"padding": False},
     }
 
 
@@ -101,7 +93,6 @@ class Gemma3nProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]] = None,
-        videos=None,
         **kwargs: Unpack[Gemma3nProcessorKwargs],
     ) -> BatchFeature:
         if text is None and images is None and audio is None:

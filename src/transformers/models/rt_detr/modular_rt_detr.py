@@ -3,7 +3,7 @@ from typing import Optional, Union
 
 import torch
 
-from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
+from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
@@ -26,6 +26,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -98,8 +99,7 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-class RTDetrFastImageProcessorKwargs(DetrFastImageProcessorKwargs):
-    pass
+RTDetrFastImageProcessorKwargs = RTDetrImageProcessorKwargs
 
 
 class RTDetrImageProcessorFast(DetrImageProcessorFast):
@@ -129,11 +129,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        return BaseImageProcessorFast.preprocess(self, images, annotations, masks_path, **kwargs)
+        return BaseImageProcessorFast.preprocess(self, images, **kwargs)
 
     def prepare_annotation(
         self,

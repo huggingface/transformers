@@ -27,7 +27,6 @@ from torch import nn
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -44,6 +43,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, logging
 from .image_processing_mask2former import (
+    Mask2FormerImageProcessorKwargs,
     compute_segments,
     convert_segmentation_to_rle,
     get_size_with_aspect_ratio,
@@ -57,28 +57,6 @@ else:
     from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
-
-
-class Mask2FormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    size_divisor (`int`, *optional*, defaults to 32):
-        Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-        Swin Transformer.
-    ignore_index (`int`, *optional*):
-        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-        denoted with 0 (background) will be replaced with `ignore_index`.
-    do_reduce_labels (`bool`, *optional*, defaults to `False`):
-        Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
-        The background label will be replaced by `ignore_index`.
-    num_labels (`int`, *optional*):
-        The number of labels in the segmentation map.
-    """
-
-    size_divisor: Optional[int]
-    ignore_index: Optional[int]
-    do_reduce_labels: Optional[bool]
-    num_labels: Optional[int]
 
 
 def convert_segmentation_map_to_binary_masks_fast(
@@ -114,6 +92,9 @@ def convert_segmentation_map_to_binary_masks_fast(
     else:
         labels = all_labels
     return binary_masks.float(), labels.long()
+
+
+Mask2FormerFastImageProcessorKwargs = Mask2FormerImageProcessorKwargs
 
 
 @auto_docstring

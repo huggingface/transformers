@@ -30,8 +30,8 @@ def process_file(
     file_type="modeling_",
     show_diff=True,
 ):
-    file_name_prefix = file_type.split("*")[0]
-    file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
+    file_name_prefix = file_type.split(".*")[0]
+    file_name_suffix = file_type.split(".*")[-1] if ".*" in file_type else ""
     file_path = modular_file_path.replace("modular_", f"{file_name_prefix}_").replace(".py", f"{file_name_suffix}.py")
     # Read the actual modeling file
     with open(file_path, "r", encoding="utf-8") as modeling_file:

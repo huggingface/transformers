@@ -21,7 +21,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -40,6 +39,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from .image_processing_vitmatte import VitMatteImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -50,13 +50,7 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class VitMatteFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    size_divisor (`int`, *optional*, defaults to 32):
-        The width and height of the image will be padded to be divisible by this number.
-    """
-
-    size_divisor: Optional[int]
+VitMatteFastImageProcessorKwargs = VitMatteImageProcessorKwargs
 
 
 @auto_docstring
@@ -92,21 +86,21 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
     def _pad_image(
         self,
         images: "torch.tensor",
-        size_divisibility: int = 32,
+        size_divisor: int = 32,
     ) -> "torch.tensor":
         """
-        Pads an image or batched images constantly so that width and height are divisible by size_divisibility
+        Pads an image or batched images constantly so that width and height are divisible by size_divisor
 
         Args:
             image (`torch,tensor`):
                 Image to pad.
-            size_divisibility (`int`, *optional*, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The width and height of the image will be padded to be divisible by this number.
         """
         height, width = get_image_size(images, channel_dim=ChannelDimension.FIRST)
 
-        pad_height = 0 if height % size_divisibility == 0 else size_divisibility - height % size_divisibility
-        pad_width = 0 if width % size_divisibility == 0 else size_divisibility - width % size_divisibility
+        pad_height = 0 if height % size_divisor == 0 else size_divisor - height % size_divisor
+        pad_width = 0 if width % size_divisor == 0 else size_divisor - width % size_divisor
 
         if pad_width + pad_height > 0:
             padding = (0, 0, pad_width, pad_height)

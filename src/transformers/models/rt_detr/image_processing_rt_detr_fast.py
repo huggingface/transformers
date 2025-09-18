@@ -12,7 +12,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -33,31 +32,13 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, requires_backends
 from ...utils.import_utils import requires
-from .image_processing_rt_detr import get_size_with_aspect_ratio
+from .image_processing_rt_detr import RTDetrImageProcessorKwargs, get_size_with_aspect_ratio
 
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
 else:
     from torchvision.transforms import functional as F
-
-
-class RTDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-    do_convert_annotations (`bool`, *optional*, defaults to `True`):
-        Controls whether to convert the annotations to the format expected by the RT_DETR model. Converts the
-        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
-        Whether to return segmentation masks.
-    """
-
-    format: Optional[Union[str, AnnotationFormat]]
-    do_convert_annotations: Optional[bool]
-    return_segmentation_masks: Optional[bool]
-
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -119,6 +100,9 @@ def prepare_coco_detection_annotation(
         new_target["keypoints"] = keypoints
 
     return new_target
+
+
+RTDetrFastImageProcessorKwargs = RTDetrImageProcessorKwargs
 
 
 @auto_docstring
@@ -367,26 +351,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        r"""
-        annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
-            List of annotations associated with the image or batch of images. If annotation is for object
-            detection, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
-                dictionary. An image can have no annotations, in which case the list should be empty.
-            If annotation is for segmentation, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
-                An image can have no segments, in which case the list should be empty.
-            - "file_name" (`str`): The file name of the image.
-        masks_path (`str` or `pathlib.Path`, *optional*):
-            Path to the directory containing the segmentation masks.
-        """
-        return super().preprocess(images, annotations, masks_path, **kwargs)
+        return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,

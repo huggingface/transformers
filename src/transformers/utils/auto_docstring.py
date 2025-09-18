@@ -102,6 +102,13 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    size_divisor = {
+        "description": """
+    The size by which to make sure both the height and width can be divided.
+    """,
+        "shape": None,
+    }
+
     default_to_square = {
         "description": """
     Whether to default to a square image when resizing, if size is an int.

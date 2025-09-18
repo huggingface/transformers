@@ -20,10 +20,10 @@ import torch
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     Unpack,
 )
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -40,7 +40,7 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class Phi4MultimodalFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Phi4MultimodalFastImageProcessorKwargs(ImagesKwargs):
     r"""
     patch_size (`int`, *optional*):
         The size of the patch.

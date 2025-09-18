@@ -21,7 +21,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     get_max_height_width,
     group_images_by_shape,
     reorder_images,
@@ -32,6 +31,7 @@ from ...utils import (
     auto_docstring,
     is_torchvision_v2_available,
 )
+from .image_processing_vilt import ViltImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -44,17 +44,7 @@ MAX_LONGER_EDGE = 1333
 MAX_SHORTER_EDGE = 800
 
 
-class ViltFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        size_divisor (`int`, *optional*, defaults to 32):
-            The size to make the height and width divisible by.
-        rescale_factor (`float`, *optional*, defaults to 1/255):
-            The factor to rescale the image by.
-    """
-
-    size_divisor: Optional[int]
-    rescale_factor: Optional[float]
+ViltFastImageProcessorKwargs = ViltImageProcessorKwargs
 
 
 @auto_docstring

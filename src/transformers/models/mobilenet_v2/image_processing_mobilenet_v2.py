@@ -37,6 +37,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_torch_available, is_torch_tensor, logging
 
 
@@ -48,6 +49,17 @@ from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
+
+
+class MobileNetV2ImageProcessorKwargs(ImagesKwargs):
+    """
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_reduce_labels: Optional[bool]
 
 
 @requires(backends=("vision",))
@@ -96,6 +108,7 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = MobileNetV2ImageProcessorKwargs
 
     def __init__(
         self,

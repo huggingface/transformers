@@ -25,10 +25,7 @@ from torch.nn import functional as F
 from torchvision.ops.boxes import batched_nms
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -40,6 +37,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, is_torchvision_v2_available
+from .image_processing_sam import SamImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -48,17 +46,7 @@ else:
     from torchvision.transforms import functional as F_t
 
 
-class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    mask_size (`dict[str, int]`, *optional*):
-        The size `{"longest_edge": int}` to resize the segmentation maps to.
-    mask_pad_size (`dict[str, int]`, *optional*):
-        The size `{"height": int, "width": int}` to pad the segmentation maps to. Must be larger than any segmentation
-        map size provided for preprocessing.
-    """
-
-    mask_size: Optional[dict[str, int]]
-    mask_pad_size: Optional[dict[str, int]]
+SamFastImageProcessorKwargs = SamImageProcessorKwargs
 
 
 @auto_docstring

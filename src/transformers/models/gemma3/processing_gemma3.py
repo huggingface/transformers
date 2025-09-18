@@ -20,21 +20,12 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import to_py_obj
 
 
-class Gemma3ImagesKwargs(ImagesKwargs):
-    do_pan_and_scan: Optional[bool]
-    pan_and_scan_min_crop_size: Optional[int]
-    pan_and_scan_max_num_crops: Optional[int]
-    pan_and_scan_min_ratio_to_activate: Optional[float]
-    do_convert_rgb: Optional[bool]
-
-
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Gemma3ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -81,8 +72,6 @@ class Gemma3Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
         if text is None and images is None:

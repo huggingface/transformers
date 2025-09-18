@@ -24,12 +24,7 @@ from typing import Optional, Union
 import torch
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -41,6 +36,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
+from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -49,15 +45,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class SegformerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    do_reduce_labels: Optional[bool]
+SegformerFastImageProcessorKwargs = SegformerImageProcessorKwargs
 
 
 @auto_docstring

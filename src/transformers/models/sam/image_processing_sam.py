@@ -37,6 +37,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -62,6 +63,19 @@ if is_tf_available():
     from ...tf_utils import flatten, shape_list
 
 logger = logging.get_logger(__name__)
+
+
+class SamImageProcessorKwargs(ImagesKwargs):
+    r"""
+    mask_size (`dict[str, int]`, *optional*):
+        The size `{"longest_edge": int}` to resize the segmentation maps to.
+    mask_pad_size (`dict[str, int]`, *optional*):
+        The size `{"height": int, "width": int}` to pad the segmentation maps to. Must be larger than any segmentation
+        map size provided for preprocessing.
+    """
+
+    mask_size: Optional[dict[str, int]]
+    mask_pad_size: Optional[dict[str, int]]
 
 
 class SamImageProcessor(BaseImageProcessor):
@@ -114,6 +128,7 @@ class SamImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = SamImageProcessorKwargs
 
     def __init__(
         self,
