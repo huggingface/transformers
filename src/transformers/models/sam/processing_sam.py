@@ -22,10 +22,9 @@ from typing import Optional, Union
 import numpy as np
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
-from .image_processing_sam import SamImageProcessorKwargs
 
 
 if is_torch_available():
@@ -35,12 +34,14 @@ if is_tf_available():
     import tensorflow as tf
 
 
-class SamImagesKwargs(SamImageProcessorKwargs):
+class SamImagesKwargs(ImagesKwargs):
     segmentation_maps: Optional[ImageInput]
     input_points: Optional[list[list[float]]]
     input_labels: Optional[list[list[int]]]
     input_boxes: Optional[list[list[list[float]]]]
     point_pad_value: Optional[int]
+    mask_size: Optional[dict[str, int]]
+    mask_pad_size: Optional[dict[str, int]]
 
 
 class SamProcessorKwargs(ProcessingKwargs, total=False):
