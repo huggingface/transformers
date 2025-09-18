@@ -23,16 +23,17 @@ import json
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
-import torch
+import accelerate
 from safetensors.torch import safe_open
 
 from transformers import (
+    AudioFlamingo3Config,
     AudioFlamingo3ForConditionalGeneration,
-    AutoConfig,
     AutoTokenizer,
     GenerationConfig,
+    Qwen2Config,
     WhisperFeatureExtractor,
 )
 
@@ -41,77 +42,14 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-def _ensure_dir(p: Path) -> None:
-    p.mkdir(parents=True, exist_ok=True)
-
-
-def _load_json(p: Path) -> dict[str, Any]:
+def _load_json(p: Path):
     if not p.is_file():
         raise FileNotFoundError(f"Missing JSON: {p}")
     with p.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def _save_json(obj: dict[str, Any], p: Path) -> None:
-    _ensure_dir(p.parent)
-    with p.open("w", encoding="utf-8") as f:
-        json.dump(obj, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-
-
-def _strip_keys(d: dict[str, Any], keys: Iterable[str]) -> dict[str, Any]:
-    ks = set(keys)
-    return {k: v for k, v in d.items() if k not in ks}
-
-
-def get_generation_config(src_root: Path) -> dict[str, Any]:
-    data = _load_json(src_root / "llm" / "generation_config.json")
-    logger.info("generation_config.json")
-    return data
-
-
-_BASE_MAIN_CONFIG: dict[str, Any] = {
-    "model_type": "audioflamingo3",
-    "model_dtype": "torch.float16",
-    "hidden_size": 3584,
-    "sound_hidden_size": 1280,
-    "bos_token_id": 151670,
-    "eos_token_id": 151645,
-    "sound_token_id": 151669,
-    "pad_token_id": 151671,
-    "model_max_length": 8192,
-    "end_newline_token_id": 198,
-    "padding_side": "right",
-    "media_tokens": {"sound": "<sound>"},
-    "ignore_index": -100,
-}
-
-
-def write_main_config(src_root: Path, dst_root: Path) -> None:
-    top_cfg = _load_json(src_root / "config.json")
-    final_cfg = dict(_BASE_MAIN_CONFIG)
-    for key in ("model_dtype", "hidden_size", "sound_hidden_size"):
-        if key in top_cfg:
-            final_cfg[key] = top_cfg[key]
-
-    text_cfg = _strip_keys(
-        _load_json(src_root / "llm" / "config.json"),
-        keys=("_name_or_path", "architectures"),
-    )
-    audio_cfg = _strip_keys(
-        _load_json(src_root / "sound_tower" / "config.json"),
-        keys=("_name_or_path", "architectures"),
-    )
-    audio_cfg["model_type"] = "audioflamingo3_encoder"
-
-    final_cfg["text_config"] = text_cfg
-    final_cfg["audio_config"] = audio_cfg
-
-    _save_json(final_cfg, dst_root / "config.json")
-    logger.info("config.json")
-
-
-def write_processor(src_root: Path, dst_root: Path) -> None:
+def write_processor(src_root: Path, dst_root: Path):
     llm_dir = src_root / "llm"
 
     AutoTokenizer.from_pretrained(str(llm_dir)).save_pretrained(
@@ -126,7 +64,11 @@ def write_processor(src_root: Path, dst_root: Path) -> None:
     logger.info("processor (tokenizer + preprocessor)")
 
 
-COMPONENTS = ("llm", "sound_tower", "sound_mm_projector")
+PREFIX_MAP = {
+    "llm": "language_model",
+    "sound_tower": "audio_tower",
+    "sound_mm_projector": "multi_modal_projector",
+}
 
 
 def _resolve_component_dir(dirpath: Path):
@@ -146,19 +88,22 @@ def _resolve_component_dir(dirpath: Path):
     return ("file", cands[0]) if len(cands) == 1 else None
 
 
-def merge_and_shard_weights(src_root: Path, dst_root: Path, gen_cfg_dict: dict[str, Any]) -> None:
+def merge_and_shard_weights(src_root: Path, dst_root: Path):
     state: dict[str, Any] = {}
-    for tag in COMPONENTS:
+    for tag in PREFIX_MAP.keys():
         comp = _resolve_component_dir(src_root / tag)
         if not comp:
             continue
+
+        out_prefix = PREFIX_MAP.get(tag, tag)
+
         if comp[0] == "file":
             fp: Path = comp[1]
             with safe_open(str(fp), framework="pt", device="cpu") as f:
                 for k in f.keys():
                     if k == "__metadata__":
                         continue
-                    state[f"{tag}.{k}"] = f.get_tensor(k)
+                    state[f"{out_prefix}.{k}"] = f.get_tensor(k)
         else:
             base: Path = comp[1]
             shard_map: dict[str, list[str]] = comp[2]
@@ -166,21 +111,46 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, gen_cfg_dict: dict[s
                 sp = base / shard
                 with safe_open(str(sp), framework="pt", device="cpu") as f:
                     for k in keys:
-                        state[f"{tag}.{k}"] = f.get_tensor(k)
+                        state[f"{out_prefix}.{k}"] = f.get_tensor(k)
 
     if not state:
         raise FileNotFoundError("No tensors found in llm/, sound_tower/, or sound_mm_projector/.")
 
-    cfg = AutoConfig.from_pretrained(dst_root)
-    with torch.device("meta"):
-        model = AudioFlamingo3ForConditionalGeneration(cfg)
-
-    gen_cfg = GenerationConfig(**gen_cfg_dict)
-    gen_cfg._from_model_config = False
-    model.generation_config = gen_cfg
+    text_config = Qwen2Config(
+        bos_token_id=151643,
+        dtype="bfloat16",
+        eos_token_id=151645,
+        hidden_size=3584,
+        intermediate_size=18944,
+        model_max_length=8192,
+        num_attention_heads=28,
+        num_hidden_layers=28,
+        num_key_value_heads=4,
+        rope_theta=1000000.0,
+        use_cache=False,
+        vocab_size=151672,
+    )
+    config = AudioFlamingo3Config(text_config=text_config)
+    with accelerate.init_empty_weights():
+        model = AudioFlamingo3ForConditionalGeneration(config)
 
     model.save_pretrained(save_directory=str(dst_root), state_dict=state)
     logger.info("model.safetensors index and shards")
+
+
+def write_generation_config(dst_root: Path) -> None:
+    generation_config = GenerationConfig(
+        bos_token_id=151643,
+        do_sample=True,
+        eos_token_id=[151645, 151643],
+        pad_token_id=151643,
+        repetition_penalty=1.05,
+        temperature=0.7,
+        top_k=20,
+        top_p=0.8,
+    )
+    generation_config.save_pretrained(dst_root)
+    logger.info("generation_config.json")
 
 
 def main() -> None:
@@ -192,10 +162,9 @@ def main() -> None:
     src_root = Path(args.src_dir).resolve()
     dst_root = Path(args.dst_dir).resolve()
 
-    gen_cfg_dict = get_generation_config(src_root)
-    write_main_config(src_root, dst_root)
     write_processor(src_root, dst_root)
-    merge_and_shard_weights(src_root, dst_root, gen_cfg_dict)
+    merge_and_shard_weights(src_root, dst_root)
+    write_generation_config(dst_root)
 
 
 if __name__ == "__main__":
