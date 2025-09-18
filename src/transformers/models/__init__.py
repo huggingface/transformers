@@ -123,6 +123,7 @@ if TYPE_CHECKING:
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
+    from .flex_olmo import *
     from .florence2 import *
     from .fnet import *
     from .focalnet import *
@@ -182,6 +183,7 @@ if TYPE_CHECKING:
     from .led import *
     from .levit import *
     from .lfm2 import *
+    from .lfm2_vl import *
     from .lightglue import *
     from .lilt import *
     from .llama import *
