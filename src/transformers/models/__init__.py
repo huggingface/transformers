@@ -211,8 +211,8 @@ if TYPE_CHECKING:
     from .megatron_gpt2 import *
     from .mgp_str import *
     from .mimi import *
-    from .ministral import *
     from .minimax import *
+    from .ministral import *
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
@@ -280,11 +280,11 @@ if TYPE_CHECKING:
     from .qwen2_audio import *
     from .qwen2_moe import *
     from .qwen2_vl import *
+    from .qwen3 import *
+    from .qwen3_moe import *
     from .qwen3_next import *
     from .qwen3_vl import *
     from .qwen3_vl_moe import *
-    from .qwen3 import *
-    from .qwen3_moe import *
     from .rag import *
     from .recurrent_gemma import *
     from .reformer import *
