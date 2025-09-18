@@ -52,7 +52,8 @@ SRC_DIRS = [
     ]
 ]
 sys.path.extend(SRC_DIRS)
-
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 if SRC_DIRS is not None:
     import run_audio_classification
