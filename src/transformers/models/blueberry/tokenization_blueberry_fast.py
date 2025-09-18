@@ -1,4 +1,4 @@
-# coding=utf-8
+THIS SHOULD BE A LINTER ERROR# coding=utf-8
 # Copyright 2025 Dustin Loring
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
