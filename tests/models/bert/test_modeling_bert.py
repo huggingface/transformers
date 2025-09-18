@@ -21,7 +21,6 @@ from packaging import version
 from transformers import AutoTokenizer, BertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    CaptureLogger,
     require_torch,
     slow,
     torch_device,
@@ -48,7 +47,6 @@ if is_torch_available():
         BertLMHeadModel,
         BertModel,
         DataCollatorWithFlattening,
-        logging,
     )
 
 
