@@ -5168,6 +5168,115 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             trainer.train()
 
+    @require_safetensors
+    def test_resume_from_interrupted_training(self):
+        """
+        Tests resuming training from a checkpoint after a simulated interruption.
+        """
+
+        # --- Helper classes and functions defined locally for this test ---
+        class DummyModel(nn.Module):
+            def __init__(self, input_dim=10, num_labels=2):
+                super().__init__()
+                self.linear = nn.Linear(input_dim, num_labels)
+
+            def forward(self, input_ids=None, attention_mask=None, labels=None):
+                logits = self.linear(input_ids.float())
+                loss = None
+                if labels is not None:
+                    loss_fn = nn.CrossEntropyLoss()
+                    loss = loss_fn(logits, labels)
+                return {"loss": loss, "logits": logits}
+
+        class DummyDictDataset(torch.utils.data.Dataset):
+            def __init__(self, input_ids, attention_mask, labels):
+                self.input_ids = input_ids
+                self.attention_mask = attention_mask
+                self.labels = labels
+
+            def __len__(self):
+                return len(self.input_ids)
+
+            def __getitem__(self, idx):
+                return {
+                    "input_ids": self.input_ids[idx],
+                    "attention_mask": self.attention_mask[idx],
+                    "labels": self.labels[idx],
+                }
+
+        def create_dummy_dataset():
+            """Creates a dummy dataset for this specific test."""
+            num_samples = 13
+            input_dim = 10
+            dummy_input_ids = torch.rand(num_samples, input_dim)
+            dummy_attention_mask = torch.ones(num_samples, input_dim)
+            dummy_labels = torch.randint(0, 2, (num_samples,))
+            return DummyDictDataset(dummy_input_ids, dummy_attention_mask, dummy_labels)
+
+        # 1. Set up a dummy model and dataset
+        model = DummyModel(input_dim=10, num_labels=2)
+        dummy_dataset = create_dummy_dataset()
+
+        # 2. First training phase (simulating an interruption)
+        output_dir_initial = self.get_auto_remove_tmp_dir()
+        training_args_initial = TrainingArguments(
+            output_dir=output_dir_initial,
+            num_train_epochs=1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=3,
+            save_strategy="steps",
+            save_steps=1,  # Save at every step
+            report_to=[],  # Disable wandb/tensorboard and other loggers
+            max_steps=2,  # Stop after step 2 to simulate interruption
+        )
+
+        trainer_initial = Trainer(
+            model=model,
+            args=training_args_initial,
+            train_dataset=dummy_dataset,
+        )
+        trainer_initial.train()
+
+        # 3. Verify that a checkpoint was created before the "interruption"
+        checkpoint_path = os.path.join(output_dir_initial, "checkpoint-2")
+        self.assertTrue(os.path.exists(checkpoint_path), f"Checkpoint not found at {checkpoint_path}")
+
+        # 4. Second training phase (resuming from the checkpoint)
+        output_dir_resumed = self.get_auto_remove_tmp_dir()
+        # Note: total steps for one epoch is ceil(13 / (2*3)) = 3.
+        # We stopped at step 2, so the resumed training should run for 1 more step.
+        training_args_resumed = TrainingArguments(
+            output_dir=output_dir_resumed,
+            num_train_epochs=1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=3,
+            save_strategy="steps",
+            save_steps=1,
+            report_to=[],
+        )
+
+        trainer_resumed = Trainer(
+            model=model,
+            args=training_args_resumed,
+            train_dataset=dummy_dataset,
+        )
+        # Resume from the interrupted checkpoint and finish the remaining training
+        trainer_resumed.train(resume_from_checkpoint=checkpoint_path)
+
+        # 5. Assertions: Check if the training completed and the final model was saved
+        # The training should have completed step 3.
+        # Total steps per epoch = ceil(13 samples / (2 batch_size * 3 grad_accum)) = 3
+        self.assertEqual(trainer_resumed.state.global_step, 3)
+
+        # Check that a checkpoint for the final step exists.
+        final_checkpoint_path = os.path.join(output_dir_resumed, "checkpoint-3")
+        self.assertTrue(os.path.exists(final_checkpoint_path))
+
+        # Check if the model weights file exists in the final checkpoint directory.
+        # Trainer saves non-PreTrainedModel models as `model.safetensors` by default if safetensors is available.
+        final_model_path = os.path.join(final_checkpoint_path, SAFE_WEIGHTS_NAME)
+        self.assertTrue(os.path.exists(final_model_path), "Final model checkpoint was not saved!")
+
 
 @require_torch
 @is_staging_test
