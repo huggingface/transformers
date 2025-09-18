@@ -2217,7 +2217,7 @@ class GenerationMixin(ContinuousMixin):
             "assistant_tokenizer": kwargs.pop("assistant_tokenizer", None),
             "assistant_model": assistant_model,
             "streamer": streamer,
-            "assistant_temperature": kwargs.pop("assistant_temperature", 1.0),
+            "assistant_temperature": kwargs.pop("assistant_temperature", None),
         }
         generation_mode_kwargs["synced_gpus"] = (
             (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and dist.get_world_size() > 1
