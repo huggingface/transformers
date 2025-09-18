@@ -406,10 +406,10 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_token
     result = {f"{split}_runtime": round(runtime, 4)}
     if num_samples is not None and num_samples > 0:
         samples_per_second = num_samples / runtime
-        result[f"{split}_samples_per_second"] = round(samples_per_second, 3)    
+        result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
     if num_steps is not None and num_steps > 0:
-        steps_per_second = num_steps / runtime  
-        result[f"{split}_steps_per_second"] = round(steps_per_second, 3)  
+        steps_per_second = num_steps / runtime
+        result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
     if num_tokens is not None and num_tokens > 0:
         tokens_per_second = num_tokens / runtime
         result[f"{split}_tokens_per_second"] = round(tokens_per_second, 3)
