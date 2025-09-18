@@ -523,17 +523,6 @@ def create_hf_config_from_nemo(
     elif model_info["is_tdt_model"]:
         # Get vocab_size from state dict if available
         vocab_size = 1024  # default
-#        print("HERE state_dict.keys()", state_dict.keys())
-#        if any("decoder.ctc_head.weight" in key or "decoder_layers.0.weight" in key for key in state_dict.keys()):
-#            # Find the decoder weight to get vocab_size
-#            decoder_keys = [k for k in state_dict.keys() if "decoder_layers.0.weight" in k]
-#            if decoder_keys:
-#                decoder_weight = state_dict[decoder_keys[0]]
-#                if decoder_weight.dim() == 3 and decoder_weight.size(2) == 1:
-#                    vocab_size = decoder_weight.size(0)  # Conv1d output channels
-#                else:
-#                    vocab_size = decoder_weight.size(0)  # Linear output features
-#                logger.info(f"Detected vocab_size: {vocab_size} from decoder weights")
 
         # Create `ParakeetEncoderConfig` sub-config with `parakeet_encoder` model_type
         parakeet_encoder_config_params = config_params.copy()
@@ -680,9 +669,6 @@ def create_hf_model(
 ) -> Union[ParakeetForCTC,ParakeetForTDT]:
     """Create the appropriate HuggingFace model and load weights."""
 
-
-    print("CREATE hf_config", hf_config)
-
     if model_info["is_ctc_model"]:
         # Check if we already have a ParakeetCTCConfig or need to create one
         if isinstance(hf_config, ParakeetConfig):
@@ -770,7 +756,6 @@ def create_hf_model(
     if shape_mismatches > 0:
         logger.warning(f"Found {shape_mismatches} shape mismatches")
 
-    print("CONVERTED MODEL IS", model)
     return model
 
 
@@ -1003,11 +988,8 @@ def verify_conversion_tdt(output_dir: str) -> bool:
         # Load config to determine model type
         config = AutoConfig.from_pretrained(output_dir)
 
-        print("HERE CONFIG IS", config)
-
         # Load model
         model = AutoModelForTDT.from_pretrained(output_dir)
-        print("HERE MODEL IS", model)
         model.eval()
 
         # Create test input

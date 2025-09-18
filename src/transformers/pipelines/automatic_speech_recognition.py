@@ -199,6 +199,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         **kwargs,
     ):
         # set the model type so we can check we have the right pre- and post-processing parameters
+
         if model.config.model_type == "whisper":
             self.type = "seq2seq_whisper"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
@@ -210,15 +211,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         ):
             self.decoder = decoder
             self.type = "ctc_with_lm"
-        elif model.config.model_type == "tdt":
+        elif model.config.model_type == "parakeet":  # TODO(hainan)
             self.type = 'tdt'
         else:
             self.type = "ctc"
-
-        print("HERE model", model)
-
-        assert  False
-        print("HERE model.config.model_type", model.config.model_type)
 
         super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
 
@@ -558,28 +554,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     out["stride"] = stride
 
         elif self.type == 'tdt':
-            print("MODEL IS", self.model)
-            assert False
             inputs = {
                 self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
                 "attention_mask": attention_mask,
             }
             outputs = self.model(**inputs)
-            logits = outputs.logits
 
-            if self.type == "ctc_with_lm":
-                out = {"logits": logits}
-            else:
-                out = {"tokens": logits.argmax(dim=-1)}
-            if stride is not None:
-                # Send stride to `postprocess`.
-                # it needs to be handled there where
-                # the pieces are to be concatenated.
-                ratio = 1 / self.model.config.inputs_to_logits_ratio
-                if isinstance(stride, tuple):
-                    out["stride"] = rescale_stride([stride], ratio)[0]
-                else:
-                    out["stride"] = rescale_stride(stride, ratio)
         else:
             inputs = {
                 self.model.main_input_name: model_inputs.pop(self.model.main_input_name),

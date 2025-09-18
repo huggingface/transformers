@@ -270,8 +270,6 @@ def infer_framework_load_model(
                         classes.append(_class)
             class_tuple = class_tuple + tuple(classes)
 
-        print("HERE class_tuple", class_tuple)
-
         if len(class_tuple) == 0:
             raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
 

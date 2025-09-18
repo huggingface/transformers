@@ -897,9 +897,6 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
             **kwargs,
         )
 
-        print("WEIRD self.ctc_head", self.ctc_head)
-        assert False
-
         hidden_states = encoder_outputs.last_hidden_state
         logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
 
@@ -979,20 +976,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
 class ParakeetForTDT(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__(config)
-        print("TOP CONFIG")
-        print(config)
-
         assert isinstance(config, ParakeetTDTConfig)
-
-
-        print("TWO CONFIGS TYPES")
-        print(type(config.encoder_config))
-        print(type(config.decoder_config))
-
-        print("TWO CONFIGS")
-        print(config.encoder_config)
-        print(config.decoder_config)
-
 
         self.encoder = ParakeetEncoder(config.encoder_config)
         self.decoder = ParakeetTDTDecoder(config.decoder_config)
@@ -1015,6 +999,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             **kwargs,
         )
 
+        print("HERE input_features", input_features.shape)
         hidden_states = encoder_outputs.last_hidden_state
 
 #        print("WEIRD self.ctc_head", self.ctc_head)

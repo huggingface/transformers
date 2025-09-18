@@ -905,17 +905,8 @@ class PretrainedConfig(PushToHubMixin):
             ):
                 # For nested configs we need to clean the diff recursively
 
-                print("COMPUTING DIFF")
-                print("key", key)
-                print("VALUE", value)
-                print("DEFAU", default_config_dict)
-                print("DEFAU", default_config_dict)
-                print("DEFAU", default_config_dict)
-                print("DEFAU", default_config_dict)
                 diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
 
-                print("DIFF default", type(default_config_dict))
-                print("DIFF value", type(value))
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
@@ -1336,10 +1327,6 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     dict_b : the default config dictionary. We want to remove values that are in this one
     """
     diff = {}
-    print("RECURSIVE", config_obj)
-    print("RECURSIVE type", config_obj.__class__())
-    print("RECURSIVE type", config_obj.__class__())
-    print("RECURSIVE type", config_obj.__class__())
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
     for key, value in dict_a.items():
         obj_value = getattr(config_obj, str(key), None)
