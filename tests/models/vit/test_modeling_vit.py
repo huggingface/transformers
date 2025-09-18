@@ -270,51 +270,50 @@ class ViTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        assert 1 == 2
-        # model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
-        #
-        # image_processor = self.default_image_processor
-        # image = prepare_img()
-        # inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
-        #
-        # # forward pass
-        # with torch.no_grad():
-        #     outputs = model(**inputs)
-        #
-        # # verify the logits
-        # expected_shape = torch.Size((1, 1000))
-        # self.assertEqual(outputs.logits.shape, expected_shape)
-        #
-        # expected_slice = torch.tensor([-33.2744, 0.8215, -0.0836]).to(torch_device)
-        #
-        # torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
 
-    # @slow
-    # def test_inference_interpolate_pos_encoding(self):
-    #     # ViT models have an `interpolate_pos_encoding` argument in their forward method,
-    #     # allowing to interpolate the pre-trained position embeddings in order to use
-    #     # the model on higher resolutions. The DINO model by Facebook AI leverages this
-    #     # to visualize self-attention on higher resolution images.
-    #     model = ViTModel.from_pretrained("facebook/dino-vits8").to(torch_device)
-    #
-    #     image_processor = ViTImageProcessor.from_pretrained("facebook/dino-vits8", size=480)
-    #     image = prepare_img()
-    #     inputs = image_processor(images=image, return_tensors="pt")
-    #     pixel_values = inputs.pixel_values.to(torch_device)
-    #
-    #     # forward pass
-    #     with torch.no_grad():
-    #         outputs = model(pixel_values, interpolate_pos_encoding=True)
-    #
-    #     # verify the logits
-    #     expected_shape = torch.Size((1, 3601, 384))
-    #     self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-    #
-    #     expected_slice = torch.tensor(
-    #         [[99.2325, 4.3882, -6.6678], [4.5372, 1.8933, -6.7355], [4.4454, 0.8514, -5.8747]]
-    #     ).to(torch_device)
-    #
-    #     torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor([-33.2744, 0.8215, -0.0836]).to(torch_device)
+
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # ViT models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = ViTModel.from_pretrained("facebook/dino-vits8").to(torch_device)
+
+        image_processor = ViTImageProcessor.from_pretrained("facebook/dino-vits8", size=480)
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 3601, 384))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[99.2325, 4.3882, -6.6678], [4.5372, 1.8933, -6.7355], [4.4454, 0.8514, -5.8747]]
+        ).to(torch_device)
+
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
     @slow
     @require_accelerate
