@@ -450,12 +450,13 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             quantized again.
         bnb_4bit_quant_storage (`torch.dtype` or str, *optional*, defaults to `torch.uint8`):
             This sets the storage type to pack the quanitzed 4-bit params.
-        bnb_4bit_target_parameters (`list[str]`, *optional*):
-            A list of extra parameters that should be quantized in 4-bit. This is useful for models that have
+        target_parameters (`list[str]`, *optional*):
+            A list of extra parameters that should be quantized. This is useful for models that have
             additional parameters that are not Linear layers. Parameters that exactly match or end with the names
             provided here will be quantized in addition to the Linear weights. As an example, for
             [Llama4](https://huggingface.co/collections/meta-llama/llama-4-67f0c30d9fe03840bc9d0164),
-            you can pass: `bnb_4bit_target_parameters=['feed_forward.experts.gate_up_proj', 'feed_forward.experts.down_proj]`
+            you can pass: `target_parameters=['feed_forward.experts.gate_up_proj', 'feed_forward.experts.down_proj]`.
+            This feature is experimental and only supported for 4bit quantization.
         kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -472,7 +473,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
         bnb_4bit_quant_storage=None,
-        bnb_4bit_target_parameters=None,
+        target_parameters=None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES
@@ -488,7 +489,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         self.llm_int8_has_fp16_weight = llm_int8_has_fp16_weight
         self.bnb_4bit_quant_type = bnb_4bit_quant_type
         self.bnb_4bit_use_double_quant = bnb_4bit_use_double_quant
-        self.bnb_4bit_target_parameters = bnb_4bit_target_parameters
+        self.target_parameters = target_parameters
 
         if bnb_4bit_compute_dtype is None:
             self.bnb_4bit_compute_dtype = torch.float32
@@ -581,10 +582,14 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
                 "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
             )
 
-        if self.bnb_4bit_target_parameters is not None and bnb_version < version.parse("0.48.0"):
-            raise ValueError(
-                "bnb_4bit_target_parameters requires bitsandbytes>=0.48.0 - please upgrade your bitsandbytes version"
-            )
+        if self.target_parameters:
+            if not self.load_in_4bit:
+                raise ValueError("target_parameters is only supported for 4bit quantization.")
+
+            if bnb_version < version.parse("0.48.0"):
+                raise ValueError(
+                    "target_parameters requires bitsandbytes>=0.48.0 - please upgrade your bitsandbytes version"
+                )
 
     def is_quantizable(self):
         r"""

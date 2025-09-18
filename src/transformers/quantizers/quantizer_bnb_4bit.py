@@ -151,11 +151,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             # but it would wrongly use uninitialized weight there.
             return True
         elif (
-            self.quantization_config.bnb_4bit_target_parameters is not None
+            self.quantization_config.target_parameters is not None
         ):  # Check if the parameter name is in the list of target parameters for quantization
             return any(
                 target_param
-                for target_param in self.quantization_config.bnb_4bit_target_parameters
+                for target_param in self.quantization_config.target_parameters
                 if param_name.endswith("." + target_param) or param_name == target_param
             )
 
@@ -242,7 +242,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     device=target_device,
                     **param_kwargs,
                 )
-            elif self.quantization_config.bnb_4bit_target_parameters:
+            elif self.quantization_config.target_parameters:
                 # Normal nn.Parameter, i.e. outside of a Linear4bit layer.
                 import bitsandbytes.nn.parametrize
 
@@ -357,7 +357,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         )
         # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
 
-        if self.quantization_config.bnb_4bit_target_parameters:
+        if self.quantization_config.target_parameters:
             # TODO: consider when param is in a module specified by modules_to_not_convert
             matched_params = [
                 param_name
@@ -365,7 +365,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 if any(
                     filter(
                         lambda target_param: param_name.endswith("." + target_param) or param_name == target_param,
-                        self.quantization_config.bnb_4bit_target_parameters,
+                        self.quantization_config.target_parameters,
                     )
                 )
             ]
@@ -419,7 +419,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     def _dequantize(self, model):
         from ..integrations import dequantize_and_replace
 
-        # TODO: support bnb_4bit_target_parameters
+        # TODO: support target_parameters
 
         model = dequantize_and_replace(
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
