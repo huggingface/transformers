@@ -6,12 +6,12 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import enum
 import math
-from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Optional
 
 import numpy as np
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -21,28 +21,55 @@ class NormalizeTypeConfig(str, enum.Enum):
     LAYER_NORM = "layernorm"
 
 
-@dataclass(frozen=True, kw_only=True)
-class TransformerConfig:
-    dim: int = 1024
-    n_heads: int = 8
-    n_layers: int = 16
-    out_channels: int = 1024
-    dropout: float = 0.1
-    pre_norm: bool = True
-    norm_eps: float = 1e-5
-    qk_norm: bool = True
-    fc_bias: bool = False
-    ffn_exp: int = 4
-    ffn_dim_multiplier: int = 1
-    multiple_of: int = 64
-    non_linearity: str = "swiglu"
-    use_rope: bool = True
-    max_positions: int = 10000
+class TransformerConfig(PretrainedConfig):
+    def __init__(
+        self,
+        hidden_size=4096,
+        intermediate_size=22016,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        num_key_value_heads=32,
+        head_dim=128,
+        hidden_act="silu",
+        max_position_embeddings=32768,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        rope_theta=10000.0,
+        rope_scaling=None,
+        attention_bias=False,
+        max_window_layers=28,
+        attention_dropout=0.0,
+        **kwargs,
+    ):
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.max_window_layers = max_window_layers
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.head_dim = head_dim
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_config_validation(self)
+        super().__init__(**kwargs)
 
 
-@dataclass(frozen=True, kw_only=True)
 class TransformerWithInputProjectionConfig(TransformerConfig):
-    in_channels: int = 128
+    def __init__(self, in_channels: int = 128, **kwargs):
+        super().__init__(**kwargs)
+        self.in_channels = in_channels
 
 
 class PerceptionEncoderAVTextEncoderConfig(PretrainedConfig):
@@ -54,11 +81,18 @@ class PerceptionEncoderAVTextEncoderConfig(PretrainedConfig):
         self.sub_config = CONFIG_MAPPING[kwargs.get("model_type", "modernbert")](**kwargs)
 
 
-@dataclass(frozen=True, kw_only=True)
-class VideoEncoderConfig:
-    backbone: str = "PE-Core-L14-336"
-    backbone_checkpoint: Optional[str] = None  # optional path to local checkpoint
-    transformer: TransformerWithInputProjectionConfig = field(default_factory=TransformerWithInputProjectionConfig)
+class VideoEncoderConfig(PretrainedConfig):
+    def __init__(
+        self,
+        backbone: str = "PE-Core-L14-336",
+        backbone_checkpoint: Optional[str] = None,  # optional path to local checkpoint
+        transformer: Optional[TransformerWithInputProjectionConfig] = None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.backbone = backbone
+        self.backbone_checkpoint = backbone_checkpoint
+        self.transformer = transformer or TransformerWithInputProjectionConfig()
 
 
 class DACVAEConfig(PretrainedConfig):
@@ -180,11 +214,6 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         self.output_dim = output_dim
         self.contrastive_head_norm_type = contrastive_head_norm_type
         self.fixed_len_video = fixed_len_video
-
-    def to_dict(self):
-        output = super().to_dict()
-        # convert any sub-configs that weren't converted by `super().to_dict()`
-        return {k: asdict(v) if is_dataclass(v) else v for k, v in output.items()}
 
 
 __all__ = ["PerceptionEncoderAVConfig"]
