@@ -5352,14 +5352,10 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 )
                 branch = "v1.0"
                 create_branch(repo_id=trainer.hub_model_id, branch=branch, token=self._token, exist_ok=True)
-                url = trainer.push_to_hub(revision=branch)
+                trainer.push_to_hub(revision=branch)
 
-            # Extract branch from the url
-            re_search = re.search(r"commit/([^/]+)/", url)
-            self.assertIsNotNone(re_search)
-
-            branch_name = re_search.groups()[0]
-            self.assertEqual(branch_name, branch)
+            commits = list_repo_commits(repo_id=trainer.hub_model_id, revision=branch, token=self._token)
+            self.assertEqual(commits[0].message, "End of training")
 
 
 @require_torch
