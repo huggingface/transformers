@@ -22,6 +22,9 @@ import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
+import torch.nn as nn
+import torch.nn.functional as F
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -33,6 +36,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     is_torch_available,
+    logging,
 )
 from ..auto import AutoModel
 from .configuration_florence2 import Florence2Config, Florence2VisionConfig
@@ -40,8 +44,9 @@ from .configuration_florence2 import Florence2Config, Florence2VisionConfig
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
+
+
+logger = logging.get_logger(__name__)
 
 
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
@@ -793,6 +798,22 @@ class Florence2Model(Florence2PreTrainedModel):
         return self.language_model.get_encoder()
 
 
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
+
+
 @auto_docstring(
     custom_intro="""
     Florence-2 is a vision model for captioning, detection, and segmentation.
@@ -900,6 +921,15 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.text_config.pad_token_id, self.config.text_config.decoder_start_token_id
+                )
 
         outputs = self.model(
             input_ids=input_ids,
