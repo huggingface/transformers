@@ -4065,6 +4065,7 @@ class Trainer:
 
             inputs = self._prepare_inputs(inputs)
             batch_tokens = 0
+            batch_samples =0
             if 'input_ids' in inputs:
                 # Count actual tokens (exclude padding if attention_mask is available)
                 if 'attention_mask' in inputs:
