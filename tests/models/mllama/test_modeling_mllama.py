@@ -505,6 +505,12 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
             model.generate(input_ids, use_cache=True)
 
+    @pytest.mark.generate
+    def test_left_padding_compatibility(self):
+        # For a perfect test, we would need to expand `cross_attention_mask` accordingly, but not worth the
+        # maintenance effort. Our default processor class handles this when we request padding.
+        super().test_left_padding_compatibility(exclude_kwargs=["cross_attention_mask"])
+
 
 @require_torch
 class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):

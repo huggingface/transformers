@@ -440,8 +440,8 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # TODO: document why a random attention mask causes this tests to fail
-        super().test_left_padding_compatibility(can_randomly_mask=False)
+        # TODO: document why a random attention mask causes this test to fail, but a full mask doesn't
+        super().test_left_padding_compatibility(exclude_kwargs=["attention_mask"])
 
     @unittest.skip(
         "Bamba requires additionally specifying position_ids, seq_idx, and FlashAttentionKwargs for padding-free training."
