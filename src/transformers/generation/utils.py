@@ -575,6 +575,9 @@ class GenerationMixin(ContinuousMixin):
         # 2. Generic cache-dependent input preparation
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
+            # TODO (joao): handle the case where cache length == input_ids length. The function below results in an
+            # exception because we get empty input_ids after slicing. In essence, we need to roll back the cache 1
+            # token to recompute the logits for the first token to be generated (but not all caches support roll backs)
             inputs_embeds, input_ids = self._cache_dependant_input_preparation(
                 input_ids, inputs_embeds, cache_position
             )
@@ -1934,6 +1937,10 @@ class GenerationMixin(ContinuousMixin):
                     "Cache object) is unsupported. Please use only one of the two."
                 )
             if isinstance(user_defined_cache, tuple) and self._supports_default_dynamic_cache():
+                logger.warning_once(
+                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                    "You should pass an instance of `Cache` instead."
+                )
                 model_kwargs[cache_name] = (
                     DynamicCache.from_legacy_cache(user_defined_cache)
                     if not requires_cross_attention_cache
@@ -1946,14 +1953,13 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.use_cache is False:
             return
 
-        # Quick escape route 3: model that only supports legacy caches or models that supply it in `prepare_inputs_for_generation` (mamba, zamba, ...)
+        # Quick escape route 3: model that only supports legacy caches or models that supply it in
+        # `prepare_inputs_for_generation` (mamba, zamba, ...)
         if not self._supports_default_dynamic_cache():
             if generation_config.cache_implementation is not None:
-                warnings.warn(
-                    "This model does not support `Cache` instances, it only supports the legacy cache format (tuple "
-                    f"of tuples). `cache_implementation` (set to {generation_config.cache_implementation}) will be "
-                    "ignored.",
-                    UserWarning,
+                logger.warning_once(
+                    "This model does not support `Cache` instances. `cache_implementation` (set to "
+                    f"{generation_config.cache_implementation}) will be ignored.",
                 )
             return
 
@@ -1985,8 +1991,9 @@ class GenerationMixin(ContinuousMixin):
             if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
                 if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
                     logger.warning_once(
-                        f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated. Please only "
-                        f"use one of {STATIC_CACHE_IMPLEMENTATIONS}, and the layer structure will be inferred automatically."
+                        f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated. "
+                        f"Please only use one of {STATIC_CACHE_IMPLEMENTATIONS}, and the layer structure will be "
+                        "inferred automatically."
                     )
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
@@ -2010,8 +2017,8 @@ class GenerationMixin(ContinuousMixin):
 
                 if backend == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
-                        "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
-                        "Please install it via  with `pip install optimum-quanto`"
+                        "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto "
+                        "backend. Please install it via  with `pip install optimum-quanto`"
                     )
                 elif backend == "HQQ" and not is_hqq_available():
                     raise ImportError(
@@ -2026,11 +2033,18 @@ class GenerationMixin(ContinuousMixin):
 
         # Use DynamicCache instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
+        # TODO (joao): remove this `else` when we remove the last traces of the legacy cache format (v4.58.0, search
+        # for `instance(past_key_values, Cache)` as well). In general, if `cache_implementation` is unset, cache
+        # initialization should happen inside the model at prefill time.
         else:
-            model_kwargs[cache_name] = (
-                DynamicCache(**dynamic_cache_kwargs)
-                if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(**dynamic_cache_kwargs), DynamicCache(**dynamic_cache_kwargs))
+            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
+
+        # TODO (joao): this logic is incomplete, e.g. `offloaded` should apply to both caches. Refactor this function
+        # to correctly pass parameterization to both caches.
+        if requires_cross_attention_cache and not isinstance(model_kwargs[cache_name], EncoderDecoderCache):
+            model_kwargs[cache_name] = EncoderDecoderCache(
+                model_kwargs[cache_name],  # self-attention cache
+                DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
             )
 
     def _supports_logits_to_keep(self) -> bool:
@@ -2620,19 +2634,19 @@ class GenerationMixin(ContinuousMixin):
         # replace bos with pad to not condition healing on it
         input_ids = torch.where(input_ids == bos_token_id, pad_token_id, input_ids)
 
-        """
-        the latter code assumes the input_ids is not empty,
-        input_id has to be checked if contains elements
-		"""
+        # the latter code assumes the input_ids is not empty, input_id has to be checked if contains elements
         if input_ids.numel() == 0:
             return input_ids
 
         tail_ids = input_ids[:, -1].tolist()
 
-        space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
         # tail tokens are used for a prefix search, thus, whitespaces are replaced with
         # their tokenization (e.g. 'Ġ') to enable search for tokens prefixed with a whitespace
-        tail_toks = (tokenizer.decode(t).replace(" ", space_tok) for t in tail_ids)
+        if tokenizer.convert_tokens_to_ids(" ") is not None:
+            space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
+            tail_toks = (tokenizer.decode(t).replace(" ", space_tok) for t in tail_ids)
+        else:
+            tail_toks = (tokenizer.decode(t) for t in tail_ids)
 
         for batch_idx, (tail_id, tail_tok) in enumerate(zip(tail_ids, tail_toks)):
             batch_ids = input_ids[batch_idx]
