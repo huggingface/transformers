@@ -154,7 +154,7 @@ def convert_image_to_patches(images: "torch.Tensor", patch_size: int) -> "torch.
     num_patches_height = image_height // patch_size
     num_patches_width = image_width // patch_size
     patched_image = images.reshape(
-        batch_size, num_patches_height, patch_size, num_patches_width, patch_size, num_channels
+        batch_size, num_channels, num_patches_height, patch_size, num_patches_width, patch_size
     )
     patched_image = patched_image.permute(0, 2, 4, 3, 5, 1)
     patched_image = patched_image.reshape(batch_size, num_patches_height * num_patches_width, -1)

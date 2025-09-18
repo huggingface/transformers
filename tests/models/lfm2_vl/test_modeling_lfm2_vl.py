@@ -252,7 +252,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see a pattern that resembles a textured surface."
+        expected_generated_text = "In this image, we see a cat and a dog lying on a pink blanket. They are both sleeping peacefully. They are"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     def test_integration_test_high_resolution(self):
@@ -271,7 +271,9 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see a pattern that resembles a textured surface, similar to the one found in the image 'A'."
+        expected_generated_text = (
+            "In this image, we see the Statue of Liberty, standing tall on its pedestal. The statue is made of metal,"
+        )
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     def test_integration_test_batched(self):
@@ -291,7 +293,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         expected_generated_text = [
-            "In this image, we see a pattern that resembles a textured surface, similar to the one found in the image 'A'.",
-            "In this image, there is a cat on the left side of the image.",
+            "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
+            "In this image, there is a cat on a bed with a cat on a bed with a cat on a bed with a cat on a bed",
         ]
         self.assertListEqual(generated_texts, expected_generated_text)
