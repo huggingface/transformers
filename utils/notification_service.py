@@ -1196,7 +1196,7 @@ if __name__ == "__main__":
             "time_spent": [],
             "failures": {},
             "job_link": {},
-            "captured_info": {}
+            "captured_info": {},
         }
         for matrix_name in job_matrix
         if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
@@ -1234,7 +1234,7 @@ if __name__ == "__main__":
                             step_number = step["number"]
                             break
                     if step_number is not None:
-                        step_link = f'{job["html_url"]}#step:{step_number}:1'
+                        step_link = f"{job['html_url']}#step:{step_number}:1"
                         matrix_job_results[matrix_name]["captured_info"][artifact_gpu] = {
                             "link": step_link,
                             "captured_info": artifact["captured_info"],
