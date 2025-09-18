@@ -360,7 +360,9 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # TODO: this tester has non-standard input mokey-patching ☠️
+        # TODO: this tester has non-standard input monkey-patching in `prepare_config_and_inputs_for_generate`,
+        # and the test fails with the monkey-patched test inputs (bad shapes for the test) ☠️ The base inputs work
+        # fine, though.
         unpadded_custom_inputs = self.model_tester.prepare_config_and_inputs_for_common()[1]
         super().test_left_padding_compatibility(unpadded_custom_inputs=unpadded_custom_inputs)
 
