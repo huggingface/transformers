@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -104,7 +103,7 @@ class CpmAntAttention(nn.Module):
                 Provide positional information to self-attention block.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -191,7 +190,7 @@ class CpmAntSelfAttentionBlock(nn.Module):
                 Provide positional information to self-attention block.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -315,7 +314,7 @@ class CpmAntTransformerBlock(nn.Module):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`tuple[torch.Tensor, torch.Tensor])`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -366,7 +365,7 @@ class CpmAntEncoder(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            past_key_values (`tuple[torch.Tensor, torch.Tensor])`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -590,7 +589,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
@@ -722,7 +721,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[tuple[torch.Tensor, torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

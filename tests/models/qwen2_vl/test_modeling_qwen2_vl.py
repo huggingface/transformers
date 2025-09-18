@@ -235,7 +235,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)  # successfull forward with no modifications
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
             patch_size = config.vision_config.patch_size
@@ -392,10 +392,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
     def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
         pass
 
 

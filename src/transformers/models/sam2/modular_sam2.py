@@ -21,7 +21,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -42,7 +41,6 @@ from ...utils import (
     ModelOutput,
     TensorType,
     auto_docstring,
-    is_torch_available,
     logging,
 )
 from ...utils.generic import TransformersKwargs, check_model_inputs
@@ -67,11 +65,6 @@ from .configuration_sam2 import (
     Sam2PromptEncoderConfig,
     Sam2VisionConfig,
 )
-
-
-if is_torch_available():
-    import torch
-    from torch.nn import functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -882,13 +875,14 @@ class Sam2PromptEncoder(SamPromptEncoder):
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
-        boxes = boxes + 0.5  # Shift to center of pixel
-        batch_size, nb_boxes = boxes.shape[:2]
-        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
-        input_shape = (self.input_image_size, self.input_image_size)
-        corner_embedding = self.shared_embedding(coords, input_shape)
+        boxes += 0.5  # Shift to center of pixel
+        coords = boxes.view(*boxes.shape[:2], 2, 2)
+        # add padding point for consistency with the original implementation
+        coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
+        corner_embedding = self.shared_embedding(coords, (self.input_image_size, self.input_image_size))
         corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
         corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
+        corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.expand_as(corner_embedding[:, :, 2, :])
         return corner_embedding
 
 

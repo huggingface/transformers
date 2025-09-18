@@ -29,8 +29,8 @@
   - sections:
     - local: fast_tokenizers
       title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
-    - local: in_translation
-      title: (번역중) Image processors
+    - local: image_processors
+      title: 이미지 프로세서
     - local: in_translation
       title: (번역중) Video processors
     - local: in_translation
@@ -607,6 +607,8 @@
         title: LED
       - local: in_translation
         title: LFM2
+      - local: in_translation
+        title: LFM2-VL
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
@@ -1037,7 +1039,7 @@
         title: Chinese-CLIP
       - local: model_doc/clip
         title: CLIP
-      - local: in_translation
+      - local: model_doc/clipseg
         title: CLIPSeg
       - local: in_translation
         title: CLVP
@@ -1161,8 +1163,8 @@
         title: SigLIP2
       - local: in_translation
         title: SmolLM3
-      - local: in_translation
-        title: SmolVLM
+      - local: model_doc/smolvlm
+        title: 소형 비전 언어 모델
       - local: in_translation
         title: Speech Encoder Decoder Models
       - local: in_translation

@@ -199,6 +199,8 @@
     title: HIGGS
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/mxfp4
+    title: MXFP4
   - local: quantization/optimum
     title: Optimum
   - local: quantization/quanto
@@ -483,6 +485,8 @@
         title: FLAN-UL2
       - local: model_doc/flaubert
         title: FlauBERT
+      - local: model_doc/flex_olmo
+        title: FlexOlmo
       - local: model_doc/fnet
         title: FNet
       - local: model_doc/fsmt
@@ -551,12 +555,16 @@
         title: LED
       - local: model_doc/lfm2
         title: LFM2
+      - local: model_doc/lfm2_vl
+        title: LFM2-VL
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
         title: Llama2
       - local: model_doc/llama3
         title: Llama3
+      - local: model_doc/longcat_flash
+        title: LongCatFlash
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -585,6 +593,8 @@
         title: MegatronGPT2
       - local: model_doc/minimax
         title: MiniMax
+      - local: model_doc/ministral
+        title: Ministral
       - local: model_doc/mistral
         title: Mistral
       - local: model_doc/mixtral
@@ -623,6 +633,8 @@
         title: OLMo
       - local: model_doc/olmo2
         title: OLMo2
+      - local: model_doc/olmo3
+        title: Olmo3
       - local: model_doc/olmoe
         title: OLMoE
       - local: model_doc/open-llama
@@ -657,6 +669,8 @@
         title: Qwen3
       - local: model_doc/qwen3_moe
         title: Qwen3MoE
+      - local: model_doc/qwen3_next
+        title: Qwen3Next
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -705,6 +719,8 @@
         title: UL2
       - local: model_doc/umt5
         title: UMT5
+      - local: model_doc/vaultgemma
+        title: VaultGemma
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm
@@ -1121,6 +1137,10 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
         title: Qwen2VL
+      - local: model_doc/qwen3_vl
+        title: Qwen3VL
+      - local: model_doc/qwen3_vl_moe
+        title: Qwen3VLMoe
       - local: model_doc/sam2
         title: SAM2
       - local: model_doc/sam2_video

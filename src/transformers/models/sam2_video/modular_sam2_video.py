@@ -24,7 +24,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import Tensor
 from tqdm import tqdm
 
@@ -37,7 +36,6 @@ from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import (
     ModelOutput,
     auto_docstring,
-    is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     logging,
@@ -61,12 +59,9 @@ from ..sam2.modeling_sam2 import (
 from ..sam2.processing_sam2 import Sam2Processor
 
 
-if is_torch_available():
-    import torch
-
 if is_torchvision_available() and is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 
@@ -836,8 +831,7 @@ class Sam2VideoProcessor(Sam2Processor):
                     "(please use clear_old_points=True instead)"
                 )
             box_coords = input_boxes.reshape(1, -1, 2, 2)
-            box_labels = torch.tensor([2, 3], dtype=torch.int32)
-            box_labels = box_labels.reshape(1, -1, 2)
+            box_labels = torch.tensor([2, 3], dtype=torch.int32).repeat(1, box_coords.shape[1], 1)
             input_points = torch.cat([box_coords, input_points], dim=2)
             input_labels = torch.cat([box_labels, input_labels], dim=2)
 
