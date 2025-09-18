@@ -3522,8 +3522,8 @@ class GenerationMixin(ContinuousMixin):
 
         if assistant_temperature is None and temp_processor is not None and temp_processor.temperature < 1.5:
             logger.warning_once(
-                f"The assistant's sampling temperature comes from main generation loop set to {temp_processor.temperature},"
-                "but speculative decoding benefits from slightly hotter candidate generation, (see #40976)so we are setting it"
+                f"The assistant's sampling temperature comes from main generation loop set to {temp_processor.temperature}, "
+                "but speculative decoding benefits from slightly hotter candidate generation, (see #40976) so we are setting it "
                 "to 1.5. This should improve decoding speed in most cases. Use `assistant_temperature` to override this value."
             )
             assistant_temperature = 1.5
