@@ -154,24 +154,16 @@ class XLMRobertaXLAttention(BertAttention):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         intermediate = self.self_attn_layer_norm(hidden_states)
-        if self.is_cross_attention:
-            attention_output, attn_weights = self.self(
-                intermediate,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_value,
-                **kwargs,
-            )
-        else:
-            attention_output, attn_weights = self.self(
-                intermediate,
-                attention_mask,
-                head_mask,
-                past_key_value,
-                cache_position,
-                **kwargs,
-            )
+        attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
+        attention_output, attn_weights = self.self(
+            intermediate,
+            encoder_hidden_states=encoder_hidden_states,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            past_key_value=past_key_value,
+            cache_position=cache_position,
+            **kwargs,
+        )
         attention_output = self.output(attention_output, hidden_states)
         return attention_output, attn_weights
 

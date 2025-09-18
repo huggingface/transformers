@@ -265,17 +265,13 @@ class XLMRobertaXLSelfAttention(nn.Module):
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = tgt_len
-
-        q_input_shape = (bsz, tgt_len, -1, self.attention_head_size)
-        kv_input_shape = (bsz, src_len, -1, self.attention_head_size)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
         # get all proj
-        query_layer = self.query(hidden_states).view(*q_input_shape).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(*kv_input_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*kv_input_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(*hidden_shape).transpose(1, 2)
+        key_layer = self.key(hidden_states).view(*hidden_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(*hidden_shape).transpose(1, 2)
 
         if past_key_value is not None:
             # decoder-only xlm_roberta_xl can have a simple dynamic cache for example
@@ -313,7 +309,7 @@ class XLMRobertaXLSelfAttention(nn.Module):
             use_cache=past_key_value is not None,
             **kwargs,
         )
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return attn_output, attn_weights
 
 
@@ -350,9 +346,9 @@ class XLMRobertaXLCrossAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[EncoderDecoderCache] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -397,7 +393,7 @@ class XLMRobertaXLCrossAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            encoder_attention_mask,
+            attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
             head_mask=head_mask,
@@ -467,24 +463,16 @@ class XLMRobertaXLAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         intermediate = self.self_attn_layer_norm(hidden_states)
-        if self.is_cross_attention:
-            attention_output, attn_weights = self.self(
-                intermediate,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_value,
-                **kwargs,
-            )
-        else:
-            attention_output, attn_weights = self.self(
-                intermediate,
-                attention_mask,
-                head_mask,
-                past_key_value,
-                cache_position,
-                **kwargs,
-            )
+        attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
+        attention_output, attn_weights = self.self(
+            intermediate,
+            encoder_hidden_states=encoder_hidden_states,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            past_key_value=past_key_value,
+            cache_position=cache_position,
+            **kwargs,
+        )
         attention_output = self.output(attention_output, hidden_states)
         return attention_output, attn_weights
 
@@ -749,13 +737,6 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         else:
             use_cache = False
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
         return_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):
             logger.warning_once(
@@ -766,19 +747,17 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
             return_legacy_cache = True
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if input_ids is not None:
+            device = input_ids.device
+            input_shape = input_ids.shape
         else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+            device = inputs_embeds.device
+            input_shape = inputs_embeds.shape[:-1]
 
-        batch_size, seq_length = input_shape
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
+        seq_length = input_shape[1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
             cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
@@ -791,6 +770,57 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
+        attention_mask, encoder_attention_mask = self._create_attention_masks(
+            input_shape=input_shape,
+            attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
+            embedding_output=embedding_output,
+            encoder_hidden_states=encoder_hidden_states,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+        )
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            **kwargs,
+        )
+        sequence_output = encoder_outputs.last_hidden_state
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+
+        if return_legacy_cache:
+            encoder_outputs.past_key_values = encoder_outputs.past_key_values.to_legacy_cache()
+
+        return BaseModelOutputWithPoolingAndCrossAttentions(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            past_key_values=encoder_outputs.past_key_values,
+        )
+
+    def _create_attention_masks(
+        self,
+        input_shape,
+        attention_mask,
+        encoder_attention_mask,
+        embedding_output,
+        encoder_hidden_states,
+        cache_position,
+        past_key_values,
+    ):
         if attention_mask is not None and attention_mask.dim() == 2:
             if self.config.is_decoder:
                 attention_mask = create_causal_mask(
@@ -829,36 +859,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
                     )
                 encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_ids=position_ids,
-            **kwargs,
-        )
-        sequence_output = encoder_outputs.last_hidden_state
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if return_legacy_cache:
-            encoder_outputs.past_key_values = encoder_outputs.past_key_values.to_legacy_cache()
-
-        return BaseModelOutputWithPoolingAndCrossAttentions(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
-        )
+        return attention_mask, encoder_attention_mask
 
     def _update_full_mask(
         self,

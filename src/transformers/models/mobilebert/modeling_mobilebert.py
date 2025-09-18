@@ -282,17 +282,13 @@ class MobileBertSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        # determine input shapes
-        bsz, tgt_len = query_tensor.shape[:-1]
-        src_len = tgt_len
-
-        q_input_shape = (bsz, tgt_len, -1, self.attention_head_size)
-        kv_input_shape = (bsz, src_len, -1, self.attention_head_size)
+        input_shape = query_tensor.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
         # get all proj
-        query_layer = self.query(query_tensor).view(*q_input_shape).transpose(1, 2)
-        key_layer = self.key(key_tensor).view(*kv_input_shape).transpose(1, 2)
-        value_layer = self.value(value_tensor).view(*kv_input_shape).transpose(1, 2)
+        query_layer = self.query(query_tensor).view(*hidden_shape).transpose(1, 2)
+        key_layer = self.key(key_tensor).view(*hidden_shape).transpose(1, 2)
+        value_layer = self.value(value_tensor).view(*hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -309,7 +305,7 @@ class MobileBertSelfAttention(nn.Module):
             head_mask=head_mask,
             **kwargs,
         )
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return attn_output, attn_weights
 
 
@@ -760,12 +756,8 @@ class MobileBertModel(MobileBertPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPooling]:
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-        elif inputs_embeds is None:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
