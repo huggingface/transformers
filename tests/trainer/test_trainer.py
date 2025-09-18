@@ -5352,10 +5352,10 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 )
                 branch = "v1.0"
                 create_branch(repo_id=trainer.hub_model_id, branch=branch, token=self._token, exist_ok=True)
-                trainer.push_to_hub(revision=branch)
+                push_commit = trainer.push_to_hub(revision=branch)
 
             commits = list_repo_commits(repo_id=trainer.hub_model_id, revision=branch, token=self._token)
-            self.assertEqual(commits[0].message, "End of training")
+            self.assertEqual(commits[0].commit_id, push_commit.oid)
 
 
 @require_torch
