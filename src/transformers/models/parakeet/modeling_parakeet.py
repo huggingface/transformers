@@ -979,6 +979,21 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
 class ParakeetForTDT(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__(config)
+        print("TOP CONFIG")
+        print(config)
+
+        assert isinstance(config, ParakeetTDTConfig)
+
+
+        print("TWO CONFIGS TYPES")
+        print(type(config.encoder_config))
+        print(type(config.decoder_config))
+
+        print("TWO CONFIGS")
+        print(config.encoder_config)
+        print(config.decoder_config)
+
+
         self.encoder = ParakeetEncoder(config.encoder_config)
         self.decoder = ParakeetTDTDecoder(config.decoder_config)
         self.joint = ParakeetTDTJoint(config.joint_config)
@@ -1002,9 +1017,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         hidden_states = encoder_outputs.last_hidden_state
 
-        print("WEIRD self.ctc_head", self.ctc_head)
-        exit(-1)
-        logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
+#        print("WEIRD self.ctc_head", self.ctc_head)
+#        exit(-1)
+#        logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         loss = None
         if labels is not None:
@@ -1034,12 +1049,13 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
 
-        return CausalLMOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return None
+#        return CausalLMOutput(
+#            loss=loss,
+#            logits=logits,
+#            hidden_states=encoder_outputs.hidden_states,
+#            attentions=encoder_outputs.attentions,
+#        )
 
     def generate(
         self,

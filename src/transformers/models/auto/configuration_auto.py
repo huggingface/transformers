@@ -290,7 +290,9 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
         ("paligemma", "PaliGemmaConfig"),
-        ("parakeet", "ParakeetConfig"),
+        ("parakeet", "ParakeetTDTConfig"),
+#        ("parakeet_tdt", "ParakeetTDTConfig"),
+#        ("parakeet", "ParakeetConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -727,6 +729,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("owlvit", "OWL-ViT"),
         ("paligemma", "PaliGemma"),
         ("parakeet", "ParakeetForCTC"),
+#        ("parakeet", "ParakeetForTDT"),
         ("parakeet_tdt", "ParakeetForTDT"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
@@ -1289,6 +1292,8 @@ class AutoConfig:
         code_revision = kwargs.pop("code_revision", None)
 
         config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        print("GETTING DICT", config_dict)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
         if has_remote_code:
@@ -1301,6 +1306,7 @@ class AutoConfig:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
+        print("GETTING DICT REMOTE CODE", config_dict)
         if has_remote_code and trust_remote_code:
             config_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
@@ -1308,19 +1314,23 @@ class AutoConfig:
             config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
-            try:
-                config_class = CONFIG_MAPPING[config_dict["model_type"]]
-            except KeyError:
-                raise ValueError(
-                    f"The checkpoint you are trying to load has model type `{config_dict['model_type']}` "
-                    "but Transformers does not recognize this architecture. This could be because of an "
-                    "issue with the checkpoint, or because your version of Transformers is out of date.\n\n"
-                    "You can update Transformers with the command `pip install --upgrade transformers`. If this "
-                    "does not work, and the checkpoint is very new, then there may not be a release version "
-                    "that supports this model yet. In this case, you can get the most up-to-date code by installing "
-                    "Transformers from source with the command "
-                    "`pip install git+https://github.com/huggingface/transformers.git`"
-                )
+            print("BEFOR MAPPING", config_dict)
+#            try:
+            config_class = CONFIG_MAPPING[config_dict["model_type"]]
+            print("MAPPING", config_class, config_dict["model_type"])
+            print("AFTER MAPPING", config_dict)
+            print("MAPPING DONE")
+#            except KeyError:
+#                raise ValueError(
+#                    f"The checkpoint you are trying to load has model type `{config_dict['model_type']}` "
+#                    "but Transformers does not recognize this architecture. This could be because of an "
+#                    "issue with the checkpoint, or because your version of Transformers is out of date.\n\n"
+#                    "You can update Transformers with the command `pip install --upgrade transformers`. If this "
+#                    "does not work, and the checkpoint is very new, then there may not be a release version "
+#                    "that supports this model yet. In this case, you can get the most up-to-date code by installing "
+#                    "Transformers from source with the command "
+#                    "`pip install git+https://github.com/huggingface/transformers.git`"
+#                )
             return config_class.from_dict(config_dict, **unused_kwargs)
         else:
             # Fallback: use pattern matching on the string.

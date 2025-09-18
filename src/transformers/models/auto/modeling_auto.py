@@ -1571,8 +1571,8 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("data2vec-audio", "Data2VecAudioForCTC"),
         ("hubert", "HubertForCTC"),
         ("mctct", "MCTCTForCTC"),
-        ("parakeet", "ParakeetForCTC"),
-        ("parakeet_tdt", "ParakeetForTDT"),
+#        ("parakeet", "ParakeetForCTC"),
+        ("parakeet", "ParakeetForTDT"), # TODO
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
         ("unispeech", "UniSpeechForCTC"),

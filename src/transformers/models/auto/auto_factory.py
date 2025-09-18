@@ -554,6 +554,8 @@ class _BaseAutoModelClass:
                 **hub_kwargs,
                 **kwargs,
             )
+            print("AutoConfig", AutoConfig)
+            print("CONFIG ASSIGNED AS", config)
 
             # if torch_dtype=auto was passed here, ensure to pass it on
             if kwargs_orig.get("torch_dtype", None) == "auto":
@@ -582,6 +584,9 @@ class _BaseAutoModelClass:
         # Set the adapter kwargs
         kwargs["adapter_kwargs"] = adapter_kwargs
 
+        print("BEFORE CONFIG", config)
+        print(type(config.encoder_config))
+        print(type(config.decoder_config))
         if has_remote_code and trust_remote_code:
             model_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
@@ -600,7 +605,9 @@ class _BaseAutoModelClass:
         elif type(config) in cls._model_mapping:
             model_class = _get_model_class(config, cls._model_mapping)
             if model_class.config_class == config.sub_configs.get("text_config", None):
+
                 config = config.get_text_config()
+            print("AFTER CONFIG", config)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )

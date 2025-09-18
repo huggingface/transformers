@@ -216,7 +216,6 @@ class ParakeetConfig(PretrainedConfig):
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
         encoder_config: Union[dict, ParakeetEncoderConfig] = None,
-        decoder_config: Union[dict, ParakeetTDTDecoderConfig] = None,
         **kwargs,
     ):
         super().__init__(
@@ -225,6 +224,7 @@ class ParakeetConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             **kwargs,
         )
+
         if encoder_config is None:
             encoder_config = {}
             logger.info("`encoder_config` is `None`. Initializing the `ParakeetEncoderConfig` with default values.")
@@ -264,8 +264,9 @@ class ParakeetConfig(PretrainedConfig):
 class ParakeetTDTConfig(PretrainedConfig):
 
     model_type = "parakeet"
+#    model_type = "parakeet_tdt"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder_config": ParakeetEncoderConfig}
+    sub_configs = {"encoder_config": ParakeetEncoderConfig, "decoder_config": ParakeetTDTDecoderConfig, "joint_config": ParakeetTDTJointConfig}
 
     def __init__(
         self,
@@ -301,8 +302,36 @@ class ParakeetTDTConfig(PretrainedConfig):
                 f"`encoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
             )
 
-        self.decoder_config = decoder_config
-        self.joint_config = joint_config
+        if decoder_config is None:
+            decoder_config = {}
+            logger.info("`encoder_config` is `None`. Initializing the `ParakeetEncoderConfig` with default values.")
+
+        if decoder_config is None:
+            decoder_config = ParakeetTDTDecoderConfig()
+        elif isinstance(decoder_config, dict):
+            self.decoder_config = ParakeetTDTDecoderConfig(**encoder_config)
+        elif isinstance(decoder_config, ParakeetTDTDecoderConfig):
+            self.decoder_config = decoder_config
+        else:
+            raise ValueError(
+                f"`decoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
+            )
+
+        if joint_config is None:
+            joint_config = {}
+            logger.info("`encoder_config` is `None`. Initializing the `ParakeetEncoderConfig` with default values.")
+
+        if joint_config is None:
+            joint_config = ParakeetTDTJointConfig()
+        elif isinstance(joint_config, dict):
+            self.joint_config = ParakeetTDTJointConfig(**joint_config)
+        elif isinstance(joint_config, ParakeetTDTJointConfig):
+            self.joint_config = joint_config
+        else:
+            raise ValueError(
+                f"`decoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
+            )
+
 
         self.vocab_size = vocab_size
 

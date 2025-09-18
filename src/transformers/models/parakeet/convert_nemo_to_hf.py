@@ -55,6 +55,7 @@ import torch
 import yaml
 
 from transformers.models.parakeet.configuration_parakeet import ParakeetConfig, ParakeetEncoderConfig, ParakeetTDTDecoderConfig, ParakeetTDTConfig, ParakeetTDTJointConfig
+#from transformers.models.parakeet.configuration_parakeet import ParakeetEncoderConfig, ParakeetTDTDecoderConfig, ParakeetTDTConfig, ParakeetTDTJointConfig
 from transformers.models.parakeet.feature_extraction_parakeet import ParakeetFeatureExtractor
 from transformers.models.parakeet.modeling_parakeet import ParakeetForCTC, ParakeetForTDT
 from transformers.models.parakeet.processing_parakeet import ParakeetProcessor
@@ -310,7 +311,7 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
         if "ctc" in model_name:
             model_info["model_type"] = "parakeet_ctc"
         if "tdt" in model_name:
-            model_info["model_type"] = "parakeet_tdt"
+            model_info["model_type"] = "parakeet"
     elif "canary" in model_name:
         model_info["model_type"] = "canary"
     elif "conformer" in model_name:
@@ -377,7 +378,7 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
 
 def create_hf_config_from_nemo(
     model_info: dict[str, Any], state_dict: dict[str, torch.Tensor], vocab_dict: Optional[dict[str, int]] = None
-) -> Union[ParakeetConfig]:
+) -> Union[ParakeetTDTConfig]:  # used to be ParakeetConfig TODO(hainan)
     """Create HuggingFace ParakeetConfig from NeMo config and weights."""
 
     encoder_cfg = model_info.get("encoder_cfg", {})
@@ -707,13 +708,13 @@ def create_hf_model(
     elif model_info["is_tdt_model"]:
         # Check if we already have a ParakeetTDTConfig or need to create one
         if isinstance(hf_config, ParakeetTDTConfig):
-            logger.info("Creating ParakeetForTDT model with existing ParakeetConfig...")
+            logger.info("Creating ParakeetForTDT model with existing ParakeetTDTConfig...")
             model = ParakeetForTDT(hf_config)
         else:
             # Fallback: create ParakeetConfig if we somehow still have FastConformerConfig
             vocab_size = 1024  # default
 
-            logger.info("Creating ParakeetForCTC model with new ParakeetConfig...")
+            logger.info("Creating ParakeetForTDT model with new ParakeetTDTConfig...")
             tdt_config = ParakeetTDTConfig(
                 vocab_size=vocab_size,
                 blank_token_id=vocab_size,
@@ -874,6 +875,10 @@ def convert_nemo_to_hf(input_path: str, output_dir: str, push_to_hub: str | None
             # Use the blank token ID from the model configuration
             blank_token_id = hf_config.blank_token_id
             logger.info(f"Using blank_token_id from model config: {blank_token_id}")
+        elif model_info["is_tdt_model"] and isinstance(hf_config, ParakeetTDTConfig):
+            # Use the blank token ID from the model configuration
+            blank_token_id = hf_config.blank_token_id
+            logger.info(f"HAINAN HERE Using blank_token_id from model config: {blank_token_id}")
 
         tokenizer = ParakeetCTCTokenizer(
             vocab_file=str(vocab_file_path),
@@ -949,7 +954,7 @@ def verify_conversion(output_dir: str) -> bool:
     """Verify that the conversion was successful by loading the model."""
     logger.info("Verifying conversion...")
 
-    try:
+    if True:
         from transformers import AutoConfig, AutoModelForCTC
 
         assert False
@@ -984,15 +989,15 @@ def verify_conversion(output_dir: str) -> bool:
         logger.info("✅ Verification PASSED")
         return True
 
-    except Exception as e:
-        logger.error(f"❌ Verification FAILED: {e}")
-        return False
+#    except Exception as e:
+#        logger.error(f"❌ Verification FAILED: {e}")
+#        return False
 
 def verify_conversion_tdt(output_dir: str) -> bool:
     """Verify that the conversion was successful by loading the model."""
     logger.info("Verifying conversion...")
 
-    try:
+    if True:
         from transformers import AutoConfig, AutoModelForTDT
 
         # Load config to determine model type
@@ -1019,17 +1024,17 @@ def verify_conversion_tdt(output_dir: str) -> bool:
         with torch.no_grad():
             outputs = model(test_input, input_lengths=lengths)
 
-        # Check output
-        if hasattr(outputs, "logits"):
-            logger.info(f"Model output shape: {outputs.logits.shape}")
-        else:
-            logger.info(f"Model output shape: {outputs.last_hidden_state.shape}")
+#        # Check output
+#        if hasattr(outputs, "logits"):
+#            logger.info(f"Model output shape: {outputs.logits.shape}")
+#        else:
+#            logger.info(f"Model output shape: {outputs.last_hidden_state.shape}")
 
         logger.info("✅ Verification PASSED")
         return True
-    except Exception as e:
-        logger.error(f"❌ Verification FAILED: {e}")
-        return False
+#    except Exception as e:
+#        logger.error(f"❌ Verification FAILED: {e}")
+#        return False
 
 
 def main():
