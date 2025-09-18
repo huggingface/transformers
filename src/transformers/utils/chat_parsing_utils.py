@@ -37,9 +37,9 @@ def recursive_parse(
     node_schema: dict,
 ):
     """
-    This function takes content and a JSON schema node which includes
-    regex extractors, and recursively parses the content according to the schema. It uses recursion to handle
-    nested schemas.
+    This function takes content and a JSON schema which includes
+    regex extractors, and recursively parses the content. The output
+    should be a data structure matching the schema.
 
     Args:
         node_content: The content corresponding to this node. Usually a string, but can be something else
