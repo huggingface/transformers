@@ -20,6 +20,8 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
+from huggingface_hub import snapshot_download, upload_folder
+
 import transformers
 from transformers import (
     CONFIG_MAPPING,
@@ -451,53 +453,53 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 self.assertEqual(v, getattr(new_processor.feature_extractor, k))
             self.assertDictEqual(new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab())
 
-    # def test_push_to_hub_dynamic_processor(self):
-    #     with TemporaryHubRepo(token=self._token) as tmp_repo:
-    #         CustomFeatureExtractor.register_for_auto_class()
-    #         CustomTokenizer.register_for_auto_class()
-    #         CustomProcessor.register_for_auto_class()
+    def test_push_to_hub_dynamic_processor(self):
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            CustomFeatureExtractor.register_for_auto_class()
+            CustomTokenizer.register_for_auto_class()
+            CustomProcessor.register_for_auto_class()
 
-    #         feature_extractor = CustomFeatureExtractor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
+            feature_extractor = CustomFeatureExtractor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
 
-    #         with tempfile.TemporaryDirectory() as tmp_dir:
-    #             vocab_file = os.path.join(tmp_dir, "vocab.txt")
-    #             with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
-    #                 vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
-    #             tokenizer = CustomTokenizer(vocab_file)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                vocab_file = os.path.join(tmp_dir, "vocab.txt")
+                with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                    vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+                tokenizer = CustomTokenizer(vocab_file)
 
-    #         processor = CustomProcessor(feature_extractor, tokenizer)
+            processor = CustomProcessor(feature_extractor, tokenizer)
 
-    #         with tempfile.TemporaryDirectory() as tmp_dir:
-    #             repo = Repository(tmp_dir, clone_from=tmp_repo, token=self._token)
-    #             processor.save_pretrained(tmp_dir)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                snapshot_download(tmp_repo.repo_id, token=self._token)
+                processor.save_pretrained(tmp_dir)
 
-    #             # This has added the proper auto_map field to the feature extractor config
-    #             self.assertDictEqual(
-    #                 processor.feature_extractor.auto_map,
-    #                 {
-    #                     "AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor",
-    #                     "AutoProcessor": "custom_processing.CustomProcessor",
-    #                 },
-    #             )
+                # This has added the proper auto_map field to the feature extractor config
+                self.assertDictEqual(
+                    processor.feature_extractor.auto_map,
+                    {
+                        "AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor",
+                        "AutoProcessor": "custom_processing.CustomProcessor",
+                    },
+                )
 
-    #             # This has added the proper auto_map field to the tokenizer config
-    #             with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
-    #                 tokenizer_config = json.load(f)
-    #             self.assertDictEqual(
-    #                 tokenizer_config["auto_map"],
-    #                 {
-    #                     "AutoTokenizer": ["custom_tokenization.CustomTokenizer", None],
-    #                     "AutoProcessor": "custom_processing.CustomProcessor",
-    #                 },
-    #             )
+                # This has added the proper auto_map field to the tokenizer config
+                with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
+                    tokenizer_config = json.load(f)
+                self.assertDictEqual(
+                    tokenizer_config["auto_map"],
+                    {
+                        "AutoTokenizer": ["custom_tokenization.CustomTokenizer", None],
+                        "AutoProcessor": "custom_processing.CustomProcessor",
+                    },
+                )
 
-    #             # The code has been copied from fixtures
-    #             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
-    #             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_tokenization.py")))
-    #             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_processing.py")))
+                # The code has been copied from fixtures
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_tokenization.py")))
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_processing.py")))
 
-    #             repo.push_to_hub()
+                upload_folder(repo_id=tmp_repo.repo_id, folder_path=tmp_dir, token=self._token)
 
-    #             new_processor = AutoProcessor.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
-    #             # Can't make an isinstance check because the new_processor is from the CustomProcessor class of a dynamic module
-    #             self.assertEqual(new_processor.__class__.__name__, "CustomProcessor")
+                new_processor = AutoProcessor.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
+                # Can't make an isinstance check because the new_processor is from the CustomProcessor class of a dynamic module
+                self.assertEqual(new_processor.__class__.__name__, "CustomProcessor")
