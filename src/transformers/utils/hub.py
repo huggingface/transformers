@@ -680,7 +680,6 @@ def has_file(
             hf_hub_url(path_or_repo, filename=filename, revision=revision, repo_type=repo_type),
             headers=build_hf_headers(token=token, user_agent=http_user_agent()),
             follow_redirects=False,
-            proxies=proxies,
             timeout=10,
         )
     except httpx.ProxyError:
