@@ -24,7 +24,6 @@ from transformers import T5GemmaConfig, T5GemmaModuleConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     torch_device,
 )
 
