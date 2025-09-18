@@ -252,7 +252,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see a large area of space, with no specific details or features."
+        expected_generated_text = "In this image, we see a pattern that resembles a textured surface."
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     def test_integration_test_high_resolution(self):
@@ -271,12 +271,12 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see a pattern that is not commonly found in everyday life. The pattern is made up of small, square"
+        expected_generated_text = "In this image, we see a pattern that resembles a textured surface, similar to the one found in the image 'A'."
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     def test_integration_test_batched(self):
         model = Lfm2VlForConditionalGeneration.from_pretrained(
-            "LiquidAI/LFM2-VL-1.6B",
+            "LiquidAI/LFM2-VL-450M",
             dtype=torch.bfloat16,
             device_map="auto",
         )
@@ -291,7 +291,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         expected_generated_text = [
-            "In this image, we see a fabric with a pattern that resembles a series of parallel lines. The lines are not uniformly spaced,",
-            "In this image, there is a cat on a blue and white background.",
+            "In this image, we see a pattern that resembles a textured surface, similar to the one found in the image 'A'.",
+            "In this image, there is a cat on the left side of the image.",
         ]
         self.assertListEqual(generated_texts, expected_generated_text)
