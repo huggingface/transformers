@@ -767,8 +767,15 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
+            old_models = [  # models that we won't commit resources fixing because they are old and have little usage
+                # reformer: has a different cache format
+                "reformer",
+                # imagegpt: the output lm head uses `vocab_size - 1` tokens, so the `NoBadWordsLogitsProcessor` used
+                # by prompt lookup may fail
+                "imagegpt",
+            ]
+            if any(model_name in model_class.__name__.lower() for model_name in old_models):
+                self.skipTest(reason="Won't fix: old model")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
@@ -927,32 +934,44 @@ class GenerationTesterMixin:
         self.assertTrue(output_prompt_lookup.shape[-1] == 10)
 
     @pytest.mark.generate
-    def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+    def test_left_padding_compatibility(self, exclude_kwargs=None):
+        """
+        Tests that adding left-padding yields the same logits as the original input.
+
+        NOTE: left-padding results in small numerical differences. This is expected.
+        See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+
+        Args:
+            exclude_kwargs (`list`, *optional*):
+                List of model kwargs that are usually part of the test inputs, but that we exclude from this test.
+                This is done to prevent complex overwrites when a certain input needs model-specific handling with
+                padding, and this handling is covered by our defaults or processor classes. Test overwrites using
+                this argument should document why they need to be excluded.
+        """
 
         # First, filter out models that don't support left padding
-        # - The model must have generative capabilities
+        # 1. The model must have generative capabilities
         if len(self.all_generative_model_classes) == 0:
             self.skipTest(reason="No generative architecture available for this model.")
 
-        # - The model must support padding
+        # 2. The model must support padding
         if not self.has_attentions:
             self.skipTest(reason="This model doesn't support padding.")
 
-        # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
+        # 3. The model must be a decoder-only architecture. Encoder-based architectures may use right-padding in their
+        # main inputs. Encoder-decoder may take left-padding of their decoder inputs [TODO: test this?].
         decoder_only_classes = []
         for model_class in self.all_generative_model_classes:
             config, _ = self.prepare_config_and_inputs_for_generate()
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 continue
             else:
                 decoder_only_classes.append(model_class)
         if len(decoder_only_classes) == 0:
             self.skipTest(reason="No decoder-only architecture available for this model.")
 
-        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
-        #   added support for it yet. We skip these models for now.
+        # 4. Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
+        # added support for it yet. We skip these models for now.
         has_encoder_attributes = any(
             attr_name
             for attr_name in config.to_dict()
@@ -963,37 +982,46 @@ class GenerationTesterMixin:
                 reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
             )
 
-        # Then, test left-padding
-        def _prepare_model_kwargs(input_ids, attention_mask, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        # Now we can start testing
+        exclude_kwargs = exclude_kwargs or []
+
+        def _prepare_model_kwargs(model_inputs, signature):
+            model_kwargs = {"input_ids": model_inputs["input_ids"], "attention_mask": model_inputs["attention_mask"]}
             if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
+                position_ids = torch.cumsum(model_inputs["attention_mask"], dim=-1) - 1
+                position_ids.masked_fill_(model_inputs["attention_mask"] == 0, 1)
                 model_kwargs["position_ids"] = position_ids
             if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[1], device=torch_device)
+                cache_position = torch.arange(model_inputs["input_ids"].shape[1], device=torch_device)
                 model_kwargs["cache_position"] = cache_position
+            if "token_type_ids" in signature:
+                model_kwargs["token_type_ids"] = model_inputs.get("token_type_ids", None)
+            # forward all other inputs
+            model_kwargs.update(
+                {k: v for k, v in model_inputs.items() if k not in model_kwargs and k not in exclude_kwargs}
+            )
             return model_kwargs
 
         for model_class in decoder_only_classes:
+            # Prepare the attention mask based on the test argument
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
-            attention_mask = inputs_dict.get("attention_mask")
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-
+            inputs_dict["attention_mask"] = (
+                inputs_dict.get("attention_mask", torch.ones_like(inputs_dict["input_ids"]))
+                if "attention_mask" not in exclude_kwargs
+                else torch.ones_like(inputs_dict["input_ids"])
+            )
+            inputs_dict["use_cache"] = False  # No cache to simplify the test (some models need careful init)
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
             # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
+            model_kwargs = _prepare_model_kwargs(inputs_dict, signature)
             next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
 
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
+            # Prepare padding inputs (length 32)
+            input_ids = inputs_dict["input_ids"]
+            attention_mask = inputs_dict["attention_mask"]
+            token_type_ids = inputs_dict.get("token_type_ids", None)
             pad_token_id = (
                 config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
             )
@@ -1003,7 +1031,26 @@ class GenerationTesterMixin:
             padded_attention_mask = torch.cat(
                 (torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device), attention_mask), dim=1
             )
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
+            if token_type_ids is not None:
+                padded_token_type_ids = torch.cat(
+                    (
+                        # Assumption: take the first token type id as the padding token type id
+                        torch.ones(pad_size[:2], dtype=input_ids.dtype, device=torch_device) * token_type_ids[0, 0],
+                        token_type_ids,
+                    ),
+                    dim=1,
+                )
+            else:
+                padded_token_type_ids = None
+
+            # With left-padding (length 32)
+            padded_inputs_dict = copy.deepcopy(inputs_dict)
+            padded_inputs_dict["input_ids"] = padded_input_ids
+            padded_inputs_dict["attention_mask"] = padded_attention_mask
+            if padded_token_type_ids is not None:
+                padded_inputs_dict["token_type_ids"] = padded_token_type_ids
+
+            model_kwargs = _prepare_model_kwargs(padded_inputs_dict, signature)
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
