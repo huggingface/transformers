@@ -23,7 +23,7 @@ from pathlib import Path
 import datasets
 import numpy as np
 from huggingface_hub import delete_repo
-from requests.exceptions import HTTPError
+from huggingface_hub.errors import HfHubHTTPError
 
 from transformers import (
     AutomaticSpeechRecognitionPipeline,
@@ -905,7 +905,7 @@ class DynamicPipelineTester(unittest.TestCase):
     def tearDownClass(cls):
         try:
             delete_repo(token=cls._token, repo_id="test-dynamic-pipeline")
-        except HTTPError:
+        except HfHubHTTPError:
             pass
 
     @unittest.skip("Broken, TODO @Yih-Dar")
