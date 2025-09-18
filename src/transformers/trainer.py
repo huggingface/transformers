@@ -4064,8 +4064,6 @@ class Trainer:
                 self.optimizer.train()
 
             inputs = self._prepare_inputs(inputs)
-            batch_tokens = 0
-            batch_samples =0
             if 'input_ids' in inputs:
                 # Count actual tokens (exclude padding if attention_mask is available)
                 if 'attention_mask' in inputs:
@@ -4075,9 +4073,9 @@ class Trainer:
                     # Fallback to total tokens if no attention mask
                     batch_tokens = inputs['input_ids'].numel()
                 batch_samples = inputs['input_ids'].shape[0]  # Batch size
-            # Update session counters
-            self._session_tokens_processed += batch_tokens
-            self._train_session_samples_processed += batch_samples
+                # Update session counters
+                self._session_tokens_processed += batch_tokens
+                self._train_session_samples_processed += batch_samples
             if is_sagemaker_mp_enabled():
                 loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
                 return loss_mb.reduce_mean().detach().to(self.args.device)
