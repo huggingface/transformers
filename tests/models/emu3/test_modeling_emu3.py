@@ -359,10 +359,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def test_generate_with_static_cache(self):
         pass
 
-    # @unittest.skip("Emu3 can't be smaller than currently if we want to downsample images")
-    # def test_model_is_small(self):
-    #     pass
-
 
 @require_torch
 class Emu3IntegrationTest(unittest.TestCase):

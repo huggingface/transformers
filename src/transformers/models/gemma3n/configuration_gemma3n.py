@@ -502,10 +502,10 @@ class Gemma3nVisionConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.architecture = architecture
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
         self.model_args = model_args  # named "model_args" for BC with timm
-        self.architecture = architecture
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
         self.vocab_offset = vocab_offset

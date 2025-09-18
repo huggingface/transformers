@@ -76,7 +76,7 @@ class ChameleonModelTester:
         pad_token_id=0,
         vq_num_embeds=5,
         vq_embed_dim=5,
-        vq_channel_multiplier=[1, 4],
+        vq_channel_multiplier=[1, 2],
         vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
         scope=None,
     ):
@@ -255,10 +255,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_batching_equivalence(self):
         pass
 
-    @unittest.skip("Chameleon VQ model cannot be squishes more due to hardcoded layer params in model code")
-    def test_model_is_small(self):
-        pass
-
 
 class ChameleonVision2SeqModelTester(ChameleonModelTester):
     def __init__(self, parent, image_size=10, **kwargs):
@@ -319,10 +315,6 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
 
     @unittest.skip("Chameleon cannot do offload because it uses `self.linear.weight` in forward")
     def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip("Chameleon VQ model cannot be squishes more due to hardcoded layer params in model code")
-    def test_model_is_small(self):
         pass
 
     @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
