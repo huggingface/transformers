@@ -24,7 +24,8 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...image_utils import ImageInput
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -32,6 +33,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from .image_processing_swin2sr import Swin2SRImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -42,14 +44,18 @@ else:
 logger = logging.get_logger(__name__)
 
 
+Swin2SRFastImageProcessorKwargs = Swin2SRImageProcessorKwargs
+
+
 @auto_docstring
 class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
     do_pad = True
     size_divisor = 8
+    valid_kwargs = Swin2SRImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+    def __init__(self, **kwargs: Unpack[Swin2SRImageProcessorKwargs]):
         pad_size = kwargs.pop("pad_size", None)
         kwargs.setdefault("size_divisor", pad_size)
         super().__init__(**kwargs)
@@ -67,6 +73,9 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
             "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
         )
         self.size_divisor = value
+
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     @deprecate_kwarg("size", version="v5", new_name="size_divisor")
     def pad(self, images: "torch.Tensor", size_divisor: int) -> "torch.Tensor":

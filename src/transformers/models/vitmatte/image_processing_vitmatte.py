@@ -284,7 +284,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         if do_pad:
             images = [
-                self.pad_image(image, size_divisibility=size_divisor, input_data_format=input_data_format)
+                self.pad_image(image, size_divisor=size_divisor, input_data_format=input_data_format)
                 for image in images
             ]
 

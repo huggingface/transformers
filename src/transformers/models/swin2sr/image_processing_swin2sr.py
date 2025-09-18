@@ -30,11 +30,22 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
+
+
+class Swin2SRImageProcessorKwargs(ImagesKwargs):
+    """
+    size_divisor (`int`, *optional*, defaults to `8`):
+        The size of the sliding window for the local attention. It will be used to pad the image
+        to the size divisible by `size_divisor`
+    """
+
+    size_divisor: Optional[int]
 
 
 class Swin2SRImageProcessor(BaseImageProcessor):
@@ -51,6 +62,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = Swin2SRImageProcessorKwargs
 
     def __init__(
         self,

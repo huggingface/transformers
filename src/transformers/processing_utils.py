@@ -188,7 +188,7 @@ class ImagesKwargs(TypedDict, total=False):
         image_std (`float` or `list[float]`, *optional*):
             Standard deviation to use if normalizing the image.
         do_pad (`bool`, *optional*):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+            Whether to pad the images in the batch.
         pad_size (`dict[str, int]`, *optional*):
             The size `{"height": int, "width" int}` to pad the images to.
         do_center_crop (`bool`, *optional*):
@@ -250,6 +250,8 @@ class VideosKwargs(TypedDict, total=False):
             Standard deviation to use if normalizing the video.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the video.
+        do_pad (`bool`, *optional*):
+            Whether to pad the images in the batch.
         do_sample_frames (`bool`, *optional*):
             Whether to sample frames from the video before processing or to process the whole video.
         video_metadata (`Union[VideoMetadata, dict]`, *optional*):
@@ -281,6 +283,7 @@ class VideosKwargs(TypedDict, total=False):
     image_mean: Optional[Union[float, list[float]]]
     image_std: Optional[Union[float, list[float]]]
     do_center_crop: Optional[bool]
+    do_pad: Optional[bool]
     crop_size: Optional[dict[str, int]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
