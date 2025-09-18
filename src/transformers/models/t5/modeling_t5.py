@@ -16,7 +16,6 @@
 
 import copy
 import math
-import os
 import warnings
 from typing import Optional, Union
 
@@ -64,126 +63,6 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-####################################################
-# This dict contains ids and associated url
-# for the pretrained weights provided with the models
-####################################################
-
-
-####################################################
-# This is a conversion method from TF 1.0 to PyTorch
-# More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
-####################################################
-def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    tf_weights = {}
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        tf_weights[name] = array
-
-    for txt_name in names:
-        name = txt_name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            tf_weights.pop(txt_name, None)
-            continue
-        if "_slot_" in name[-1]:
-            logger.info(f"Skipping {'/'.join(name)}")
-            tf_weights.pop(txt_name, None)
-            continue
-        pointer = model
-        array = tf_weights[txt_name]
-
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] in ["kernel", "scale", "embedding"]:
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "self_attention":
-                pointer = getattr(pointer, "layer")
-                pointer = pointer[0]
-            elif scope_names[0] == "enc_dec_attention":
-                pointer = getattr(pointer, "layer")
-                pointer = pointer[1]
-            elif scope_names[0] == "dense_relu_dense":
-                pointer = getattr(pointer, "layer")
-                pointer = pointer[2]
-            elif scope_names[0] == "rms_norm":
-                if hasattr(pointer, "layer_norm"):
-                    pointer = getattr(pointer, "layer_norm")
-                elif hasattr(pointer, "final_layer_norm"):
-                    pointer = getattr(pointer, "final_layer_norm")
-            elif scope_names[0] == "scale":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            elif scope_names[0] == "decoder" and name[1] == "logits":
-                continue
-            elif scope_names[0] == "logits":
-                pointer = getattr(pointer, "lm_head")
-            elif scope_names[0] == "wi" and len(scope_names) > 1 and scope_names[1].isdigit():
-                pointer = getattr(pointer, f"wi_{scope_names[1]}")
-                continue
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if scope_names[0] not in ["kernel", "scale", "embedding"]:
-            pointer = getattr(pointer, "weight")
-        if scope_names[0] != "embedding":
-            logger.info(f"Transposing numpy weight of shape {array.shape} for {name}")
-            array = np.transpose(array)
-        try:
-            if pointer.shape != array.shape:
-                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array.astype(np.float32))
-        tf_weights.pop(txt_name, None)
-
-    logger.info(f"Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}.")
-    return model
-
-
-####################################################
-# PyTorch Models are constructed by sub-classing
-# - torch.nn.Module for the layers and
-# - PreTrainedModel for the models (it-self a sub-class of nn.Module)
-####################################################
 PARALLELIZE_DOCSTRING = r"""
     This is an experimental feature and is a subject to change at a moment's notice.
 
@@ -370,7 +249,6 @@ class T5Attention(nn.Module):
                 "when creating this class."
             )
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -773,7 +651,6 @@ class T5ClassificationHead(nn.Module):
 @auto_docstring
 class T5PreTrainedModel(PreTrainedModel):
     config: T5Config
-    load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
@@ -802,8 +679,6 @@ class T5PreTrainedModel(PreTrainedModel):
             module,
             (T5Model, T5ForConditionalGeneration, T5EncoderModel, T5ForQuestionAnswering),
         ):
-            # Mesh TensorFlow embeddings initialization
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
@@ -822,9 +697,6 @@ class T5PreTrainedModel(PreTrainedModel):
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
                 module.out_proj.bias.data.zero_()
         elif isinstance(module, T5DenseActDense):
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
             module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
                 module.wi.bias.data.zero_()
@@ -842,8 +714,6 @@ class T5PreTrainedModel(PreTrainedModel):
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
         elif isinstance(module, T5Attention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
@@ -1786,8 +1656,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
             sequence_output = sequence_output.to(self.lm_head.weight.device)
 
         if self.config.tie_word_embeddings:
-            # Rescale output before projecting on vocab
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
             sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
@@ -1798,7 +1666,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
             # move labels to correct device to enable PP
             labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         if not return_dict:
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
@@ -2400,7 +2267,6 @@ __all__ = [
     "T5ForConditionalGeneration",
     "T5Model",
     "T5PreTrainedModel",
-    "load_tf_weights_in_t5",
     "T5ForQuestionAnswering",
     "T5ForSequenceClassification",
     "T5ForTokenClassification",

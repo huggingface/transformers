@@ -2387,6 +2387,7 @@ class GenerationTesterMixin:
             "zamba",
             "zamba2",
             "lfm2",
+            "lfm2-vl",
         )
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
@@ -3251,7 +3252,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertNotEqual(out_with_temp.logits[-1].tolist(), out_with_temp.scores[-1].tolist())
 
     def test_eos_token_id_int_and_list_top_k_top_sampling(self):
-        # Has TF equivalent: this test relies on random sampling
         generation_kwargs = {
             "do_sample": True,
             "num_beams": 1,
@@ -3279,7 +3279,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(expectation == len(generated_tokens[0]))
 
     def test_model_kwarg_encoder_signature_filtering(self):
-        # Has TF equivalent: ample use of framework-specific code
         bart_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         article = """Hugging Face is a technology company based in New York and Paris."""
         input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)

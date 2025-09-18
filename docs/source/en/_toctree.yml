@@ -220,8 +220,6 @@
   sections:
   - local: serialization
     title: ONNX
-  - local: tflite
-    title: LiteRT
   - local: executorch
     title: ExecuTorch
   - local: torchscript
@@ -336,8 +334,6 @@
       title: Configuration
     - local: main_classes/data_collator
       title: Data Collator
-    - local: main_classes/keras_callbacks
-      title: Keras callbacks
     - local: main_classes/logging
       title: Logging
     - local: main_classes/model
@@ -487,6 +483,8 @@
         title: FLAN-UL2
       - local: model_doc/flaubert
         title: FlauBERT
+      - local: model_doc/flex_olmo
+        title: FlexOlmo
       - local: model_doc/fnet
         title: FNet
       - local: model_doc/fsmt
@@ -555,6 +553,8 @@
         title: LED
       - local: model_doc/lfm2
         title: LFM2
+      - local: model_doc/lfm2_vl
+        title: LFM2-VL
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
