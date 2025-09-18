@@ -48,7 +48,6 @@ from .utils import (
 if is_torch_available():
     import torch
 
-
 def seed_worker(worker_id: int, num_workers: int, rank: int):
     """
     Helper function to set worker seed during Dataloader initialization.

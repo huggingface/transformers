@@ -52,34 +52,17 @@ import torch.distributed as dist
 from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
-from torch.utils.data import (
-    DataLoader,
-    Dataset,
-    IterableDataset,
-    RandomSampler,
-    SequentialSampler,
-)
+from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
-from .data.data_collator import (
-    DataCollator,
-    DataCollatorWithPadding,
-    default_data_collator,
-)
+from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
-from .hyperparameter_search import (
-    ALL_HYPERPARAMETER_SEARCH_BACKENDS,
-    default_hp_search_backend,
-)
+from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .image_processing_utils import BaseImageProcessor
-from .integrations.deepspeed import (
-    deepspeed_init,
-    deepspeed_load_checkpoint,
-    is_deepspeed_available,
-)
+from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
@@ -216,9 +199,7 @@ if is_torch_xla_available():
     import torch_xla.runtime as xr
     from torch_xla import __version__ as XLA_VERSION
 
-    IS_XLA_FSDPV2_POST_2_2 = version.parse(XLA_VERSION) >= version.parse(
-        XLA_FSDPV2_MIN_VERSION
-    )
+    IS_XLA_FSDPV2_POST_2_2 = version.parse(XLA_VERSION) >= version.parse(XLA_FSDPV2_MIN_VERSION)
     if IS_XLA_FSDPV2_POST_2_2:
         import torch_xla.distributed.spmd as xs
 else:
@@ -231,12 +212,7 @@ if is_sagemaker_mp_enabled():
 
     IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
 
-    from .trainer_pt_utils import (
-        smp_forward_backward,
-        smp_forward_only,
-        smp_gather,
-        smp_nested_concat,
-    )
+    from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
 
@@ -291,9 +267,7 @@ def _is_peft_model(model):
 
 def _get_fsdp_ckpt_kwargs():
     # TODO: @AjayP13, @younesbelkada replace this check with version check at the next `accelerate` release
-    if is_accelerate_available() and "adapter_only" in list(
-        inspect.signature(save_fsdp_model).parameters
-    ):
+    if is_accelerate_available() and "adapter_only" in list(inspect.signature(save_fsdp_model).parameters):
         return {"adapter_only": True}
     else:
         return {}
@@ -309,9 +283,7 @@ def safe_globals():
     if version.parse(torch.__version__).release < version.parse("2.6").release:
         return contextlib.nullcontext()
 
-    np_core = (
-        np._core if version.parse(np.__version__) >= version.parse("2.0.0") else np.core
-    )
+    np_core = np._core if version.parse(np.__version__) >= version.parse("2.0.0") else np.core
     allowlist = [np_core.multiarray._reconstruct, np.ndarray, np.dtype]
     # numpy >1.25 defines numpy.dtypes.UInt32DType, but below works for
     # all versions of numpy
