@@ -2809,14 +2809,6 @@ class Trainer:
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
-            # Wait for everyone to get here so we are sure the model has been saved by process 0.
-            if is_torch_xla_available():
-                xm.rendezvous("load_best_model_at_end")
-            elif args.parallel_mode == ParallelMode.DISTRIBUTED:
-                dist.barrier()
-            elif is_sagemaker_mp_enabled():
-                smp.barrier()
-
             self._load_best_model()
 
         # add remaining tr_loss
@@ -3332,16 +3324,16 @@ class Trainer:
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir, _internal_call=True)
 
-        # Wait for everyone to get here so we are sure the model has been saved by process 0
-        # before we check if the best_checkpoint_dir exists
-        if is_torch_xla_available():
-            xm.rendezvous("load_best_model_at_end")
-        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-            dist.barrier()
-        elif is_sagemaker_mp_enabled():
-            smp.barrier()
-
         if self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH] and self.state.best_global_step:
+            # Wait for everyone to get here so we are sure the model has been saved by process 0
+            # before we check if the best_checkpoint_dir exists
+            if is_torch_xla_available():
+                xm.rendezvous("load_best_model_at_end")
+            elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+                dist.barrier()
+            elif is_sagemaker_mp_enabled():
+                smp.barrier()
+
             best_checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.best_global_step}"
             best_checkpoint_dir = os.path.join(run_dir, best_checkpoint_folder)
 
