@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,27 +12,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert BERT checkpoint."""
+"""Convert Funnel checkpoint."""
 
 import argparse
 
 import torch
 
-from transformers import BertConfig, BertForPreTraining, load_tf_weights_in_bert
+from transformers import FunnelBaseModel, FunnelConfig, FunnelModel, load_tf_weights_in_funnel
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 
 
-def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_path):
+def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path, base_model):
     # Initialise PyTorch model
-    config = BertConfig.from_json_file(bert_config_file)
+    config = FunnelConfig.from_json_file(config_file)
     print(f"Building PyTorch model from configuration: {config}")
-    model = BertForPreTraining(config)
+    model = FunnelBaseModel(config) if base_model else FunnelModel(config)
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_bert(model, config, tf_checkpoint_path)
+    load_tf_weights_in_funnel(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
     print(f"Save PyTorch model to {pytorch_dump_path}")
@@ -46,17 +46,19 @@ if __name__ == "__main__":
         "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
     )
     parser.add_argument(
-        "--bert_config_file",
+        "--config_file",
         default=None,
         type=str,
         required=True,
-        help=(
-            "The config json file corresponding to the pre-trained BERT model. \n"
-            "This specifies the model architecture."
-        ),
+        help="The config json file corresponding to the pre-trained model. \nThis specifies the model architecture.",
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
+    parser.add_argument(
+        "--base_model", action="store_true", help="Whether you want just the base model (no decoder) or not."
+    )
     args = parser.parse_args()
-    convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path, args.bert_config_file, args.pytorch_dump_path)
+    convert_tf_checkpoint_to_pytorch(
+        args.tf_checkpoint_path, args.config_file, args.pytorch_dump_path, args.base_model
+    )

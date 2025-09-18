@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert BERT checkpoint."""
+"""Convert RoFormer checkpoint."""
 
 import argparse
 
 import torch
 
-from transformers import BertConfig, BertForPreTraining, load_tf_weights_in_bert
+from transformers import RoFormerConfig, RoFormerForMaskedLM, load_tf_weights_in_roformer
 from transformers.utils import logging
 
 
@@ -27,16 +27,16 @@ logging.set_verbosity_info()
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_path):
     # Initialise PyTorch model
-    config = BertConfig.from_json_file(bert_config_file)
+    config = RoFormerConfig.from_json_file(bert_config_file)
     print(f"Building PyTorch model from configuration: {config}")
-    model = BertForPreTraining(config)
+    model = RoFormerForMaskedLM(config)
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_bert(model, config, tf_checkpoint_path)
+    load_tf_weights_in_roformer(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
     print(f"Save PyTorch model to {pytorch_dump_path}")
-    torch.save(model.state_dict(), pytorch_dump_path)
+    torch.save(model.state_dict(), pytorch_dump_path, _use_new_zipfile_serialization=False)
 
 
 if __name__ == "__main__":
