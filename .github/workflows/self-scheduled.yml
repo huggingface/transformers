@@ -117,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
