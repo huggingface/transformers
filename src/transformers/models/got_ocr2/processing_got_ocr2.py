@@ -134,8 +134,6 @@ class GotOcr2Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],
     ) -> BatchFeature:
         """

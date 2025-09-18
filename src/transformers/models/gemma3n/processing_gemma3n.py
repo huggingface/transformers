@@ -93,7 +93,6 @@ class Gemma3nProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]] = None,
-        videos=None,
         **kwargs: Unpack[Gemma3nProcessorKwargs],
     ) -> BatchFeature:
         if text is None and images is None and audio is None:

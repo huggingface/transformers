@@ -74,8 +74,6 @@ class Kosmos2_5Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, list[TextInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Kosmos2_5ProcessorKwargs],
     ) -> BatchFeature:
         """

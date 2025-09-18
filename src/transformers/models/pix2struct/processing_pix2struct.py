@@ -73,8 +73,6 @@ class Pix2StructProcessor(ProcessorMixin):
         self,
         images=None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Pix2StructProcessorKwargs],
     ) -> Union[BatchEncoding, BatchFeature]:
         """

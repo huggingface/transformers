@@ -84,8 +84,6 @@ class InstructBlipProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[InstructBlipProcessorKwargs],
     ) -> BatchFeature:
         """

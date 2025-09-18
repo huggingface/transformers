@@ -234,8 +234,6 @@ class IdeficsProcessor(ProcessorMixin):
             list[list[TextInput]],
             list[list[PreTokenizedInput]],
         ] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[IdeficsProcessorKwargs],
     ) -> BatchFeature:
         """This method takes batched or non-batched prompts made of text and images and converts them into prompts that

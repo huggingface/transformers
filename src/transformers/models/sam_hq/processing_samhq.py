@@ -38,6 +38,8 @@ class SamHQImagesKwargs(ImagesKwargs):
     input_labels: Optional[list[list[int]]]
     input_boxes: Optional[list[list[list[float]]]]
     point_pad_value: Optional[int]
+    mask_size: Optional[dict[str, int]]
+    mask_pad_size: Optional[dict[str, int]]
 
 
 class SamHQProcessorKwargs(ProcessingKwargs, total=False):

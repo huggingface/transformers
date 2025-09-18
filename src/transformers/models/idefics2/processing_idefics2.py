@@ -115,8 +115,6 @@ class Idefics2Processor(ProcessorMixin):
         self,
         images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Idefics2ProcessorKwargs],
     ) -> BatchFeature:
         """

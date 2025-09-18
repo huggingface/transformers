@@ -85,8 +85,6 @@ class AriaProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
         images: Optional[ImageInput] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[AriaProcessorKwargs],
     ) -> BatchFeature:
         """
