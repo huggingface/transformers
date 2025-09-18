@@ -150,6 +150,7 @@ _import_structure = {
     # Models
     "onnx": [],
     "pipelines": [
+        "AnyToAnyPipeline",
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
@@ -822,6 +823,7 @@ if TYPE_CHECKING:
     from .optimization_tf import create_optimizer as create_optimizer
 
     # Pipelines
+    from .pipelines import AnyToAnyPipeline as AnyToAnyPipeline
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat

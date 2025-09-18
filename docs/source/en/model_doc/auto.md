@@ -242,6 +242,10 @@ The following auto classes are available for the following audio tasks.
 
 The following auto classes are available for the following multimodal tasks.
 
+### AutoModelForMultimodalLM
+
+[[autodoc]] AutoModelForMultimodalLM
+
 ### AutoModelForTableQuestionAnswering
 
 [[autodoc]] AutoModelForTableQuestionAnswering
