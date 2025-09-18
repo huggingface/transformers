@@ -329,7 +329,7 @@ def read_video_opencv(
     video_path: Union["URL", "Path"],
     sample_indices_fn: Callable,
     **kwargs,
-):
+) -> tuple[np.ndarray, VideoMetadata]:
     """
     Decode a video using the OpenCV backend.
 
@@ -345,7 +345,7 @@ def read_video_opencv(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
+        tuple[`np.ndarray`, `VideoMetadata`]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
