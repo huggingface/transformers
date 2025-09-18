@@ -46,11 +46,10 @@ logger = logging.get_logger(__name__)
 
 class EfficientNetImageProcessorKwargs(ImagesKwargs):
     """
-    Args:
-        rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
-            Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
-        include_top (`bool`, *optional*, defaults to `self.include_top`):
-            Normalize the image again with the standard deviation only for image classification if set to True.
+    rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
+        Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
+    include_top (`bool`, *optional*, defaults to `self.include_top`):
+        Normalize the image again with the standard deviation only for image classification if set to True.
     """
 
     rescale_offset: bool

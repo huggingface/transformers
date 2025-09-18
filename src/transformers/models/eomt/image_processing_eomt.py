@@ -57,12 +57,12 @@ if is_torch_available():
 class EomtImageProcessorKwargs(ImagesKwargs):
     """
     do_split_image (`bool`, *optional*, defaults to `False`):
-            Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
-            input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
-            Otherwise, the input images will be padded to the target size.
+        Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
+        input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
+        Otherwise, the input images will be padded to the target size.
     ignore_index (`int`, *optional*):
-            Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-            denoted with 0 (background) will be replaced with `ignore_index`.
+        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+        denoted with 0 (background) will be replaced with `ignore_index`.
     """
 
     do_split_image: bool

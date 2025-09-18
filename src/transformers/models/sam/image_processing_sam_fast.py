@@ -25,9 +25,7 @@ from torch.nn import functional as F
 from torchvision.ops.boxes import batched_nms
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -38,10 +36,7 @@ from ...image_utils import (
     pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-    is_torchvision_v2_available,
-)
+from ...utils import auto_docstring, is_torchvision_v2_available
 from .image_processing_sam import SamImageProcessorKwargs
 
 

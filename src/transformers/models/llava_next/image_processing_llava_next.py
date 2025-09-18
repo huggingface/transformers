@@ -60,7 +60,7 @@ if is_vision_available():
 
 
 class LlavaNextImageProcessorKwargs(ImagesKwargs):
-    """
+    r"""
     image_grid_pinpoints (`list[list[int]]`, *optional*):
         A list of possible resolutions to use for processing high resolution images. The best resolution is selected
         based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`

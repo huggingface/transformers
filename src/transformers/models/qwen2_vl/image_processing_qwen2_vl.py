@@ -53,7 +53,7 @@ logger = logging.get_logger(__name__)
 
 
 class Qwen2VLImageProcessorKwargs(ImagesKwargs):
-    """
+    r"""
     min_pixels (`int`, *optional*, defaults to `56 * 56`):
         The min pixels of the image to resize the image.
     max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):

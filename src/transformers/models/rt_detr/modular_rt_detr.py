@@ -129,11 +129,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        return BaseImageProcessorFast.preprocess(self, images, annotations, masks_path, **kwargs)
+        return BaseImageProcessorFast.preprocess(self, images, **kwargs)
 
     def prepare_annotation(
         self,

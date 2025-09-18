@@ -54,11 +54,10 @@ if is_vision_available():
 
 class DonutImageProcessorKwargs(ImagesKwargs):
     """
-    Args:
-        do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
-            Whether to resize the image using thumbnail method.
-        do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
-            Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
+    do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
+        Whether to resize the image using thumbnail method.
+    do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
+        Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
     """
 
     do_thumbnail: Optional[bool]

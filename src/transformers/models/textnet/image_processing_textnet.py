@@ -50,11 +50,6 @@ if is_vision_available():
 
 
 class TextNetImageProcessorKwargs(ImagesKwargs):
-    """
-    size_divisor (`int`, *optional*, defaults to 32):
-        Ensures height and width are rounded to a multiple of this value after resizing.
-    """
-
     size_divisor: Optional[int]
 
 

@@ -42,9 +42,9 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     size = {"height": 384, "width": 384}
     min_size = 14
     do_resize = True
-    do_pad = True
     do_rescale = True
     do_normalize = True
+    do_pad = True
     valid_kwargs = DeepseekVLFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[DeepseekVLFastImageProcessorKwargs]):

@@ -59,9 +59,9 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
     size = {"height": 384, "width": 384}
     min_size = 14
     do_resize = True
-    do_pad = True
     do_rescale = True
     do_normalize = True
+    do_pad = True
     valid_kwargs = DeepseekVLHybridFastImageProcessorKwargs
     high_res_image_mean = OPENAI_CLIP_MEAN
     high_res_image_std = OPENAI_CLIP_STD

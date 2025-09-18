@@ -315,7 +315,7 @@ def get_best_fit(
 
 
 class Llama4ImageProcessorKwargs(ImagesKwargs):
-    """
+    r"""
     max_patches (`int`, *optional*, defaults to 16):
         The maximum number of patches to be extracted from the image.
         Can be overridden by the `max_patches` parameter in the `preprocess` method.

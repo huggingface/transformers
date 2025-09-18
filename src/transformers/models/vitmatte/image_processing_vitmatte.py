@@ -42,12 +42,7 @@ logger = logging.get_logger(__name__)
 
 
 class VitMatteImageProcessorKwargs(ImagesKwargs):
-    """
-    size_divisor (`int`, *optional*, defaults to 32):
-        The width and height of the image will be padded to be divisible by this number.
-    """
-
-    size_divisor: int
+    size_divisor: Optional[int]
 
 
 class VitMatteImageProcessor(BaseImageProcessor):

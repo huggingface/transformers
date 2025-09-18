@@ -49,10 +49,9 @@ logger = logging.get_logger(__name__)
 
 
 class PoolFormerImageProcessorKwargs(ImagesKwargs):
-    """
-    Args:
-        crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
-            Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
+    r"""
+    crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
+        Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
     """
 
     crop_pct: Optional[float]

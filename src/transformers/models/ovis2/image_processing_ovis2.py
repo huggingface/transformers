@@ -46,20 +46,19 @@ logger = logging.get_logger(__name__)
 
 class Ovis2ImageProcessorKwargs(ImagesKwargs):
     """
-    Args:
-        crop_to_patches (`bool`, *optional*, defaults to `False`):
-            Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
-            `preprocess` method.
-        min_patches (`int`, *optional*, defaults to 1):
-            The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-            set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
-        max_patches (`int`, *optional*, defaults to 12):
-            The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-            set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
-        use_covering_area_grid (`bool`, *optional*, defaults to `True`):
-            Whether to use the covering area grid to determine the number of patches. Only has an effect if
-            `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
-            `preprocess` method.
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+        `preprocess` method.
+    min_patches (`int`, *optional*, defaults to 1):
+        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+    max_patches (`int`, *optional*, defaults to 12):
+        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+        Whether to use the covering area grid to determine the number of patches. Only has an effect if
+        `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
+        `preprocess` method.
     """
 
     crop_to_patches: Optional[bool]

@@ -23,9 +23,8 @@ import numpy as np
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
-from ...video_utils import VideoInput
 from .image_processing_sam import SamImageProcessorKwargs
 
 
@@ -77,8 +76,6 @@ class SamProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio: Optional[AudioInput] = None,
-        video: Optional[VideoInput] = None,
         **kwargs,
     ) -> BatchEncoding:
         """

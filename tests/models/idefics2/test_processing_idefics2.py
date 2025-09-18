@@ -194,7 +194,6 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
         padded_expected_input_ids_1 = [0] * pad_len + expected_input_ids_1
 
-        print(inputs["input_ids"][-1], [expected_input_ids_2])
         self.assertEqual(
             inputs["input_ids"], [padded_expected_input_ids_1, expected_input_ids_2]
         )

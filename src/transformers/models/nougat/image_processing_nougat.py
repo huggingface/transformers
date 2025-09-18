@@ -53,14 +53,13 @@ if is_vision_available():
 
 
 class NougatImageProcessorKwargs(ImagesKwargs):
-    """
-    Args:
+    r"""
     do_crop_margin (`bool`, *optional*, defaults to `True`):
-            Whether to crop the image margins.
+        Whether to crop the image margins.
     do_thumbnail (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image using thumbnail method.
+        Whether to resize the image using thumbnail method.
     do_align_long_axis (`bool`, *optional*, defaults to `False`):
-            Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
+        Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
     """
 
     do_crop_margin: Optional[bool]

@@ -124,13 +124,6 @@ def get_resize_output_image_size(
 
 
 class BridgeTowerImageProcessorKwargs(ImagesKwargs):
-    """
-    Args:
-        size_divisor (`int`, *optional*, defaults to 32):
-            The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
-            is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-    """
-
     size_divisor: Optional[int]
 
 

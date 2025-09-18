@@ -57,6 +57,8 @@ class Kosmos2_5Processor(ProcessorMixin):
             An instance of [`Kosmos2_5ImageProcessor`]. The image processor is a required input.
         tokenizer (Union[`T5TokenizerFast`, `T5Tokenizer`]):
             An instance of ['T5TokenizerFast`] or ['T5Tokenizer`]. The tokenizer is a required input.
+        num_image_tokens (`int`, *optional*, defaults to 2048):
+            Number of image tokens used as a placeholder.
     """
 
     attributes = ["image_processor", "tokenizer"]

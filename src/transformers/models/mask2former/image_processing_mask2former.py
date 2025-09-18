@@ -63,9 +63,6 @@ if is_torch_available():
 
 class Mask2FormerImageProcessorKwargs(ImagesKwargs):
     r"""
-    size_divisor (`int`, *optional*, defaults to 32):
-        Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-        Swin Transformer.
     ignore_index (`int`, *optional*):
         Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
         denoted with 0 (background) will be replaced with `ignore_index`.

@@ -98,6 +98,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = ConvNextImageProcessorKwargs
 
     def __init__(
         self,

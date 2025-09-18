@@ -55,13 +55,11 @@ logger = logging.get_logger(__name__)
 
 
 class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs):
-    """
+    r"""
     keep_aspect_ratio (`bool`, *optional*):
         If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
     ensure_multiple_of (`int`, *optional*):
         If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
-    size_divisor (`int`, *optional*):
-        If `do_pad` is `True`, pads the image dimensions to be divisible by this value.
     prompt_scale_to_meter (`float`, *optional*):
         Scale factor to convert the prompt depth to meters.
     """

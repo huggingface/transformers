@@ -19,14 +19,8 @@ from typing import Optional, Union
 import torch
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    SizeDict,
-)
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
+from ...image_utils import ImageInput, PILImageResampling
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,

@@ -1547,8 +1547,6 @@ def get_class_node_and_dependencies(
 
     # This is used to avoid adding objects to the dependencies graph if they will be imported already
     imported_objects = modular_mapper.imported_objects_per_file[file_type]
-    # if file_type == "image_processing":
-    #     imported_objects = set()
 
     # We need to replace the class node with the transformers (modeling file) super class node
     if super_class is not None:

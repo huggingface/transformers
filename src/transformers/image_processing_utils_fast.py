@@ -173,9 +173,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     size = None
     default_to_square = True
     crop_size = None
-    pad_size = None
     do_resize = None
-    do_pad = None
     do_center_crop = None
     do_pad = None
     pad_size = None
@@ -188,6 +186,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     input_data_format = None
     device = None
     model_input_names = ["pixel_values"]
+    valid_kwargs = ImagesKwargs
     unused_kwargs = None
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
@@ -654,7 +653,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
             data_format = ChannelDimension.FIRST
 
         kwargs["size"] = size
-        kwargs["pad_size"] = pad_size
         kwargs["crop_size"] = crop_size
         kwargs["pad_size"] = pad_size
         kwargs["image_mean"] = image_mean
@@ -713,7 +711,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self._valid_kwargs_names:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name))
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         # Extract parameters that are only used for preparing the input images
         do_convert_rgb = kwargs.pop("do_convert_rgb")

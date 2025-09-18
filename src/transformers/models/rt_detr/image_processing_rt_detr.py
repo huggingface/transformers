@@ -82,11 +82,17 @@ class RTDetrImageProcessorKwargs(ImagesKwargs):
         Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
     return_segmentation_masks (`bool`, *optional*, defaults to `False`):
         Whether to return segmentation masks.
+    annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
+        Annotations to transform according to the padding that is applied to the images.
+    masks_path (`str` or `pathlib.Path`, *optional*):
+        Path to the directory containing the segmentation masks.
     """
 
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
     return_segmentation_masks: Optional[bool]
+    annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
+    masks_path: Optional[Union[str, pathlib.Path]]
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio

@@ -97,11 +97,17 @@ class DetrImageProcessorKwargs(ImagesKwargs):
         Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
     return_segmentation_masks (`bool`, *optional*, defaults to `False`):
         Whether to return segmentation masks.
+    annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
+        Annotations to transform according to the padding that is applied to the images.
+    masks_path (`str` or `pathlib.Path`, *optional*):
+        Path to the directory containing the segmentation masks.
     """
 
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
     return_segmentation_masks: Optional[bool]
+    annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
+    masks_path: Optional[Union[str, pathlib.Path]]
 
 
 # From the original repo: https://github.com/facebookresearch/detr/blob/3af9fa878e73b6894ce3596450a8d9b89d918ca9/datasets/transforms.py#L76

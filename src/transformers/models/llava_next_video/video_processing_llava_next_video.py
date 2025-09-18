@@ -15,7 +15,6 @@
 """Video processor class for LLaVa-NeXT-Video."""
 
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...processing_utils import Unpack, VideosKwargs
 from ...video_processing_utils import BaseVideoProcessor
 
 
@@ -32,9 +31,6 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
     do_normalize = True
     do_convert_rgb = True
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
-
-    def __init__(self, **kwargs: Unpack[VideosKwargs]):
-        super().__init__(**kwargs)
 
 
 __all__ = ["LlavaNextVideoVideoProcessor"]

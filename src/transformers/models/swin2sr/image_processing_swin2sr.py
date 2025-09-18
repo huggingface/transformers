@@ -39,12 +39,6 @@ logger = logging.get_logger(__name__)
 
 
 class Swin2SRImageProcessorKwargs(ImagesKwargs):
-    """
-    size_divisor (`int`, *optional*, defaults to `8`):
-        The size of the sliding window for the local attention. It will be used to pad the image
-        to the size divisible by `size_divisor`
-    """
-
     size_divisor: Optional[int]
 
 

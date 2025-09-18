@@ -48,12 +48,6 @@ logger = logging.get_logger(__name__)
 
 
 class ViltImageProcessorKwargs(ImagesKwargs):
-    """
-    Args:
-        size_divisor (`int`, *optional*, defaults to 32):
-            The size to make the height and width divisible by.
-    """
-
     size_divisor: Optional[int]
 
 

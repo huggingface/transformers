@@ -55,7 +55,7 @@ class ImageGPTImageProcessorKwargs(ImagesKwargs):
         When True, each pixel is assigned to its nearest color cluster, enabling ImageGPT's discrete token modeling.
     """
 
-    clusters: Optional[Union[np.ndarray, list[list[int]], torch.Tensor]]
+    clusters: Optional[Union[np.ndarray, list[list[int]], "torch.Tensor"]]
     do_color_quantize: Optional[bool]
 
 
