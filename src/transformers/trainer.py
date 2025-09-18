@@ -241,10 +241,9 @@ if is_accelerate_available():
     DATA_SAMPLERS = [RandomSampler]
     if version.parse(accelerate_version) > version.parse("1.3.0"):
         from accelerate.utils import TorchTensorParallelPlugin
-    if version.parse(accelerate_version) > version.parse("0.23.0"):
-        from accelerate.data_loader import SeedableRandomSampler
+    from accelerate.data_loader import SeedableRandomSampler
 
-        DATA_SAMPLERS += [SeedableRandomSampler]
+    DATA_SAMPLERS += [SeedableRandomSampler]
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
@@ -4195,9 +4194,7 @@ class Trainer:
         elif (tp_size := getattr(self.model, "_tp_size", 0)) is not None and tp_size > 1:
             self._save(output_dir)
         elif self.is_fsdp_enabled:
-            if ("FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)) and (
-                version.parse(accelerate_version) > version.parse("0.24.1")
-            ):
+            if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
