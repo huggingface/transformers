@@ -1202,6 +1202,14 @@ if __name__ == "__main__":
         if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
     }
 
+    matrix_job_results_extra = {
+        matrix_name: {
+            "captured_info": {},
+        }
+        for matrix_name in job_matrix
+        if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
+    }
+
     unclassified_model_failures = []
 
     for matrix_name in matrix_job_results:
@@ -1235,7 +1243,8 @@ if __name__ == "__main__":
                             break
                     if step_number is not None:
                         step_link = f"{job['html_url']}#step:{step_number}:1"
-                        matrix_job_results[matrix_name]["captured_info"][artifact_gpu] = {
+                        matrix_job_results[matrix_name]["captured_info"][artifact_gpu] = step_link
+                        matrix_job_results_extra[matrix_name]["captured_info"][artifact_gpu] = {
                             "link": step_link,
                             "captured_info": artifact["captured_info"],
                         }
@@ -1441,6 +1450,15 @@ if __name__ == "__main__":
         api.upload_file(
             path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[test_name]}_results.json",
             path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{test_to_result_name[test_name]}_results.json",
+            repo_id=report_repo_id,
+            repo_type="dataset",
+            token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+        )
+
+    if len(matrix_job_results_extra) > 0:
+        api.upload_file(
+            path_or_fileobj=f"ci_results_{job_name}/matrix_job_results_extra.json",
+            path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/matrix_job_results_extra.json",
             repo_id=report_repo_id,
             repo_type="dataset",
             token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
