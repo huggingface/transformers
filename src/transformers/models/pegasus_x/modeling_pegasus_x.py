@@ -20,7 +20,6 @@ from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -67,9 +66,6 @@ class DimensionInfo:
     num_blocks: int  # num blocks
     global_len: int  # global length
     padded_seq_len: int  # padded token seq length
-
-    # Note: Compared to the original Flax implementation, we will pad the token representations to
-    #       a multiple of block size at the start of the encoder layers, so T=P always.
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right

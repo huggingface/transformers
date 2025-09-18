@@ -208,8 +208,6 @@
   sections:
   - local: serialization
     title: ONNX로 내보내기
-  - local: tflite
-    title: TFLite로 내보내기
   - local: executorch
     title: ExecuTorch
   - local: torchscript
@@ -402,8 +400,6 @@
       title: Configuration
     - local: main_classes/data_collator
       title: Data Collator
-    - local: main_classes/keras_callbacks
-      title: Keras callbacks
     - local: main_classes/logging
       title: Logging
     - local: main_classes/model
@@ -607,6 +603,8 @@
         title: LED
       - local: in_translation
         title: LFM2
+      - local: in_translation
+        title: LFM2-VL
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2

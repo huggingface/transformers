@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -485,7 +484,6 @@ class Kosmos2_5VisionAttention(nn.Module):
         self.is_causal = False
         self.scaling = self.head_dim**-0.5
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.key = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)

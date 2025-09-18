@@ -15,7 +15,6 @@
 import ast
 import collections
 import contextlib
-import copy
 import doctest
 import functools
 import gc
@@ -91,7 +90,6 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_flax_available,
     is_flute_available,
     is_fp_quant_available,
     is_fsdp_available,
@@ -107,7 +105,6 @@ from .utils import (
     is_ipex_available,
     is_jinja_available,
     is_jumanpp_available,
-    is_keras_nlp_available,
     is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
@@ -143,7 +140,6 @@ from .utils import (
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
-    is_tf_available,
     is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
@@ -680,18 +676,6 @@ def require_torchcodec(test_case):
     return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
 
 
-def require_torch_or_tf(test_case):
-    """
-    Decorator marking a test that requires PyTorch or TensorFlow.
-
-    These tests are skipped when neither PyTorch not TensorFlow is installed.
-
-    """
-    return unittest.skipUnless(is_torch_available() or is_tf_available(), "test requires PyTorch or TensorFlow")(
-        test_case
-    )
-
-
 def require_intel_extension_for_pytorch(test_case):
     """
     Decorator marking a test that requires Intel Extension for PyTorch.
@@ -747,13 +731,6 @@ def require_tokenizers(test_case):
     Decorator marking a test that requires 🤗 Tokenizers. These tests are skipped when 🤗 Tokenizers isn't installed.
     """
     return unittest.skipUnless(is_tokenizers_available(), "test requires tokenizers")(test_case)
-
-
-def require_keras_nlp(test_case):
-    """
-    Decorator marking a test that requires keras_nlp. These tests are skipped when keras_nlp isn't installed.
-    """
-    return unittest.skipUnless(is_keras_nlp_available(), "test requires keras_nlp")(test_case)
 
 
 def require_pandas(test_case):
@@ -1022,16 +999,6 @@ if is_torch_available():
         torch_device = "cpu"
 else:
     torch_device = None
-
-if is_tf_available():
-    import tensorflow as tf
-
-if is_flax_available():
-    import jax
-
-    jax_device = jax.default_backend()
-else:
-    jax_device = None
 
 
 def require_torchdynamo(test_case):
@@ -1545,20 +1512,12 @@ def require_mistral_common(test_case):
 
 def get_gpu_count():
     """
-    Return the number of available gpus (regardless of whether torch, tf or jax is used)
+    Return the number of available gpus
     """
     if is_torch_available():
         import torch
 
         return torch.cuda.device_count()
-    elif is_tf_available():
-        import tensorflow as tf
-
-        return len(tf.config.list_physical_devices("GPU"))
-    elif is_flax_available():
-        import jax
-
-        return jax.device_count()
     else:
         return 0
 
@@ -1636,58 +1595,6 @@ def assert_screenout(out, what):
     out_pr = apply_print_resets(out).lower()
     match_str = out_pr.find(what.lower())
     assert match_str != -1, f"expecting to find {what} in output: f{out_pr}"
-
-
-def set_model_tester_for_less_flaky_test(test_case):
-    # NOTE: this function edits the config object, which may lead to hard-to-debug side-effects. Use with caution.
-    # Do not use in tests/models where objects behave very differently based on the config's hidden layer settings
-    # (e.g. KV caches, sliding window attention, ...)
-
-    # TODO (if possible): Avoid exceptional cases
-    exceptional_classes = [
-        "ZambaModelTester",
-        "Zamba2ModelTester",
-        "RwkvModelTester",
-        "AriaVisionText2TextModelTester",
-        "GPTNeoModelTester",
-        "DPTModelTester",
-        "Qwen3NextModelTester",
-    ]
-    if test_case.model_tester.__class__.__name__ in exceptional_classes:
-        return
-
-    target_num_hidden_layers = 1
-    if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
-        target_num_hidden_layers = None
-
-    if hasattr(test_case.model_tester, "num_hidden_layers") and target_num_hidden_layers is not None:
-        test_case.model_tester.num_hidden_layers = target_num_hidden_layers
-    if (
-        hasattr(test_case.model_tester, "vision_config")
-        and "num_hidden_layers" in test_case.model_tester.vision_config
-        and target_num_hidden_layers is not None
-    ):
-        test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
-        if isinstance(test_case.model_tester.vision_config, dict):
-            test_case.model_tester.vision_config["num_hidden_layers"] = 1
-        else:
-            test_case.model_tester.vision_config.num_hidden_layers = 1
-    if (
-        hasattr(test_case.model_tester, "text_config")
-        and "num_hidden_layers" in test_case.model_tester.text_config
-        and target_num_hidden_layers is not None
-    ):
-        test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
-        if isinstance(test_case.model_tester.text_config, dict):
-            test_case.model_tester.text_config["num_hidden_layers"] = 1
-        else:
-            test_case.model_tester.text_config.num_hidden_layers = 1
-
-    # A few model class specific handling
-
-    # For Albert
-    if hasattr(test_case.model_tester, "num_hidden_groups"):
-        test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
 
 
 def set_config_for_less_flaky_test(config):
@@ -2581,8 +2488,6 @@ def nested_simplify(obj, decimals=3):
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
         return nested_simplify(obj.tolist(), decimals)
-    elif is_tf_available() and tf.is_tensor(obj):
-        return nested_simplify(obj.numpy().tolist())
     elif isinstance(obj, float):
         return round(obj, decimals)
     elif isinstance(obj, (np.int32, np.float32, np.float16)):
@@ -3466,15 +3371,21 @@ def _get_test_info():
     if test_frame is not None:
         line_number = test_frame.lineno
 
-    # most inner (recent) to most outer () frames
+    # The frame of `patched` being called (the one and the only one calling `_get_test_info`)
+    # This is used to get the original method being patched in order to get the context.
+    frame_of_patched_obj = None
+
     captured_frames = []
     to_capture = False
-    # up to the test method being called
+    # From the most outer (i.e. python's `runpy.py`) frame to most inner frame (i.e. the frame of this method)
+    # Between `the test method being called` and `before entering `patched``.
     for frame in reversed(stack_from_inspect):
         if test_file in str(frame).replace(r"\\", "/"):
             if "self" in frame.frame.f_locals and test_name == frame.frame.f_locals["self"]._testMethodName:
                 to_capture = True
-        elif "patched" in frame.frame.f_code.co_name:
+        # TODO: check simply with the name is not robust.
+        elif "patched" == frame.frame.f_code.co_name:
+            frame_of_patched_obj = frame
             to_capture = False
             break
         if to_capture:
@@ -3486,11 +3397,17 @@ def _get_test_info():
         tb_next = tb
     test_traceback = tb
 
-    stack = traceback.extract_stack()
+    origin_method_being_patched = frame_of_patched_obj.frame.f_locals["orig_method"]
 
-    # The frame that calls this patched method (it may not be the test method)
-    # -1: `_get_test_info`; -2: `patched_xxx`; -3: the caller to `patched_xxx`
-    caller_frame = stack[-3]
+    # An iterable of type `traceback.StackSummary` with each element of type `FrameSummary`
+    stack = traceback.extract_stack()
+    # The frame which calls `the original method being patched`
+    caller_frame = None
+    # From the most inner (i.e. recent) frame to the most outer frame
+    for frame in reversed(stack):
+        if origin_method_being_patched.__name__ in frame.line:
+            caller_frame = frame
+
     caller_path = os.path.relpath(caller_frame.filename)
     caller_lineno = caller_frame.lineno
 

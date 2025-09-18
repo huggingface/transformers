@@ -714,9 +714,7 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation"
-    )
+    @unittest.skip(reason="Siglip (vision backbone) uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 

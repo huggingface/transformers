@@ -20,7 +20,6 @@ from typing import Any, Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -753,8 +752,6 @@ class GroupViTPreTrainedModel(PreTrainedModel):
 
         init_range = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=init_range)
             if module.bias is not None:
                 module.bias.data.zero_()

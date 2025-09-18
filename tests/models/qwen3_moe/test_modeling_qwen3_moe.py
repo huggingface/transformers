@@ -232,7 +232,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
     @slow
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = (
-            "To be or not to be: the role of the liver in the pathogenesis of obesity and type 2 diabetes.\nThe"
+            "To be or not to be: a question of life and death\n\nThe question of life and death is a question that has"
         )
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B-Base", use_fast=False)
