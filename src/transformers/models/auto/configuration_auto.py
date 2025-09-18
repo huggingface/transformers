@@ -65,6 +65,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("blip-2", "Blip2Config"),
         ("blip_2_qformer", "Blip2QFormerConfig"),
         ("bloom", "BloomConfig"),
+        ("blueberry", "BlueberryConfig"),
         ("bridgetower", "BridgeTowerConfig"),
         ("bros", "BrosConfig"),
         ("camembert", "CamembertConfig"),

@@ -3,11 +3,8 @@ import json
 import os
 import tempfile
 
-from transformers.models.blueberry.tokenization_blueberry import (
-    BlueberryTokenizer,
-    HARMONY_CHAT_TEMPLATE,
-    HARMONY_SPECIAL_TOKENS,
-)
+from transformers.models.blueberry.tokenization_blueberry import BlueberryTokenizer, HARMONY_CHAT_TEMPLATE, HARMONY_SPECIAL_TOKENS
+from transformers.models.blueberry.tokenization_blueberry_fast import BlueberryTokenizerFast
 
 
 def _write_fake_gpt2_files(tmpdir):
@@ -61,4 +58,16 @@ def test_blueberry_chat_template_present_and_special_tokens_added():
         ]
         rendered = tok.apply_chat_template(messages, tokenize=False)
         assert "<|assistant|>" in rendered
+
+
+def test_blueberry_fast_tokenizer_load_from_slow():
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        vocab_file, merges_file = _write_fake_gpt2_files(tmpdir)
+        slow = BlueberryTokenizer(vocab_file=vocab_file, merges_file=merges_file)
+        fast = BlueberryTokenizerFast.from_pretrained(tmpdir, from_slow=True, __slow_tokenizer=slow)
+        text = "Hello World!"
+        ids = fast.encode(text)
+        assert isinstance(ids, list)
+        assert fast.chat_template == HARMONY_CHAT_TEMPLATE
 
