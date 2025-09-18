@@ -724,6 +724,29 @@ class BertModelIntegrationTest(unittest.TestCase):
             )
 
     @slow
+    def test_sdpa_padding_to_nan(self):
+        # Test for Pytorch sdpa implementation doesn't produce non for padded tokens on bfloat16
+        # See: https://github.com/huggingface/transformers/issues/31035 
+        model_sdpa = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", attn_implementation="sdpa", dtype=torch.bfloat16)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertModel")
+
+        model_sdpa = model_sdpa.eval()
+
+        input_texts = [
+          "I visited him yesterday.", # this one will have quite many pad tokens
+          "Red, blue, and more colors  " + "red " * 40,  
+        ]
+
+        inputs = tokenizer(input_texts, return_tensors="pt", padding=True)
+        
+
+        with torch.no_grad():
+          outputs = model_sdpa(**inputs)
+
+        hidden_states = outputs.last_hidden_state
+        self.assertFalse(torch.isnan(hidden_states).any())
+
+    @slow
     @pytest.mark.torch_export_test
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
