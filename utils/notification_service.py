@@ -158,9 +158,11 @@ class Message:
         self.n_model_failures = (
             self.n_model_single_gpu_failures + self.n_model_multi_gpu_failures + self.n_model_unknown_failures
         )
+        self.n_model_jobs_errored_out = sum(r["error"] for r in model_results.values())
 
         # Failures and success of the additional tests
         self.n_additional_success = sum(r["success"] for r in additional_results.values())
+        self.n_additional_jobs_errored_out = sum(r["error"] for r in additional_results.values())
 
         if len(additional_results) > 0:
             # `dicts_to_sum` uses `dicts_to_sum` which requires a non empty dictionary. Let's just add an empty entry.
@@ -183,6 +185,7 @@ class Message:
         self.n_failures = self.n_model_failures + self.n_additional_failures
         self.n_success = self.n_model_success + self.n_additional_success
         self.n_tests = self.n_failures + self.n_success
+        self.n_jobs_errored_out = self.n_model_jobs_errored_out + self.n_additional_jobs_errored_out
 
         self.model_results = model_results
         self.additional_results = additional_results
@@ -241,6 +244,7 @@ class Message:
                 "type": "plain_text",
                 "text": (
                     f"There were {self.n_failures} failures, out of {self.n_tests} tests.\n"
+                    f"🚨 There were {self.n_jobs_errored_out} jobs errored out (not producing test output files). 🚨\n"
                     f"The suite ran in {self.time}."
                 ),
                 "emoji": True,
@@ -561,7 +565,7 @@ class Message:
         if self.ci_title:
             blocks.append(self.ci_title_section)
 
-        if self.n_model_failures > 0 or self.n_additional_failures > 0:
+        if self.n_model_failures > 0 or self.n_additional_failures > 0 or self.n_jobs_errored_out > 0:
             blocks.append(self.failures)
 
         if self.n_model_failures > 0:
@@ -1194,6 +1198,7 @@ if __name__ == "__main__":
             "success": 0,
             "skipped": 0,
             "time_spent": [],
+            "error": False,
             "failures": {},
             "job_link": {},
             "captured_info": {},
@@ -1222,6 +1227,11 @@ if __name__ == "__main__":
                 continue
 
             artifact = retrieve_artifact(path, artifact_gpu)
+
+            if "summary_short" not in artifact:
+                # The process might be killed (for example, CPU OOM), or the job is canceled for some reason), etc.
+                matrix_job_results[matrix_name]["error"] = True
+
             if "stats" in artifact:
                 # Link to the GitHub Action job
                 job = artifact_name_to_job_map[path]
