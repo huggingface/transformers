@@ -15,7 +15,7 @@
 """Image processor class for Got-OCR-2."""
 
 from functools import lru_cache
-from typing import Optional, Union
+from typing import Optional, TypedDict, Union
 
 import numpy as np
 
@@ -38,7 +38,6 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -49,7 +48,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class GotOcr2ImageProcessorKwargs(ImagesKwargs):
+class GotOcr2ImageProcessorKwargs(TypedDict):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
