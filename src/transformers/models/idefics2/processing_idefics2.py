@@ -190,7 +190,6 @@ class Idefics2Processor(ProcessorMixin):
             if self.image_processor.do_image_splitting:
                 # A single image token is split into 4 patches + 1 original image
                 image_str = image_str * 5
-                self.image_seq_len *= 5
 
             prompt_strings = []
             for sample in text:

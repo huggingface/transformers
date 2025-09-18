@@ -110,6 +110,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "num_crops"]
+    valid_kwargs = Gemma3ImageProcessorKwargs
 
     def __init__(
         self,
