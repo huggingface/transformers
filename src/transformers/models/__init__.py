@@ -256,6 +256,7 @@ if TYPE_CHECKING:
     from .pegasus_x import *
     from .perceiver import *
     from .perception_lm import *
+    from .isaac import *
     from .persimmon import *
     from .phi import *
     from .phi3 import *
