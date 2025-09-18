@@ -147,16 +147,7 @@ def _test_eager_matches_sdpa_inference(
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
 
-        # If it's a model with sliding window attention, let's test it with sliding window
-        if hasattr(config, "sliding_window"):
-            config.sliding_window = 2
-
         model = model_class(config)
-        # TODO: standardize the interfaces for musicgen models, see other todo in this test
-        if model.__class__.__name__ == "MusicgenMelodyForConditionalGeneration":
-            is_encoder_decoder = True
-        else:
-            is_encoder_decoder = model.config.is_encoder_decoder
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
@@ -187,15 +178,7 @@ def _test_eager_matches_sdpa_inference(
 
         # TODO: if we can also check with `batch_size=1` without being flaky?
         for batch_size in [7]:
-            # musicgen decoder models; TODO: find better abstraction
-            if (
-                model.__class__.__name__.startswith("Musicgen")
-                and hasattr(self.model_tester, "num_codebooks")
-                and not hasattr(model_eager, "text_encoder")
-            ):
-                input_data_batch_size = batch_size * self.model_tester.num_codebooks
-            else:
-                input_data_batch_size = batch_size
+            input_data_batch_size = batch_size
 
             processed_inputs = {}
             processed_inputs[model.main_input_name] = inputs_dict[model.main_input_name]
@@ -240,12 +223,7 @@ def _test_eager_matches_sdpa_inference(
             else:
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
                 if dummy_attention_mask is None:
-                    if is_encoder_decoder:
-                        seqlen = inputs_dict.get("decoder_input_ids", processed_inputs[model.main_input_name]).shape[
-                            -1
-                        ]
-                    else:
-                        seqlen = processed_inputs[model.main_input_name].shape[-1]
+                    seqlen = processed_inputs[model.main_input_name].shape[-1]
                     dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
 
                 # extend dummy_attention_mask to have at least `batch_size` elements
@@ -264,63 +242,18 @@ def _test_eager_matches_sdpa_inference(
                     dummy_attention_mask[-1, -2:] = 0
                     dummy_attention_mask[-1, :-2] = 1
 
-            if is_encoder_decoder:
-                # musicgen encoder-decoder models; TODO: find better abstraction
-                if model.__class__.__name__.startswith("Musicgen") and hasattr(self.model_tester, "num_codebooks"):
-                    input_data_batch_size = batch_size * self.model_tester.num_codebooks
-                else:
-                    input_data_batch_size = batch_size
+            processed_inputs.update(
+                {
+                    "output_hidden_states": True,
+                }
+            )
 
-                decoder_input_ids = inputs_dict.get("decoder_input_ids", processed_inputs[model.main_input_name])
-                decoder_input_ids = decoder_input_ids[:input_data_batch_size]
-                if decoder_input_ids.shape[0] != input_data_batch_size:
-                    extension = torch.ones(
-                        input_data_batch_size - decoder_input_ids.shape[0],
-                        *decoder_input_ids.shape[1:],
-                        dtype=decoder_input_ids.dtype,
-                        device=torch_device,
-                    )
-                    decoder_input_ids = torch.cat((decoder_input_ids, extension), dim=0)
-                    decoder_input_ids = decoder_input_ids.to(torch_device)
+            # Otherwise fails for e.g. WhisperEncoderModel
+            if "attention_mask" in inspect.signature(model_eager.forward).parameters:
+                processed_inputs["attention_mask"] = dummy_attention_mask
 
-                # TODO: never an `attention_mask` arg here?
-                processed_inputs.update(
-                    {
-                        "decoder_input_ids": decoder_input_ids,
-                        "decoder_attention_mask": dummy_attention_mask,
-                        "output_hidden_states": True,
-                    }
-                )
-            else:
-                processed_inputs.update(
-                    {
-                        "output_hidden_states": True,
-                    }
-                )
-
-                # Otherwise fails for e.g. WhisperEncoderModel
-                if "attention_mask" in inspect.signature(model_eager.forward).parameters:
-                    processed_inputs["attention_mask"] = dummy_attention_mask
-
-                if self.has_attentions and _can_output_attn(model_sdpa):
-                    processed_inputs["output_attentions"] = output_attentions
-            if "bool_masked_pos" in inspect.signature(model_eager.forward).parameters:
-                dummy_mask = torch.ones((self.model_tester.num_masks,))
-
-                # In case of additional token (like class) we define a custom `mask_length`
-                if hasattr(self.model_tester, "mask_length"):
-                    mask_length = self.model_tester.mask_length - dummy_mask.size(0)
-                else:
-                    mask_length = self.model_tester.seq_length - dummy_mask.size(0)
-                dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
-                dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
-                processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
-
-            if "noise" in inspect.signature(model_eager.forward).parameters:
-                np.random.seed(2)
-                num_patches = int((self.model_tester.image_size // self.model_tester.patch_size) ** 2)
-                noise = np.random.uniform(size=(batch_size, num_patches))
-                processed_inputs["noise"] = torch.from_numpy(noise)
+            if self.has_attentions and _can_output_attn(model_sdpa):
+                processed_inputs["output_attentions"] = output_attentions
 
             # TODO: test gradients as well (& for FA2 as well!)
             with torch.no_grad():
@@ -529,26 +462,6 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    @unittest.skip(reason="VideoLlama3VisionModel does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="VideoLlama3VisionModel does not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="VideoLlama3VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="VideoLlama3VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="VideoLlama3VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
