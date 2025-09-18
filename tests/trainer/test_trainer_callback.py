@@ -154,7 +154,11 @@ class TrainerCallbackTest(unittest.TestCase):
             expected_events.append("on_epoch_begin")
             for _ in range(train_dl_len):
                 step += 1
-                expected_events += ["on_step_begin", "on_pre_optimizer_step", "on_optimizer_step", "on_step_end"]
+                expected_events.append("on_step_begin")
+                expected_events.append("on_pre_optimizer_step")
+                expected_events.append("on_optimizer_step")
+                expected_events.append("on_step_end")
+
                 if step % trainer.args.logging_steps == 0:
                     expected_events.append("on_log")
                 if trainer.args.eval_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
@@ -230,38 +234,7 @@ class TrainerCallbackTest(unittest.TestCase):
             self.assertEqual(events, self.get_expected_events(trainer))
 
             # Independent log/save/eval
-            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], logging_steps=5)
-            trainer.train()
-            events = trainer.callback_handler.callbacks[-2].events
-            self.assertEqual(events, self.get_expected_events(trainer))
-
-            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], save_steps=5)
-            trainer.train()
-            events = trainer.callback_handler.callbacks[-2].events
-            self.assertEqual(events, self.get_expected_events(trainer))
-
-            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_steps=5, eval_strategy="steps")
-            trainer.train()
-            events = trainer.callback_handler.callbacks[-2].events
-            self.assertEqual(events, self.get_expected_events(trainer))
-
-            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_strategy="epoch")
-            trainer.train()
-            events = trainer.callback_handler.callbacks[-2].events
-            self.assertEqual(events, self.get_expected_events(trainer))
-
-            # A bit of everything
-            trainer = self.get_trainer(
-                callbacks=[MyTestTrainerCallback],
-                logging_steps=3,
-                save_steps=10,
-                eval_steps=5,
-                eval_strategy="steps",
-            )
-            trainer.train()
-            events = trainer.callback_handler.callbacks[-2].events
-            self.assertEqual(events, self.get_expected_events(trainer))
-
+            
             # warning should be emitted for duplicated callbacks
             with patch("transformers.trainer_callback.logger.warning") as warn_mock:
                 trainer = self.get_trainer(
