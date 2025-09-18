@@ -139,6 +139,7 @@ class TestTokensPerSecondFix(unittest.TestCase):
                               f"Tokens per second too high: {tokens_per_sec}")
                 self.assertGreater(tokens_per_sec, 10, 
                                  f"Tokens per second too low: {tokens_per_sec}")
+            # print
 
 if __name__ == "__main__":
     unittest.main()
