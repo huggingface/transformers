@@ -934,9 +934,18 @@ class GenerationTesterMixin:
         self.assertTrue(output_prompt_lookup.shape[-1] == 10)
 
     @pytest.mark.generate
-    def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+    def test_left_padding_compatibility(self, can_randomly_mask=True):
+        """
+        Tests that adding left-padding yields the same logits as the original input.
+
+        NOTE: left-padding results in small numerical differences. This is expected.
+        See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+
+        Args:
+            can_randomly_mask (`bool`, *optional*, defaults to `True`):
+                Whether to use the default random test attention mask. In some models don't support left-padding with
+                these exotic masks, and overwrite this parameter to False. The overwrite should document why.
+        """
 
         # First, filter out models that don't support left padding
         # - The model must have generative capabilities
@@ -987,7 +996,10 @@ class GenerationTesterMixin:
         for model_class in decoder_only_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             input_ids = inputs_dict["input_ids"]
-            attention_mask = inputs_dict.get("attention_mask", torch.ones_like(input_ids))
+            if can_randomly_mask:
+                attention_mask = inputs_dict.get("attention_mask", torch.ones_like(input_ids))
+            else:
+                attention_mask = torch.ones_like(input_ids)
             token_type_ids = inputs_dict.get("token_type_ids", None)
 
             model = model_class(config).to(torch_device).eval()
