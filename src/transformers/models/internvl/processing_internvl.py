@@ -33,7 +33,6 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "crop_to_patches": True,
         },
-        "videos_kwargs": {},
     }
 
 

@@ -42,7 +42,6 @@ class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": False,
         },
         "image_kwargs": {},
-        "videos_kwargs": {},
     }
 
 

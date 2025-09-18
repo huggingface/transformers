@@ -45,7 +45,6 @@ class PixtralProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
-        "images_kwargs": {},
         "common_kwargs": {
             "return_tensors": "pt",
         },

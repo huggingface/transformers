@@ -21,17 +21,11 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
-class MllamaImagesKwargs(ImagesKwargs, total=False):
-    max_image_tiles: Optional[int]
-
-
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: MllamaImagesKwargs
-
     _defaults = {
         "image_kwargs": {
             "max_image_tiles": 4,

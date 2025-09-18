@@ -52,12 +52,9 @@ class ViltImageProcessorKwargs(ImagesKwargs):
     Args:
         size_divisor (`int`, *optional*, defaults to 32):
             The size to make the height and width divisible by.
-        rescale_factor (`float`, *optional*, defaults to 1/255):
-            The factor to rescale the image by.
     """
 
     size_divisor: Optional[int]
-    rescale_factor: Optional[float]
 
 
 def max_across_indices(values: Iterable[Any]) -> list[Any]:

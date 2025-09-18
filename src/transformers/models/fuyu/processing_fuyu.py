@@ -71,7 +71,6 @@ class FuyuProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
             "return_mm_token_type_ids": False,
         },
-        "images_kwargs": {},
     }
 
 

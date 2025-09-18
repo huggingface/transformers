@@ -65,7 +65,6 @@ class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
             "task": None,
         },
-        "images_kwargs": {},
     }
 
 

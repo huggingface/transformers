@@ -47,7 +47,6 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": "max_length",
         },
-        "images_kwargs": {},
         "common_kwargs": {
             "return_tensors": "np",
         },
