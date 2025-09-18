@@ -3240,14 +3240,12 @@ class Trainer:
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
             if hasattr(self, '_train_session_start_time') and self._train_session_start_time is not None:
                 session_runtime = time.time() - self._train_session_start_time
-                session_steps = self.state.global_step - self._session_start_step                
+                session_steps = self.state.global_step - self._session_start_step
                 if session_runtime > 0 and session_steps > 0:
                     logs["train_steps_per_second"] = round(session_steps / session_runtime, 3)
-                    
                     # Calculate tokens per second using session data only
                     if self._session_tokens_processed > 0:
                         logs["train_tokens_per_second"] = round(self._session_tokens_processed / session_runtime, 3)
-                    
                     # Calculate samples per second using session data only
                     if self._train_session_samples_processed > 0:
                         logs["train_samples_per_second"] = round(self._train_session_samples_processed / session_runtime, 3)
@@ -3256,7 +3254,6 @@ class Trainer:
                     logs["train_steps_per_second"] = 0.0
                     logs["train_tokens_per_second"] = 0.0
                     logs["train_samples_per_second"] = 0.0
-            
             # Log learning rate
             if hasattr(self.lr_scheduler, "get_last_lr"):
                 logs["learning_rate"] = self.lr_scheduler.get_last_lr()[0]
@@ -4067,7 +4064,7 @@ class Trainer:
                 self.optimizer.train()
 
             inputs = self._prepare_inputs(inputs)
-            batch_tokens = inputs['input_ids'].numel()
+            batch_tokens = 0
             if 'input_ids' in inputs:
                 # Count actual tokens (exclude padding if attention_mask is available)
                 if 'attention_mask' in inputs:
@@ -4076,9 +4073,7 @@ class Trainer:
                 else:
                     # Fallback to total tokens if no attention mask
                     batch_tokens = inputs['input_ids'].numel()
-                
                 batch_samples = inputs['input_ids'].shape[0]  # Batch size
-            
             # Update session counters
             self._session_tokens_processed += batch_tokens
             self._train_session_samples_processed += batch_samples

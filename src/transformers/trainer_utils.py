@@ -406,32 +406,14 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_token
     result = {f"{split}_runtime": round(runtime, 4)}
     if num_samples is not None and num_samples > 0:
         samples_per_second = num_samples / runtime
-        result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
-        
+        result[f"{split}_samples_per_second"] = round(samples_per_second, 3)    
     if num_steps is not None and num_steps > 0:
         steps_per_second = num_steps / runtime  
-        result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
-        
+        result[f"{split}_steps_per_second"] = round(steps_per_second, 3)  
     if num_tokens is not None and num_tokens > 0:
         tokens_per_second = num_tokens / runtime
         result[f"{split}_tokens_per_second"] = round(tokens_per_second, 3)
-    
     return result
-
-    '''if runtime == 0:
-        return result
-    if num_samples is not None:
-        samples_per_second = num_samples / runtime
-        result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
-    if num_steps is not None:
-        steps_per_second = num_steps / runtime
-        result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
-    if num_tokens is not None:
-        tokens_per_second = num_tokens / runtime
-        result[f"{split}_tokens_per_second"] = round(tokens_per_second, 3)
-    return result
-'''
-
 class SchedulerType(ExplicitEnum):
     """
     Scheduler names for the parameter `lr_scheduler_type` in [`TrainingArguments`].
@@ -929,17 +911,14 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
 def session_speed_metrics(split, session_start_time, session_steps, session_tokens=None, session_samples=None):
     """
     Calculate speed metrics for the current training session only.
-    
     This function specifically addresses the train_tokens_per_second bug (#40560)
     by calculating metrics based only on the current session data, not cumulative totals.
-    
     Args:
         split (str): Metric name prefix (e.g., "train", "eval")
         session_start_time (float): Start time of current session
         session_steps (int): Number of steps in current session
         session_tokens (int, optional): Number of tokens processed in session
         session_samples (int, optional): Number of samples processed in session
-        
     Returns:
         Dict[str, float]: Speed metrics for current session only
     """
