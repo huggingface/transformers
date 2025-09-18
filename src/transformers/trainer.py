@@ -2300,8 +2300,6 @@ class Trainer:
         self._session_tokens_processed = 0
         self._train_session_samples_processed = 0
         self._session_start_step = self.state.global_step
-            
-
         if resume_from_checkpoint is not None:
             logger.info("Resetting session metrics for checkpoint resume to ensure accurate speed calculations")
             self._train_session_start_time = time.time()
@@ -2980,8 +2978,6 @@ class Trainer:
         self._session_tokens_processed = 0
         self._train_session_samples_processed = 0
         logger.info(f"Reset session metrics after checkpoint load. Starting from step {self._session_start_step}")
-        
-
         if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file) or is_fsdp_ckpt:
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
@@ -3244,8 +3240,7 @@ class Trainer:
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
             if hasattr(self, '_train_session_start_time') and self._train_session_start_time is not None:
                 session_runtime = time.time() - self._train_session_start_time
-                session_steps = self.state.global_step - self._session_start_step
-                
+                session_steps = self.state.global_step - self._session_start_step                
                 if session_runtime > 0 and session_steps > 0:
                     logs["train_steps_per_second"] = round(session_steps / session_runtime, 3)
                     
@@ -4072,6 +4067,7 @@ class Trainer:
                 self.optimizer.train()
 
             inputs = self._prepare_inputs(inputs)
+            batch_tokens = inputs['input_ids'].numel()
             if 'input_ids' in inputs:
                 # Count actual tokens (exclude padding if attention_mask is available)
                 if 'attention_mask' in inputs:

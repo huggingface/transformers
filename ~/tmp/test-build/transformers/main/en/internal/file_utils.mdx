@@ -1,0 +1,166 @@
+<script lang="ts">
+import {onMount} from "svelte";
+import Tip from "$lib/Tip.svelte";
+import Youtube from "$lib/Youtube.svelte";
+import Docstring from "$lib/Docstring.svelte";
+import CodeBlock from "$lib/CodeBlock.svelte";
+import CodeBlockFw from "$lib/CodeBlockFw.svelte";
+import DocNotebookDropdown from "$lib/DocNotebookDropdown.svelte";
+import CourseFloatingBanner from "$lib/CourseFloatingBanner.svelte";
+import IconCopyLink from "$lib/IconCopyLink.svelte";
+import FrameworkContent from "$lib/FrameworkContent.svelte";
+import Markdown from "$lib/Markdown.svelte";
+import Question from "$lib/Question.svelte";
+import FrameworkSwitchCourse from "$lib/FrameworkSwitchCourse.svelte";
+import InferenceApi from "$lib/InferenceApi.svelte";
+import TokenizersLanguageContent from "$lib/TokenizersLanguageContent.svelte";
+import ExampleCodeBlock from "$lib/ExampleCodeBlock.svelte";
+import Added from "$lib/Added.svelte";
+import Changed from "$lib/Changed.svelte";
+import Deprecated from "$lib/Deprecated.svelte";
+import PipelineIcon from "$lib/PipelineIcon.svelte";
+import PipelineTag from "$lib/PipelineTag.svelte";
+import Heading from "$lib/Heading.svelte";
+import HfOptions from "$lib/HfOptions.svelte";
+import HfOption from "$lib/HfOption.svelte";
+import EditOnGithub from "$lib/EditOnGithub.svelte";
+import InferenceSnippet from "$lib/InferenceSnippet/InferenceSnippet.svelte";
+let fw: "pt" | "tf" = "pt";
+onMount(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    fw = urlParams.get("fw") || "pt";
+});
+</script>
+<svelte:head>
+  <meta name="hf:doc:metadata" content={metadata} >
+</svelte:head>
+
+<!--HF DOCBUILD BODY START-->
+
+HF_DOC_BODY_START
+
+<!--Copyright 2021 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# General Utilities
+
+This page lists all of Transformers general utility functions that are found in the file `utils.py`.
+
+Most of those are only useful if you are studying the general code in the library.
+
+
+## Enums and namedtuples[[transformers.utils.ExplicitEnum]]
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>class transformers.utils.ExplicitEnum</name><anchor>transformers.utils.ExplicitEnum</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/utils/generic.py#L471</source><parameters>[{"name": "new_class_name", "val": ""}, {"name": "names", "val": ""}, {"name": "module", "val": " = None"}, {"name": "qualname", "val": " = None"}, {"name": "type", "val": " = None"}, {"name": "start", "val": " = 1"}, {"name": "boundary", "val": " = None"}]</parameters></docstring>
+
+Enum with more explicit error message for missing values.
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>class transformers.utils.PaddingStrategy</name><anchor>transformers.utils.PaddingStrategy</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/utils/generic.py#L483</source><parameters>[{"name": "*values", "val": ""}]</parameters></docstring>
+
+Possible values for the `padding` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for tab-completion in an
+IDE.
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>class transformers.TensorType</name><anchor>transformers.TensorType</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/utils/generic.py#L494</source><parameters>[{"name": "*values", "val": ""}]</parameters></docstring>
+
+Possible values for the `return_tensors` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for
+tab-completion in an IDE.
+
+
+</div>
+
+## Special Decorators[[transformers.add_start_docstrings]]
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.add_start_docstrings</name><anchor>transformers.add_start_docstrings</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/utils/doc.py#L37</source><parameters>[{"name": "*docstr", "val": ""}]</parameters></docstring>
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.utils.add_start_docstrings_to_model_forward</name><anchor>transformers.utils.add_start_docstrings_to_model_forward</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/utils/doc.py#L45</source><parameters>[{"name": "*docstr", "val": ""}]</parameters></docstring>
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.add_end_docstrings</name><anchor>transformers.add_end_docstrings</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/utils/doc.py#L81</source><parameters>[{"name": "*docstr", "val": ""}]</parameters></docstring>
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.utils.add_code_sample_docstrings</name><anchor>transformers.utils.add_code_sample_docstrings</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/utils/doc.py#L1455</source><parameters>[{"name": "*docstr", "val": ""}, {"name": "processor_class", "val": " = None"}, {"name": "checkpoint", "val": " = None"}, {"name": "output_type", "val": " = None"}, {"name": "config_class", "val": " = None"}, {"name": "mask", "val": " = '[MASK]'"}, {"name": "qa_target_start_index", "val": " = 14"}, {"name": "qa_target_end_index", "val": " = 15"}, {"name": "model_cls", "val": " = None"}, {"name": "modality", "val": " = None"}, {"name": "expected_output", "val": " = None"}, {"name": "expected_loss", "val": " = None"}, {"name": "real_checkpoint", "val": " = None"}, {"name": "revision", "val": " = None"}]</parameters></docstring>
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.utils.replace_return_docstrings</name><anchor>transformers.utils.replace_return_docstrings</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/utils/doc.py#L1554</source><parameters>[{"name": "output_type", "val": " = None"}, {"name": "config_class", "val": " = None"}]</parameters></docstring>
+
+
+</div>
+
+## Other Utilities[[transformers.utils._LazyModule]]
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>class transformers.utils._LazyModule</name><anchor>transformers.utils._LazyModule</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/utils/import_utils.py#L2176</source><parameters>[{"name": "name", "val": ": str"}, {"name": "module_file", "val": ": str"}, {"name": "import_structure", "val": ": dict[frozenset[str], dict[str, set[str]]]"}, {"name": "module_spec", "val": ": typing.Optional[_frozen_importlib.ModuleSpec] = None"}, {"name": "extra_objects", "val": ": typing.Optional[dict[str, object]] = None"}, {"name": "explicit_import_shortcut", "val": ": typing.Optional[dict[str, list[str]]] = None"}]</parameters></docstring>
+
+Module class that surfaces all objects but only performs associated imports when the objects are requested.
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.infer_device</name><anchor>transformers.infer_device</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/pytorch_utils.py#L370</source><parameters>[]</parameters></docstring>
+
+Infers available device.
+
+
+</div>
+
+<!--HF DOCBUILD BODY END-->
+
+HF_DOC_BODY_END
+

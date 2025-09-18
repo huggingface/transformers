@@ -1,0 +1,599 @@
+<script lang="ts">
+import {onMount} from "svelte";
+import Tip from "$lib/Tip.svelte";
+import Youtube from "$lib/Youtube.svelte";
+import Docstring from "$lib/Docstring.svelte";
+import CodeBlock from "$lib/CodeBlock.svelte";
+import CodeBlockFw from "$lib/CodeBlockFw.svelte";
+import DocNotebookDropdown from "$lib/DocNotebookDropdown.svelte";
+import CourseFloatingBanner from "$lib/CourseFloatingBanner.svelte";
+import IconCopyLink from "$lib/IconCopyLink.svelte";
+import FrameworkContent from "$lib/FrameworkContent.svelte";
+import Markdown from "$lib/Markdown.svelte";
+import Question from "$lib/Question.svelte";
+import FrameworkSwitchCourse from "$lib/FrameworkSwitchCourse.svelte";
+import InferenceApi from "$lib/InferenceApi.svelte";
+import TokenizersLanguageContent from "$lib/TokenizersLanguageContent.svelte";
+import ExampleCodeBlock from "$lib/ExampleCodeBlock.svelte";
+import Added from "$lib/Added.svelte";
+import Changed from "$lib/Changed.svelte";
+import Deprecated from "$lib/Deprecated.svelte";
+import PipelineIcon from "$lib/PipelineIcon.svelte";
+import PipelineTag from "$lib/PipelineTag.svelte";
+import Heading from "$lib/Heading.svelte";
+import HfOptions from "$lib/HfOptions.svelte";
+import HfOption from "$lib/HfOption.svelte";
+import EditOnGithub from "$lib/EditOnGithub.svelte";
+import InferenceSnippet from "$lib/InferenceSnippet/InferenceSnippet.svelte";
+let fw: "pt" | "tf" = "pt";
+onMount(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    fw = urlParams.get("fw") || "pt";
+});
+</script>
+<svelte:head>
+  <meta name="hf:doc:metadata" content={metadata} >
+</svelte:head>
+
+<!--HF DOCBUILD BODY START-->
+
+HF_DOC_BODY_START
+
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# Utilities for Image Processors
+
+This page lists all the utility functions used by the image processors, mainly the functional
+transformations used to process the images.
+
+Most of those are only useful if you are studying the code of the image processors in the library.
+
+## Image Transformations[[transformers.image_transforms.center_crop]]
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.image_transforms.center_crop</name><anchor>transformers.image_transforms.center_crop</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L455</source><parameters>[{"name": "image", "val": ": ndarray"}, {"name": "size", "val": ": tuple[int, int]"}, {"name": "data_format", "val": ": typing.Union[transformers.image_utils.ChannelDimension, str, NoneType] = None"}, {"name": "input_data_format", "val": ": typing.Union[transformers.image_utils.ChannelDimension, str, NoneType] = None"}]</parameters><paramsdesc>- **image** (`np.ndarray`) --
+  The image to crop.
+- **size** (`tuple[int, int]`) --
+  The target size for the cropped image.
+- **data_format** (`str` or `ChannelDimension`, *optional*) --
+  The channel dimension format for the output image. Can be one of:
+  - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+  - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+  If unset, will use the inferred format of the input image.
+- **input_data_format** (`str` or `ChannelDimension`, *optional*) --
+  The channel dimension format for the input image. Can be one of:
+  - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+  - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+  If unset, will use the inferred format of the input image.</paramsdesc><paramgroups>0</paramgroups><rettype>`np.ndarray`</rettype><retdesc>The cropped image.</retdesc></docstring>
+
+Crops the `image` to the specified `size` using a center crop. Note that if the image is too small to be cropped to
+the size given, it will be padded (so the returned result will always be of size `size`).
+
+
+
+
+
+
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.image_transforms.center_to_corners_format</name><anchor>transformers.image_transforms.center_to_corners_format</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L570</source><parameters>[{"name": "bboxes_center", "val": ": TensorType"}]</parameters></docstring>
+
+Converts bounding boxes from center format to corners format.
+
+center format: contains the coordinate for the center of the box and its width, height dimensions
+(center_x, center_y, width, height)
+corners format: contains the coordinates for the top-left and bottom-right corners of the box
+(top_left_x, top_left_y, bottom_right_x, bottom_right_y)
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.image_transforms.corners_to_center_format</name><anchor>transformers.image_transforms.corners_to_center_format</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L630</source><parameters>[{"name": "bboxes_corners", "val": ": TensorType"}]</parameters></docstring>
+
+Converts bounding boxes from corners format to center format.
+
+corners format: contains the coordinates for the top-left and bottom-right corners of the box
+(top_left_x, top_left_y, bottom_right_x, bottom_right_y)
+center format: contains the coordinate for the center of the box and its the width, height dimensions
+(center_x, center_y, width, height)
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.image_transforms.id_to_rgb</name><anchor>transformers.image_transforms.id_to_rgb</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L664</source><parameters>[{"name": "id_map", "val": ""}]</parameters></docstring>
+
+Converts unique ID to RGB color.
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.image_transforms.normalize</name><anchor>transformers.image_transforms.normalize</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L394</source><parameters>[{"name": "image", "val": ": ndarray"}, {"name": "mean", "val": ": typing.Union[float, collections.abc.Collection[float]]"}, {"name": "std", "val": ": typing.Union[float, collections.abc.Collection[float]]"}, {"name": "data_format", "val": ": typing.Optional[transformers.image_utils.ChannelDimension] = None"}, {"name": "input_data_format", "val": ": typing.Union[transformers.image_utils.ChannelDimension, str, NoneType] = None"}]</parameters><paramsdesc>- **image** (`np.ndarray`) --
+  The image to normalize.
+- **mean** (`float` or `Collection[float]`) --
+  The mean to use for normalization.
+- **std** (`float` or `Collection[float]`) --
+  The standard deviation to use for normalization.
+- **data_format** (`ChannelDimension`, *optional*) --
+  The channel dimension format of the output image. If unset, will use the inferred format from the input.
+- **input_data_format** (`ChannelDimension`, *optional*) --
+  The channel dimension format of the input image. If unset, will use the inferred format from the input.</paramsdesc><paramgroups>0</paramgroups></docstring>
+
+Normalizes `image` using the mean and standard deviation specified by `mean` and `std`.
+
+image = (image - mean) / std
+
+
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.image_transforms.pad</name><anchor>transformers.image_transforms.pad</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L694</source><parameters>[{"name": "image", "val": ": ndarray"}, {"name": "padding", "val": ": typing.Union[int, tuple[int, int], collections.abc.Iterable[tuple[int, int]]]"}, {"name": "mode", "val": ": PaddingMode = <PaddingMode.CONSTANT: 'constant'>"}, {"name": "constant_values", "val": ": typing.Union[float, collections.abc.Iterable[float]] = 0.0"}, {"name": "data_format", "val": ": typing.Union[transformers.image_utils.ChannelDimension, str, NoneType] = None"}, {"name": "input_data_format", "val": ": typing.Union[transformers.image_utils.ChannelDimension, str, NoneType] = None"}]</parameters><paramsdesc>- **image** (`np.ndarray`) --
+  The image to pad.
+- **padding** (`int` or `tuple[int, int]` or `Iterable[tuple[int, int]]`) --
+  Padding to apply to the edges of the height, width axes. Can be one of three formats:
+  - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
+  - `((before, after),)` yields same before and after pad for height and width.
+  - `(pad,)` or int is a shortcut for before = after = pad width for all axes.
+- **mode** (`PaddingMode`) --
+  The padding mode to use. Can be one of:
+  - `"constant"`: pads with a constant value.
+  - `"reflect"`: pads with the reflection of the vector mirrored on the first and last values of the
+    vector along each axis.
+  - `"replicate"`: pads with the replication of the last value on the edge of the array along each axis.
+  - `"symmetric"`: pads with the reflection of the vector mirrored along the edge of the array.
+- **constant_values** (`float` or `Iterable[float]`, *optional*) --
+  The value to use for the padding if `mode` is `"constant"`.
+- **data_format** (`str` or `ChannelDimension`, *optional*) --
+  The channel dimension format for the output image. Can be one of:
+  - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+  - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+  If unset, will use same as the input image.
+- **input_data_format** (`str` or `ChannelDimension`, *optional*) --
+  The channel dimension format for the input image. Can be one of:
+  - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+  - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+  If unset, will use the inferred format of the input image.</paramsdesc><paramgroups>0</paramgroups><rettype>`np.ndarray`</rettype><retdesc>The padded image.</retdesc></docstring>
+
+Pads the `image` with the specified (height, width) `padding` and `mode`.
+
+
+
+
+
+
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.image_transforms.rgb_to_id</name><anchor>transformers.image_transforms.rgb_to_id</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L653</source><parameters>[{"name": "color", "val": ""}]</parameters></docstring>
+
+Converts RGB color to unique ID.
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.image_transforms.rescale</name><anchor>transformers.image_transforms.rescale</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L97</source><parameters>[{"name": "image", "val": ": ndarray"}, {"name": "scale", "val": ": float"}, {"name": "data_format", "val": ": typing.Optional[transformers.image_utils.ChannelDimension] = None"}, {"name": "dtype", "val": ": dtype = <class 'numpy.float32'>"}, {"name": "input_data_format", "val": ": typing.Union[transformers.image_utils.ChannelDimension, str, NoneType] = None"}]</parameters><paramsdesc>- **image** (`np.ndarray`) --
+  The image to rescale.
+- **scale** (`float`) --
+  The scale to use for rescaling the image.
+- **data_format** (`ChannelDimension`, *optional*) --
+  The channel dimension format of the image. If not provided, it will be the same as the input image.
+- **dtype** (`np.dtype`, *optional*, defaults to `np.float32`) --
+  The dtype of the output image. Defaults to `np.float32`. Used for backwards compatibility with feature
+  extractors.
+- **input_data_format** (`ChannelDimension`, *optional*) --
+  The channel dimension format of the input image. If not provided, it will be inferred from the input image.</paramsdesc><paramgroups>0</paramgroups><rettype>`np.ndarray`</rettype><retdesc>The rescaled image.</retdesc></docstring>
+
+Rescales `image` by `scale`.
+
+
+
+
+
+
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.image_transforms.resize</name><anchor>transformers.image_transforms.resize</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L323</source><parameters>[{"name": "image", "val": ": ndarray"}, {"name": "size", "val": ": tuple[int, int]"}, {"name": "resample", "val": ": PILImageResampling = None"}, {"name": "reducing_gap", "val": ": typing.Optional[int] = None"}, {"name": "data_format", "val": ": typing.Optional[transformers.image_utils.ChannelDimension] = None"}, {"name": "return_numpy", "val": ": bool = True"}, {"name": "input_data_format", "val": ": typing.Union[transformers.image_utils.ChannelDimension, str, NoneType] = None"}]</parameters><paramsdesc>- **image** (`np.ndarray`) --
+  The image to resize.
+- **size** (`tuple[int, int]`) --
+  The size to use for resizing the image.
+- **resample** (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`) --
+  The filter to user for resampling.
+- **reducing_gap** (`int`, *optional*) --
+  Apply optimization by resizing the image in two steps. The bigger `reducing_gap`, the closer the result to
+  the fair resampling. See corresponding Pillow documentation for more details.
+- **data_format** (`ChannelDimension`, *optional*) --
+  The channel dimension format of the output image. If unset, will use the inferred format from the input.
+- **return_numpy** (`bool`, *optional*, defaults to `True`) --
+  Whether or not to return the resized image as a numpy array. If False a `PIL.Image.Image` object is
+  returned.
+- **input_data_format** (`ChannelDimension`, *optional*) --
+  The channel dimension format of the input image. If unset, will use the inferred format from the input.</paramsdesc><paramgroups>0</paramgroups><rettype>`np.ndarray`</rettype><retdesc>The resized image.</retdesc></docstring>
+
+Resizes `image` to `(height, width)` specified by `size` using the PIL library.
+
+
+
+
+
+
+
+
+</div>
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>transformers.image_transforms.to_pil_image</name><anchor>transformers.image_transforms.to_pil_image</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L162</source><parameters>[{"name": "image", "val": ": typing.Union[numpy.ndarray, ForwardRef('PIL.Image.Image'), ForwardRef('torch.Tensor'), ForwardRef('tf.Tensor'), ForwardRef('jnp.ndarray')]"}, {"name": "do_rescale", "val": ": typing.Optional[bool] = None"}, {"name": "image_mode", "val": ": typing.Optional[str] = None"}, {"name": "input_data_format", "val": ": typing.Union[transformers.image_utils.ChannelDimension, str, NoneType] = None"}]</parameters><paramsdesc>- **image** (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor` or `tf.Tensor`) --
+  The image to convert to the `PIL.Image` format.
+- **do_rescale** (`bool`, *optional*) --
+  Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will default
+  to `True` if the image type is a floating type and casting to `int` would result in a loss of precision,
+  and `False` otherwise.
+- **image_mode** (`str`, *optional*) --
+  The mode to use for the PIL image. If unset, will use the default mode for the input image type.
+- **input_data_format** (`ChannelDimension`, *optional*) --
+  The channel dimension format of the input image. If unset, will use the inferred format from the input.</paramsdesc><paramgroups>0</paramgroups><rettype>`PIL.Image.Image`</rettype><retdesc>The converted image.</retdesc></docstring>
+
+Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
+needed.
+
+
+
+
+
+
+
+
+</div>
+
+## ImageProcessingMixin[[transformers.ImageProcessingMixin]]
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>class transformers.ImageProcessingMixin</name><anchor>transformers.ImageProcessingMixin</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L64</source><parameters>[{"name": "**kwargs", "val": ""}]</parameters></docstring>
+
+This is an image processor mixin used to provide saving/loading functionality for sequential and image feature
+extractors.
+
+
+
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>fetch_images</name><anchor>transformers.ImageProcessingMixin.fetch_images</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L522</source><parameters>[{"name": "image_url_or_urls", "val": ": typing.Union[str, list[str], list[list[str]]]"}]</parameters></docstring>
+
+Convert a single or a list of urls into the corresponding `PIL.Image` objects.
+
+If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
+returned.
+
+
+</div>
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>from_dict</name><anchor>transformers.ImageProcessingMixin.from_dict</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L389</source><parameters>[{"name": "image_processor_dict", "val": ": dict[str, typing.Any]"}, {"name": "**kwargs", "val": ""}]</parameters><paramsdesc>- **image_processor_dict** (`dict[str, Any]`) --
+  Dictionary that will be used to instantiate the image processor object. Such a dictionary can be
+  retrieved from a pretrained checkpoint by leveraging the
+  [`~image_processing_utils.ImageProcessingMixin.to_dict`] method.
+- **kwargs** (`dict[str, Any]`) --
+  Additional parameters from which to initialize the image processor object.</paramsdesc><paramgroups>0</paramgroups><rettype>[`~image_processing_utils.ImageProcessingMixin`]</rettype><retdesc>The image processor object instantiated from those
+parameters.</retdesc></docstring>
+
+Instantiates a type of [`~image_processing_utils.ImageProcessingMixin`] from a Python dictionary of parameters.
+
+
+
+
+
+
+
+
+</div>
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>from_json_file</name><anchor>transformers.ImageProcessingMixin.from_json_file</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L446</source><parameters>[{"name": "json_file", "val": ": typing.Union[str, os.PathLike]"}]</parameters><paramsdesc>- **json_file** (`str` or `os.PathLike`) --
+  Path to the JSON file containing the parameters.</paramsdesc><paramgroups>0</paramgroups><rettype>A image processor of type [`~image_processing_utils.ImageProcessingMixin`]</rettype><retdesc>The image_processor object
+instantiated from that JSON file.</retdesc></docstring>
+
+Instantiates a image processor of type [`~image_processing_utils.ImageProcessingMixin`] from the path to a JSON
+file of parameters.
+
+
+
+
+
+
+
+
+</div>
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>from_pretrained</name><anchor>transformers.ImageProcessingMixin.from_pretrained</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L91</source><parameters>[{"name": "pretrained_model_name_or_path", "val": ": typing.Union[str, os.PathLike]"}, {"name": "cache_dir", "val": ": typing.Union[str, os.PathLike, NoneType] = None"}, {"name": "force_download", "val": ": bool = False"}, {"name": "local_files_only", "val": ": bool = False"}, {"name": "token", "val": ": typing.Union[bool, str, NoneType] = None"}, {"name": "revision", "val": ": str = 'main'"}, {"name": "**kwargs", "val": ""}]</parameters><paramsdesc>- **pretrained_model_name_or_path** (`str` or `os.PathLike`) --
+  This can be either:
+
+  - a string, the *model id* of a pretrained image_processor hosted inside a model repo on
+    huggingface.co.
+  - a path to a *directory* containing a image processor file saved using the
+    [`~image_processing_utils.ImageProcessingMixin.save_pretrained`] method, e.g.,
+    `./my_model_directory/`.
+  - a path or url to a saved image processor JSON *file*, e.g.,
+    `./my_model_directory/preprocessor_config.json`.
+- **cache_dir** (`str` or `os.PathLike`, *optional*) --
+  Path to a directory in which a downloaded pretrained model image processor should be cached if the
+  standard cache should not be used.
+- **force_download** (`bool`, *optional*, defaults to `False`) --
+  Whether or not to force to (re-)download the image processor files and override the cached versions if
+  they exist.
+- **resume_download** --
+  Deprecated and ignored. All downloads are now resumed by default when possible.
+  Will be removed in v5 of Transformers.
+- **proxies** (`dict[str, str]`, *optional*) --
+  A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+  'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+- **token** (`str` or `bool`, *optional*) --
+  The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+  the token generated when running `hf auth login` (stored in `~/.huggingface`).
+- **revision** (`str`, *optional*, defaults to `"main"`) --
+  The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+  git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+  identifier allowed by git.
+
+
+  <Tip>
+
+  To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
+
+  </Tip>
+
+- **return_unused_kwargs** (`bool`, *optional*, defaults to `False`) --
+  If `False`, then this function returns just the final image processor object. If `True`, then this
+  functions returns a `Tuple(image_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
+  consisting of the key/value pairs whose keys are not image processor attributes: i.e., the part of
+  `kwargs` which has not been used to update `image_processor` and is otherwise ignored.
+- **subfolder** (`str`, *optional*, defaults to `""`) --
+  In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+  specify the folder name here.
+- **kwargs** (`dict[str, Any]`, *optional*) --
+  The values in kwargs of any keys which are image processor attributes will be used to override the
+  loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
+  controlled by the `return_unused_kwargs` keyword parameter.</paramsdesc><paramgroups>0</paramgroups><retdesc>A image processor of type [`~image_processing_utils.ImageProcessingMixin`].</retdesc></docstring>
+
+Instantiate a type of [`~image_processing_utils.ImageProcessingMixin`] from an image processor.
+
+
+
+
+
+<ExampleCodeBlock anchor="transformers.ImageProcessingMixin.from_pretrained.example">
+
+Examples:
+
+```python
+# We can't instantiate directly the base class *ImageProcessingMixin* so let's show the examples on a
+# derived class: *CLIPImageProcessor*
+image_processor = CLIPImageProcessor.from_pretrained(
+    "openai/clip-vit-base-patch32"
+)  # Download image_processing_config from huggingface.co and cache.
+image_processor = CLIPImageProcessor.from_pretrained(
+    "./test/saved_model/"
+)  # E.g. image processor (or model) was saved using *save_pretrained('./test/saved_model/')*
+image_processor = CLIPImageProcessor.from_pretrained("./test/saved_model/preprocessor_config.json")
+image_processor = CLIPImageProcessor.from_pretrained(
+    "openai/clip-vit-base-patch32", do_normalize=False, foo=False
+)
+assert image_processor.do_normalize is False
+image_processor, unused_kwargs = CLIPImageProcessor.from_pretrained(
+    "openai/clip-vit-base-patch32", do_normalize=False, foo=False, return_unused_kwargs=True
+)
+assert image_processor.do_normalize is False
+assert unused_kwargs == {"foo": False}
+```
+
+</ExampleCodeBlock>
+
+</div>
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>get_image_processor_dict</name><anchor>transformers.ImageProcessingMixin.get_image_processor_dict</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L266</source><parameters>[{"name": "pretrained_model_name_or_path", "val": ": typing.Union[str, os.PathLike]"}, {"name": "**kwargs", "val": ""}]</parameters><paramsdesc>- **pretrained_model_name_or_path** (`str` or `os.PathLike`) --
+  The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
+- **subfolder** (`str`, *optional*, defaults to `""`) --
+  In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+  specify the folder name here.
+- **image_processor_filename** (`str`, *optional*, defaults to `"config.json"`) --
+  The name of the file in the model directory to use for the image processor config.</paramsdesc><paramgroups>0</paramgroups><rettype>`tuple[Dict, Dict]`</rettype><retdesc>The dictionary(ies) that will be used to instantiate the image processor object.</retdesc></docstring>
+
+From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
+image processor of type [`~image_processor_utils.ImageProcessingMixin`] using `from_dict`.
+
+
+
+
+
+
+
+
+</div>
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>push_to_hub</name><anchor>transformers.ImageProcessingMixin.push_to_hub</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/utils/hub.py#L847</source><parameters>[{"name": "repo_id", "val": ": str"}, {"name": "use_temp_dir", "val": ": typing.Optional[bool] = None"}, {"name": "commit_message", "val": ": typing.Optional[str] = None"}, {"name": "private", "val": ": typing.Optional[bool] = None"}, {"name": "token", "val": ": typing.Union[bool, str, NoneType] = None"}, {"name": "max_shard_size", "val": ": typing.Union[str, int, NoneType] = '5GB'"}, {"name": "create_pr", "val": ": bool = False"}, {"name": "safe_serialization", "val": ": bool = True"}, {"name": "revision", "val": ": typing.Optional[str] = None"}, {"name": "commit_description", "val": ": typing.Optional[str] = None"}, {"name": "tags", "val": ": typing.Optional[list[str]] = None"}, {"name": "**deprecated_kwargs", "val": ""}]</parameters><paramsdesc>- **repo_id** (`str`) --
+  The name of the repository you want to push your image processor to. It should contain your organization name
+  when pushing to a given organization.
+- **use_temp_dir** (`bool`, *optional*) --
+  Whether or not to use a temporary directory to store the files saved before they are pushed to the Hub.
+  Will default to `True` if there is no directory named like `repo_id`, `False` otherwise.
+- **commit_message** (`str`, *optional*) --
+  Message to commit while pushing. Will default to `"Upload image processor"`.
+- **private** (`bool`, *optional*) --
+  Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
+- **token** (`bool` or `str`, *optional*) --
+  The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+  when running `hf auth login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
+  is not specified.
+- **max_shard_size** (`int` or `str`, *optional*, defaults to `"5GB"`) --
+  Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
+  will then be each of size lower than this size. If expressed as a string, needs to be digits followed
+  by a unit (like `"5MB"`). We default it to `"5GB"` so that users can easily load models on free-tier
+  Google Colab instances without any CPU OOM issues.
+- **create_pr** (`bool`, *optional*, defaults to `False`) --
+  Whether or not to create a PR with the uploaded files or directly commit.
+- **safe_serialization** (`bool`, *optional*, defaults to `True`) --
+  Whether or not to convert the model weights in safetensors format for safer serialization.
+- **revision** (`str`, *optional*) --
+  Branch to push the uploaded files to.
+- **commit_description** (`str`, *optional*) --
+  The description of the commit that will be created
+- **tags** (`list[str]`, *optional*) --
+  List of tags to push on the Hub.</paramsdesc><paramgroups>0</paramgroups></docstring>
+
+Upload the image processor file to the 🤗 Model Hub.
+
+
+
+<ExampleCodeBlock anchor="transformers.ImageProcessingMixin.push_to_hub.example">
+
+Examples:
+
+```python
+from transformers import AutoImageProcessor
+
+image processor = AutoImageProcessor.from_pretrained("google-bert/bert-base-cased")
+
+# Push the image processor to your namespace with the name "my-finetuned-bert".
+image processor.push_to_hub("my-finetuned-bert")
+
+# Push the image processor to an organization with the name "my-finetuned-bert".
+image processor.push_to_hub("huggingface/my-finetuned-bert")
+```
+
+</ExampleCodeBlock>
+
+
+</div>
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>register_for_auto_class</name><anchor>transformers.ImageProcessingMixin.register_for_auto_class</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L500</source><parameters>[{"name": "auto_class", "val": " = 'AutoImageProcessor'"}]</parameters><paramsdesc>- **auto_class** (`str` or `type`, *optional*, defaults to `"AutoImageProcessor "`) --
+  The auto class to register this new image processor with.</paramsdesc><paramgroups>0</paramgroups></docstring>
+
+Register this class with a given auto class. This should only be used for custom image processors as the ones
+in the library are already mapped with `AutoImageProcessor `.
+
+
+
+
+
+
+</div>
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>save_pretrained</name><anchor>transformers.ImageProcessingMixin.save_pretrained</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L205</source><parameters>[{"name": "save_directory", "val": ": typing.Union[str, os.PathLike]"}, {"name": "push_to_hub", "val": ": bool = False"}, {"name": "**kwargs", "val": ""}]</parameters><paramsdesc>- **save_directory** (`str` or `os.PathLike`) --
+  Directory where the image processor JSON file will be saved (will be created if it does not exist).
+- **push_to_hub** (`bool`, *optional*, defaults to `False`) --
+  Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+  repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+  namespace).
+- **kwargs** (`dict[str, Any]`, *optional*) --
+  Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.</paramsdesc><paramgroups>0</paramgroups></docstring>
+
+Save an image processor object to the directory `save_directory`, so that it can be re-loaded using the
+[`~image_processing_utils.ImageProcessingMixin.from_pretrained`] class method.
+
+
+
+
+</div>
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>to_dict</name><anchor>transformers.ImageProcessingMixin.to_dict</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L434</source><parameters>[]</parameters><rettype>`dict[str, Any]`</rettype><retdesc>Dictionary of all the attributes that make up this image processor instance.</retdesc></docstring>
+
+Serializes this instance to a Python dictionary.
+
+
+
+
+
+
+</div>
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>to_json_file</name><anchor>transformers.ImageProcessingMixin.to_json_file</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L486</source><parameters>[{"name": "json_file_path", "val": ": typing.Union[str, os.PathLike]"}]</parameters><paramsdesc>- **json_file_path** (`str` or `os.PathLike`) --
+  Path to the JSON file in which this image_processor instance's parameters will be saved.</paramsdesc><paramgroups>0</paramgroups></docstring>
+
+Save this instance to a JSON file.
+
+
+
+
+</div>
+<div class="docstring border-l-2 border-t-2 pl-4 pt-3.5 border-gray-100 rounded-tl-xl mb-6 mt-8">
+
+
+<docstring><name>to_json_string</name><anchor>transformers.ImageProcessingMixin.to_json_string</anchor><source>https://github.com/huggingface/transformers/blob/main/src/transformers/image_processing_base.py#L465</source><parameters>[]</parameters><rettype>`str`</rettype><retdesc>String containing all the attributes that make up this feature_extractor instance in JSON format.</retdesc></docstring>
+
+Serializes this instance to a JSON string.
+
+
+
+
+
+
+</div></div>
+
+<!--HF DOCBUILD BODY END-->
+
+HF_DOC_BODY_END
+
