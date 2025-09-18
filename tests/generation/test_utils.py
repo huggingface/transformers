@@ -1024,8 +1024,8 @@ class GenerationTesterMixin:
             if token_type_ids is not None:
                 padded_token_type_ids = torch.cat(
                     (
-                        # Assumption: take the first token type id as the padding token type id
-                        torch.ones(pad_size[:2], dtype=input_ids.dtype, device=torch_device) * token_type_ids[0, 0],
+                        # Assumption: `0` is a good default value for padding token type ids
+                        torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device),
                         token_type_ids,
                     ),
                     dim=1,
