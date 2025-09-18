@@ -22,6 +22,9 @@ import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
+import torch.nn as nn
+import torch.nn.functional as F
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -41,8 +44,6 @@ from .configuration_florence2 import Florence2Config, Florence2VisionConfig
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
