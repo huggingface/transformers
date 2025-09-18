@@ -14,16 +14,26 @@
 # limitations under the License.
 
 from .configuration_blueberry import BlueberryConfig
-from .modeling_blueberry import (
-    BlueberryPreTrainedModel,
-    BlueberryModel,
-    BlueberryForCausalLM,
-)
 
+# These will be set later if torch is available
+BlueberryPreTrainedModel = None
+BlueberryModel = None
+BlueberryForCausalLM = None
+
+from transformers.utils import import_utils
+
+if import_utils.is_torch_available():
+    # only import modelling parts if torch is installed
+    from .modeling_blueberry import (
+        BlueberryPreTrainedModel,
+        BlueberryModel,
+        BlueberryForCausalLM,
+    )
+
+# tokenizers (fast or not) usually don't require torch
 try:
     from .tokenization_blueberry import BlueberryTokenizer, BlueberryTokenizerFast
 except Exception:
-    # Fast tokenizer might be unavailable in minimal envs
     BlueberryTokenizer = None
     BlueberryTokenizerFast = None
 
@@ -35,4 +45,3 @@ __all__ = [
     "BlueberryTokenizer",
     "BlueberryTokenizerFast",
 ]
-
