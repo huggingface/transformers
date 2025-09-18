@@ -820,6 +820,10 @@ class Trainer:
             num_devices = xr.global_runtime_device_count()
             xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
         self.is_fsdp_xla_v1_enabled = self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
+        self._train_session_start_time = None
+        self._session_start_step = 0
+        self._session_tokens_processed = 0
+        self._train_session_samples_processed = 0
 
     @property
     def tokenizer(self) -> Optional[PreTrainedTokenizerBase]:
@@ -2292,8 +2296,15 @@ class Trainer:
             resume_from_checkpoint = get_last_checkpoint(args.output_dir)
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
+        self._train_session_start_time = time.time()
+        self._session_tokens_processed = 0
+        self._train_session_samples_processed = 0
+        self._session_start_step = self.state.global_step
+            
 
         if resume_from_checkpoint is not None:
+            logger.info("Resetting session metrics for checkpoint resume to ensure accurate speed calculations")
+            self._train_session_start_time = time.time()
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
                 self._load_from_checkpoint(resume_from_checkpoint)
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
@@ -2964,6 +2975,12 @@ class Trainer:
                     f"Transformers but your current version is {__version__}. This is not recommended and could "
                     "yield to errors or unwanted behaviors."
                 )
+        self._session_start_step = self.state.global_step
+        self._train_session_start_time = time.time()
+        self._session_tokens_processed = 0
+        self._train_session_samples_processed = 0
+        logger.info(f"Reset session metrics after checkpoint load. Starting from step {self._session_start_step}")
+        
 
         if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file) or is_fsdp_ckpt:
             # If the model is on the GPU, it still works!
@@ -3225,8 +3242,35 @@ class Trainer:
             tr_loss -= tr_loss
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+            if hasattr(self, '_train_session_start_time') and self._train_session_start_time is not None:
+                session_runtime = time.time() - self._train_session_start_time
+                session_steps = self.state.global_step - self._session_start_step
+                
+                if session_runtime > 0 and session_steps > 0:
+                    logs["train_steps_per_second"] = round(session_steps / session_runtime, 3)
+                    
+                    # Calculate tokens per second using session data only
+                    if self._session_tokens_processed > 0:
+                        logs["train_tokens_per_second"] = round(self._session_tokens_processed / session_runtime, 3)
+                    
+                    # Calculate samples per second using session data only
+                    if self._train_session_samples_processed > 0:
+                        logs["train_samples_per_second"] = round(self._train_session_samples_processed / session_runtime, 3)
+                else:
+                    # Fallback for edge cases
+                    logs["train_steps_per_second"] = 0.0
+                    logs["train_tokens_per_second"] = 0.0
+                    logs["train_samples_per_second"] = 0.0
+            
+            # Log learning rate
+            if hasattr(self.lr_scheduler, "get_last_lr"):
+                logs["learning_rate"] = self.lr_scheduler.get_last_lr()[0]
+            else:
+                logs["learning_rate"] = self.optimizer.param_groups[0]["lr"]
             if grad_norm is not None:
                 logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
+            self._globalstep_last_logged = self.state.global_step
+            self.log(logs)
             if learning_rate is not None:
                 logs["learning_rate"] = learning_rate
             else:
@@ -4028,6 +4072,20 @@ class Trainer:
                 self.optimizer.train()
 
             inputs = self._prepare_inputs(inputs)
+            if 'input_ids' in inputs:
+                # Count actual tokens (exclude padding if attention_mask is available)
+                if 'attention_mask' in inputs:
+                    # Count only non-padded tokens for accurate measurement
+                    batch_tokens = inputs['attention_mask'].sum().item()
+                else:
+                    # Fallback to total tokens if no attention mask
+                    batch_tokens = inputs['input_ids'].numel()
+                
+                batch_samples = inputs['input_ids'].shape[0]  # Batch size
+            
+            # Update session counters
+            self._session_tokens_processed += batch_tokens
+            self._train_session_samples_processed += batch_samples
             if is_sagemaker_mp_enabled():
                 loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
                 return loss_mb.reduce_mean().detach().to(self.args.device)
