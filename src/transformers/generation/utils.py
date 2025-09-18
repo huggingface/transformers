@@ -1907,6 +1907,7 @@ class GenerationMixin(ContinuousMixin):
                 "minimax",
                 "xlnet",
                 "lfm2",
+                "lfm2-vl",
             ]
         )
 
