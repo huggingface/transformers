@@ -155,6 +155,7 @@ def list_repo_templates(
     local_files_only: bool,
     revision: Optional[str] = None,
     cache_dir: Optional[str] = None,
+    token: Optional[str] = None,
 ) -> list[str]:
     """List template files from a repo.
 
@@ -171,6 +172,7 @@ def list_repo_templates(
                     revision=revision,
                     path_in_repo=CHAT_TEMPLATE_DIR,
                     recursive=False,
+                    token=token,
                 )
                 if entry.path.endswith(".jinja")
             ]
