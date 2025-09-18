@@ -112,6 +112,7 @@ class LayoutLMv2ModelTester:
         detectron2_config["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 4
         detectron2_config["MODEL.RESNETS.STEM_OUT_CHANNELS"] = 4
         detectron2_config["MODEL.FPN.OUT_CHANNELS"] = 32
+        detectron2_config["MODEL.RESNETS.NUM_GROUPS"] = 1
         self.detectron2_config = detectron2_config
 
     def prepare_config_and_inputs(self):
