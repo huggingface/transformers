@@ -553,26 +553,6 @@ class AutoModelTest(unittest.TestCase):
         _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
         self.assertEqual(_MODEL_MAPPING[BertConfig], GPT2Model)
 
-    # def test_dynamic_saving_from_local_repo(self):
-    #     with tempfile.TemporaryDirectory() as tmp_dir, tempfile.TemporaryDirectory() as tmp_dir_out:
-    #         # `Repository` is deprecated and will be removed in `huggingface_hub v1.0`.
-    #         # TODO: Remove this test when this comes.
-    #         # Here is a ugly approach to avoid `too many requests`
-    #         repo_id = url_to_local_path("hf-internal-testing/tiny-random-custom-architecture")
-    #         if os.path.isdir(repo_id):
-    #             shutil.copytree(repo_id, tmp_dir, dirs_exist_ok=True)
-    #         else:
-    #             _ = Repository(
-    #                 local_dir=tmp_dir,
-    #                 clone_from=url_to_local_path("hf-internal-testing/tiny-random-custom-architecture"),
-    #             )
-
-    #         model = AutoModelForCausalLM.from_pretrained(tmp_dir, trust_remote_code=True)
-    #         model.save_pretrained(tmp_dir_out)
-    #         _ = AutoModelForCausalLM.from_pretrained(tmp_dir_out, trust_remote_code=True)
-    #         self.assertTrue((Path(tmp_dir_out) / "modeling_fake_custom.py").is_file())
-    #         self.assertTrue((Path(tmp_dir_out) / "configuration_fake_custom.py").is_file())
-
     def test_custom_model_patched_generation_inheritance(self):
         """
         Tests that our inheritance patching for generate-compatible models works as expected. Without this feature,
