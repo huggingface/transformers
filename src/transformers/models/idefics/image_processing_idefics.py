@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 from PIL import Image
 

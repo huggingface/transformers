@@ -16,8 +16,9 @@
 
 import math
 import os
+from collections.abc import Callable
 from operator import attrgetter
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn

@@ -14,7 +14,8 @@
 # limitations under the License.
 
 
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import flax
 import flax.linen as nn

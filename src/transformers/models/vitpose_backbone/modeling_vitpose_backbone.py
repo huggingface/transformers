@@ -20,7 +20,8 @@ This code is the same as the original Vision Transformer (ViT) with 2 modificati
 """
 
 import collections.abc
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn

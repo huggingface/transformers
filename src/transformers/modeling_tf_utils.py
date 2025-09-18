@@ -25,9 +25,9 @@ import os
 import pickle
 import re
 import warnings
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Union
+from typing import TYPE_CHECKING, Any, Union
 
 import h5py
 import numpy as np
