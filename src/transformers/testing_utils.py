@@ -15,6 +15,7 @@
 import ast
 import collections
 import contextlib
+import copy
 import doctest
 import functools
 import gc
