@@ -70,7 +70,7 @@ class LayoutLMv2ModelTester:
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
-        image_feature_pool_shape=[7, 7, 256],
+        image_feature_pool_shape=[7, 7, 32],
         coordinate_size=6,
         shape_size=6,
         num_labels=3,
@@ -111,6 +111,7 @@ class LayoutLMv2ModelTester:
         detectron2_config["MODEL.RESNETS.DEPTH"] = 50
         detectron2_config["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 4
         detectron2_config["MODEL.RESNETS.STEM_OUT_CHANNELS"] = 4
+        detectron2_config["MODEL.FPN.OUT_CHANNELS"] = 32
         self.detectron2_config = detectron2_config
 
     def prepare_config_and_inputs(self):
