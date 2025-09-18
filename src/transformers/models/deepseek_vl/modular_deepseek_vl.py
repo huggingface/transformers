@@ -14,6 +14,9 @@
 
 from typing import Optional, Union
 
+import torch
+import torch.nn as nn
+
 from ...configuration_utils import PretrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -24,7 +27,6 @@ from ...tokenization_utils_base import (
 )
 from ...utils import (
     auto_docstring,
-    is_torch_available,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -33,10 +35,6 @@ from ..janus.image_processing_janus import JanusImageProcessor
 from ..janus.image_processing_janus_fast import JanusImageProcessorFast
 from ..janus.modeling_janus import JanusForConditionalGeneration, JanusModel, JanusPreTrainedModel
 
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
