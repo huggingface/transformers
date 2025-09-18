@@ -491,6 +491,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("blip-2", "BLIP-2"),
         ("blip_2_qformer", "BLIP-2 QFormer"),
         ("bloom", "BLOOM"),
+        ("blueberry", "Blueberry"),
         ("bort", "BORT"),
         ("bridgetower", "BridgeTower"),
         ("bros", "BROS"),
