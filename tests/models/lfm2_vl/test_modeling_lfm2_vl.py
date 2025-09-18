@@ -166,9 +166,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     model_tester_class = Lfm2VlModelTester
     _is_composite = True
 
-    # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = Lfm2VlForConditionalGeneration if is_torch_available() else None
-
     def setUp(self):
         self.model_tester = Lfm2VlModelTester(self)
         common_properties = ["image_token_id", "projector_hidden_size"]
