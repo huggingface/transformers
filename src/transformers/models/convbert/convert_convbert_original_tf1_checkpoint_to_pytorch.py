@@ -16,13 +16,17 @@
 
 import argparse
 import os
+from operator import attrgetter
+
 import torch
 
 from transformers import ConvBertConfig, ConvBertModel
 from transformers.utils import logging
 
+
 logger = logging.get_logger(__name__)
 logging.set_verbosity_info()
+
 
 def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
