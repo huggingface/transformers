@@ -24,11 +24,12 @@ from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...utils import is_vision_available, logging
-from .image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs
 
 
 if is_vision_available():
     from ...image_utils import load_images
+    from .image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs
+
 
 logger = logging.get_logger(__name__)
 
