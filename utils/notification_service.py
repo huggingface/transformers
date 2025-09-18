@@ -1457,8 +1457,8 @@ if __name__ == "__main__":
 
     if len(matrix_job_results_extra) > 0:
         api.upload_file(
-            path_or_fileobj=f"ci_results_{job_name}/matrix_job_results_extra.json",
-            path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/matrix_job_results_extra.json",
+            path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json",
+            path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json",
             repo_id=report_repo_id,
             repo_type="dataset",
             token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
