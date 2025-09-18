@@ -78,7 +78,7 @@ class MaxLengthCriteria(StoppingCriteria):
         is_done = cur_len >= self.max_length
         if self.max_position_embeddings is not None and not is_done and cur_len > self.max_position_embeddings:
             logger.warning_once(
-                "This is a friendly reminder - the current text generation call will exceed the model's predefined "
+                "This is a friendly reminder - the current text generation call has exceeded the model's predefined "
                 f"maximum length ({self.max_position_embeddings}). Depending on the model, you may observe "
                 "exceptions, performance degradation, or nothing at all."
             )
