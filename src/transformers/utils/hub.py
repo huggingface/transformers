@@ -155,7 +155,7 @@ def list_repo_templates(
     local_files_only: bool,
     revision: Optional[str] = None,
     cache_dir: Optional[str] = None,
-    token: Optional[str] = None,
+    token: Union[bool, str, None] = None,
 ) -> list[str]:
     """List template files from a repo.
 
