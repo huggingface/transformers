@@ -51,7 +51,7 @@ class XcodecModelTester:
         num_channels=1,
         sample_rate=16000,
         codebook_size=1024,
-        num_samples=400,
+        num_samples=256,
         is_training=False,
     ):
         self.parent = parent
@@ -61,7 +61,9 @@ class XcodecModelTester:
         self.codebook_size = codebook_size
         self.is_training = is_training
         self.num_samples = num_samples
-        self.acoustic_model_config = DacConfig(decoder_hidden_size=8, encoder_hidden_size=8, codebook_size=16)
+        self.acoustic_model_config = DacConfig(
+            decoder_hidden_size=8, encoder_hidden_size=8, codebook_size=16, downsampling_ratios=[16, 16]
+        )
         self.semantic_model_config = HubertConfig(
             hidden_size=32,
             num_hidden_layers=2,
