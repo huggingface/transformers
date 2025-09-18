@@ -88,16 +88,6 @@ The original code can be found [here](<https://github.com/facebookresearch/blt>)
 
 [[autodoc]] BltConfig
 
-## BltTokenizer
-
-[[autodoc]] BltTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-## BltModel
-
 [[autodoc]] BltModel
     - forward
 
