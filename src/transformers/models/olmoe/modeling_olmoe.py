@@ -266,35 +266,18 @@ class OlmoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class OlmoeMlp(nn.Module):
-    def __init__(self, config: OlmoeConfig):
-        super().__init__()
-        self.ffn_dim = config.intermediate_size
-        self.hidden_dim = config.hidden_size
-
-        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
-        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states):
-        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
-        current_hidden_states = self.w2(current_hidden_states)
-        return current_hidden_states
-
-
-class OlmoeNaiveMoe(nn.ModuleList):
+class OlmoeExperts(nn.ModuleList):
     """
     ModuleList of experts.
     """
 
-    def __init__(self, config: OlmoeConfig):
+    def __init__(self, config):
         super().__init__()
+        for _ in range(config.num_experts):
+            self.append(OlmoeMLP(config))
+        self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(OlmoeMlp(config))
+        self.norm_topk_prob = config.norm_topk_prob
 
     def route_tokens_to_experts(self, hidden_states, router_logits):
         routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
@@ -333,7 +316,7 @@ class OlmoeSparseMoeBlock(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
         self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
-        self.experts = OlmoeNaiveMoe(config)
+        self.experts = OlmoeExperts(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -458,7 +441,7 @@ class OlmoeModel(OlmoePreTrainedModel):
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-        # FIXEM: SHOULD NOT HAVE SLIDING
+
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
         causal_mask = mask_function(
             config=self.config,

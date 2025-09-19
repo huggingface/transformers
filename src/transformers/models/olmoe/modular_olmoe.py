@@ -117,7 +117,7 @@ class OlmoeAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class Qwen3MoeExperts(MixtralExperts, nn.ModuleList):
+class OlmoeExperts(MixtralExperts, nn.ModuleList):
     def __init__(self, config):
         nn.ModuleList.__init__(self)
         for _ in range(config.num_experts):
@@ -144,7 +144,7 @@ class OlmoeSparseMoeBlock(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
         self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
-        self.experts = OlmoeNaiveMoe(config)
+        self.experts = OlmoeExperts(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
