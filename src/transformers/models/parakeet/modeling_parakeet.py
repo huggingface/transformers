@@ -116,8 +116,6 @@ class LSTMDropout(torch.nn.Module):
         self, x: torch.Tensor, h: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
     ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
 
-        print("HERE x h", x.shape) #, h.shape)
-
         x, h = self.lstm(x, h)
 
         if self.dropout:
@@ -580,14 +578,23 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
         elif activation == 'tanh':
             activation = torch.nn.Tanh()
 
-        self.layers = (
+        self.layers = torch.nn.Sequential(
             [activation]
             + ([torch.nn.Dropout(p=dropout)] if dropout else [])
             + [torch.nn.Linear(config.joint_hidden, num_classes)]
         )
 
-
         self.post_init()
+
+    @auto_docstring
+    @check_model_inputs
+    @can_return_tuple
+    def forward(self, enc, pred):
+        enc = self.enc(enc.view([-1]))
+        pred = self.pred(pred.view([-1]))
+
+        output = self.layers(enc + pred)
+        return output
 
 
 class ParakeetTDTPredictor(ParakeetPreTrainedModel):
@@ -680,17 +687,11 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
         states,
         hidden_state = None,
     ):
-        print("HERE INPUT", input_token)
-#        assert False
-
-        # y: (B, U)
         y = input_token
-
         g, states = self.predict(y, state=states) #, add_sos=add_sos)  # (B, U, D)
         g = g.transpose(1, 2)  # (B, D, U)
 
         return g, states
-#        return g, target_length, states
 
     def predict(self, y, state):
         # Get device and dtype of current module
@@ -733,8 +734,6 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
 
 
         y = y.transpose(0, 1)  # (U + 1, B, H)
-
-        print("HERE Y is", y.shape)
 
         g, hid = self.dec_rnn(y, state)
         g = g.transpose(0, 1)  # (B, U + 1, H)
@@ -1007,6 +1006,9 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
 class ParakeetForTDT(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__(config)
+
+        print("HERE config", config)
+
         assert isinstance(config, ParakeetTDTConfig)
 
         self.encoder = ParakeetEncoder(config.encoder_config)
@@ -1035,12 +1037,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             attention_mask=attention_mask,
             **kwargs,
         )
-
-#        hidden_states = encoder_outputs.last_hidden_state
-
-#        print("WEIRD self.ctc_head", self.ctc_head)
-#        exit(-1)
-#        logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         loss = None
         if labels is not None:
@@ -1111,35 +1107,27 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         return sequences
 
-    def greedy_decode(self,
-                      encoder_output: torch.Tensor(),
-        ):
-            T = encoder_output.shape[1]
-#            print("HERE encoder_output", encoder_output.shape)
-#            print("HERE self.decoder", self.decoder)
+    def greedy_decode(self, encoder_output):
+        T = encoder_output.shape[1]
+        t = 0
+        hyp = []
+        last_label = 1024 # should be blank
 
-            t = 0
+        while t < T:
+            not_blank = True
+            symbols_added = 0
+            enc = encoder_output[0,t,:]
+            while not_blank and symbols_added < 2:
+                if isinstance(last_label, int):
+                    last_label = torch.LongTensor([[last_label]]) #.to(self.decoder.device)
+                g, hidden_prime = self.decoder(last_label, None)
+                logp = self.joint(enc, g)
 
-            hyp = []
-            last_label = 1024 # should be blank
+                print("HERE logp", logp.shape)
 
-            while t < T:
-                not_blank = True
-                symbols_added = 0
-                enc = encoder_output[0,t,:]
-                while not_blank and symbols_added < 2:
-#                    print("BEFORE LAST", last_label)
-                    if isinstance(last_label, int):
-                        last_label = torch.LongTensor([[last_label]]) #.to(self.decoder.device)
-#                    print("PASSING LAST", last_label)
-#                    print("PASSING LAST shape", last_label.shape)
-                    g, hidden_prime = self.decoder(last_label, None)
-                    logp = self.joint(enc, g)
+                symbols_added += 1
 
-
-                    symbols_added += 1
-
-                t+=1
+            t+=1
 
 
 __all__ = ["ParakeetForCTC", "ParakeetForTDT", "ParakeetEncoder", "ParakeetPreTrainedModel"]
