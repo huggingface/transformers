@@ -16,8 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-09-01 and added to Hugging Face Transformers on 2025-09-15.*
-
+*This model was released on 2025-09-01 and added to Hugging Face Transformers on 2025-09-17.*
 
 # LongCatFlash
 
@@ -70,7 +69,7 @@ outputs = model.generate(inputs, max_new_tokens=30)
 print(tokenizer.batch_decode(outputs))
 ```
 
-To run with TP, you will need torchrun: 
+To run with TP, you will need torchrun:
 
 ```bash
 torchrun  --nproc_per_node=8 --nnodes=2 --node_rank=0 | 1  --rdzv-id <an_id> --rdzv-backend c10d --rdzv-endpoint $NODE_ID:$NODE_PORT  --log-dir ./logs_longcat launch_longcat.py

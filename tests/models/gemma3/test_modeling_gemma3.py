@@ -814,8 +814,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
         prompt = "What is the capital of France?"
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        foward_outputs = model(**model_inputs)
-        self.assertIn("DynamicSlidingWindowLayer", str(foward_outputs.past_key_values))
+        forward_outputs = model(**model_inputs)
+        self.assertIn("DynamicSlidingWindowLayer", str(forward_outputs.past_key_values))
 
         generate_outputs = model.generate(
             **model_inputs, max_new_tokens=2, do_sample=False, return_dict_in_generate=True

@@ -306,6 +306,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
     "VaultGemmaConfig": ["tie_word_embeddings"],
+    "GemmaConfig": ["tie_word_embeddings"],
 }
 
 
@@ -472,7 +473,6 @@ def check_config_attributes_being_used(config_class):
     # Get the path to modeling source files
     config_source_file = inspect.getsourcefile(config_class)
     model_dir = os.path.dirname(config_source_file)
-    # Let's check against all frameworks: as long as one framework uses an attribute, we are good.
     modeling_paths = [os.path.join(model_dir, fn) for fn in os.listdir(model_dir) if fn.startswith("modeling_")]
 
     # Get the source code strings

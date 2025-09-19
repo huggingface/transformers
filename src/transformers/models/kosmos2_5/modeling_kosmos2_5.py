@@ -78,23 +78,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
-def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
-    """
-    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
-    are ignored. This is modified from fairseq's `utils.make_positions`.
-
-    Args:
-        x: torch.Tensor x:
-
-    Returns: torch.Tensor
-    """
-    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
-    return incremental_indices.long() + padding_idx
-
-
 KOSMOS2_5_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -484,7 +467,6 @@ class Kosmos2_5VisionAttention(nn.Module):
         self.is_causal = False
         self.scaling = self.head_dim**-0.5
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.key = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
@@ -686,13 +668,15 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
             bsz, seq_len = input_ids.size()
             if position_ids is None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = create_position_ids_from_input_ids(
+                position_ids = self.create_position_ids_from_input_ids(
                     input_ids, self.padding_idx, past_key_values_length
                 ).to(input_ids.device)
         else:
             bsz, seq_len = inputs_embeds.size()[:-1]
             if position_ids is None:
-                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds, past_key_values_length)
+                position_ids = self.create_position_ids_from_inputs_embeds(
+                    inputs_embeds, past_key_values_length, self.padding_idx
+                )
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
@@ -701,8 +685,9 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
 
+    @staticmethod
     # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding.create_position_ids_from_inputs_embeds
-    def create_position_ids_from_inputs_embeds(self, inputs_embeds, past_key_values_length):
+    def create_position_ids_from_inputs_embeds(inputs_embeds, past_key_values_length, padding_idx):
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
 
@@ -715,9 +700,26 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
         sequence_length = input_shape[1]
 
         position_ids = torch.arange(
-            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+            padding_idx + 1, sequence_length + padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
         return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
+
+    @staticmethod
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings.create_position_ids_from_input_ids
+    def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+        """
+        Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
+        are ignored. This is modified from fairseq's `utils.make_positions`.
+
+        Args:
+            x: torch.Tensor x:
+
+        Returns: torch.Tensor
+        """
+        # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+        mask = input_ids.ne(padding_idx).int()
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+        return incremental_indices.long() + padding_idx
 
 
 # Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextFFN with Kosmos2->Kosmos2_5
@@ -1618,7 +1620,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
 
         # cut input_ids if past_key_values is used
         if past_key_values is not None:
-            position_ids = create_position_ids_from_input_ids(
+            position_ids = Kosmos2_5TextSinusoidalPositionalEmbedding.create_position_ids_from_input_ids(
                 input_ids,
                 padding_idx=self.config.pad_token_id,
                 past_key_values_length=0,

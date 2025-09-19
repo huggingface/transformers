@@ -136,8 +136,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] models.gpt2.modeling_gpt2.GPT2DoubleHeadsModelOutput
 
-[[autodoc]] models.gpt2.modeling_tf_gpt2.TFGPT2DoubleHeadsModelOutput
-
 <frameworkcontent>
 <pt>
 
@@ -172,48 +170,4 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     - forward
 
 </pt>
-<tf>
-
-## TFGPT2Model
-
-[[autodoc]] TFGPT2Model
-    - call
-
-## TFGPT2LMHeadModel
-
-[[autodoc]] TFGPT2LMHeadModel
-    - call
-
-## TFGPT2DoubleHeadsModel
-
-[[autodoc]] TFGPT2DoubleHeadsModel
-    - call
-
-## TFGPT2ForSequenceClassification
-
-[[autodoc]] TFGPT2ForSequenceClassification
-    - call
-
-## TFSequenceClassifierOutputWithPast
-
-[[autodoc]] modeling_tf_outputs.TFSequenceClassifierOutputWithPast
-
-## TFGPT2Tokenizer
-
-[[autodoc]] TFGPT2Tokenizer
-
-</tf>
-<jax>
-
-## FlaxGPT2Model
-
-[[autodoc]] FlaxGPT2Model
-    - __call__
-
-## FlaxGPT2LMHeadModel
-
-[[autodoc]] FlaxGPT2LMHeadModel
-    - __call__
-
-</jax>
 </frameworkcontent>
