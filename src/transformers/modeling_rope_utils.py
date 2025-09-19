@@ -427,7 +427,7 @@ def _compute_longrope_parameters(
     # NOTE: Phi3 (and potentially other models) modify `max_position_embeddings` and have a
     # `original_max_position_embeddings` field containing the pretrained value. They use the ratio between these two
     # values to compute the default attention scaling factor, instead of using `factor`.
-    if original_max_position_embeddings := getattr(config, "original_max_position_embeddings"):
+    if original_max_position_embeddings := getattr(config, "original_max_position_embeddings", None):
         factor = config.max_position_embeddings / original_max_position_embeddings
     else:
         original_max_position_embeddings = config.max_position_embeddings
