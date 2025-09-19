@@ -2688,26 +2688,35 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         applicable_attn_implementation = attn_implementation
+
         # If FA not installed, do not fail but use kernels instead
         if (
-            applicable_attn_implementation == "flash_attention_2"
+            applicable_attn_implementation.startswith("flash_attention")
             and self._supports_flash_attn
-            and not is_flash_attn_2_available()
+            and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
         ):
-            applicable_attn_implementation = "kernels-community/flash-attn"
+            if applicable_attn_implementation.endswith("2"):
+                applicable_attn_implementation = "kernels-community/flash-attn"
+            else:
+                applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
+
         if is_kernel(applicable_attn_implementation):
             try:
                 load_and_register_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
-                if attn_implementation == "flash_attention_2":
+                if attn_implementation.startswith("flash_attention"):
                     logger.warning_once(
-                        "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` "
-                        "library instead!"
+                        f"You do not have `flash_attn` installed, using `{applicable_attn_implementation}` "
+                        "from the `kernels` library instead!"
                     )
             except Exception as e:
-                if attn_implementation == "flash_attention_2":
-                    self._flash_attn_2_can_dispatch()  # will fail as fa2 is not available but raise the proper exception
+                # raise the proper exception for requested flash attention
+                if attn_implementation.startswith("flash_attention"):
+                    if attn_implementation.endswith("2"):
+                        self._flash_attn_2_can_dispatch()
+                    else:
+                        self._flash_attn_3_can_dispatch()
 
                 # error properly out if a kernel was specifically requested
                 raise e
