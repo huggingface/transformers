@@ -109,7 +109,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
-        return_tensors = self.framework
+        return_tensors = "pt"
         if self.tokenizer.pad_token is None:
             # Override for tokenizers not supporting padding
             logger.error(
@@ -226,7 +226,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         sequence = inputs["sequence"]
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
         # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
-        model_forward = self.model.forward if self.framework == "pt" else self.model.call
+        model_forward = self.model.forward
         if "use_cache" in inspect.signature(model_forward).parameters:
             model_inputs["use_cache"] = False
         outputs = self.model(**model_inputs)
@@ -242,10 +242,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     def postprocess(self, model_outputs, multi_label=False):
         candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
         sequences = [outputs["sequence"] for outputs in model_outputs]
-        if self.framework == "pt":
-            logits = np.concatenate([output["logits"].float().numpy() for output in model_outputs])
-        else:
-            logits = np.concatenate([output["logits"].numpy() for output in model_outputs])
+        logits = np.concatenate([output["logits"].float().numpy() for output in model_outputs])
         N = logits.shape[0]
         n = len(candidate_labels)
         num_sequences = N // n
