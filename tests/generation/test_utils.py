@@ -84,10 +84,6 @@ if is_torch_available():
         StaticCache,
     )
     from transformers.generation import (
-        BeamSampleDecoderOnlyOutput,
-        BeamSampleEncoderDecoderOutput,
-        BeamSearchDecoderOnlyOutput,
-        BeamSearchEncoderDecoderOutput,
         CompileConfig,
         GenerateBeamDecoderOnlyOutput,
         GenerateBeamEncoderDecoderOutput,
@@ -95,14 +91,10 @@ if is_torch_available():
         GenerateEncoderDecoderOutput,
         GenerationConfig,
         GenerationMixin,
-        GreedySearchDecoderOnlyOutput,
-        GreedySearchEncoderDecoderOutput,
         LogitsProcessorList,
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
         PromptLookupCandidateGenerator,
-        SampleDecoderOnlyOutput,
-        SampleEncoderDecoderOutput,
         StoppingCriteria,
         StoppingCriteriaList,
         SynthIDTextWatermarkingConfig,
@@ -364,15 +356,11 @@ class GenerationTesterMixin:
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, GreedySearchEncoderDecoderOutput)
             else:
                 self.assertTrue(
                     output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
 
             self._check_generate_outputs(output_generate, model.config)
 
@@ -446,15 +434,11 @@ class GenerationTesterMixin:
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, SampleEncoderDecoderOutput)
             else:
                 self.assertTrue(
                     output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, SampleDecoderOnlyOutput)
 
             self._check_generate_outputs(output_generate, model.config, num_return_sequences=2)
 
@@ -496,15 +480,11 @@ class GenerationTesterMixin:
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
             else:
                 self.assertTrue(
                     output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
             self._check_generate_outputs(
                 output_generate,
@@ -625,15 +605,11 @@ class GenerationTesterMixin:
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
             else:
                 self.assertTrue(
                     output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
             self._check_generate_outputs(
                 output_generate,
