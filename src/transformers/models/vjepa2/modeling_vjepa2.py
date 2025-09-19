@@ -299,7 +299,6 @@ class VJEPA2RopeAttention(nn.Module):
         hidden_states,
         position_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        head_mask: Optional[torch.Tensor] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
@@ -331,7 +330,6 @@ class VJEPA2RopeAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -419,7 +417,6 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         position_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> tuple[torch.Tensor, ...]:
         # Self-Attention
@@ -428,7 +425,7 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         self_attention_outputs = self.attention(
             hidden_states,
             position_mask=position_mask,  # position mask for context/target selection
-            head_mask=head_mask,  # head mask is applied at F.scaled_dot_product_attention
+            # head mask is applied at F.scaled_dot_product_attention
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -476,7 +473,6 @@ class VJEPA2Encoder(nn.Module):
     def forward(
         self,
         pixel_values_videos: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         **kwargs,
@@ -490,8 +486,7 @@ class VJEPA2Encoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            layer_outputs = layer_module(hidden_states, None, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, None, output_attentions)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -625,7 +620,7 @@ class VJEPA2Predictor(nn.Module):
         self.layernorm = nn.LayerNorm(config.pred_hidden_size, eps=config.layer_norm_eps)
         self.proj = nn.Linear(config.pred_hidden_size, config.hidden_size, bias=True)
 
-    def sort_tokens(self, hidden_states, position_masks, argsort, head_mask=None):
+    def sort_tokens(self, hidden_states, position_masks, argsort):
         # gather position masks
         argsort = argsort.to(position_masks.device)
         position_masks = torch.gather(position_masks, dim=1, index=argsort)
@@ -635,28 +630,7 @@ class VJEPA2Predictor(nn.Module):
         hidden_states_argsort = argsort.unsqueeze(-1).expand(-1, -1, hidden_states.size(-1))
         hidden_states = torch.gather(hidden_states, dim=1, index=hidden_states_argsort)
 
-        # gather head mask
-        if head_mask is not None and head_mask[0] is not None:
-            argsort = argsort.to(head_mask.device)
-            head_mask = head_mask.permute(1, 0, 2, 3, 4)
-            argsort_4d = (
-                argsort.unsqueeze(1)
-                .unsqueeze(1)
-                .expand(-1, head_mask.size(1), head_mask.size(2), -1)
-                .unsqueeze(-1)
-                .expand(-1, -1, -1, -1, head_mask.size(-1))
-            )
-            head_mask = torch.gather(head_mask, dim=3, index=argsort_4d)
-            argsort_5d = (
-                argsort.unsqueeze(1)
-                .unsqueeze(1)
-                .unsqueeze(1)
-                .expand(-1, head_mask.size(1), head_mask.size(2), head_mask.size(3), -1)
-            )
-            head_mask = torch.gather(head_mask, dim=4, index=argsort_5d)
-            head_mask = head_mask.permute(1, 0, 2, 3, 4)
-
-        return hidden_states, position_masks, head_mask
+        return hidden_states, position_masks
 
     def unsort_tokens(self, hidden_states, argsort):
         argsort = argsort.to(hidden_states.device)
@@ -671,7 +645,6 @@ class VJEPA2Predictor(nn.Module):
         encoder_hidden_states: torch.Tensor,
         context_mask: list[torch.Tensor],
         target_mask: list[torch.Tensor],
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         **kwargs,
@@ -687,14 +660,13 @@ class VJEPA2Predictor(nn.Module):
 
         # Put tokens in sorted order
         argsort = torch.argsort(position_masks, dim=1)  # [B, N]
-        hidden_states, position_masks, head_mask = self.sort_tokens(hidden_states, position_masks, argsort, head_mask)
+        hidden_states, position_masks = self.sort_tokens(hidden_states, position_masks, argsort)
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            layer_outputs = layer_module(hidden_states, position_masks, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, position_masks, output_attentions)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1005,21 +977,6 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-def _convert_head_mask_to_5d(head_mask, num_hidden_layers):
-    """
-    Inputs:
-        - head_mask: bsz x seq_length x seq_length | None
-    Returns
-        - [num_hidden_layers x batch x num_heads x seq_length x seq_length] | [num_hidden_layers]
-    """
-    if head_mask is not None:
-        head_mask = head_mask.unsqueeze(1).unsqueeze(0)
-        head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
-    else:
-        head_mask = [None] * num_hidden_layers
-    return head_mask
-
-
 @auto_docstring
 class VJEPA2Model(VJEPA2PreTrainedModel):
     def __init__(self, config: VJEPA2Config):
@@ -1040,9 +997,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
-        context_head_mask: Optional[torch.Tensor] = None,
         context_mask: Optional[list[torch.Tensor]] = None,
-        target_head_mask: Optional[torch.Tensor] = None,
         target_mask: Optional[list[torch.Tensor]] = None,
         skip_predictor: bool = False,
         output_attentions: Optional[bool] = None,
@@ -1050,14 +1005,10 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         **kwargs,
     ) -> VJEPA2WithMaskedInputModelOutput:
         r"""
-        context_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
-            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
         context_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
             The mask position ids indicating which encoder output patches are going to be exposed to the predictor.
             By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating full context
             available to the predictor.
-        target_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
-            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the target.
         target_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
             The mask position ids indicating which encoder output patches are going to be used as a prediction target
             for the predictor. By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating
@@ -1073,13 +1024,8 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 
-        # Prepare head mask if needed
-        context_head_mask = _convert_head_mask_to_5d(context_head_mask, self.config.num_hidden_layers)
-        target_head_mask = _convert_head_mask_to_5d(target_head_mask, self.config.pred_num_hidden_layers)
-
         encoder_outputs: BaseModelOutput = self.encoder(
             pixel_values_videos=pixel_values_videos,
-            head_mask=context_head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
@@ -1096,7 +1042,6 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
                 encoder_hidden_states=sequence_output,
                 context_mask=context_mask,
                 target_mask=target_mask,
-                head_mask=target_head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )

@@ -202,9 +202,7 @@ class Dinov2SelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(
-        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -221,7 +219,6 @@ class Dinov2SelfAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -277,8 +274,8 @@ class Dinov2Attention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, head_mask)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -381,10 +378,9 @@ class Dinov2Layer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(hidden_states_norm, head_mask)
+        self_attention_output = self.attention(hidden_states_norm)
         self_attention_output = self.layer_scale1(self_attention_output)
 
         # first residual connection
@@ -408,13 +404,10 @@ class Dinov2Encoder(nn.Module):
         self.layer = nn.ModuleList([Dinov2Layer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(
-        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_hidden_states: bool = False
-    ) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
         all_hidden_states = [hidden_states] if output_hidden_states else None
         for i, layer_module in enumerate(self.layer):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            hidden_states = layer_module(hidden_states, layer_head_mask)
+            hidden_states = layer_module(hidden_states)
             if all_hidden_states:
                 all_hidden_states.append(hidden_states)
 
@@ -502,7 +495,6 @@ class Dinov2Model(Dinov2PreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
@@ -517,18 +509,9 @@ class Dinov2Model(Dinov2PreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
-        encoder_outputs: BaseModelOutput = self.encoder(
-            embedding_output, head_mask=head_mask, output_hidden_states=output_hidden_states
-        )
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=output_hidden_states)
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
         pooled_output = sequence_output[:, 0, :]
@@ -566,7 +549,6 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
@@ -576,7 +558,7 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        outputs: BaseModelOutputWithPooling = self.dinov2(pixel_values, head_mask=head_mask, **kwargs)
+        outputs: BaseModelOutputWithPooling = self.dinov2(pixel_values, **kwargs)
 
         sequence_output = outputs.last_hidden_state  # batch_size, sequence_length, hidden_size
         cls_token = sequence_output[:, 0]

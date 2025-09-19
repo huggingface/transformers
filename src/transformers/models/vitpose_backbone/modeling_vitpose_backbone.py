@@ -148,9 +148,7 @@ class VitPoseBackboneSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(
-        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -167,7 +165,6 @@ class VitPoseBackboneSelfAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -223,8 +220,8 @@ class VitPoseBackboneAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, head_mask)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -297,7 +294,6 @@ class VitPoseBackboneLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         dataset_index: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         # Validate dataset_index when using multiple experts
         if self.num_experts > 1 and dataset_index is None:
@@ -308,7 +304,7 @@ class VitPoseBackboneLayer(GradientCheckpointingLayer):
             )
 
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm, head_mask)
+        attention_output = self.attention(hidden_states_norm)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -338,13 +334,11 @@ class VitPoseBackboneEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         dataset_index: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutput:
         all_hidden_states = [hidden_states] if output_hidden_states else None
         for i, layer_module in enumerate(self.layer):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            hidden_states = layer_module(hidden_states, dataset_index, layer_head_mask)
+            hidden_states = layer_module(hidden_states, dataset_index)
             if all_hidden_states is not None:
                 all_hidden_states.append(hidden_states)
 
@@ -413,7 +407,6 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         self,
         pixel_values: torch.Tensor,
         dataset_index: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ):
@@ -440,16 +433,9 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(pixel_values)
         outputs: BaseModelOutput = self.encoder(
-            embedding_output, dataset_index=dataset_index, head_mask=head_mask, output_hidden_states=True
+            embedding_output, dataset_index=dataset_index, output_hidden_states=True
         )
         hidden_states = outputs.hidden_states
 

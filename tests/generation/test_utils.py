@@ -123,10 +123,6 @@ class GenerationTesterMixin:
 
         # We don't want a few model inputs in our model input dictionary for generation tests
         input_keys_to_ignore = [
-            # we don't want to mask attention heads
-            "head_mask",
-            "decoder_head_mask",
-            "cross_attn_head_mask",
             # we don't want encoder-decoder models to start from filled decoder ids
             "decoder_input_ids",
             "decoder_attention_mask",
@@ -2012,7 +2008,7 @@ class GenerationTesterMixin:
                     .eval()
                 )
 
-                # Drop all keys except for `input_ids`. Hard to manipulate with multimodals/head_mask/etc
+                # Drop all keys except for `input_ids`. Hard to manipulate with multimodals etc
                 dummy_input_ids = inputs_dict["input_ids"]
                 dummy_position_ids = torch.arange(dummy_input_ids.shape[1], device=torch_device)
                 dummy_position_ids = dummy_position_ids.unsqueeze(0).repeat(dummy_input_ids.shape[0], 1)
@@ -2106,7 +2102,7 @@ class GenerationTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                # Drop all keys except for the minimal set. Hard to manipulate with multimodals/head_mask/etc
+                # Drop all keys except for the minimal set. Hard to manipulate with multimodals etc
                 inputs_dict = {k: v for k, v in inputs_dict.items() if k in ["input_ids", "attention_mask"]}
 
                 # Ensure left padding, to adapt for some models

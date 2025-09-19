@@ -257,7 +257,6 @@ class BeitSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
@@ -304,10 +303,6 @@ class BeitSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -323,22 +318,20 @@ class BeitSdpaSelfAttention(BeitSelfAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
         resolution: Optional[tuple[int]] = None,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        if output_attentions or head_mask is not None:
+        if output_attentions:
             logger.warning_once(
                 "`BeitSdpaSelfAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
-                "support `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, "
+                "support `output_attentions=True`. Falling back to the manual attention implementation, "
                 "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
                 'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
                 hidden_states=hidden_states,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
                 relative_position_bias=relative_position_bias,
                 interpolate_pos_encoding=interpolate_pos_encoding,
@@ -445,14 +438,13 @@ class BeitAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
         resolution: Optional[tuple[int]] = None,
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         self_outputs = self.attention(
-            hidden_states, head_mask, output_attentions, relative_position_bias, interpolate_pos_encoding, resolution
+            hidden_states, output_attentions, relative_position_bias, interpolate_pos_encoding, resolution
         )
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -514,7 +506,6 @@ class BeitLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
@@ -522,7 +513,6 @@ class BeitLayer(GradientCheckpointingLayer):
     ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
-            head_mask,
             output_attentions=output_attentions,
             relative_position_bias=relative_position_bias,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -663,7 +653,6 @@ class BeitEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         interpolate_pos_encoding: bool = False,
@@ -686,11 +675,8 @@ class BeitEncoder(nn.Module):
             else:
                 relative_position_bias = None
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             layer_outputs = layer_module(
                 hidden_states,
-                head_mask=layer_head_mask,
                 output_attentions=output_attentions,
                 relative_position_bias=relative_position_bias,
                 interpolate_pos_encoding=interpolate_pos_encoding,
@@ -788,7 +774,6 @@ class BeitModel(BeitPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
@@ -804,19 +789,11 @@ class BeitModel(BeitPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         resolution = pixel_values.shape[2:]
 
         encoder_outputs = self.encoder(
             embedding_output,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             resolution=resolution,
@@ -888,7 +865,6 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -932,7 +908,6 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         outputs = self.beit(
             pixel_values,
             bool_masked_pos=bool_masked_pos,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -983,7 +958,6 @@ class BeitForImageClassification(BeitPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -999,7 +973,6 @@ class BeitForImageClassification(BeitPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.beit(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1318,7 +1291,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1358,7 +1330,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         outputs = self.beit(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=True,  # we need the intermediate hidden states
             interpolate_pos_encoding=interpolate_pos_encoding,
