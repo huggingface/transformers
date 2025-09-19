@@ -676,17 +676,6 @@ class ModelTesterMixin:
 
     def test_num_layers_is_small(self):
         # TODO (if possible): Avoid exceptional cases
-        exceptional_classes = [
-            "Zamba2ModelTester",
-            "RwkvModelTester",
-            "AriaVisionText2TextModelTester",
-            "GPTNeoModelTester",
-            "Qwen3NextModelTester",
-            "LxmertModelTester",
-        ]
-        if self.model_tester.__class__.__name__ in exceptional_classes:
-            return
-
         # ⛔ DO NOT edit this list (unless there is really nothing to tweak in the model tester class and approved by the reviewer) ⛔!
         exceptional_num_hidden_layers = {
             "FunnelModelTest": 5,
@@ -712,7 +701,7 @@ class ModelTesterMixin:
         if hasattr(self.model_tester, "out_features") or hasattr(self.model_tester, "out_indices"):
             self.skipTest(reason="bon")
 
-        if hasattr(self.model_tester, "num_hidden_layers"):
+        if hasattr(self.model_tester, "num_hidden_layers") and isinstance(self.model_tester.num_hidden_layers, int):
             assert self.model_tester.num_hidden_layers <= target_num_hidden_layers
 
         if (
