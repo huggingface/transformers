@@ -268,11 +268,8 @@ class Ernie4_5_MoeStatics(nn.Module):
         - Additionally, usage per expert in the original codebase
     """
 
-    def __init__(self, config):
+    def __init__(self, num_experts_groups, num_experts):
         super().__init__()
-
-        num_experts_groups = 1
-        num_experts = config.moe_num_experts
 
         self.e_score_correction_bias = nn.Parameter(
             torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
@@ -303,25 +300,22 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
     (optional) shared experts and a corrections bias during gating.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, num_experts, intermediate_size):
         super().__init__()
-        self.num_experts = config.moe_num_experts
+        self.num_experts = num_experts
         self.top_k = config.moe_k
 
         # correction bias (yes it seems to be a typo with statics <> statistics)
-        self.moe_statics = Ernie4_5_MoeStatics(config)
+        self.moe_statics = Ernie4_5_MoeStatics(num_experts_groups=1, num_experts=self.num_experts)
 
         # gating
-        self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
-        self.experts = nn.ModuleList(
-            [Ernie4_5_MoeMLP(config, config.moe_intermediate_size) for _ in range(config.moe_num_experts)]
-        )
+        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False, dtype=torch.float32)
+        self.experts = nn.ModuleList([Ernie4_5_MoeMLP(config, intermediate_size) for _ in range(self.num_experts)])
         self.norm_min = config.moe_norm_min
 
-        # (optional) shared experts for all forwards
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
-            self.shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
+            self.shared_experts = Ernie4_5_MoeMLP(config, intermediate_size * config.moe_num_shared_experts)
 
     def forward(
         self,
@@ -395,7 +389,9 @@ class Ernie4_5_MoeDecoderLayer(GradientCheckpointingLayer):
             and layer_idx >= config.moe_layer_start_index
             and layer_idx <= config.moe_layer_end_index
         ):
-            self.mlp = Ernie4_5_MoeSparseMoeBlock(config)
+            self.mlp = Ernie4_5_MoeSparseMoeBlock(
+                config, num_experts=config.moe_num_experts, intermediate_size=config.moe_intermediate_size
+            )
         else:
             self.mlp = Ernie4_5_MoeMLP(config)
 
