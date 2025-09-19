@@ -14,7 +14,6 @@
 
 """Testing suite for the PyTorch PhiMoE model."""
 
-import copy
 import unittest
 
 from parameterized import parameterized
