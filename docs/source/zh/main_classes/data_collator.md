@@ -47,19 +47,16 @@ Data collators是一个对象，通过使用数据集元素列表作为输入来
 
 [[autodoc]] data.data_collator.DataCollatorForLanguageModeling
     - numpy_mask_tokens
-    - tf_mask_tokens
     - torch_mask_tokens
 
 ## DataCollatorForWholeWordMask
 
 [[autodoc]] data.data_collator.DataCollatorForWholeWordMask
     - numpy_mask_tokens
-    - tf_mask_tokens
     - torch_mask_tokens
 
 ## DataCollatorForPermutationLanguageModeling
 
 [[autodoc]] data.data_collator.DataCollatorForPermutationLanguageModeling
     - numpy_mask_tokens
-    - tf_mask_tokens
     - torch_mask_tokens
