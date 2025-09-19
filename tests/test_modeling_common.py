@@ -684,7 +684,7 @@ class ModelTesterMixin:
             "GPTNeoModelTester",
             "DPTModelTester",
             "Qwen3NextModelTester",
-            "LxmertModelTest",
+            "LxmertModelTester",
         ]
         if self.model_tester.__class__.__name__ in exceptional_classes:
             return
@@ -699,7 +699,7 @@ class ModelTesterMixin:
             "OwlViTForObjectDetectionTest": 12,
             "Owlv2ModelTest": 12,
             "Owlv2TextModelTest": 12,
-            "Owlv2ForObjectDetectionTest:": 12,
+            "Owlv2ForObjectDetectionTest": 12,
             "SamHQModelTest": 12,
             "Swin2SRModelTest": 3,
             "XLNetModelTest": 3,
