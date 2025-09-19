@@ -240,15 +240,9 @@ def flex_attention_forward(
     attention_mask: Union[torch.Tensor, "BlockMask"],
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
-    head_mask: Optional[torch.Tensor] = None,
     s_aux: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-    if head_mask is not None:
-        logger.warning_once(
-            "`flex_attention` does not support `head_mask`. Please set your attention to `eager` if you want this feature."
-        )
-
     if kwargs.get("dropout", 0.0) > 0:
         raise ValueError(
             "`flex_attention` does not support `dropout`. Please use it with inference"
@@ -270,8 +264,6 @@ def flex_attention_forward(
             score = softcap * torch.tanh(score / softcap)
         if score_mask is not None:
             score = score + score_mask[batch_idx][0][q_idx][kv_idx]
-        if head_mask is not None:
-            score = score + head_mask[batch_idx][head_idx][0][0]
         if s_aux is not None:
             logits_max = torch.max(score, dim=-1, keepdim=True).values
             sinks = torch.exp(s_aux - logits_max)
