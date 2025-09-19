@@ -197,6 +197,13 @@ class PhimoeIntegrationTest(unittest.TestCase):
         # Can't run with the real checkpoint, even if offloaded. Let's just use a tiny dummy one
         config = copy.deepcopy(model.config)
         config.num_hidden_layers = 2
+        # make `head_dim = 128`
+        config.hidden_size = 512
+        config.num_attention_heads = 4
+        config.num_key_value_heads = 1
+        config.intermediate_size = 512
+        config.max_position_embeddinqgs = 64
+        config.num_local_experts = 4
         torch.manual_seed(42)
         model = PhimoeForCausalLM(config).to(torch_device)
         model.eval()
@@ -209,7 +216,9 @@ class PhimoeIntegrationTest(unittest.TestCase):
             },
             {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
         ]
-        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(
+            torch_device
+        )
 
         response_tokens = PhimoeMiniWithStaticCache.generate(model, inputs, max_seq_len=10)
 
@@ -217,7 +226,7 @@ class PhimoeIntegrationTest(unittest.TestCase):
 
         # This is dummy outputs. We actually check if it could run with static cache, not the output quality.
         EXPECTED_OUTPUT = [
-            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|>ington"
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> awards"
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
