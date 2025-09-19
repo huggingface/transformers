@@ -1145,7 +1145,9 @@ class ModelUtilsTest(TestCasePlus):
         response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = {}
-        response_mock.raise_for_status.side_effect = httpx.HTTPError("failed")
+        response_mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "failed", request=mock.Mock(), response=mock.Mock()
+        )
         response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
