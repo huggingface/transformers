@@ -2691,12 +2691,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If FA not installed, do not fail but use kernels instead
         if (
-            applicable_attn_implementation.startswith("flash_attention")
+            attn_implementation is not None
+            and attn_implementation.startswith("flash_attention")
             and self._supports_flash_attn
             and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
         ):
-            if applicable_attn_implementation.endswith("2"):
+            if attn_implementation.endswith("2"):
                 applicable_attn_implementation = "kernels-community/flash-attn"
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
