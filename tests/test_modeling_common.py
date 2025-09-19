@@ -677,12 +677,10 @@ class ModelTesterMixin:
     def test_num_layers_is_small(self):
         # TODO (if possible): Avoid exceptional cases
         exceptional_classes = [
-            "ZambaModelTester",
             "Zamba2ModelTester",
             "RwkvModelTester",
             "AriaVisionText2TextModelTester",
             "GPTNeoModelTester",
-            "DPTModelTester",
             "Qwen3NextModelTester",
             "LxmertModelTester",
         ]
