@@ -23,7 +23,7 @@ import unicodedata
 from collections import OrderedDict
 from typing import Any, Optional, Union, overload
 
-from .tokenization_utils_base import (
+from .tokenization_base import (
     ENCODE_KWARGS_DOCSTRING,
     ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
     INIT_TOKENIZER_DOCSTRING,
@@ -404,7 +404,7 @@ def _insert_one_token_to_ordered_list(token_list: list[str], new_token: str):
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
-class PreTrainedTokenizer(PreTrainedTokenizerBase):
+class PreTrainedSentencepieceTokenizer(PreTrainedTokenizerBase):
     """
     Base class for all slow tokenizers.
 
@@ -441,10 +441,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         )
 
         self._decode_use_source_tokenizer = False
-
-    @property
-    def is_fast(self) -> bool:
-        return False
 
     @property
     def vocab_size(self) -> int:

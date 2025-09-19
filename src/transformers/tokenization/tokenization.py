@@ -26,6 +26,7 @@ from typing import Any, Optional, Union
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
+from tokenizers import processors
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
@@ -33,7 +34,7 @@ from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_base import (
+from .tokenization_base import (
     INIT_TOKENIZER_DOCSTRING,
     AddedToken,
     BatchEncoding,
@@ -79,7 +80,7 @@ VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TIKTOKEN_VO
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
-class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
+class PreTrainedTokenizer(PreTrainedTokenizerBase):
     """
     Base class for all fast tokenizers (wrapping HuggingFace tokenizers library).
 
@@ -178,64 +179,56 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         super().__init__(**kwargs)
         self._tokenizer.encode_special_tokens = self.split_special_tokens
 
-        added_tokens_decoder_hash = {hash(repr(token)) for token in self.added_tokens_decoder}
-        tokens_to_add = [
-            token
-            for index, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])
-            if hash(repr(token)) not in added_tokens_decoder_hash
-        ]
-        encoder = list(self.added_tokens_encoder.keys()) + [str(token) for token in tokens_to_add]
-        # if some of the special tokens are strings, we check if we don't already have a token
-        tokens_to_add += [
-            token for token in self.all_special_tokens_extended if token not in encoder and token not in tokens_to_add
-        ]
-
-        if len(tokens_to_add) > 0:
-            tokens = []
-            special_tokens = self.all_special_tokens
-            for token in tokens_to_add:
-                is_special = (
-                    (token.special or str(token) in special_tokens)
-                    if isinstance(token, AddedToken)
-                    else str(token) in special_tokens
-                )
-                if isinstance(token, str):
-                    token = AddedToken(token, special=is_special)
-                else:
-                    token.special = is_special
-                tokens.append(token)
-            if tokens:
-                self.add_tokens(tokens)
-
-        try:
-            pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-            if pre_tok_state.get("add_prefix_space", self.add_prefix_space) != self.add_prefix_space:
-                pre_tok_class = getattr(pre_tokenizers_fast, pre_tok_state.pop("type"))
-                pre_tok_state["add_prefix_space"] = self.add_prefix_space
-                self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-        except Exception:
-            # We'll get an error if there is no pre_tokenizer, or if it's a custom pre_tokenizer that can
-            # not be serialized. In those cases, we just ignore the error as there's no pre_tokenizer
-            # for which we need to update the `add_prefix_space` attribute.
-            pass
-
-    @property
-    def is_fast(self) -> bool:
-        return True
-
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
+    def update_post_processor(self):
         """
-        `bool`: Whether or not the slow tokenizer can be saved. For a sentencepiece based slow tokenizer, this
-        can only be `True` if the original `"sentencepiece.model"` was not deleted.
+        Updates the underlying post processor with the current `bos_token` and `eos_token`.
         """
-        if "vocab_file" in self.vocab_files_names and self.vocab_files_names["vocab_file"].endswith(".model"):
-            if hasattr(self, "vocab_file") and self.vocab_file:
-                # If the vocab file is a sentencepiece model, we can save it
-                return os.path.isfile(self.vocab_file)
-            return False
+        bos = self.bos_token
+        bos_token_id = self.bos_token_id
+        if bos is None and self.add_bos_token:
+            raise ValueError("add_bos_token = True but bos_token = None")
+
+        eos = self.eos_token
+        eos_token_id = self.eos_token_id
+        if eos is None and self.add_eos_token:
+            raise ValueError("add_eos_token = True but eos_token = None")
+
+        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
+
+        special_tokens = []
+        if self.add_bos_token:
+            special_tokens.append((bos, bos_token_id))
+        if self.add_eos_token:
+            special_tokens.append((eos, eos_token_id))
+        
+        new_processor = processors.TemplateProcessing(
+            single=single, pair=pair, special_tokens=special_tokens
+        )
+        if isinstance(self._tokenizer.post_processor, processors.Sequence):
+            self._tokenizer.post_processor += [new_processor]
         else:
-            return True
+            self._tokenizer.post_processor = processors.Sequence([self._tokenizer.post_processor, new_processor])
+
+    @property
+    def add_eos_token(self):
+        return self._add_eos_token
+
+    @property
+    def add_bos_token(self):
+        return self._add_bos_token
+
+    @add_eos_token.setter
+    def add_eos_token(self, value):
+        self._add_eos_token = value
+        self.update_post_processor()
+
+    @add_bos_token.setter
+    def add_bos_token(self, value):
+        self._add_bos_token = value
+        self.update_post_processor()
+
+
 
     @property
     def vocab_size(self) -> int:
@@ -657,8 +650,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 batched_output.encodings,
             )
 
-        self._eventual_warn_about_too_long_sequence(batched_output["input_ids"], max_length, verbose)
-
         return batched_output
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
@@ -704,42 +695,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         file containing {config + vocab + added-tokens}.
         """
         save_directory = str(save_directory)
-
-        if self.slow_tokenizer_class is None and legacy_format is True:
-            raise ValueError(
-                "Your tokenizer does not have a legacy version defined and therefore cannot register this version. You"
-                " might consider leaving the legacy_format at `None` or setting it to `False`."
-            )
-
-        save_slow = (
-            (legacy_format is None or legacy_format is True)
-            and self.slow_tokenizer_class is not None
-            and self.can_save_slow_tokenizer
+        tokenizer_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_FILE
         )
-        save_fast = legacy_format is None or legacy_format is False
-
-        if save_slow:
-            added_tokens_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
-            )
-            # make sure to be forward compatible
-            added_vocab = {tok: index for tok, index in self.added_tokens_encoder.items() if index >= self.vocab_size}
-            if added_vocab:
-                with open(added_tokens_file, "w", encoding="utf-8") as f:
-                    out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-                    f.write(out_str)
-
-            vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
-            file_names = file_names + vocab_files + (added_tokens_file,)
-
-        if save_fast:
-            tokenizer_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_FILE
-            )
-            self.backend_tokenizer.save(tokenizer_file)
-            file_names = file_names + (tokenizer_file,)
-
-        return file_names
+        self.backend_tokenizer.save(tokenizer_file)
+        return tokenizer_file
 
     def train_new_from_iterator(
         self,
