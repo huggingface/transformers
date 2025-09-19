@@ -400,7 +400,7 @@ class MiniMaxAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MiniMaxMLP(nn.Module):
+class MiniMaxMlp(nn.Module):
     def __init__(self, config: MiniMaxConfig):
         super().__init__()
         self.ffn_dim = config.intermediate_size
@@ -418,39 +418,6 @@ class MiniMaxMLP(nn.Module):
         return current_hidden_states
 
 
-class MiniMaxRouter(nn.Module):
-    """
-    Gate module which determines which experts to use for each token.
-    It uses a separate set of parameters for each expert.
-    """
-
-    def __init__(self, config: MiniMaxConfig):
-        super().__init__()
-        self.num_experts = config.num_experts
-        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
-        self.top_k = config.num_experts_per_tok
-        self.jitter_noise = config.router_jitter_noise
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Args:
-            hidden_states: (batch_size, sequence_length, hidden_dim)
-        Returns:
-            router_logits: (batch_size * sequence_length, num_experts)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
-        """
-        if self.training and self.jitter_noise > 0:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        router_logits = torch.nn.functional.linear(hidden_states, self.weight)
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        top_k_weights = top_k_weights.to(hidden_states.dtype)
-        return router_logits, top_k_index, top_k_weights
-
-
 class MiniMaxExperts(nn.ModuleList):
     """
     ModuleList of experts.
@@ -461,11 +428,16 @@ class MiniMaxExperts(nn.ModuleList):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
-            self.append(MiniMaxMLP(config))
+            self.append(MiniMaxMlp(config))
 
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
+        return top_k_index, top_k_weights
+
+    def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
         """
         Args:
             hidden_states: (batch_size * sequence_length, hidden_dim)
@@ -475,6 +447,7 @@ class MiniMaxExperts(nn.ModuleList):
             (batch_size * sequence_length, hidden_dim)
         """
         final_hidden_states = torch.zeros_like(hidden_states)
+        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
         expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
@@ -489,14 +462,19 @@ class MiniMaxExperts(nn.ModuleList):
 class MiniMaxSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.gate = MiniMaxRouter(config)
+        self.top_k = config.num_experts_per_tok
+        self.jitter_noise = config.router_jitter_noise
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = MiniMaxExperts(config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        router_logits, selected_experts, routing_weights = self.gate(hidden_states)
+        if self.training and self.jitter_noise > 0:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        router_logits = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
-        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        hidden_states = self.experts(hidden_states, router_logits)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, router_logits
 

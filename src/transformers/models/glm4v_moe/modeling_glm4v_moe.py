@@ -298,9 +298,14 @@ class Glm4vMoeTextNaiveMoe(nn.ModuleList):
         for _ in range(self.num_experts):
             self += [Glm4vMoeTextMLP(config, intermediate_size=config.moe_intermediate_size)]
 
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
+        return top_k_index, top_k_weights
+
+    def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
         """
         Args:
             hidden_states: (batch_size * sequence_length, hidden_dim)
@@ -310,6 +315,7 @@ class Glm4vMoeTextNaiveMoe(nn.ModuleList):
             (batch_size * sequence_length, hidden_dim)
         """
         final_hidden_states = torch.zeros_like(hidden_states)
+        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
         expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
