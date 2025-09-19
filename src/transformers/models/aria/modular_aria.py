@@ -1120,19 +1120,6 @@ class AriaGroupedExpertsGemm(nn.Module):
         )
 
 
-class AriaRouter(nn.Module):
-    def __init__(self, config: AriaTextConfig):
-        super().__init__()
-        self.router = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False)
-        self.config = config
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        logits = self.router(hidden_states)
-        top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
-        scores = nn.functional.softmax(top_logits, dim=-1)
-        return logits, top_indices, scores
-
-
 class AriaExperts(nn.Module):
     def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
@@ -1140,7 +1127,13 @@ class AriaExperts(nn.Module):
         self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
         self.fc2 = AriaGroupedExpertsGemm(config.intermediate_size, config.hidden_size, config.moe_num_experts)
 
-    def forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        top_logits, top_indices = torch.topk(router_logits, k=self.config.moe_topk, dim=1)
+        scores = nn.functional.softmax(top_logits, dim=-1)
+        return top_indices, scores
+
+    def forward(self, hidden_states, router_logits) -> torch.Tensor:
+        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
         original_dtype = top_k_index.dtype
         tokens_per_expert = torch.histc(
             top_k_index.flatten().to(torch.float32),
@@ -1174,7 +1167,7 @@ class AriaExperts(nn.Module):
 class AriaTextMoELayer(nn.Module):
     def __init__(self, config: AriaTextConfig):
         super().__init__()
-        self.gate = AriaRouter(config)
+        self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False)
         self.experts = AriaExperts(config)
         self.shared_experts = AriaSharedExpertsMLP(config)
         self.config = config
@@ -1182,10 +1175,8 @@ class AriaTextMoELayer(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         original_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-
-        _, top_k_index, top_k_weights = self.gate(hidden_states)
-        expert_output = self.experts(hidden_states, top_k_index, top_k_weights).view(original_shape)
-
+        router_logits = self.gate(hidden_states)
+        expert_output = self.experts(hidden_states, router_logits).view(original_shape)
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
         return expert_output + shared_expert_output
 
