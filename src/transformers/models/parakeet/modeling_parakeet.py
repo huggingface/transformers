@@ -568,6 +568,7 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
 
         activation = config.joint_activation
         dropout = config.joint_dropout
+        dropout = 0.1
 
         num_classes = config.vocab_size + 1 + len(config.durations)
 
@@ -583,7 +584,9 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
             + ([torch.nn.Dropout(p=dropout)] if dropout else [])
             + [torch.nn.Linear(config.joint_hidden, num_classes)]
         )
-        self.layers = torch.nn.Sequential(*layers)
+        self.joint_net = torch.nn.Sequential(*layers)
+
+        print("CREATING JOINT", self.joint_net )
 
         self.post_init()
 
@@ -594,7 +597,7 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
         enc = self.enc(enc.view([-1]))
         pred = self.pred(pred.view([-1]))
 
-        output = self.layers(enc + pred)
+        output = self.joint_net(enc + pred)
         return output
 
 

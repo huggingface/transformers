@@ -731,6 +731,9 @@ def create_hf_model(
 
     matched_params = 0
     shape_mismatches = 0
+    print("HERE  model_state_dict.keys()")
+    print( model_state_dict.keys())
+    print( hf_state_dict.keys())
     for param_name in model_state_dict.keys():
         if param_name in hf_state_dict:
             if model_state_dict[param_name].shape == hf_state_dict[param_name].shape:
