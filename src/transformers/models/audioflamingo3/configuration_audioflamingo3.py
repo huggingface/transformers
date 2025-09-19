@@ -29,9 +29,11 @@ logger = logging.get_logger(__name__)
 class AudioFlamingo3EncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`AudioFlamingo3Encoder`]. It is used to instantiate an
-    AudioFlamingo3 audio encoder according to the specified arguments, defining the model architecture. Instantiating an
+    AudioFlamingo3 audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of the AudioFlamingo3
     architecture.
+
+    e.g. [nvidia/audio-flamingo-3](https://huggingface.co/nvidia/audio-flamingo-3)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -132,6 +134,8 @@ class AudioFlamingo3Config(PretrainedConfig):
     This is the configuration class to store the configuration of an [`AudioFlamingo3ForConditionalGeneration`]. It is used to instantiate an
     AudioFlamingo3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the AudioFlamingo3.
+
+    e.g. [nvidia/audio-flamingo-3](https://huggingface.co/nvidia/audio-flamingo-3)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
