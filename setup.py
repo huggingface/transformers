@@ -439,7 +439,6 @@ setup(
     entry_points={
         "console_scripts": [
             "transformers=transformers.commands.transformers_cli:main",
-            "transformers-cli=transformers.commands.transformers_cli:main_cli",
         ]
     },
     python_requires=">=3.9.0",
