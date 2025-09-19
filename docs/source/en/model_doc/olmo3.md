@@ -16,7 +16,8 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-09-08.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-09-16.*
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -46,7 +47,7 @@ pipe = pipeline(
     dtype=torch.bfloat16,
     device=0,
 )
-    
+
 result = pipe("Plants create energy through a process known as")
 print(result)
 ```
@@ -119,11 +120,11 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
-- Load specific intermediate checkpoints by adding the `revision` parameter to [`~PreTrainedModel.from_pretrained`]. 
+- Load specific intermediate checkpoints by adding the `revision` parameter to [`~PreTrainedModel.from_pretrained`].
 
     ```py
     from transformers import AutoModelForCausalLM
-    
+
     model = AutoModelForCausalLM.from_pretrained("allenai/TBA", revision="stage1-step140000-tokens294B")
     ```
 
