@@ -25,6 +25,7 @@ from ...utils import PaddingStrategy, TensorType, is_torch_available, logging
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -85,6 +86,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
 
         self.n_fft = n_fft
         self.hop_length = hop_length
+        self.win_length = n_fft
         self.num_mel_bins = num_mel_bins
         if padding not in ["center", "same"]:
             raise ValueError("Padding must be either `center` or `same`.")
@@ -109,12 +111,11 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
 
     def _np_extract_fbank_features(self, waveform: np.ndarray) -> np.ndarray:
         """
-        Compute the log-mel spectrogram of the input waveform.
-        Vocos pads the input if `padding=="same"`, because spectrogram() only applies center padding internally.
+        Compute the log-mel spectrogram of the input waveform using NumPy backend.
+        Original Vocos pads the input when `padding=="same"` because spectrogram() only applies center padding internally.
         It computes the spectrogram using the filter bank, then clips values before log to avoid near-zero values, see
         https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L44
         """
-
         if self.padding == "same":
             pad = self.n_fft - self.hop_length
             waveform = np.pad(waveform, (pad // 2, pad // 2), mode="reflect")
@@ -129,15 +130,41 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
             power=1,
         )
 
+        features = features.astype(np.float32)
         features = np.log(np.clip(features, a_min=1e-7, a_max=None))
+        return features
 
-        return features.T
+    def _torch_extract_fbank_features(self, waveform: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the log-mel spectrogram of the input waveform using torch backend via `torch.stft`.
+        """
+        if self.padding == "same":
+            pad = self.win_length - self.hop_length
+            waveform = F.pad(waveform, (pad // 2, pad // 2), mode="reflect")
+
+        window = torch.hann_window(self.n_fft, periodic=True, device=waveform.device)
+        stft = torch.stft(
+            waveform,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            window=window,
+            center=(self.padding == "center"),
+            pad_mode="reflect",
+            return_complex=True,
+        )
+        # Vocos's original implementation uses torchaudio.Melspectrogram with the default power of 1
+        magnitudes = stft.abs()
+        mel_filters = torch.as_tensor(self.mel_filters, device=magnitudes.device, dtype=magnitudes.dtype)
+        features = torch.matmul(mel_filters.T, magnitudes)
+        features = torch.log(torch.clip(features, min=1e-7))
+        return features
 
     def __call__(
         self,
         raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         padding: Union[bool, str, PaddingStrategy] = True,
-        pad_to_multiple_of: Optional[int] = 2,
+        pad_to_multiple_of: Optional[int] = None,
         max_length: Optional[int] = None,
         truncation: bool = False,
         sampling_rate: Optional[int] = None,
@@ -229,25 +256,33 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [raw_speech]
 
-        input_features = [self._np_extract_fbank_features(waveform) for waveform in raw_speech]
+        batched = BatchFeature({"input_features": raw_speech})
 
-        batched_speech = BatchFeature({"input_features": input_features})
+        if is_torch_available():
+            # pad the input audio to enable batch processing with torch.stft instead of processing each sample individually
+            max_length = max(len(speech) for speech in raw_speech)
+            padded_audio = torch.full(
+                (len(raw_speech), max_length), fill_value=self.padding_value, dtype=torch.float32
+            )
+            for i, speech in enumerate(raw_speech):
+                padded_audio[i, : len(speech)] = torch.tensor(speech, dtype=torch.float32)
+            input_features = self._torch_extract_fbank_features(padded_audio)
+            batched["input_features"] = input_features
+        else:
+            input_features = [self._np_extract_fbank_features(speech) for speech in raw_speech]
+            batched["input_features"] = input_features
 
-        padded_inputs = self.pad(
-            batched_speech,
+        padded = self.pad(
+            batched,
             padding=padding,
             max_length=max_length,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
+            return_tensors=return_tensors,
         )
 
-        padded_inputs["input_features"] = [feature.T for feature in padded_inputs["input_features"]]
-
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
-
-        return padded_inputs
+        return padded
 
 
 __all__ = ["VocosFeatureExtractor"]
