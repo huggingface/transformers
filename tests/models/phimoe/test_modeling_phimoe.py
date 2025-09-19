@@ -184,7 +184,7 @@ class PhimoeIntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        outputs = model.generate(inputs, max_new_tokens=10)
+        outputs = model.generate(inputs, max_new_tokens=30)
         output_text = tokenizer.batch_decode(outputs)
 
         EXPECTED_OUTPUT = [
@@ -199,7 +199,8 @@ class PhimoeIntegrationTest(unittest.TestCase):
         config = copy.deepcopy(model.config)
         config.num_hidden_layers = 2
         torch.manual_seed(42)
-        model = type(model)(config)
+        model = PhimoeForCausalLM(config).to(torch_device)
+        model.eval()
         tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct")
 
         messages = [
