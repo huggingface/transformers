@@ -15,11 +15,11 @@
 
 import argparse
 import copy
+import glob
 import os
-import random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-import glob
+
 import yaml
 
 
