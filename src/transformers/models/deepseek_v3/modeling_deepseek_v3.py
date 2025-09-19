@@ -160,7 +160,7 @@ class DeepseekV3NaiveMoe(nn.ModuleList):
     def __init__(self, config):
         nn.Module.__init__(self)
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
             self += [DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size)]
 
@@ -559,7 +559,7 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -583,7 +583,7 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids.to(hidden_states.device))
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(

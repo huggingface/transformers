@@ -1185,6 +1185,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         sequence_output = decoder_outputs.last_hidden_state
 
         if self.config.tie_word_embeddings:
+            # Rescale output before projecting on vocab
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
             sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)

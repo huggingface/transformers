@@ -296,18 +296,16 @@ class DbrxExperts(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        router_logits: torch.Tensor,
-        router_top_value: torch.Tensor,
-        router_indices: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_size)
 
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        num_experts = router_scores.shape[1]
+        num_experts = top_k_weights.shape[1]
         next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -321,7 +319,7 @@ class DbrxExperts(nn.Module):
             w1 = self.mlp.w1.view(split_expert_shape)[expert_idx]
             w2 = self.mlp.w2.view(split_expert_shape)[expert_idx]
             states = self.mlp(current_state, w1, v1, w2)
-            states = states.view(-1, self.hidden_size) * router_scores[token_idx, expert_idx, None]
+            states = states.view(-1, self.hidden_size) * top_k_weights[token_idx, expert_idx, None]
             next_states.index_add_(0, token_idx, states)
 
         next_states = next_states.view(batch_size, -1, self.hidden_size)
@@ -337,9 +335,9 @@ class DbrxFFN(nn.Module):
         self.experts = DbrxExperts(config.ffn_config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        router_logits, router_top_value, router_indices = self.router(hidden_states)
-        output = self.experts(hidden_states, router_logits, router_top_value, router_indices)
-        return output, router_logits
+        _, top_k_index, top_k_weight = self.router(hidden_states)
+        output = self.experts(hidden_states, top_k_index, top_k_weight)
+        return output
 
 
 class DbrxNormAttentionNorm(nn.Module):
