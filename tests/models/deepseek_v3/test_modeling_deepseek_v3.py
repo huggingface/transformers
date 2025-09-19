@@ -64,7 +64,7 @@ class DeepseekV3ModelTester:
         hidden_size=32,
         intermediate_size=37,
         moe_intermediate_size=12,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=4,
         n_shared_experts=1,
@@ -325,7 +325,9 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
