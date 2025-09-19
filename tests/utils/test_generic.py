@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from transformers.configuration_utils import PretrainedConfig
-from transformers.modeling_outputs import BaseModelOutput
+from transformers.modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from transformers.testing_utils import require_torch
 from transformers.utils import (
     can_return_tuple,
@@ -138,6 +138,19 @@ class GenericTester(unittest.TestCase):
         self.assertTrue(to_py_obj(t2) == x2)
 
         self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
+
+    def test_model_output_subclass(self):
+        # testing with “dict-like init” case
+        out = CausalLMOutputWithPast({"logits": torch.ones(2, 3, 4)})
+        self.assertTrue(out["logits"] is not None)
+        self.assertTrue(out.loss is None)
+        self.assertTrue(len(out.to_tuple()) == 1)
+
+        # testing with dataclass init case
+        out = CausalLMOutputWithPast(logits=torch.ones(2, 3, 4))
+        self.assertTrue(out["logits"] is not None)
+        self.assertTrue(out.loss is None)
+        self.assertTrue(len(out.to_tuple()) == 1)
 
 
 class ValidationDecoratorTester(unittest.TestCase):
