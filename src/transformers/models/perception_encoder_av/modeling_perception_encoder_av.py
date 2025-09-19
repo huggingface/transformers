@@ -633,15 +633,6 @@ class Transformer(torch.nn.Module):
         return output[:, 1:], output[:, 0]
 
 
-class TransformerWithInputProjection(Transformer):
-    def __init__(self, config):
-        super().__init__(config)
-        self.data_proj = torch.nn.Linear(config.in_channels, config.hidden_size)
-
-    def forward(self, x: torch.Tensor, *args, **kwargs):
-        return super().forward(self.data_proj(x), *args, **kwargs)
-
-
 class VideoEncoder(torch.nn.Module):
     def __init__(self, cfg: VideoEncoderConfig):
         super().__init__()
@@ -654,23 +645,25 @@ class VideoEncoder(torch.nn.Module):
 
         self.backbone = pe.CLIP.from_config(cfg.backbone)
         self.proj = torch.nn.Linear(self.backbone.visual.output_dim, cfg.transformer.hidden_size, bias=False)
-        self.transformer = TransformerWithInputProjection(cfg.transformer)
+        self.data_proj = torch.nn.Linear(cfg.transformer.hidden_size, cfg.transformer.hidden_size)
+        self.transformer = Transformer(cfg.transformer)
 
     def forward(self, video: torch.Tensor) -> torch.Tensor:
         B, N, C, H, W = video.shape
         backbone_output = self.backbone.encode_image(video.view(B * N, C, H, W), normalize=True).view(B, N, -1)
         projected = self.proj(backbone_output)
-        return self.transformer(projected)
+        return self.transformer(self.data_proj(projected))
 
 
 ## Audio Video Encoder
-class AudioVideoEncoder(TransformerWithInputProjection):
+class AudioVideoEncoder(Transformer):
     def __init__(self, config):
         super().__init__(config)
         self.modality_aligner = AlignModalities(
             self.config.hidden_size, self.config.hidden_size, normalize=True, btc=True
         )
         self.concat_modality_proj = torch.nn.Linear(self.config.hidden_size * 2, self.config.hidden_size)
+        self.data_proj = torch.nn.Linear(self.config.hidden_size, self.config.hidden_size)
 
     def forward(
         self,
@@ -682,7 +675,7 @@ class AudioVideoEncoder(TransformerWithInputProjection):
         video, video_mask = self.modality_aligner(audio, audio_mask, video, video_mask)
         x = torch.cat([audio, video], dim=-1)
         x = self.concat_modality_proj(x)
-        return super().forward(x, padding_mask=video_mask)
+        return super().forward(self.data_proj(x), padding_mask=video_mask)
 
 
 @dataclass
@@ -705,8 +698,9 @@ class PerceptionEncoderAVModel(PreTrainedModel):
         cfg.audio_encoder._attn_implementation = cfg._attn_implementation
         cfg.audio_video_encoder._attn_implementation = cfg._attn_implementation
         cfg.video_encoder.transformer._attn_implementation = cfg._attn_implementation
+        self.audio_data_proj = torch.nn.Linear(cfg.audio_codec.codebook_dim, cfg.audio_encoder.hidden_size)
         self.audio_codec = DacEncoderVAE(cfg.audio_codec)
-        self.audio_encoder = TransformerWithInputProjection(cfg.audio_encoder)
+        self.audio_encoder = Transformer(cfg.audio_encoder)
         self.audio_video_encoder = AudioVideoEncoder(cfg.audio_video_encoder)
         self.video_encoder = VideoEncoder(cfg.video_encoder)
         self.text_encoder = AutoModel.from_config(cfg.text_encoder.sub_config)
@@ -743,13 +737,13 @@ class PerceptionEncoderAVModel(PreTrainedModel):
 
     def encode_audio(self, audio: torch.Tensor) -> torch.Tensor:
         codec_features = self.audio_codec(audio).transpose(1, 2)
-        _, cls_emb = self.audio_encoder(codec_features)
+        _, cls_emb = self.audio_encoder(self.audio_data_proj(codec_features))
         return self.audio_head(cls_emb)
 
     def encode_audio_video(self, audio: torch.Tensor, video: torch.Tensor) -> torch.Tensor:
         # Encode audio
         codec_features = self.audio_codec(audio).transpose(1, 2)
-        audio_features, _ = self.audio_encoder(codec_features)
+        audio_features, _ = self.audio_encoder(self.audio_data_proj(codec_features))
         # Encode video
         video_feats, _ = self.video_encoder(video)
         _, cls_emb = self.audio_video_encoder(audio_features, video_feats)

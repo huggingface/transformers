@@ -59,12 +59,6 @@ class TransformerConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class TransformerWithInputProjectionConfig(TransformerConfig):
-    def __init__(self, in_channels: int = 128, **kwargs):
-        super().__init__(**kwargs)
-        self.in_channels = in_channels
-
-
 class PerceptionEncoderAVTextEncoderConfig(PretrainedConfig):
     sub_configs = {"sub_config": AutoConfig}
     model_type = "modernbert"
@@ -79,13 +73,13 @@ class VideoEncoderConfig(PretrainedConfig):
         self,
         backbone: str = "PE-Core-L14-336",
         backbone_checkpoint: Optional[str] = None,  # optional path to local checkpoint
-        transformer: Optional[TransformerWithInputProjectionConfig] = None,
+        transformer: Optional[TransformerConfig] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.backbone = backbone
         self.backbone_checkpoint = backbone_checkpoint
-        self.transformer = transformer or TransformerWithInputProjectionConfig()
+        self.transformer = transformer or TransformerConfig()
 
 
 class DACVAEConfig(PretrainedConfig):
@@ -195,12 +189,12 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         video_encoder = video_encoder or {}
 
         if "transformer" in video_encoder:
-            video_encoder["transformer"] = TransformerWithInputProjectionConfig(**video_encoder["transformer"])
+            video_encoder["transformer"] = TransformerConfig(**video_encoder["transformer"])
 
         self.video_encoder = VideoEncoderConfig(**video_encoder)
         self.audio_codec = DACVAEConfig(**audio_codec)
-        self.audio_encoder = TransformerWithInputProjectionConfig(**audio_encoder)
-        self.audio_video_encoder = TransformerWithInputProjectionConfig(**audio_video_encoder)
+        self.audio_encoder = TransformerConfig(**audio_encoder)
+        self.audio_video_encoder = TransformerConfig(**audio_video_encoder)
         self.text_encoder = PerceptionEncoderAVTextEncoderConfig(**text_encoder)
         self.separate_text_heads = separate_text_heads
         self.output_dim = output_dim
