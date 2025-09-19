@@ -89,27 +89,4 @@ ESMFold는 [Matt](https://huggingface.co/Rocketknight1)와 [Sylvain](https://hug
     - forward
 
 </pt>
-<tf>
-
-## TFEsmModel [[transformers.TFEsmModel]]
-
-[[autodoc]] TFEsmModel
-    - call
-
-## TFEsmForMaskedLM [[transformers.TFEsmForMaskedLM]]
-
-[[autodoc]] TFEsmForMaskedLM
-    - call
-
-## TFEsmForSequenceClassification [[transformers.TFEsmForSequenceClassification]]
-
-[[autodoc]] TFEsmForSequenceClassification
-    - call
-
-## TFEsmForTokenClassification [[transformers.TFEsmForTokenClassification]]
-
-[[autodoc]] TFEsmForTokenClassification
-    - call
-
-</tf>
 </frameworkcontent>

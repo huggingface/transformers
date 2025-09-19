@@ -99,37 +99,4 @@ ConvBERT 훈련 팁은 BERT와 유사합니다. 사용 팁은 [BERT 문서](bert
     - forward
 
 </pt>
-<tf>
-
-## TFConvBertModel [[transformers.TFConvBertModel]]
-
-[[autodoc]] TFConvBertModel
-    - call
-
-## TFConvBertForMaskedLM [[transformers.TFConvBertForMaskedLM]]
-
-[[autodoc]] TFConvBertForMaskedLM 
-    - call
-
-## TFConvBertForSequenceClassification [[transformers.TFConvBertForSequenceClassification]]
-
-[[autodoc]] TFConvBertForSequenceClassification
-    - call
-
-## TFConvBertForMultipleChoice [[transformers.TFConvBertForMultipleChoice]]
-
-[[autodoc]] TFConvBertForMultipleChoice
-    - call
-
-## TFConvBertForTokenClassification [[transformers.TFConvBertForTokenClassification]]
-
-[[autodoc]] TFConvBertForTokenClassification
-    - call
-
-## TFConvBertForQuestionAnswering [[transformers.TFConvBertForQuestionAnswering]]
-
-[[autodoc]] TFConvBertForQuestionAnswering
-    - call
-
-</tf>
 </frameworkcontent>
