@@ -21,12 +21,13 @@ import sys
 
 import torch
 
-from transformers import TransfoXLConfig, TransfoXLLMHeadModel, load_tf_weights_in_transfo_xl
+from transformers import TransfoXLConfig, TransfoXLLMHeadModel
 from transformers.models.deprecated.transfo_xl import tokenization_transfo_xl as data_utils
 from transformers.models.deprecated.transfo_xl.tokenization_transfo_xl import CORPUS_NAME, VOCAB_FILES_NAMES
 from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, logging
 
 
+logger = logging.get_logger(__name__)
 logging.set_verbosity_info()
 
 # We do this to be able to load python 2 datasets pickles
@@ -35,6 +36,133 @@ data_utils.Vocab = data_utils.TransfoXLTokenizer
 data_utils.Corpus = data_utils.TransfoXLCorpus
 sys.modules["data_utils"] = data_utils
 sys.modules["vocabulary"] = data_utils
+
+
+def build_tf_to_pytorch_map(model, config):
+    """
+    A map of modules from TF to PyTorch. This time I use a map to keep the PyTorch model as identical to the original
+    PyTorch model as possible.
+    """
+    tf_to_pt_map = {}
+
+    if hasattr(model, "transformer"):
+        # We are loading in a TransfoXLLMHeadModel => we will load also the Adaptive Softmax
+        tf_to_pt_map.update(
+            {
+                "transformer/adaptive_softmax/cutoff_0/cluster_W": model.crit.cluster_weight,
+                "transformer/adaptive_softmax/cutoff_0/cluster_b": model.crit.cluster_bias,
+            }
+        )
+        for i, (out_l, proj_l, tie_proj) in enumerate(
+            zip(model.crit.out_layers, model.crit.out_projs, config.tie_projs)
+        ):
+            layer_str = f"transformer/adaptive_softmax/cutoff_{i}/"
+            if config.tie_word_embeddings:
+                tf_to_pt_map.update({layer_str + "b": out_l.bias})
+            else:
+                raise NotImplementedError
+                # I don't think this is implemented in the TF code
+                tf_to_pt_map.update({layer_str + "lookup_table": out_l.weight, layer_str + "b": out_l.bias})
+            if not tie_proj:
+                tf_to_pt_map.update({layer_str + "proj": proj_l})
+        # Now load the rest of the transformer
+        model = model.transformer
+
+    # Embeddings
+    for i, (embed_l, proj_l) in enumerate(zip(model.word_emb.emb_layers, model.word_emb.emb_projs)):
+        layer_str = f"transformer/adaptive_embed/cutoff_{i}/"
+        tf_to_pt_map.update({layer_str + "lookup_table": embed_l.weight, layer_str + "proj_W": proj_l})
+
+    # Transformer blocks
+    for i, b in enumerate(model.layers):
+        layer_str = f"transformer/layer_{i}/"
+        tf_to_pt_map.update(
+            {
+                layer_str + "rel_attn/LayerNorm/gamma": b.dec_attn.layer_norm.weight,
+                layer_str + "rel_attn/LayerNorm/beta": b.dec_attn.layer_norm.bias,
+                layer_str + "rel_attn/o/kernel": b.dec_attn.o_net.weight,
+                layer_str + "rel_attn/qkv/kernel": b.dec_attn.qkv_net.weight,
+                layer_str + "rel_attn/r/kernel": b.dec_attn.r_net.weight,
+                layer_str + "ff/LayerNorm/gamma": b.pos_ff.layer_norm.weight,
+                layer_str + "ff/LayerNorm/beta": b.pos_ff.layer_norm.bias,
+                layer_str + "ff/layer_1/kernel": b.pos_ff.CoreNet[0].weight,
+                layer_str + "ff/layer_1/bias": b.pos_ff.CoreNet[0].bias,
+                layer_str + "ff/layer_2/kernel": b.pos_ff.CoreNet[3].weight,
+                layer_str + "ff/layer_2/bias": b.pos_ff.CoreNet[3].bias,
+            }
+        )
+
+    # Relative positioning biases
+    if config.untie_r:
+        r_r_list = []
+        r_w_list = []
+        for b in model.layers:
+            r_r_list.append(b.dec_attn.r_r_bias)
+            r_w_list.append(b.dec_attn.r_w_bias)
+    else:
+        r_r_list = [model.r_r_bias]
+        r_w_list = [model.r_w_bias]
+    tf_to_pt_map.update({"transformer/r_r_bias": r_r_list, "transformer/r_w_bias": r_w_list})
+    return tf_to_pt_map
+
+
+def load_tf_weights_in_transfo_xl(model, config, tf_path):
+    """Load tf checkpoints in a pytorch model"""
+    try:
+        import numpy as np
+        import tensorflow as tf
+    except ImportError:
+        logger.error(
+            "Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
+            "https://www.tensorflow.org/install/ for installation instructions."
+        )
+        raise
+    # Build TF to PyTorch weights loading map
+    tf_to_pt_map = build_tf_to_pytorch_map(model, config)
+
+    # Load weights from TF model
+    init_vars = tf.train.list_variables(tf_path)
+    tf_weights = {}
+    for name, shape in init_vars:
+        logger.info(f"Loading TF weight {name} with shape {shape}")
+        array = tf.train.load_variable(tf_path, name)
+        tf_weights[name] = array
+
+    for name, pointer in tf_to_pt_map.items():
+        assert name in tf_weights
+        array = tf_weights[name]
+        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
+        # which are not required for using pretrained model
+        if "kernel" in name or "proj" in name:
+            array = np.transpose(array)
+        if ("r_r_bias" in name or "r_w_bias" in name) and len(pointer) > 1:
+            # Here we will split the TF weights
+            assert len(pointer) == array.shape[0]
+            for i, p_i in enumerate(pointer):
+                arr_i = array[i, ...]
+                try:
+                    assert p_i.shape == arr_i.shape
+                except AssertionError as e:
+                    e.args += (p_i.shape, arr_i.shape)
+                    raise
+                logger.info(f"Initialize PyTorch weight {name} for layer {i}")
+                p_i.data = torch.from_numpy(arr_i)
+        else:
+            try:
+                assert pointer.shape == array.shape, (
+                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                )
+            except AssertionError as e:
+                e.args += (pointer.shape, array.shape)
+                raise
+            logger.info(f"Initialize PyTorch weight {name}")
+            pointer.data = torch.from_numpy(array)
+        tf_weights.pop(name, None)
+        tf_weights.pop(name + "/Adam", None)
+        tf_weights.pop(name + "/Adam_1", None)
+
+    logger.info(f"Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}")
+    return model
 
 
 def convert_transfo_xl_checkpoint_to_pytorch(

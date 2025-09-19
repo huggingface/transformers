@@ -31,7 +31,6 @@ import numpy as np
 from .utils import (
     ExplicitEnum,
     is_psutil_available,
-    is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
     is_torch_hpu_available,
@@ -61,8 +60,7 @@ def seed_worker(worker_id: int, num_workers: int, rank: int):
 def enable_full_determinism(seed: int, warn_only: bool = False):
     """
     Helper function for reproducible behavior during distributed training. See
-    - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
-    - https://www.tensorflow.org/api_docs/python/tf/config/experimental/enable_op_determinism for tensorflow
+    https://pytorch.org/docs/stable/notes/randomness.html for pytorch
     """
     # set seed first
     set_seed(seed)
@@ -84,15 +82,10 @@ def enable_full_determinism(seed: int, warn_only: bool = False):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    if is_tf_available():
-        import tensorflow as tf
-
-        tf.config.experimental.enable_op_determinism()
-
 
 def set_seed(seed: int, deterministic: bool = False):
     """
-    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` (if installed).
 
     Args:
         seed (`int`):
@@ -118,12 +111,6 @@ def set_seed(seed: int, deterministic: bool = False):
         torch.hpu.manual_seed_all(seed)
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
-    if is_tf_available():
-        import tensorflow as tf
-
-        tf.random.set_seed(seed)
-        if deterministic:
-            tf.config.experimental.enable_op_determinism()
 
 
 def neftune_post_forward_hook(module, input, output):
@@ -464,8 +451,6 @@ class TrainerMemoryTracker:
     metrics = {"train_runtime": 10.5}
     self._memory_tracker.stop_and_update_metrics(metrics)
     ```
-
-    At the moment GPU tracking is only for `pytorch`, but can be extended to support `tensorflow`.
 
     To understand this class' intricacies please read the documentation of [`~Trainer.log_metrics`].
     """
