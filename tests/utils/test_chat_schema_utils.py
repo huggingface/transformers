@@ -124,9 +124,7 @@ smollm_schema = {
         "thinking": {"type": "string"},
         "tool_calls": {
             "x-parser": "json",
-            "x-parser-args": {
-                "transform": "[{type: 'function', function: @}]"
-            },
+            "x-parser-args": {"transform": "[{type: 'function', function: @}]"},
             "type": "array",
             "items": {
                 "type": "object",
@@ -147,7 +145,6 @@ smollm_schema = {
         },
     },
 }
-
 
 
 @require_jmespath
@@ -244,28 +241,45 @@ class ChatSchemaParserTest(unittest.TestCase):
         )
 
     def test_smollm_template_thinking_and_tool_call(self):
-        model_out = "<think>\nOkay, the user said, \"Hello! How are you?\" I need to respond appropriately. Since this is the first message, I should greet them back and ask how I can assist. I should keep it friendly and open-ended. Let me make sure the response is welcoming and encourages them to share what they need help with. I'll avoid any technical jargon and keep it simple. Let me check for any typos and ensure the tone is positive.\n</think>\n\n<tool_call>{\"name\": \"greet_user\", \"arguments\": {\"greeting\": \"Hello! I'm doing well, thanks for asking. How can I assist you today? Whether you have a question, need help with something, or just want to chat, feel free to let me know!\"}}</tool_call>"
+        model_out = '<think>\nOkay, the user said, "Hello! How are you?" I need to respond appropriately. Since this is the first message, I should greet them back and ask how I can assist. I should keep it friendly and open-ended. Let me make sure the response is welcoming and encourages them to share what they need help with. I\'ll avoid any technical jargon and keep it simple. Let me check for any typos and ensure the tone is positive.\n</think>\n\n<tool_call>{"name": "greet_user", "arguments": {"greeting": "Hello! I\'m doing well, thanks for asking. How can I assist you today? Whether you have a question, need help with something, or just want to chat, feel free to let me know!"}}</tool_call>'
         parsed_chat = recursive_parse(model_out, smollm_schema)
         self.assertEqual(
             parsed_chat,
             {
-                'thinking': 'Okay, the user said, "Hello! How are you?" I need to respond appropriately. Since this is the first message, I should greet them back and ask how I can assist. I should keep it friendly and open-ended. Let me make sure the response is welcoming and encourages them to share what they need help with. I\'ll avoid any technical jargon and keep it simple. Let me check for any typos and ensure the tone is positive.',
-                'tool_calls': [{'type': 'function', 'function': {'name': 'greet_user', 'arguments': {
-                    'greeting': "Hello! I'm doing well, thanks for asking. How can I assist you today? Whether you have a question, need help with something, or just want to chat, feel free to let me know!"}}}]}
+                "thinking": 'Okay, the user said, "Hello! How are you?" I need to respond appropriately. Since this is the first message, I should greet them back and ask how I can assist. I should keep it friendly and open-ended. Let me make sure the response is welcoming and encourages them to share what they need help with. I\'ll avoid any technical jargon and keep it simple. Let me check for any typos and ensure the tone is positive.',
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "greet_user",
+                            "arguments": {
+                                "greeting": "Hello! I'm doing well, thanks for asking. How can I assist you today? Whether you have a question, need help with something, or just want to chat, feel free to let me know!"
+                            },
+                        },
+                    }
+                ],
+            },
         )
 
     def test_smollm_template_tool_call_no_thinking(self):
-        model_out = "<tool_call>{\"name\": \"get_weather\", \"arguments\": {\"city\": \"Paris\"}}</tool_call>"
+        model_out = '<tool_call>{"name": "get_weather", "arguments": {"city": "Paris"}}</tool_call>'
         parsed_chat = recursive_parse(model_out, smollm_schema)
         self.assertEqual(
             parsed_chat,
-            {'tool_calls': [{'type': 'function', 'function': {'name': 'get_weather', 'arguments': {'city': 'Paris'}}}]}
+            {
+                "tool_calls": [
+                    {"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Paris"}}}
+                ]
+            },
         )
 
     def test_smollm_template_thinking_no_tool_call(self):
-        model_out = "<think>\nOkay, the user asked, \"Hey! Can you tell me about gravity?\" Let me start by breaking down what they might be looking for. They probably want a basic understanding of gravity, maybe for a school project or just personal curiosity. I should explain what gravity is, how it works, and maybe some examples.</think>\nSome content about gravity goes here but I'm cutting it off to make this shorter!"
+        model_out = '<think>\nOkay, the user asked, "Hey! Can you tell me about gravity?" Let me start by breaking down what they might be looking for. They probably want a basic understanding of gravity, maybe for a school project or just personal curiosity. I should explain what gravity is, how it works, and maybe some examples.</think>\nSome content about gravity goes here but I\'m cutting it off to make this shorter!'
         parsed_chat = recursive_parse(model_out, smollm_schema)
         self.assertEqual(
             parsed_chat,
-            {'content': "Some content about gravity goes here but I'm cutting it off to make this shorter!", 'thinking': 'Okay, the user asked, "Hey! Can you tell me about gravity?" Let me start by breaking down what they might be looking for. They probably want a basic understanding of gravity, maybe for a school project or just personal curiosity. I should explain what gravity is, how it works, and maybe some examples.'}
+            {
+                "content": "Some content about gravity goes here but I'm cutting it off to make this shorter!",
+                "thinking": 'Okay, the user asked, "Hey! Can you tell me about gravity?" Let me start by breaking down what they might be looking for. They probably want a basic understanding of gravity, maybe for a school project or just personal curiosity. I should explain what gravity is, how it works, and maybe some examples.',
+            },
         )
