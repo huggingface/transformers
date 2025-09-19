@@ -4129,16 +4129,15 @@ class Trainer:
                 labels,
                 num_items_in_batch=num_items_in_batch,
             )
+        # Default HF loss handling (label smoothing) if no custom loss function
         elif labels is not None:
             unwrapped_model = self.accelerator.unwrap_model(model)
-            if _is_peft_model(unwrapped_model):
-                model_name = unwrapped_model.base_model.model._get_name()
-            else:
-                model_name = unwrapped_model._get_name()
-            # User-defined compute_loss function
-            if self.compute_loss_func is not None:
-                loss = self.compute_loss_func(outputs, labels, num_items_in_batch=num_items_in_batch)
-            elif model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+            model_name = (
+                unwrapped_model.base_model.model._get_name()
+                if _is_peft_model(unwrapped_model)
+                else unwrapped_model._get_name()
+            )
+            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
                 loss = self.label_smoother(outputs, labels)
