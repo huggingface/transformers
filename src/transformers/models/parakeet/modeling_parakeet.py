@@ -586,8 +586,6 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
         )
         self.joint_net = torch.nn.Sequential(*layers)
 
-        print("CREATING JOINT", self.joint_net )
-
         self.post_init()
 
     @auto_docstring
@@ -1086,20 +1084,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         output = self.greedy_decode(encoder_outputs.last_hidden_state)
 
-        # mask out padded tokens
-        if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask)
-            sequences[~attention_mask] = self.config.pad_token_id
-
-        if return_dict_in_generate:
-            return ParakeetGenerateOutput(
-                sequences=sequences,
-                logits=outputs.logits,
-                attentions=outputs.attentions,
-                hidden_states=outputs.hidden_states,
-            )
-
-        return sequences
+        return output
 
     def greedy_decode(self, encoder_output):
         T = encoder_output.shape[1]
@@ -1107,21 +1092,45 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         hyp = []
         last_label = 1024 # should be blank
 
+#                if isinstance(last_label, int):
+        last_label = torch.LongTensor([[last_label]]) #.to(self.decoder.device)
+        g, hidden_prime = self.decoder(last_label, None)
+
         while t < T:
-            not_blank = True
             symbols_added = 0
             enc = encoder_output[0,t,:]
-            while not_blank and symbols_added < 2:
-                if isinstance(last_label, int):
+            while symbols_added < 2:
+                logits = self.joint(enc, g)
+                token_logits = logits[:1025].softmax(-1)
+                duration_logits = logits[1025:].softmax(-1)
+
+                v, token = token_logits.max(-1)
+                v_duration, duration = duration_logits.max(-1)
+                token = token.item()
+                duration = duration.item()
+
+                print("TIME TOKEN DURATION", t, token, duration)
+                print("two values", v, v_duration)
+
+                if token != 1024:
+                    hyp.append(token)
+                    last_label = token
+#                    print("ADDING", token, "at", t)
                     last_label = torch.LongTensor([[last_label]]) #.to(self.decoder.device)
-                g, hidden_prime = self.decoder(last_label, None)
-                logp = self.joint(enc, g)
+                    g, hidden_prime = self.decoder(last_label, hidden_prime)
+#                else:
+#                    print("BLANK")
 
-                print("HERE logp", logp.shape)
+                if duration == 0:
+                    symbols_added += 1
+                else:
+                    t += duration
+                    break
+            if symbols_added == 2:
+                t += 1
+            print("T IS", t)
+        return hyp
 
-                symbols_added += 1
-
-            t+=1
 
 
 __all__ = ["ParakeetForCTC", "ParakeetForTDT", "ParakeetEncoder", "ParakeetPreTrainedModel"]
