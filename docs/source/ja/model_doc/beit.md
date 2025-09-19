@@ -132,18 +132,3 @@ BEiT の使用を開始するのに役立つ公式 Hugging Face およびコミ�
 
 [[autodoc]] BeitForSemanticSegmentation
     - forward
-
-## FlaxBeitModel
-
-[[autodoc]] FlaxBeitModel
-    - __call__
-
-## FlaxBeitForMaskedImageModeling
-
-[[autodoc]] FlaxBeitForMaskedImageModeling
-    - __call__
-
-## FlaxBeitForImageClassification
-
-[[autodoc]] FlaxBeitForImageClassification
-    - __call__

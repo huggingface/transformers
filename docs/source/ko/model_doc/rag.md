@@ -77,24 +77,4 @@ rendered properly in your Markdown viewer.
     - generate
 
 </pt>
-<tf>
-
-## TFRagModel [[transformers.TFRagModel]]
-
-[[autodoc]] TFRagModel
-    - call
-
-## TFRagSequenceForGeneration [[transformers.TFRagSequenceForGeneration]]
-
-[[autodoc]] TFRagSequenceForGeneration
-    - call
-    - generate
-
-## TFRagTokenForGeneration [[transformers.TFRagTokenForGeneration]]
-
-[[autodoc]] TFRagTokenForGeneration
-    - call
-    - generate
-
-</tf>
 </frameworkcontent>
