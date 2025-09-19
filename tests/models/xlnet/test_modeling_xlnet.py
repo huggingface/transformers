@@ -80,7 +80,7 @@ class XLNetModelTester:
         self.hidden_size = 32
         self.num_attention_heads = 4
         self.d_inner = 128
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 3
         self.type_sequence_label_size = 2
         self.bi_data = False
         self.same_length = False
