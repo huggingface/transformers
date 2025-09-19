@@ -194,6 +194,16 @@ class OptimizerNames(ExplicitEnum):
     STABLE_ADAMW = "stable_adamw"
 
 
+class MultiDatasetStrategy(ExplicitEnum):
+    SAMPLING = "sampling"
+    AGGREGATE = "aggregate"
+
+
+class SamplingStrategy(ExplicitEnum):
+    PROPORTIONAL = "proportional"
+    ROUND_ROBIN = "round_robin"
+
+
 def _convert_str_dict(passed_value: dict):
     "Safely checks that a passed value is a dictionary and converts any string values to their appropriate types."
     for key, value in passed_value.items():
@@ -845,6 +855,34 @@ class TrainingArguments:
     eval_strategy: Union[IntervalStrategy, str] = field(
         default="no",
         metadata={"help": "The evaluation strategy to use."},
+    )
+    multi_dataset_strategy: Union[MultiDatasetStrategy, str] = field(
+        default="sampling",
+        metadata={
+            "help": (
+                "When training on multiple datasets, this defines the strategy to use. "
+                "'sampling' samples from each dataset based on `dataset_sampling_strategy`. "
+                "'aggregate' gets a batch from each dataset and aggregates their losses."
+            )
+        },
+    )
+    dataset_sampling_strategy: Union[SamplingStrategy, str] = field(
+        default="proportional",
+        metadata={
+            "help": (
+                "When training on multiple datasets, this defines the strategy to sample from each dataset."
+                " 'proportional' samples from each dataset based on its size, 'round_robin' cycles through them."
+            )
+        },
+    )
+    loss_aggregation_strategy: str = field(
+        default="mean",
+        metadata={
+            "help": (
+                "When using `multi_dataset_strategy='aggregate'`, this defines the strategy to aggregate losses. "
+                "Can be 'sum' or 'mean'."
+            )
+        },
     )
     prediction_loss_only: bool = field(
         default=False,
@@ -1620,6 +1658,8 @@ class TrainingArguments:
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
         self.save_strategy = SaveStrategy(self.save_strategy)
         self.hub_strategy = HubStrategy(self.hub_strategy)
+        self.multi_dataset_strategy = MultiDatasetStrategy(self.multi_dataset_strategy)
+        self.dataset_sampling_strategy = SamplingStrategy(self.dataset_sampling_strategy)
 
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.eval_strategy != IntervalStrategy.NO:

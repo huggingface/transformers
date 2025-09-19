@@ -93,6 +93,7 @@ from .trainer_pt_utils import (
     LabelSmoother,
     LayerWiseDummyOptimizer,
     LengthGroupedSampler,
+    MultiDatasetLoader,
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
@@ -417,7 +418,14 @@ class Trainer:
         model: Union[PreTrainedModel, nn.Module, None] = None,
         args: Optional[TrainingArguments] = None,
         data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
+        train_dataset: Optional[
+            Union[
+                Dataset,
+                IterableDataset,
+                "datasets.Dataset",
+                dict[str, Union[Dataset, IterableDataset, "datasets.Dataset"]],
+            ]
+        ] = None,
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset], "datasets.Dataset"]] = None,
         processing_class: Optional[
             Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin]
@@ -429,6 +437,8 @@ class Trainer:
         optimizers: tuple[Optional[torch.optim.Optimizer], Optional[torch.optim.lr_scheduler.LambdaLR]] = (None, None),
         optimizer_cls_and_kwargs: Optional[tuple[type[torch.optim.Optimizer], dict[str, Any]]] = None,
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+        compute_loss_fns: Optional[dict[str, Callable]] = None,
+        loss_aggregation_strategy: str = "sum",
     ):
         if args is None:
             output_dir = "tmp_trainer"
@@ -453,6 +463,8 @@ class Trainer:
 
         self.args = args
         self.compute_loss_func = compute_loss_func
+        self.compute_loss_fns = compute_loss_fns
+        self.loss_aggregation_strategy = loss_aggregation_strategy
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
 
@@ -1136,6 +1148,31 @@ class Trainer:
         """
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
+
+        if isinstance(self.train_dataset, dict) and self.args.multi_dataset_strategy == "aggregate":
+            dataloaders = {
+                domain: self._get_dataloader(
+                    dataset=ds,
+                    description=f"Training ({domain})",
+                    batch_size=self._train_batch_size,
+                    sampler_fn=self._get_train_sampler,
+                    is_training=True,
+                )
+                for domain, ds in self.train_dataset.items()
+            }
+            return dataloaders
+        elif isinstance(self.train_dataset, dict):
+            dataloaders = {
+                domain: self._get_dataloader(
+                    dataset=ds,
+                    description=f"Training ({domain})",
+                    batch_size=self._train_batch_size,
+                    sampler_fn=self._get_train_sampler,
+                    is_training=True,
+                )
+                for domain, ds in self.train_dataset.items()
+            }
+            return MultiDatasetLoader(dataloaders, strategy=self.args.dataset_sampling_strategy.value)
 
         return self._get_dataloader(
             dataset=self.train_dataset,
@@ -2356,6 +2393,7 @@ class Trainer:
         self.accelerator.free_memory()
         self._train_batch_size = batch_size
         if self.args.auto_find_batch_size:
+            self.state.train_batch_size = self._train_batch_size
             if self.state.train_batch_size != self._train_batch_size:
                 from accelerate.utils import release_memory
 
@@ -2369,10 +2407,10 @@ class Trainer:
                     self.args.per_device_train_batch_size = self._train_batch_size // max(1, self.args.n_gpu)
                     self.propagate_args_to_deepspeed(True)
                     self.args.per_device_train_batch_size = original_bs
-            self.state.train_batch_size = self._train_batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
+        is_multi_dataset_aggregate = isinstance(train_dataloader, dict)
         if self.is_fsdp_xla_v2_enabled:
             train_dataloader = tpu_spmd_dataloader(train_dataloader)
 
@@ -2381,16 +2419,26 @@ class Trainer:
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
         total_train_batch_size = self.get_total_train_batch_size(args)
-
-        (
-            num_train_epochs,
-            num_update_steps_per_epoch,
-            num_examples,
-            num_train_samples,
-            epoch_based,
-            len_dataloader,
-            max_steps,
-        ) = self.set_initial_training_values(args, train_dataloader, total_train_batch_size)
+        if not is_multi_dataset_aggregate:
+            (
+                num_train_epochs,
+                num_update_steps_per_epoch,
+                num_examples,
+                num_train_samples,
+                epoch_based,
+                len_dataloader,
+                max_steps,
+            ) = self.set_initial_training_values(args, train_dataloader, total_train_batch_size)
+        else:
+            # For aggregation, we follow the principle that all dataloaders have the same length, OR we
+            # train up to the shortest one.
+            len_dataloader = min(len(dl) for dl in train_dataloader.values())
+            num_update_steps_per_epoch = len_dataloader // args.gradient_accumulation_steps
+            num_examples = self.num_examples(train_dataloader)
+            num_train_samples = num_examples * args.num_train_epochs
+            num_train_epochs = args.num_train_epochs
+            max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
+            epoch_based = True
 
         num_train_tokens = None
         if self.args.include_tokens_per_second:
@@ -2603,7 +2651,10 @@ class Trainer:
                 elif steps_trained_in_current_epoch == 0:
                     self._load_rng_state(resume_from_checkpoint)
 
-            epoch_iterator = iter(epoch_dataloader)
+            if is_multi_dataset_aggregate:
+                epoch_iterator = {domain: iter(dl) for domain, dl in epoch_dataloader.items()}
+            else:
+                epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
             remainder = steps_in_epoch % args.gradient_accumulation_steps
             if remainder == 0:
@@ -2612,15 +2663,77 @@ class Trainer:
             total_updates = steps_in_epoch // args.gradient_accumulation_steps + int(
                 remainder < args.gradient_accumulation_steps
             )
+            if is_multi_dataset_aggregate:
+                if args.gradient_accumulation_steps > 1:
+                    raise ValueError(
+                        "Gradient accumulation is not supported with the 'aggregate' multi-dataset strategy yet."
+                    )
+                for step in range(steps_in_epoch):
+                    self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
+                    domain_losses = []
+                    domain_inputs_for_flos = {}
+                    for domain, iterator in epoch_iterator.items():
+                        try:
+                            inputs = next(iterator)
+                            domain_inputs_for_flos.update(inputs)
+                        except StopIteration:
+                            # Indicates datasets may have different lengths. We stop at the shortest.
+                            continue
+                        with self.compute_loss_context_manager():
+                            loss = self.compute_loss(model, self._prepare_inputs(inputs), domain=domain)
+                        domain_losses.append(loss)
+                    if not domain_losses:
+                        break
+                    # Aggregate the losses.
+                    if self.args.loss_aggregation_strategy == "sum":
+                        aggregated_loss = torch.sum(torch.stack(domain_losses))
+                    elif self.args.loss_aggregation_strategy == "mean":
+                        aggregated_loss = torch.mean(torch.stack(domain_losses))
+                    else:
+                        raise ValueError(f"Unknown loss_aggregation_strategy: {self.args.loss_aggregation_strategy}")
+                    tr_loss_step = aggregated_loss
+                    if (
+                        args.logging_nan_inf_filter
+                        and not is_torch_xla_available()
+                        and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
+                    ):
+                        tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                    else:
+                        tr_loss += tr_loss_step
+                    self.current_flos += float(self.floating_point_ops(domain_inputs_for_flos))
+                    self.accelerator.backward(tr_loss_step)
+                    # Optimizer step
+                    self.optimizer.step()
+                    self.lr_scheduler.step()
+                    model.zero_grad()
+                    self.state.global_step += 1
+                    self.state.epoch = epoch + (step + 1) / steps_in_epoch
+                    self.control = self.callback_handler.on_step_end(args, self.state, self.control)
+                    self._maybe_log_save_evaluate(
+                        tr_loss,
+                        grad_norm,
+                        model,
+                        trial,
+                        epoch,
+                        ignore_keys_for_eval,
+                        start_time,
+                        learning_rate=learning_rate,
+                    )
+                    if self.control.should_epoch_stop or self.control.should_training_stop:
+                        break
+                continue
             for _ in range(total_updates):
                 update_step += 1
                 num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
-                batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, args.device)
+                batch_samples, domains, num_items_in_batch = self.get_batch_samples(
+                    epoch_iterator, num_batches, args.device
+                )
                 # Store the number of batches for current gradient accumulation
                 # This is used to correctly scale the loss when the last accumulation step has fewer batches
                 self.current_gradient_accumulation_steps = len(batch_samples)
                 for i, inputs in enumerate(batch_samples):
                     step += 1
+                    domain = domains[i]
                     do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
                     # Since we perform prefetching, we need to manually set sync_gradients
                     self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
@@ -2671,7 +2784,7 @@ class Trainer:
                         else contextlib.nullcontext
                     )
                     with context():
-                        tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+                        tr_loss_step = self.training_step(model, inputs, num_items_in_batch, domain=domain)
 
                     if (
                         args.logging_nan_inf_filter
@@ -3985,6 +4098,7 @@ class Trainer:
         model: nn.Module,
         inputs: dict[str, Union[torch.Tensor, Any]],
         num_items_in_batch: Optional[torch.Tensor] = None,
+        domain: Optional[str] = None,
     ) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
@@ -4019,7 +4133,7 @@ class Trainer:
                 return loss_mb.reduce_mean().detach().to(self.args.device)
 
             with self.compute_loss_context_manager():
-                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch, domain=domain)
 
             del inputs
             if (
@@ -4080,6 +4194,7 @@ class Trainer:
         inputs: dict[str, Union[torch.Tensor, Any]],
         return_outputs: bool = False,
         num_items_in_batch: Optional[torch.Tensor] = None,
+        domain: Optional[str] = None,
     ):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
@@ -4121,8 +4236,14 @@ class Trainer:
                 model_name = unwrapped_model.base_model.model._get_name()
             else:
                 model_name = unwrapped_model._get_name()
+            # User-defined compute_loss function for multi-dataset training
+            if domain is not None and self.compute_loss_fns is not None:
+                if domain not in self.compute_loss_fns:
+                    raise ValueError(f"No loss function provided for domain: {domain}")
+                loss_fn = self.compute_loss_fns[domain]
+                loss = loss_fn(outputs, labels)
             # User-defined compute_loss function
-            if self.compute_loss_func is not None:
+            elif self.compute_loss_func is not None:
                 loss = self.compute_loss_func(outputs, labels, num_items_in_batch=num_items_in_batch)
             elif model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
@@ -5580,16 +5701,23 @@ class Trainer:
 
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
-    ) -> tuple[list, Optional[Union[torch.Tensor, int]]]:
+    ) -> tuple[list, list, Optional[Union[torch.Tensor, int]]]:
         """
         Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
         """
         batch_samples = []
+        domains = []
         num_items_in_batch = None
 
         for _ in range(num_batches):
             try:
-                batch_samples.append(next(epoch_iterator))
+                if isinstance(self.train_dataset, dict):
+                    domain, batch = next(epoch_iterator)
+                    batch_samples.append(batch)
+                    domains.append(domain)
+                else:
+                    batch_samples.append(next(epoch_iterator))
+                    domains.append(None)
             except StopIteration:
                 break
 
@@ -5633,7 +5761,7 @@ class Trainer:
                 if pc := getattr(self.accelerator, "parallelism_config", None):
                     num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
 
-        return batch_samples, num_items_in_batch
+        return batch_samples, domains, num_items_in_batch
 
     def set_initial_training_values(
         self, args: TrainingArguments, dataloader: DataLoader, total_train_batch_size: int
