@@ -850,7 +850,7 @@ def check_model_inputs(func):
         }
 
         # We let cross attentions to be saved separately because some models add `cross-attn` layer
-        # when certain condtions are met. Let's output cross attention if attentions are requested (for BC)
+        # when certain conditions are met. Let's output cross attention if attentions are requested (for BC)
         if "output_attentions" in recordable_keys:
             recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
 

@@ -339,7 +339,7 @@ class ContinuousBatchProcessorMetrics:
             page_size = cache.head_dim * cache.num_key_value_heads
             page_mem_in_bytes = page_size * cache.dtype.itemsize
             # When a block is allocated, it is for both K and V, so we multiply by 2
-            # It's also allocated accross all cache tensors, so we multiply by the nb of tensors: len(cache.key_cache)
+            # It's also allocated across all cache tensors, so we multiply by the nb of tensors: len(cache.key_cache)
             block_mem_in_bytes = 2 * len(cache.key_cache) * cache.block_size * page_mem_in_bytes
 
             # Retrieve the number of used and free blocks
