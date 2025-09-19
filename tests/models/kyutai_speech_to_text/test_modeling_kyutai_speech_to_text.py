@@ -641,7 +641,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
         reproduce test expected outputs using original codebase: https://gist.github.com/eustlb/7a9aa6139d11e0103c6b65bac103da52
 
         DISCLAIMER: we are testing for pretty short inputs. Indeed, reproducing correct expected outputs for longer is not possible
-        as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context lenght,
+        as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context length,
         ultimately giving different outputs.
         """
         processor = KyutaiSpeechToTextProcessor.from_pretrained(self.model_checkpoint)
@@ -671,7 +671,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
         reproduce test expected outputs using original codebase: https://gist.github.com/eustlb/b58c217c75124d405ec1c13877c7ece8
 
         DISCLAIMER: we are testing for pretty short inputs. Indeed, reproducing correct expected outputs for longer is not possible
-        as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context lenght,
+        as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context length,
         ultimately giving different outputs.
         """
         processor = KyutaiSpeechToTextProcessor.from_pretrained(self.model_checkpoint)

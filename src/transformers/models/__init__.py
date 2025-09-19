@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from .blip import *
     from .blip_2 import *
     from .bloom import *
+    from .blt import *
     from .bridgetower import *
     from .bros import *
     from .byt5 import *
@@ -183,6 +184,7 @@ if TYPE_CHECKING:
     from .led import *
     from .levit import *
     from .lfm2 import *
+    from .lfm2_vl import *
     from .lightglue import *
     from .lilt import *
     from .llama import *

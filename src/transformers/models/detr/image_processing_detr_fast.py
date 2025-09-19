@@ -725,7 +725,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
     def post_process(self, outputs, target_sizes):
         """
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+        bottom_right_x, bottom_right_y) format.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):

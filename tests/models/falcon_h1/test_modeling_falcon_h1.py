@@ -54,7 +54,7 @@ class FalconH1ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=64,
