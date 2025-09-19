@@ -268,7 +268,7 @@ class Gemma3nTextModelTester(GemmaModelTester):
         vocab_size_per_layer_input=99,
         hidden_size=16,
         hidden_size_per_layer_input=16,
-        num_hidden_layers=4,  # override to correctly test sharing cache pattern
+        num_hidden_layers=2,  # override to correctly test sharing cache pattern
         num_kv_shared_layers=2,  # important to override
         layer_types=[
             "full_attention",

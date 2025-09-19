@@ -61,7 +61,7 @@ class ZambaModelTester:
         vocab_size=99,
         hidden_size=64,
         mamba_dt_rank=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         attn_layer_offset=1,
         attn_layer_period=8,
         num_attention_heads=4,

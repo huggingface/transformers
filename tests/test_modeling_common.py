@@ -674,6 +674,61 @@ class ModelTesterMixin:
 
         return inputs_dict
 
+    def test_num_layers_is_small(self):
+        # TODO (if possible): Avoid exceptional cases
+        exceptional_classes = [
+            "ZambaModelTester",
+            "Zamba2ModelTester",
+            "RwkvModelTester",
+            "AriaVisionText2TextModelTester",
+            "GPTNeoModelTester",
+            "DPTModelTester",
+            "Qwen3NextModelTester",
+        ]
+        if self.model_tester.__class__.__name__ in exceptional_classes:
+            return
+
+        # ⛔ DO NOT edit this list (unless there is really nothing to tweak in the model tester class and approved by the reviewer) ⛔!
+        exceptional_num_hidden_layers = {
+            "FunnelModelTest": 5,
+            "FunnelBaseModelTest": 4,
+            "GroupViTVisionModelTest": 12,
+            "OwlModelTest": 12,
+            "OwlViTTextModelTest": 12,
+            "OwlViTForObjectDetectionTest": 12,
+            "Owlv2ModelTest": 12,
+            "Owlv2TextModelTest": 12,
+            "Owlv2ForObjectDetectionTest:": 12,
+            "SamHQModelTest": 12,
+            "Swin2SRModelTest": 3,
+            "XLNetModelTest": 3,
+        }
+
+        target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
+
+        if hasattr(self.model_tester, "out_features") or hasattr(self.model_tester, "out_indices"):
+            self.skipTest(reason="bon")
+
+        if hasattr(self.model_tester, "num_hidden_layers"):
+            assert self.model_tester.num_hidden_layers <= target_num_hidden_layers
+
+        if (
+                hasattr(self.model_tester, "vision_config")
+                and "num_hidden_layers" in self.model_tester.vision_config
+        ):
+            if isinstance(self.model_tester.vision_config, dict):
+                assert self.model_tester.vision_config["num_hidden_layers"] <= target_num_hidden_layers
+            else:
+                assert self.model_tester.vision_config.num_hidden_layers <= target_num_hidden_layers
+        if (
+                hasattr(self.model_tester, "text_config")
+                and "num_hidden_layers" in self.model_tester.text_config
+        ):
+            if isinstance(self.model_tester.text_config, dict):
+                assert self.model_tester.text_config["num_hidden_layers"] <= target_num_hidden_layers
+            else:
+                assert self.model_tester.text_config.num_hidden_layers <= target_num_hidden_layers
+
     def test_save_load(self):
         def check_save_load(out1, out2):
             # make sure we don't have nans
