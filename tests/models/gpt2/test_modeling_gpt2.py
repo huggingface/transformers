@@ -28,7 +28,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ids_tensor
 
 
@@ -65,10 +64,7 @@ class GPT2ModelTester(CausalLMModelTester):
         self.num_choices = num_choices
 
     def prepare_config_and_inputs(
-        self,
-        full_inputs = False,
-        scale_attn_by_inverse_layer_idx=False,
-        reorder_and_upcast_attn=False
+        self, full_inputs=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
         (config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels) = (
             super().prepare_config_and_inputs()
@@ -90,7 +86,13 @@ class GPT2ModelTester(CausalLMModelTester):
             )
         else:
             config_and_inputs = (
-                config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+                config,
+                input_ids,
+                token_type_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
             )
 
         config = self.get_config(
@@ -111,6 +113,7 @@ class GPT2ModelTester(CausalLMModelTester):
         config, input_ids, _, head_mask, token_type_ids, _, _, _, _ = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
         return config, inputs_dict
+
 
 @require_torch
 class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
@@ -210,8 +213,11 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         model = GPT2LMHeadModel(config)
         model.to(torch_device)
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.vocab_size))
+        self.assertEqual(result.loss.shape, ())
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.vocab_size),
+        )
         result.loss.backward()
 
     def test_gpt2_reorder_and_upcast_attn(self):
@@ -223,7 +229,10 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         model.to(torch_device)
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.assertEqual(result.loss.shape, ())
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.vocab_size))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.vocab_size),
+        )
         result.loss.backward()
 
     def test_training_gradient_checkpointing(self):

@@ -329,10 +329,12 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         model.eval()
         result = model(input_ids, attention_mask=attention_mask)
         self.assertEqual(
-            result.start_logits.shape, (self.model_tester.batch_size, self.model_tester.seq_length),
+            result.start_logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
         )
         self.assertEqual(
-            result.end_logits.shape, (self.model_tester.batch_size, self.model_tester.seq_length),
+            result.end_logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
         )
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
