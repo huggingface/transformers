@@ -83,7 +83,7 @@ class ReformerModelTester:
         axial_pos_embds=True,
         axial_pos_shape=[4, 8],
         axial_pos_embds_dim=[16, 16],
-        attn_layers=["local", "local", "local", "local"],
+        attn_layers=["local", "local"],
         pad_token_id=0,
         eos_token_id=2,
         scope=None,

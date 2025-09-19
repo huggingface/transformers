@@ -47,7 +47,7 @@ class EomtForUniversalSegmentationTester:
         num_labels=4,
         hidden_size=8,
         num_attention_heads=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
