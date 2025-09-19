@@ -737,8 +737,6 @@ def _load_state_dict_into_meta_model(
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
     for param_name, empty_param in state_dict.items():
-        if param_name not in expected_keys:  # when loading from ckpt, we skip param if doesnt exist in modeling
-            continue
         # we need to use serialized_param_name as file pointer is untouched
         if is_meta_state_dict:
             # This is the name of the parameter as it appears on disk file
@@ -5330,13 +5328,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weights_only,
         )
 
-        # We need to update both the mapping and the list of checkpoint keys to remove the mismatched ones
-        key_renaming_mapping = {k: v for k, v in key_renaming_mapping.items() if v not in mismatched_keys}
-
-        # We also remove the eventual unexpected keys
-        if model._keys_to_ignore_on_load_unexpected is not None:
-            for pattern in model._keys_to_ignore_on_load_unexpected:
-                key_renaming_mapping = {k: v for k, v in key_renaming_mapping.items() if re.search(pattern, k) is None}
+        # We need to update both the mapping and the list of checkpoint keys to remove the mismatched and unexpected ones
+        key_renaming_mapping = {
+            k: v for k, v in key_renaming_mapping.items() if v not in mismatched_keys and v not in unexpected_keys
+        }
 
         checkpoint_keys = list(key_renaming_mapping.values())
 
