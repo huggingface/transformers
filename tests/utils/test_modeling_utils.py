@@ -2055,6 +2055,8 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(MyModelD.config_class, MyConfigA)
 
     def test_ignore_missing_key_works(self):
+        """Test that if a parameter (not buffer) is specified in `_keys_to_ignore_on_load_missing` and is actually
+        missing from the checkpoint, it will still be moved to cpu and initialized"""
         temp = tempfile.TemporaryDirectory()
         # Create dummy model
         model = BaseModelWithMissingKeys(PretrainedConfig())
@@ -2076,6 +2078,9 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
 
     def test_device_map_works_with_unexpected_keys(self):
+        """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
+        present in the checkpoint, it will correctly be removed from the weights we load, especially those
+        we use if the device map has offloading"""
         temp = tempfile.TemporaryDirectory()
 
         # Create dummy model
@@ -2096,6 +2101,9 @@ class ModelUtilsTest(TestCasePlus):
         BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
 
     def test_device_map_works_with_unexpected_keys_sharded(self):
+        """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
+        present in the checkpoint, it will correctly be removed from the weights we load, especially those
+        we use if the device map has offloading"""
         temp = tempfile.TemporaryDirectory()
 
         # Create dummy model
