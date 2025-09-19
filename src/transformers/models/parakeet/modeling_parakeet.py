@@ -115,6 +115,9 @@ class LSTMDropout(torch.nn.Module):
     def forward(
         self, x: torch.Tensor, h: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
     ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+
+        print("HERE x h", x.shape) #, h.shape)
+
         x, h = self.lstm(x, h)
 
         if self.dropout:
@@ -668,6 +671,84 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
                  )
              )
 
+    @auto_docstring
+    @check_model_inputs
+    @can_return_tuple
+    def forward(
+        self,
+        input_token,
+        states,
+        hidden_state = None,
+    ):
+        print("HERE INPUT", input_token)
+#        assert False
+
+        # y: (B, U)
+        y = input_token
+
+        g, states = self.predict(y, state=states) #, add_sos=add_sos)  # (B, U, D)
+        g = g.transpose(1, 2)  # (B, D, U)
+
+        return g, states
+#        return g, target_length, states
+
+    def predict(self, y, state):
+        # Get device and dtype of current module
+        _p = next(self.parameters())
+        device = _p.device
+        dtype = _p.dtype
+
+        # If y is not None, it is of shape [B, U] with dtype long.
+        if y is not None:
+            if y.device != device:
+                y = y.to(device)
+
+            # (B, U) -> (B, U, H)
+            y = self.embed(y)
+        else:
+            # Y is not provided, assume zero tensor with shape [B, 1, H] is required
+            # Emulates output of embedding of pad token.
+            if batch_size is None:
+                B = 1 if state is None else state[0].size(1)
+            else:
+                B = batch_size
+
+            y = torch.zeros((B, 1, self.pred_hidden), device=device, dtype=dtype)
+
+        # Prepend blank "start of sequence" symbol (zero tensor)
+#        if add_sos:
+#            B, U, H = y.shape
+#            start = torch.zeros((B, 1, H), device=y.device, dtype=y.dtype)
+#            y = torch.cat([start, y], dim=1).contiguous()  # (B, U + 1, H)
+#        else:
+        start = None  # makes del call later easier
+
+        # If in training mode, and random_state_sampling is set,
+        # initialize state to random normal distribution tensor.
+#        if state is None:
+#            if self.random_state_sampling and self.training:
+#                state = self.initialize_state(y)
+
+        # Forward step through RNN
+
+
+        y = y.transpose(0, 1)  # (U + 1, B, H)
+
+        print("HERE Y is", y.shape)
+
+        g, hid = self.dec_rnn(y, state)
+        g = g.transpose(0, 1)  # (B, U + 1, H)
+
+        del y, start, state
+
+#        # Adapter module forward step
+#        if self.is_adapter_available():
+#            g = self.forward_enabled_adapters(g)
+
+        return g, hid
+
+
+
 
 @auto_docstring(
     custom_intro="""
@@ -779,66 +860,16 @@ class ParakeetTDTDecoder(ParakeetPreTrainedModel):
         self.post_init()
 
 
-
     @auto_docstring
     @check_model_inputs
     @can_return_tuple
     def forward(
         self,
-        input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        hidden_states = self.subsampling(input_features, attention_mask)
-        hidden_states = hidden_states * self.input_scale
-        position_embeddings = self.encode_positions(hidden_states)
+        input_token,
+        hidden_state = None,
+    ):
+        return self.prediction(input_token, hidden_state)
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        position_embeddings = nn.functional.dropout(
-            position_embeddings, p=self.dropout_positions, training=self.training
-        )
-
-        if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
-
-            # NOTE: @eustlb, which mask utils to do the same?
-            # @ebezzam could use `create_causal_mask` but more complicated
-            # as `and_mask_function` requires callable mask function
-            attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
-            attention_mask = attention_mask & attention_mask.transpose(1, 2)
-            attention_mask = attention_mask.unsqueeze(1)
-            # attention_mask = create_causal_mask(
-            #     self.config,
-            #     hidden_states,
-            #     attention_mask,
-            #     cache_position=torch.arange(attention_mask.shape[1], device=hidden_states.device),
-            #     past_key_values=None,
-            #     position_ids=None,
-            #     # and_mask_function=None,
-            # )
-            # # ensure boolean mask because of `~attention_mask` in later processing
-            # if attention_mask is not None and attention_mask.dtype != torch.bool:
-            #     attention_mask = attention_mask > 0
-
-        for encoder_layer in self.layers:
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            to_drop = False
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:  # skip the layer
-                    to_drop = True
-
-            # skip the layer when `to_drop=True``, rather than setting `hidden_states=None`
-            # which can cause error when computing loss on None output
-            if not to_drop:
-                hidden_states = encoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    position_embeddings=position_embeddings,
-                    **kwargs,
-                )
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @dataclass
@@ -999,8 +1030,13 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             **kwargs,
         )
 
-        print("HERE input_features", input_features.shape)
-        hidden_states = encoder_outputs.last_hidden_state
+        encoder_outputs = self.encoder(
+            input_features=input_features,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+
+#        hidden_states = encoder_outputs.last_hidden_state
 
 #        print("WEIRD self.ctc_head", self.ctc_head)
 #        exit(-1)
@@ -1045,19 +1081,20 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
     def generate(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        return_dict_in_generate: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[ParakeetGenerateOutput, torch.LongTensor]:
         kwargs["return_dict"] = True
-        outputs: CausalLMOutput = self.forward(
+
+        encoder_outputs = self.encoder(
             input_features=input_features,
-            attention_mask=attention_mask,
+#            attention_mask=attention_mask,
             **kwargs,
         )
 
+        output = self.greedy_decode(encoder_outputs.last_hidden_state)
+
         # greedy decoding
-        sequences = outputs.logits.argmax(dim=-1)
+#        sequences = output.logits.argmax(dim=-1)
 
         # mask out padded tokens
         if attention_mask is not None:
@@ -1073,6 +1110,36 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             )
 
         return sequences
+
+    def greedy_decode(self,
+                      encoder_output: torch.Tensor(),
+        ):
+            T = encoder_output.shape[1]
+#            print("HERE encoder_output", encoder_output.shape)
+#            print("HERE self.decoder", self.decoder)
+
+            t = 0
+
+            hyp = []
+            last_label = 1024 # should be blank
+
+            while t < T:
+                not_blank = True
+                symbols_added = 0
+                enc = encoder_output[0,t,:]
+                while not_blank and symbols_added < 2:
+#                    print("BEFORE LAST", last_label)
+                    if isinstance(last_label, int):
+                        last_label = torch.LongTensor([[last_label]]) #.to(self.decoder.device)
+#                    print("PASSING LAST", last_label)
+#                    print("PASSING LAST shape", last_label.shape)
+                    g, hidden_prime = self.decoder(last_label, None)
+                    logp = self.joint(enc, g)
+
+
+                    symbols_added += 1
+
+                t+=1
 
 
 __all__ = ["ParakeetForCTC", "ParakeetForTDT", "ParakeetEncoder", "ParakeetPreTrainedModel"]

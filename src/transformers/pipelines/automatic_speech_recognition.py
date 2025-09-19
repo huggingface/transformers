@@ -556,9 +556,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         elif self.type == 'tdt':
             inputs = {
                 self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
-                "attention_mask": attention_mask,
+#                "attention_mask": attention_mask,
             }
-            outputs = self.model(**inputs)
+            outputs = self.model.generate(**inputs)
 
         else:
             inputs = {
