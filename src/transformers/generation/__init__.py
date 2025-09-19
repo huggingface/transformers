@@ -101,16 +101,6 @@ else:
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
-        "GreedySearchEncoderDecoderOutput",
-        "GreedySearchDecoderOnlyOutput",
-        "SampleEncoderDecoderOutput",
-        "SampleDecoderOnlyOutput",
-        "BeamSearchEncoderDecoderOutput",
-        "BeamSearchDecoderOnlyOutput",
-        "BeamSampleEncoderDecoderOutput",
-        "BeamSampleDecoderOnlyOutput",
-        "ContrastiveSearchEncoderDecoderOutput",
-        "ContrastiveSearchDecoderOnlyOutput",
         "GenerateBeamDecoderOnlyOutput",
         "GenerateBeamEncoderDecoderOutput",
         "GenerateDecoderOnlyOutput",
@@ -196,21 +186,11 @@ if TYPE_CHECKING:
             validate_stopping_criteria,
         )
         from .utils import (
-            BeamSampleDecoderOnlyOutput,
-            BeamSampleEncoderDecoderOutput,
-            BeamSearchDecoderOnlyOutput,
-            BeamSearchEncoderDecoderOutput,
-            ContrastiveSearchDecoderOnlyOutput,
-            ContrastiveSearchEncoderDecoderOutput,
             GenerateBeamDecoderOnlyOutput,
             GenerateBeamEncoderDecoderOutput,
             GenerateDecoderOnlyOutput,
             GenerateEncoderDecoderOutput,
             GenerationMixin,
-            GreedySearchDecoderOnlyOutput,
-            GreedySearchEncoderDecoderOutput,
-            SampleDecoderOnlyOutput,
-            SampleEncoderDecoderOutput,
         )
         from .watermarking import (
             BayesianDetectorConfig,
