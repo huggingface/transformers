@@ -95,7 +95,7 @@ class Qwen2MoeRouter(nn.Linear):
 
 class Qwen2MoeExperts(MixtralExperts, nn.Module):
     def __init__(self, config):
-        nn.Module.__init__(self)
+        nn.ModuleList.__init__(self)
         self.num_experts = config.num_experts
         for _ in range(config.num_experts):
             self += [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size)]

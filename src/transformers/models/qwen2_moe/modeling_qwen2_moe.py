@@ -282,7 +282,7 @@ class Qwen2MoeExperts(nn.ModuleList):
     """
 
     def __init__(self, config):
-        nn.Module.__init__(self)
+        super().__init__()
         self.num_experts = config.num_experts
         for _ in range(config.num_experts):
             self += [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size)]
