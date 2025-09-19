@@ -678,6 +678,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt_neox", "GPTNeoXForCausalLM"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseForCausalLM"),
         ("gpt_oss", "GptOssForCausalLM"),
+        ("lexa_delta", "LexaDeltaForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
         ("granite", "GraniteForCausalLM"),
         ("granitemoe", "GraniteMoeForCausalLM"),
