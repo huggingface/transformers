@@ -18,6 +18,7 @@ import os
 import random
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from datasets import Audio, load_dataset
@@ -115,6 +116,40 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
 
     def setUp(self):
         self.feat_extract_tester = VocosFeatureExtractionTester(self)
+        self.EXPECTED_INPUT_FEATURES = torch.tensor(
+            [
+                -1.7868,
+                -2.6268,
+                -4.2176,
+                -3.1553,
+                -2.8303,
+                -2.9688,
+                -2.5228,
+                -2.2364,
+                -2.2634,
+                -2.6506,
+                -2.9499,
+                -2.9495,
+                -3.6546,
+                -2.4890,
+                -2.5498,
+                -2.1440,
+                -2.7317,
+                -2.8661,
+                -3.9949,
+                -3.0592,
+                -3.9502,
+                -3.6474,
+                -3.6898,
+                -3.2182,
+                -3.0109,
+                -2.3629,
+                -2.7947,
+                -2.7480,
+                -2.9207,
+                -2.8100,
+            ]
+        )
 
     # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_feat_extract_from_and_save_pretrained
     def test_feat_extract_from_and_save_pretrained(self):
@@ -196,46 +231,20 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         speech_samples = ds.sort("id")[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
 
-    # @slow
-    def test_integration(self):
-        EXPECTED_INPUT_FEATURES = torch.tensor(
-            [
-                -1.7723,
-                -2.6265,
-                -4.3446,
-                -3.1139,
-                -2.8543,
-                -2.9732,
-                -2.4957,
-                -2.2525,
-                -2.2552,
-                -2.6201,
-                -2.9786,
-                -2.9158,
-                -3.6589,
-                -2.4617,
-                -2.5469,
-                -2.1645,
-                -2.7375,
-                -2.8342,
-                -3.9452,
-                -3.0140,
-                -3.8436,
-                -3.6883,
-                -3.6017,
-                -3.2762,
-                -3.0133,
-                -2.3405,
-                -2.8324,
-                -2.7181,
-                -2.8962,
-                -2.8469,
-            ]
-        )
-
+    @require_torch
+    def test_integration_torch_backend(self):
         speech = self._load_datasamples(1)
         feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/vocos-mel-24khz")
         input_features = feature_extractor(speech, return_tensors="pt").input_features
-        self.assertEqual(input_features.shape, (1, feature_extractor.feature_size, 550))
-        # the numpy backend of melspectogram causes small numerical differences between cuda and cpu wheels
-        torch.testing.assert_close(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-3, atol=1e-3)
+        self.assertEqual(input_features.shape, (1, 100, 549))
+        torch.testing.assert_close(input_features[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)
+
+    @patch("transformers.models.vocos.feature_extraction_vocos.is_torch_available", return_value=False)
+    def test_integration_numpy_backend(self, _mock_torch_avail):
+        speech = self._load_datasamples(1)
+        feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/vocos-mel-24khz")
+        input_features = feature_extractor(speech, return_tensors="pt").input_features
+        self.assertEqual(input_features.shape, (1, 100, 549))
+
+        # numpy backend produces same values as torch, within tolerance ofc
+        torch.testing.assert_close(input_features[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)
