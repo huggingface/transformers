@@ -242,7 +242,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         # Here, normalize() is using a constant factor to divide pixel values.
-        # hence, the method does not need iamge_mean and image_std.
+        # hence, the method does not need image_mean and image_std.
         validate_preprocess_arguments(
             do_resize=do_resize,
             size=size,

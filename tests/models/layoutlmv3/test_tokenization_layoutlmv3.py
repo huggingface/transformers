@@ -1697,11 +1697,11 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         words_without_space = tokens_to_add + list(tokenizer_s.added_tokens_encoder.keys())
         boxes = [[i, i, i, i] for i in range(len(words_with_space))]
 
-        tokens_to_add_formated = [
+        tokens_to_add_formatted = [
             AddedToken(token, rstrip=True, lstrip=True, single_word=False) for token in tokens_to_add
         ]
-        tokenizer_s.add_tokens(tokens_to_add_formated)
-        tokenizer_f.add_tokens(tokens_to_add_formated)
+        tokenizer_s.add_tokens(tokens_to_add_formatted)
+        tokenizer_f.add_tokens(tokens_to_add_formatted)
 
         ids_s = tokenizer_s(words_with_space, boxes=boxes).input_ids
         ids_f = tokenizer_f(words_with_space, boxes=boxes).input_ids
