@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_keye import *
-    from .modeling_keye import *
-    from .processing_keye import *
+    from .configuration_keye_vl_1_5 import *
+    from .modeling_keye_vl_1_5 import *
+    from .processing_keye_vl_1_5 import *
 else:
     import sys
 

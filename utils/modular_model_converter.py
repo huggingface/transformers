@@ -902,7 +902,6 @@ def replace_class_node(
     all_bases = [get_full_attribute_name(k.value) for k in modular_class_node.bases]
     if any(base is None for base in all_bases):
         raise ValueError(f"Could not parse the name of the bases for {modular_class_node.name.value}")
-
     original_modeling_node = mapper.classes[renamed_super_class]
     # Always use the new name of the class (in case we use e.g. `ColPaliForRetrieval` inheriting from `PaliGemmaForConditionalGeneration`)
     new_class_name = modular_class_node.name

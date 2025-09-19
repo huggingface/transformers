@@ -1114,7 +1114,7 @@ class ProcessorMixin(PushToHubMixin):
         # instantiate processor with used (and valid) kwargs only
         processor = cls(*args, **valid_kwargs)
 
-        logger.info(f"Processor {processor}")
+        # logger.info(f"Processor {processor}")
         if return_unused_kwargs:
             return processor, unused_kwargs
         else:

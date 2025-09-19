@@ -230,7 +230,6 @@ VLMS = [
     "gotocr2",
     "gemma3",
     "internvl",
-    "keye",
     "llava",  # all llava prefixed models fall under this check
     "mistral3",
     "mllama",
@@ -240,6 +239,7 @@ VLMS = [
     "qwen2_5_vl",
     "videollava",
     "vipllava",
+    "keyevl1_5",
 ]
 
 

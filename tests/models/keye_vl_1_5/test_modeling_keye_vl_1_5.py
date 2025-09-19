@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Keye model."""
+"""Testing suite for the PyTorch KeyeVL1_5 model."""
 
 import copy
 import unittest
@@ -20,9 +20,10 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    KeyeConfig,
-    KeyeForConditionalGeneration,
-    KeyeModel,
+    KeyeVL1_5Config,
+    KeyeVL1_5TextConfig,
+    KeyeVL1_5ForConditionalGeneration,
+    KeyeVL1_5Model,
     is_torch_available,
     is_vision_available,
 )
@@ -63,7 +64,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class KeyeVisionText2TextModelTester:
+class KeyeVL1_5VisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -72,10 +73,12 @@ class KeyeVisionText2TextModelTester:
         num_channels=3,
         ignore_index=-100,
         image_size=28,
+        # start
         bos_token_id=0,
         eos_token_id=1,
         pad_token_id=2,
         vision_start_token_id=3,
+        vision_end_token_id=6,
         image_token_id=4,
         video_token_id=5,
         hidden_act="silu",
@@ -83,13 +86,18 @@ class KeyeVisionText2TextModelTester:
         vocab_size=99,
         intermediate_size=37,
         max_position_embeddings=512,
+        # end
         max_window_layers=3,
-        model_type="Keye",
+        model_type="KeyeVL1_5",
+        # start
         num_attention_heads=4,
         num_hidden_layers=4,
         num_key_value_heads=2,
         rope_theta=10000,
         tie_word_embeddings=True,
+        sliding_window=4096,
+        use_sliding_window=False,
+        # end
         is_training=True,
         vision_config={
             "depth": 2,
@@ -104,6 +112,33 @@ class KeyeVisionText2TextModelTester:
             "spatial_merge_size": 2,
             "temporal_patch_size": 1,
         },
+        # text_config={
+        #     "vocab_size": 99,
+        #     "hidden_size": 32,
+        #     "intermediate_size": 37,
+        #     "num_hidden_layers": 4,
+        #     "num_attention_heads": 4,
+        #     "num_key_value_heads": 2,
+        #     "hidden_act": "silu",
+        #     "max_position_embeddings": 512,
+        #     "initializer_range": 0.02,
+        #     "rms_norm_eps": 1e-5,
+        #     "use_cache": True,
+        #     "tie_word_embeddings": True,
+        #     "rope_theta": 10000,
+        #     "use_sliding_window": False,
+        #     "sliding_window": 4096,
+        #     "layer_types": None,
+        #     "attention_dropout": 0.0,
+        #     "rope_scaling": {"type": "mrope", "mrope_section": [2, 1, 1]},
+        #     "image_token_id": 4,
+        #     "video_token_id": 5,
+        #     "attention_bias": False,
+        #     "eos_token_id": 1,
+        #     "bos_token_id": 0,
+        #     "pad_token_id": 2,
+        #     "vision_start_token_id": 3,
+        # },
         rope_scaling={"type": "mrope", "mrope_section": [2, 1, 1]},
         train_batch_size=1,
         num_video_tokens=1,
@@ -114,6 +149,7 @@ class KeyeVisionText2TextModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.vision_start_token_id = vision_start_token_id
+        self.vision_end_token_id = vision_end_token_id
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         self.hidden_act = hidden_act
@@ -127,6 +163,8 @@ class KeyeVisionText2TextModelTester:
         self.num_key_value_heads = num_key_value_heads
         self.rope_theta = rope_theta
         self.tie_word_embeddings = tie_word_embeddings
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window
         self.vision_config = vision_config
         self.rope_scaling = rope_scaling
         self.batch_size = batch_size
@@ -140,7 +178,7 @@ class KeyeVisionText2TextModelTester:
         self.train_batch_size = train_batch_size
 
     def get_config(self):
-        return KeyeConfig(
+        return KeyeVL1_5Config(
             hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -157,9 +195,11 @@ class KeyeVisionText2TextModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             vision_start_token_id=self.vision_start_token_id,
+            vision_end_token_id=self.vision_end_token_id,
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
             vocab_size=self.vocab_size,
+            sliding_window=self.sliding_window,
         )
 
     def prepare_config_and_inputs(self):
@@ -183,12 +223,15 @@ class KeyeVisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
 
+        # print(input_ids, "ZLNLN", input_ids.shape)
         input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.video_token_id] = self.pad_token_id
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
+        input_ids[input_ids == self.vision_end_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
+        input_ids[:, self.num_image_tokens + 1] = self.vision_end_token_id
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor([[1, 2, 2]] * self.batch_size, device=torch_device),
@@ -199,15 +242,15 @@ class KeyeVisionText2TextModelTester:
 
 
 @require_torch
-class KeyeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class KeyeVL1_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
-    Model tester for `KeyeForConditionalGeneration`.
+    Model tester for `KeyeVL1_5ForConditionalGeneration`.
     """
 
     all_model_classes = (
         (
-            KeyeModel,
-            KeyeForConditionalGeneration,
+            KeyeVL1_5Model,
+            KeyeVL1_5ForConditionalGeneration,
         )
         if is_torch_available()
         else ()
@@ -216,8 +259,8 @@ class KeyeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = KeyeVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=KeyeConfig, has_text_modality=False)
+        self.model_tester = KeyeVL1_5VisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=KeyeVL1_5Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -314,6 +357,7 @@ class KeyeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
         input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
         input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_end_token_id] = self.model_tester.pad_token_id
         input_ids[:, self.model_tester.num_video_tokens] = self.model_tester.video_token_id
 
         insertion_point = self.model_tester.num_video_tokens
@@ -322,6 +366,7 @@ class KeyeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         for b in range(B):
             input_ids[b, insertion_point - 1] = self.model_tester.vision_start_token_id
             input_ids[b, insertion_point : insertion_point + n_video_tokens] = self.model_tester.video_token_id
+            input_ids[b, insertion_point + n_video_tokens] = self.model_tester.vision_end_token_id
 
         for model_class in self.all_model_classes:
             second_per_grid_ts = torch.tensor([1.0] * B, device=torch_device)
@@ -421,11 +466,11 @@ class KeyeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class KeyeIntegrationTest(unittest.TestCase):
-    # all_model_classes = (KeyeForConditionalGeneration,) if is_torch_available() else ()
+class KeyeVL1_5IntegrationTest(unittest.TestCase):
+    # all_model_classes = (KeyeVL1_5ForConditionalGeneration,) if is_torch_available() else ()
 
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("Kwai-Keye/Keye-VL-8B-Preview")
+        self.processor = AutoProcessor.from_pretrained("Kwai-Keye/Keye-VL-1_5-8B")
         self.messages = [
             {
                 "role": "user",
@@ -446,8 +491,8 @@ class KeyeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = KeyeForConditionalGeneration.from_pretrained(
-            "Kwai-Keye/Keye-VL-8B-Preview", dtype="auto", device_map="auto"
+        model = KeyeVL1_5ForConditionalGeneration.from_pretrained(
+            "Kwai-Keye/Keye-VL-1_5-8B", dtype="auto", device_map="auto"
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
