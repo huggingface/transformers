@@ -129,48 +129,5 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
     - forward
 
 </pt>
-<jax>
-
-## FlaxBigBirdModel
-
-[[autodoc]] FlaxBigBirdModel
-    - __call__
-
-## FlaxBigBirdForPreTraining
-
-[[autodoc]] FlaxBigBirdForPreTraining
-    - __call__
-
-## FlaxBigBirdForCausalLM
-
-[[autodoc]] FlaxBigBirdForCausalLM
-    - __call__
-
-## FlaxBigBirdForMaskedLM
-
-[[autodoc]] FlaxBigBirdForMaskedLM
-    - __call__
-
-## FlaxBigBirdForSequenceClassification
-
-[[autodoc]] FlaxBigBirdForSequenceClassification
-    - __call__
-
-## FlaxBigBirdForMultipleChoice
-
-[[autodoc]] FlaxBigBirdForMultipleChoice
-    - __call__
-
-## FlaxBigBirdForTokenClassification
-
-[[autodoc]] FlaxBigBirdForTokenClassification
-    - __call__
-
-## FlaxBigBirdForQuestionAnswering
-
-[[autodoc]] FlaxBigBirdForQuestionAnswering
-    - __call__
-
-</jax>
 </frameworkcontent>
 
