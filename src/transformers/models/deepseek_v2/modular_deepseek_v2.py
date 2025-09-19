@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import (
     logging,
 )
@@ -238,16 +238,15 @@ def apply_rotary_emb(
 
 
 class DeepseekV2Experts(Qwen2MoeExperts):
-    
     def __init__(self, config: DeepseekV2Config):
         super().__init__(config)
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group
         self.topk_group = config.topk_group
-        
+
     def route_tokens_to_experts(self, hidden_states, router_logits):
-        batch_size , seq_len, _ = hidden_states.shape
+        batch_size, seq_len, _ = hidden_states.shape
         if self.topk_method == "greedy":
             topk_weight, topk_idx = torch.topk(router_logits, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
@@ -443,9 +442,9 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
 
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-        if isinstance(module, DeepseekV2Router):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        super()._init_weights(module)
+        if isinstance(module, DeepseekV2Moe):
+            module.gate.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV2Model(LlamaModel):

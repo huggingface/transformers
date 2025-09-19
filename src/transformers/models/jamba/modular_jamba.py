@@ -2,37 +2,38 @@
 # to this file as they will be overwritten.
 
 import math
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
-from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...masking_utils import create_causal_mask
+from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import (
     GenericForSequenceClassification,
     GradientCheckpointingLayer,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
-    can_return_tuple,
     is_causal_conv1d_available,
     is_mamba_ssm_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
-from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv, LlamaMLP
+from ...utils.generic import check_model_inputs
+from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm, repeat_kv
+from ..mixtral.modeling_mixtral import (
+    MixtralExperts,
+    MixtralForCausalLM,
+)
 from .configuration_jamba import JambaConfig
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralPreTrainedModel, MixtralDecoderLayer, load_balancing_loss_func, MixtralExperts
+
 
 if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
+    pass
 
 
 if is_mamba_ssm_available():
@@ -52,7 +53,6 @@ is_fast_path_available = all(
 
 
 logger = logging.get_logger(__name__)
-
 
 
 class JambaRMSNorm(LlamaRMSNorm):
@@ -247,7 +247,9 @@ class JambaAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_position=cache_position)
+            key_states, value_states = past_key_values.update(
+                key_states, value_states, self.layer_idx, cache_position=cache_position
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -267,6 +269,7 @@ class JambaAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
 
 class JambaMambaMixer(nn.Module):
     """
@@ -560,7 +563,6 @@ class JambaExperts(MixtralExperts):
         return top_k_index, top_k_weights
 
 
-
 class JambaSparseMoeBlock(nn.Module):
     """
     This implementation is
@@ -615,7 +617,7 @@ class JambaAttentionDecoderLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.FloatTensor, Optional[torch.Tensor], Optional[HybridMambaAttentionDynamicCache]]:
         hidden_states = self.input_layernorm(hidden_states)
         residual = hidden_states
-        hidden_states, _= self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -729,22 +731,29 @@ class JambaModel(JambaPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping["full_attention"] = create_causal_mask(
-                config=self.config,
-                input_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
-                position_ids=position_ids,
-            ) if self.config.use_mamba_kernels else attention_mask
-
+            causal_mask_mapping["full_attention"] = (
+                create_causal_mask(
+                    config=self.config,
+                    input_embeds=inputs_embeds,
+                    attention_mask=attention_mask,
+                    cache_position=cache_position,
+                    past_key_values=past_key_values,
+                    position_ids=position_ids,
+                )
+                if self.config.use_mamba_kernels
+                else attention_mask
+            )
 
             causal_mask_mapping["mamba"] = self._update_mamba_mask(attention_mask, cache_position)
 
         hidden_states = inputs_embeds
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
-            layer_mask = causal_mask_mapping["mamba"] if isinstance(decoder_layer, JambaMambaDecoderLayer) else causal_mask_mapping["full_attention"]
+            layer_mask = (
+                causal_mask_mapping["mamba"]
+                if isinstance(decoder_layer, JambaMambaDecoderLayer)
+                else causal_mask_mapping["full_attention"]
+            )
 
             hidden_states = decoder_layer(
                 hidden_states,

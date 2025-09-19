@@ -118,11 +118,8 @@ class DeepseekV3NaiveMoe(MixtralExperts, nn.Module):
             self += [DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size)]
 
     def route_tokens_to_experts(self, hidden_states, router_logits):
-
         group_scores = (
-            router_logits.view(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
+            router_logits.view(-1, self.n_group, self.n_routed_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
         )
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)

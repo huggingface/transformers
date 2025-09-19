@@ -19,7 +19,6 @@ from typing import Optional, Union
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import functional as F
 
 from ...cache_utils import Cache
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast

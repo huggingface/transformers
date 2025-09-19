@@ -14,19 +14,16 @@
 from typing import Callable, Optional
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -35,7 +32,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, MixtralExperts
+from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, MixtralModel
 from .configuration_olmoe import OlmoeConfig
 
 
@@ -125,6 +122,7 @@ class OlmoeExperts(MixtralExperts, nn.ModuleList):
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
+
     def route_tokens_to_experts(self, hidden_states, router_logits):
         routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
         top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
@@ -132,12 +130,9 @@ class OlmoeExperts(MixtralExperts, nn.ModuleList):
             top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
         top_k_weights = top_k_weights.to(hidden_states.dtype)
         return top_k_index, top_k_weights
-    
-
 
 
 class OlmoeSparseMoeBlock(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_experts
@@ -233,6 +228,7 @@ class OlmoeModel(MixtralModel):
         )
         self.norm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = OlmoeRotaryEmbedding(config=config)
+
 
 class OlmoeForCausalLM(MixtralForCausalLM, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]

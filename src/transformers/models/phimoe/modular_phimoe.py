@@ -21,11 +21,15 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ..llama.modeling_llama import LlamaAttention
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import check_model_inputs
 from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
     MixtralExperts,
@@ -33,6 +37,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralMLP,
     MixtralModel,
     MixtralPreTrainedModel,
+    rotate_half,
 )
 from .configuration_phimoe import PhimoeConfig
 
@@ -69,6 +74,7 @@ class PhimoeRotaryEmbedding(nn.Module):
         emb = torch.cat((freqs, freqs), dim=-1)
         return (emb.cos() * mscale).to(x.dtype), (emb.sin() * mscale).to(x.dtype)
 
+
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -95,7 +101,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
- 
+
 class PhimoeAttention(LlamaAttention):
     pass
 
@@ -425,6 +431,7 @@ class PhimoeModel(MixtralModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
 
 class PhimoeForCausalLM(MixtralForCausalLM):
     # Copied from transformers.models.phi3.modeling_phi3.Phi3ForCausalLM.prepare_inputs_for_generation

@@ -35,7 +35,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ...utils.typing_utils import TransformersKwargs
@@ -47,7 +47,7 @@ from ..m2m_100.modeling_m2m_100 import (
 from ..musicgen.modeling_musicgen import MusicgenAttention, MusicgenDecoder
 from ..switch_transformers.modeling_switch_transformers import load_balancing_loss_func
 from .configuration_nllb_moe import NllbMoeConfig
-from ..bart.modeling_bart import eager_attention_forward 
+
 
 logger = logging.get_logger(__name__)
 

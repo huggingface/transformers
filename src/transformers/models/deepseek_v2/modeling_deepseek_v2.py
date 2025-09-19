@@ -431,8 +431,8 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, DeepseekV2Router):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, DeepseekV2Moe):
+            module.gate.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

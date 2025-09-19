@@ -22,7 +22,6 @@
 from typing import Optional, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
@@ -151,7 +150,6 @@ class MixtralMLP(nn.Module):
         return current_hidden_states
 
 
-
 class MixtralExperts(nn.ModuleList):
     """
     ModuleList of experts.
@@ -171,9 +169,7 @@ class MixtralExperts(nn.ModuleList):
         top_k_weights = top_k_weights.to(hidden_states.dtype)
         return top_k_index, top_k_weights
 
-    def forward(
-        self, hidden_states: torch.Tensor, router_logits: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
         """
         Args:
             hidden_states: (batch_size * sequence_length, hidden_dim)
@@ -209,7 +205,6 @@ class MixtralSparseMoeBlock(nn.Module):
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         router_logits = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_dim)
         hidden_states = self.experts(hidden_states, router_logits)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, router_logits

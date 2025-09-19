@@ -135,8 +135,6 @@ class DbrxAttention(nn.Module):
         return attn_output, attn_weights
 
 
-
-
 class DbrxExpertGLU(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -211,6 +209,7 @@ class DbrxExperts(nn.Module):
 
         next_states = next_states.view(batch_size, -1, self.hidden_size)
         return next_states
+
 
 class DbrxRouter(nn.Module):
     def __init__(self, config):
