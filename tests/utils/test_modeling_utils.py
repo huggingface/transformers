@@ -152,6 +152,19 @@ if is_torch_available():
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
+    class BaseModelWithMissingKeys(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+        _keys_to_ignore_on_load_missing = [r"^linear"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(50, 50)
+            self.linear_2 = nn.Linear(50, 50)
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
     class BaseModelWithTiedWeights(PreTrainedModel):
         config_class = PretrainedConfig
 
@@ -2041,6 +2054,27 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(MyModelC.config_class, MyConfigC)
         self.assertIs(MyModelD.config_class, MyConfigA)
 
+    def test_ignore_missing_key_works(self):
+        temp = tempfile.TemporaryDirectory()
+        # Create dummy model
+        model = BaseModelWithMissingKeys(PretrainedConfig())
+
+        # Save the config
+        model.config.save_pretrained(temp.name)
+        # Get the state dict to save
+        state_dict = model.state_dict()
+        # Remove the layer that we should ignore if missing
+        del state_dict["linear.weight"], state_dict["linear.bias"]
+        # Save the state dict as a single shard
+        safe_save_file(state_dict, Path(temp.name) / "model.safetensors", metadata={"format": "pt"})
+
+        # Try loading back, with the missing key not present in the state_dict
+        model = BaseModelWithMissingKeys.from_pretrained(temp.name)
+
+        # Make sure the skipped missing key is not still on meta device!
+        for k, v in model.state_dict().items():
+            self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
+
     def test_device_map_works_with_unexpected_keys(self):
         temp = tempfile.TemporaryDirectory()
 
@@ -2051,13 +2085,11 @@ class ModelUtilsTest(TestCasePlus):
         model.config.save_pretrained(temp.name)
 
         # Get the state dict to save
-        sd = model.state_dict()
-
+        state_dict = model.state_dict()
         # Add a layer that is in the "_keys_to_ignore_on_load_unexpected" list to ignore
-        sd["mtp"] = torch.randn(12, 12)
-
+        state_dict["mtp"] = torch.randn(12, 12)
         # Save the state dict as a single shard
-        safe_save_file(sd, Path(temp.name) / "model.safetensors", metadata={"format": "pt"})
+        safe_save_file(state_dict, Path(temp.name) / "model.safetensors", metadata={"format": "pt"})
 
         # Load the model with entire shards placed on disk in order to trigger `get_disk_only_shard_files`.
         # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
@@ -2073,13 +2105,13 @@ class ModelUtilsTest(TestCasePlus):
         model.config.save_pretrained(temp.name)
 
         # Get the state dict to save
-        sd = model.state_dict()
+        state_dict = model.state_dict()
 
         # Add a layer that is in the "_keys_to_ignore_on_load_unexpected" list to ignore
-        sd["mtp"] = torch.randn(50, 50)
+        state_dict["mtp"] = torch.randn(50, 50)
 
         # Split the state dict in shards, save the index and the shards
-        shards = split_torch_state_dict_into_shards(sd, max_shard_size="1kb")
+        shards = split_torch_state_dict_into_shards(state_dict, max_shard_size="1kb")
         index = {
             "metadata": {"total_parameters": model.num_parameters(), **shards.metadata},
             "weight_map": shards.tensor_to_filename,
@@ -2093,7 +2125,7 @@ class ModelUtilsTest(TestCasePlus):
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                shard[tensor] = sd[tensor].contiguous()
+                shard[tensor] = state_dict[tensor].contiguous()
             safe_save_file(shard, Path(temp.name) / shard_file, metadata={"format": "pt"})
 
         # Load the model with entire shards placed on disk in order to trigger `get_disk_only_shard_files`.
