@@ -708,23 +708,6 @@ class PerceptionEncoderAVDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class CLSToken(torch.nn.Module):
-    def __init__(self, d_model):
-        super().__init__()
-        self.weight = torch.nn.Parameter(torch.randn(1, 1, d_model))
-
-    def forward(self, input_data: torch.Tensor) -> torch.Tensor:
-        """Expands CLS token to match input batch size.
-
-        Args:
-            input_data: Input tensor of shape (batch_size, seq_len, d_model)
-
-        Returns:
-            Expanded CLS tokens of shape (batch_size, 1, d_model)
-        """
-        return self.weight.expand(input_data.size(0), -1, -1)
-
-
 def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
     dim = cos.size(-1)
     cos = cos.narrow(-1, 0, dim // 2)
@@ -753,7 +736,7 @@ class Transformer(torch.nn.Module):
             out_channels=config.hidden_size,
         )
 
-        self.cls_token = CLSToken(config.hidden_size)
+        self.cls_token = torch.nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
     def forward(
         self,
@@ -762,7 +745,7 @@ class Transformer(torch.nn.Module):
         padding_mask: Optional[torch.Tensor] = None,
     ):
         # Prepend the cls token
-        x = torch.cat([self.cls_token(x), x], dim=1)
+        x = torch.cat([self.cls_token.expand(x.size(0), -1, -1), x], dim=1)
         if padding_mask is not None:
             padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1)
 
