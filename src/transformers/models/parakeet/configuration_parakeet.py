@@ -149,14 +149,6 @@ class ParakeetTDTJointConfig(PretrainedConfig):
         self.joint_activation=joint_activation
 
 
-        print("SUCCESS!")
-#        self.pred_hidden = kwargs['pred_hidden']
-#        self.pred_n_layers = kwargs['pred_n_layers']
-#        self.joint_hidden = kwargs['joint_hidden']
-#        self.vocab_size = kwargs['vocab_size']
-#        self.durations = kwargs['durations']
-
-
 
 class ParakeetConfig(PretrainedConfig):
     r"""

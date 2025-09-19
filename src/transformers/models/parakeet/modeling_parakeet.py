@@ -709,6 +709,7 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
             # (B, U) -> (B, U, H)
             y = self.embed(y)
         else:
+            assert False
             # Y is not provided, assume zero tensor with shape [B, 1, H] is required
             # Emulates output of embedding of pad token.
             if batch_size is None:
@@ -735,7 +736,9 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
         # Forward step through RNN
 
 
+#        print("BEFORE TRANSPOSE", y.shape)
         y = y.transpose(0, 1)  # (U + 1, B, H)
+#        print("AFTER  TRANSPOSE", y.shape)
 
         g, hid = self.dec_rnn(y, state)
         g = g.transpose(0, 1)  # (B, U + 1, H)
@@ -1109,8 +1112,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 token = token.item()
                 duration = duration.item()
 
-                print("TIME TOKEN DURATION", t, token, duration)
-                print("two values", v, v_duration)
+#                print("TIME TOKEN DURATION", t, token, duration)
+#                print("two values", v, v_duration)
 
                 if token != 1024:
                     hyp.append(token)
@@ -1128,7 +1131,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                     break
             if symbols_added == 2:
                 t += 1
-            print("T IS", t)
+#            print("T IS", t)
+        print("HYP IS",hyp)
         return hyp
 
 
