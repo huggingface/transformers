@@ -28,7 +28,6 @@ from .configuration_perception_encoder_av import (
     DACVAEConfig,
     NormalizeTypeConfig,
     PerceptionEncoderAVConfig,
-    PerceptionEncoderAVTextEncoderConfig,
     TransformerConfig,
     VideoEncoderConfig,
 )
@@ -79,26 +78,6 @@ class ResnetBlock1d(torch.nn.Module):
         h = self.block1(x)
         h = self.block2(h)
         return h + x
-
-
-## Text Encoder
-class PerceptionEncoderAVTextEncoder(torch.nn.Module):
-    def __init__(self, config: PerceptionEncoderAVTextEncoderConfig):
-        super().__init__()
-        self.nth_layer = config.nth_layer
-        self.model = AutoModel.from_config(config.sub_config)
-
-    def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
-        output = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            output_hidden_states=self.nth_layer is not None,
-        )
-        if self.nth_layer is None:
-            # Note that `hidden_state[-1]` is not necessarily equivalent to `last_hidden_state`
-            # https://huggingface.co/docs/transformers/en/main_classes/output#model-outputs
-            return output.last_hidden_state[:, 0]
-        return output.hidden_states[self.nth_layer][:, 0]
 
 
 class AlignModalities(torch.nn.Module):
@@ -745,7 +724,7 @@ class PerceptionEncoderAVModel(PreTrainedModel):
         self.audio_encoder = TransformerWithInputProjection(cfg.audio_encoder)
         self.audio_video_encoder = AudioVideoEncoder(cfg.audio_video_encoder)
         self.video_encoder = VideoEncoder(cfg.video_encoder)
-        self.text_encoder = PerceptionEncoderAVTextEncoder(cfg.text_encoder)
+        self.text_encoder = AutoModel.from_config(cfg.text_encoder.sub_config)
 
         heads = ["video", "audio", "audio_visual"]
         if cfg.separate_text_heads:
@@ -766,8 +745,17 @@ class PerceptionEncoderAVModel(PreTrainedModel):
         _, raw_feat = self.video_encoder(video)
         return self.video_head(raw_feat)
 
-    def encode_text(self, text: torch.Tensor, kind: TextType = TextType.audio) -> torch.Tensor:
-        cls_embedding = self.text_encoder(text)
+    def encode_text(
+        self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None, kind: TextType = TextType.audio
+    ) -> torch.Tensor:
+        nth_layer = self.config.text_encoder.nth_layer
+        output = self.text_encoder(
+            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=nth_layer is not None
+        )
+        if nth_layer is None:
+            cls_embedding = output.last_hidden_state[:, 0]
+        else:
+            cls_embedding = output.hidden_states[nth_layer][:, 0]
         head = getattr(self, f"{kind.value}_text_head")
         return head(cls_embedding)
 
