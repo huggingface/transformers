@@ -6,7 +6,7 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import enum
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -14,13 +14,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-from ...modeling_utils import PreTrainedModel
+from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...integrations import use_kernel_forward_from_hub
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_perception_encoder_av import (
     DACVAEConfig,
     NormalizeTypeConfig,
     PerceptionEncoderAVConfig,
     PerceptionEncoderAVTextEncoderConfig,
+    TransformerConfig,
     VideoEncoderConfig,
 )
 
@@ -453,118 +462,250 @@ class DacEncoderVAE(torch.nn.Module):
         return feature_idx.int()
 
 
-class RotaryEmbedding(torch.nn.Module):
-    """
-    RotaryEmbedding Module
-    """
-
-    def __init__(
-        self,
-        theta: float,
-        head_dim: int,
-        max_seqlen: int = 1024,
-        scale_factor: int = 1,
-        low_freq_factor: int = 1,
-        high_freq_factor: int = 32,
-        old_context_len: int = 8192,
-    ):
+class PerceptionEncoderAVMLP(nn.Module):
+    def __init__(self, config):
         super().__init__()
-
-        self.theta = theta
-        self.head_dim = head_dim
-        self.max_seqlen = max_seqlen
-        self.scale_factor = scale_factor
-        self.low_freq_factor = low_freq_factor
-        self.high_freq_factor = high_freq_factor
-        self.old_context_len = old_context_len
-        if scale_factor != 1:
-            self.low_freq_wavelen = old_context_len / low_freq_factor
-            self.high_freq_wavelen = old_context_len / high_freq_factor
-            assert self.low_freq_wavelen >= self.high_freq_wavelen
-
-    def reset_parameters(self):
-        freqs_cis = self.precompute_freqs_cis(dim=self.head_dim, end=self.max_seqlen, theta=self.theta)
-        S, D, _, _ = freqs_cis.shape
-        # S D 2 2 -> 1 S 1 D 2 2
-        freqs_cis = freqs_cis.view(1, S, 1, D, 2, 2)
-        self.register_buffer(
-            "freqs_cis",
-            freqs_cis,
-            persistent=False,
-        )
-
-    def apply_scaling(self, freqs):
-        if self.scale_factor == 1:
-            return freqs
-        new_freqs = []
-        for freq in freqs:
-            wavelen = 2 * math.pi / freq
-            if wavelen < self.high_freq_wavelen:
-                new_freqs.append(freq)
-            elif wavelen > self.low_freq_wavelen:
-                new_freqs.append(freq / self.scale_factor)
-            else:
-                assert self.low_freq_wavelen != self.high_freq_wavelen
-                smooth = (self.old_context_len / wavelen - self.low_freq_factor) / (
-                    self.high_freq_factor - self.low_freq_factor
-                )
-                new_freqs.append((1 - smooth) * freq / self.scale_factor + smooth * freq)
-        return torch.tensor(new_freqs, dtype=freqs.dtype, device=freqs.device)
-
-    def precompute_freqs_cis(
-        self,
-        dim: int,
-        end: int,
-        theta: float = 10000.0,
-    ):
-        """
-        Precompute the frequency tensor for complex exponentials (cis) with given dimensions.
-
-        This function calculates a frequency tensor with complex exponentials using the given dimension 'dim'
-        and the end index 'end'. The 'theta' parameter scales the frequencies.
-        The returned tensor contains complex values in complex64 data type.
-
-        Args:
-            dim (int): Dimension of the frequency tensor.
-            end (int): End index for precomputing frequencies.
-            theta (float, optional): Scaling factor for frequency computation. Defaults to 10000.0.
-
-        Returns:
-            torch.Tensor: Precomputed frequency tensor with complex exponentials.
-        """
-        freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-        freqs = self.apply_scaling(freqs)
-
-        t = torch.arange(end, device=freqs.device)
-        freqs = torch.outer(t, freqs).float()
-
-        cos, sin = freqs.cos(), freqs.sin()
-
-        return torch.stack((cos, -sin, sin, cos), dim=-1).view(*freqs.size(), 2, 2)
-
-    def forward(self, x: torch.Tensor, bhle: bool = False, **kwargs):
-        if bhle:
-            x = x.transpose(1, 2)  # (B H L E) -> (B L H E)
-        seqlen = x.size(1)
-        x_ = x.reshape(*x.shape[:-1], -1, 1, 2)  # B L H E -> B L H E/2 1 2
-        x_out = (x_ * self.freqs_cis[:, :seqlen]).sum(5).flatten(3)
-        if bhle:
-            x_out = x_out.transpose(1, 2)
-        return x_out.type_as(x)
-
-
-class RMSNorm(torch.nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-5):
-        super().__init__()
-        self.eps = eps
-        self.weight = torch.nn.Parameter(torch.ones(dim))
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        output = self._norm(x.float())
-        return (output * self.weight).type_as(x)
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class PerceptionEncoderAVRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        PerceptionEncoderAVRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class PerceptionEncoderAVRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: PerceptionEncoderAVConfig, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+def apply_rotary_pos_emb(q, k, freqs_cis, unsqueeze_dim=1):
+    freqs_cis = freqs_cis.unsqueeze(unsqueeze_dim)
+    q_ = q.reshape(*q.shape[:-1], -1, 1, 2)
+    k_ = k.reshape(*k.shape[:-1], -1, 1, 2)
+    return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
+
+
+class PerceptionEncoderAVAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: PerceptionEncoderAVConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.q_norm = PerceptionEncoderAVRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # unlike olmo, only on the head dim!
+        self.k_norm = PerceptionEncoderAVRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # thus post q_norm does not need reshape
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        # The only difference from `Qwen3Attention` is the reshape of Q/K/V
+        # We reshape # B x T x C -> B x T x C/H x H, and then permute...
+        # Qwen3 reshapes # B x T x C -> B x T x H x C/H
+
+        input_shape = hidden_states.shape[:-1]
+        nheads = hidden_states.size(-1) // self.head_dim
+
+        query_states = self.q_norm(self._reshape_heads(self.q_proj(hidden_states), nheads))
+        key_states = self.k_norm(self._reshape_heads(self.k_proj(hidden_states), nheads))
+        value_states = self._reshape_heads(self.v_proj(hidden_states), nheads)
+
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, position_embeddings)
+
+        attention_interface = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+    def _reshape_heads(self, x: torch.Tensor, heads: int) -> torch.Tensor:
+        B, T, C = x.shape
+        # B x T x C -> B x T x C/H x H
+        x = x.reshape(B, T, C // heads, heads)
+        # B x T x C/H x H -> B x H x T x C/H
+        return x.permute(0, 3, 1, 2)
+
+
+class PerceptionEncoderAVDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: PerceptionEncoderAVConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = PerceptionEncoderAVAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = PerceptionEncoderAVMLP(config)
+        self.input_layernorm = PerceptionEncoderAVRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = PerceptionEncoderAVRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attention_type = config.layer_types[layer_idx]
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
 
 
 class CLSToken(torch.nn.Module):
@@ -584,271 +725,35 @@ class CLSToken(torch.nn.Module):
         return self.weight.expand(input_data.size(0), -1, -1)
 
 
-class Attention(torch.nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        head_dim: int,
-        n_heads: int,
-        n_kv_heads: int,
-        norm_eps: float = 1e-5,
-        use_qk_norm: bool = True,
-    ):
-        super().__init__()
-        assert n_heads % n_kv_heads == 0
-
-        self.head_dim = head_dim
-        self.n_heads = n_heads
-        self.n_kv_heads = n_kv_heads
-        self.use_qk_norm = use_qk_norm
-
-        # local heads
-        assert self.n_heads % self.n_kv_heads == 0
-
-        self.wq = torch.nn.Linear(dim, n_heads * head_dim, bias=False)
-        self.wk, self.wv = [torch.nn.Linear(dim, n_kv_heads * head_dim, bias=False) for _ in range(2)]
-        self.wo = torch.nn.Linear(n_heads * head_dim, dim, bias=False)
-
-        self.q_norm, self.k_norm = [RMSNorm(head_dim, norm_eps) for _ in range(2)]
-
-    def reshape_heads(self, x: torch.Tensor, heads: int) -> torch.Tensor:
-        B, T, C = x.shape
-        # B x T x C -> B x T x C/H x H
-        x = x.reshape(B, T, C // heads, heads)
-        # B x T x C/H x H -> B x H x T x C/H
-        return x.permute(0, 3, 1, 2)
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        cross_x: Optional[torch.Tensor] = None,
-        key_padding_mask: Optional[torch.Tensor] = None,
-        rope_embeddings: Optional[RotaryEmbedding] = None,
-    ):
-        # x: B, T, E
-        xq = self.wq(x)
-        if cross_x is not None:
-            xk, xv = self.wk(cross_x), self.wv(cross_x)
-        else:
-            xk, xv = self.wk(x), self.wv(x)
-
-        xk = self.reshape_heads(xk, self.n_kv_heads)
-        xv = self.reshape_heads(xv, self.n_kv_heads)
-        xq = self.reshape_heads(xq, self.n_heads)
-        if self.use_qk_norm:
-            xq = self.q_norm(xq)
-            xk = self.k_norm(xk)
-
-        if rope_embeddings is not None:
-            xq = rope_embeddings(xq, bhle=True)
-            xk = rope_embeddings(xk, bhle=True)
-
-        attn_mask = None
-        if key_padding_mask is not None:
-            attn_mask = key_padding_mask[:, None, None, :]
-
-        output = F.scaled_dot_product_attention(xq, xk, xv, attn_mask=attn_mask)
-
-        output = rearrange(output, "b h n d -> b n (h d)")
-        return self.wo(output)
-
-
-class FeedForward(torch.nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        hidden_dim: int,
-        ffn_dim_multiplier: float,
-        multiple_of: int,
-        dropout: float,
-        non_linearity: str,
-    ):
-        super().__init__()
-        self.swiglu = non_linearity == "swiglu"
-        self.dropout = dropout
-        # swiglu hidden dim factor multiplier (same #params as relu / gelu)
-        hidden_dim = int(2 * hidden_dim / 3)
-
-        # custom dim factor multiplier
-        hidden_dim = int(ffn_dim_multiplier * hidden_dim)
-        # round hidden dimension to `multiple_of`
-        hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
-        # layers
-        self.w1 = torch.nn.Linear(
-            dim,
-            hidden_dim,
-            bias=False,
-        )
-        self.w2 = torch.nn.Linear(
-            hidden_dim,
-            dim,
-            bias=False,
-        )
-        if self.swiglu:
-            self.w3 = torch.nn.Linear(
-                dim,
-                hidden_dim,
-                bias=False,
-            )
-
-        # non-linearity
-        self.non_linearity = {
-            "relu": F.relu,
-            "gelu": F.gelu,
-            "swiglu": None,
-            "srelu": lambda x: F.relu(x) ** 2,
-            "silu": F.silu,
-        }[non_linearity]
-
-    def forward(
-        self,
-        x,
-    ):
-        hidden1 = self.w1(x)
-        if self.swiglu:
-            hidden3 = self.w3(x)
-            hidden = F.silu(hidden1) * hidden3
-        else:
-            hidden = self.non_linearity(hidden1)
-        hidden = F.dropout(hidden, p=self.dropout, training=self.training)
-        return self.w2(hidden)
-
-
-class TransformerBlock(torch.nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        n_heads: int,
-        n_kv_heads: Optional[int] = None,
-        dropout: float = 0.0,
-        pre_norm: bool = True,
-        norm_eps: float = 1e-5,
-        qk_norm: bool = True,
-        ffn_exp: int = 4,
-        ffn_dim_multiplier: int = 1,
-        multiple_of: int = 64,
-        non_linearity: str = "swiglu",
-    ):
-        super().__init__()
-        assert dim % n_heads == 0
-        self.n_heads = n_heads
-        self.n_kv_heads = n_heads if n_kv_heads is None else n_kv_heads
-        self.dim = dim
-        self.dropout = dropout
-        self.head_dim = dim // n_heads
-        self.pre_norm = pre_norm
-        assert self.n_heads % self.n_kv_heads == 0
-
-        self.attention = Attention(
-            dim=dim,
-            head_dim=self.head_dim,
-            n_heads=self.n_heads,
-            n_kv_heads=self.n_kv_heads,
-            norm_eps=norm_eps,
-            use_qk_norm=qk_norm,
-        )
-        self.feed_forward = FeedForward(
-            dim=dim,
-            hidden_dim=int(ffn_exp * dim),
-            ffn_dim_multiplier=ffn_dim_multiplier,
-            multiple_of=multiple_of,
-            dropout=dropout,
-            non_linearity=non_linearity,
-        )
-
-        self.attention_norm, self.ffn_norm = [RMSNorm(dim, norm_eps) for _ in range(2)]
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        padding_mask: Optional[torch.Tensor],
-        rope_embeddings: Optional[RotaryEmbedding] = None,
-    ):
-        assert self.attention is not None and self.attention_norm is not None
-        h_attn = self.attention(
-            self.attention_norm(x),
-            key_padding_mask=padding_mask,
-            rope_embeddings=rope_embeddings,
-        )
-        h = x + h_attn
-        h_ff = self.feed_forward(self.ffn_norm(h))
-        out = h + h_ff
-        return out
+def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
+    dim = cos.size(-1)
+    cos = cos.narrow(-1, 0, dim // 2)
+    sin = sin.narrow(-1, 0, dim // 2)
+    freqs_cis = torch.stack((cos, -sin, sin, cos), dim=-1).view(*cos.size(), 2, 2)
+    return freqs_cis
 
 
 class Transformer(torch.nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        n_heads: int,
-        n_layers: int,
-        out_channels: int,
-        dropout: float = 0.0,
-        pre_norm: bool = True,
-        norm_eps: float = 1e-5,
-        qk_norm: bool = True,
-        fc_bias: bool = False,
-        ffn_exp: int = 4,
-        ffn_dim_multiplier: int = 1,
-        multiple_of: int = 64,
-        non_linearity: str = "swiglu",
-        use_rope: bool = True,
-        max_positions: int = 10000,
-    ):
-        self.out_channels = out_channels
-
+    def __init__(self, config: TransformerConfig):
         super().__init__()
-        self.n_layers = n_layers
-        self.dim = dim
-        self.head_dim = dim // n_heads
-        self.dropout = dropout
-        self.use_rope = use_rope
-        self.non_linearity = non_linearity
-        self.n_kv_heads = n_heads
+        self.config = config
 
-        self.rope_embeddings = None
-        if self.use_rope:
-            self.rope_embeddings = RotaryEmbedding(
-                theta=max(10000, 2 * max_positions),
-                head_dim=dim // n_heads,
-                max_seqlen=max_positions,
-            )
-            self.rope_embeddings.reset_parameters()
-
-        # transformer blocks
-        self.layers = torch.nn.ModuleList()
-        for _ in range(n_layers):
-            layer = TransformerBlock(
-                dim=dim,
-                n_heads=n_heads,
-                n_kv_heads=self.n_kv_heads,
-                dropout=dropout,
-                pre_norm=pre_norm,
-                norm_eps=norm_eps,
-                qk_norm=qk_norm,
-                ffn_exp=ffn_exp,
-                ffn_dim_multiplier=ffn_dim_multiplier,
-                multiple_of=multiple_of,
-                non_linearity=non_linearity,
-            )
-            self.layers.append(layer)
-
-        self.norm = None
-        if pre_norm:
-            self.norm = RMSNorm(dim, norm_eps)
-
-        # output layer
-        self.output = torch.nn.Linear(dim, out_channels, bias=fc_bias)
-
-        self.x_embedder = Patcher(
-            in_channels=dim,
-            out_channels=dim,
+        self.rope_embeddings = PerceptionEncoderAVRotaryEmbedding(config)
+        self.layers = torch.nn.ModuleList(
+            [PerceptionEncoderAVDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
         )
 
-        self.cls_token = CLSToken(dim)
+        self.norm = PerceptionEncoderAVRMSNorm(config.hidden_size, config.rms_norm_eps)
 
-    def unpatchify(self, x):
-        return x
+        # output layer
+        self.output = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+
+        self.x_embedder = Patcher(
+            in_channels=config.hidden_size,
+            out_channels=config.hidden_size,
+        )
+
+        self.cls_token = CLSToken(config.hidden_size)
 
     def forward(
         self,
@@ -866,31 +771,32 @@ class Transformer(torch.nn.Module):
         h = rearrange(h, "b c l -> b l c")
         original_N = h.shape[1]
         N = h.shape[1]
-        h = F.dropout(h, p=self.dropout, training=self.training)
 
-        for i, layer in enumerate(self.layers):
+        cos, sin = self.rope_embeddings(h, torch.arange(h.size(1), device=h.device)[None])
+        rope_embeddings = stack_freqs(cos, sin)
+
+        for layer in self.layers:
             h = layer(
-                x=h,
-                padding_mask=padding_mask,
-                rope_embeddings=self.rope_embeddings,
+                hidden_states=h,
+                attention_mask=padding_mask,
+                position_embeddings=rope_embeddings,
             )
 
         # output layer
         if self.norm is not None:
             h = self.norm(h)
-        h = F.dropout(h, p=self.dropout, training=self.training)
+
         output = self.output(h)
         N = output.shape[1]
         if original_N != N:
             output = output[:, -original_N:]
-        output = self.unpatchify(output)
         return output[:, 1:], output[:, 0]
 
 
 class TransformerWithInputProjection(Transformer):
-    def __init__(self, in_channels: int, dim: int, **kwargs):
-        super().__init__(dim=dim, **kwargs)
-        self.data_proj = torch.nn.Linear(in_channels, dim)
+    def __init__(self, config):
+        super().__init__(config)
+        self.data_proj = torch.nn.Linear(config.in_channels, config.hidden_size)
 
     def forward(self, x: torch.Tensor, *args, **kwargs):
         return super().forward(self.data_proj(x), *args, **kwargs)
@@ -907,8 +813,8 @@ class VideoEncoder(torch.nn.Module):
             )
 
         self.backbone = pe.CLIP.from_config(cfg.backbone)
-        self.proj = torch.nn.Linear(self.backbone.visual.output_dim, cfg.transformer.dim, bias=False)
-        self.transformer = TransformerWithInputProjection(**asdict(cfg.transformer))
+        self.proj = torch.nn.Linear(self.backbone.visual.output_dim, cfg.transformer.hidden_size, bias=False)
+        self.transformer = TransformerWithInputProjection(cfg.transformer)
 
     def forward(self, video: torch.Tensor) -> torch.Tensor:
         B, N, C, H, W = video.shape
@@ -919,10 +825,12 @@ class VideoEncoder(torch.nn.Module):
 
 ## Audio Video Encoder
 class AudioVideoEncoder(TransformerWithInputProjection):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.modality_aligner = AlignModalities(self.dim, self.dim, normalize=True, btc=True)
-        self.concat_modality_proj = torch.nn.Linear(self.dim * 2, self.dim)
+    def __init__(self, config):
+        super().__init__(config)
+        self.modality_aligner = AlignModalities(
+            self.config.hidden_size, self.config.hidden_size, normalize=True, btc=True
+        )
+        self.concat_modality_proj = torch.nn.Linear(self.config.hidden_size * 2, self.config.hidden_size)
 
     def forward(
         self,
@@ -953,9 +861,13 @@ class PerceptionEncoderAVModel(PreTrainedModel):
         cfg: PerceptionEncoderAVConfig,
     ):
         super().__init__(cfg)
+        # Synchronize _attn_implementations
+        cfg.audio_encoder._attn_implementation = cfg._attn_implementation
+        cfg.audio_video_encoder._attn_implementation = cfg._attn_implementation
+        cfg.video_encoder.transformer._attn_implementation = cfg._attn_implementation
         self.audio_codec = DacEncoderVAE(cfg.audio_codec)
-        self.audio_encoder = TransformerWithInputProjection(**asdict(cfg.audio_encoder))
-        self.audio_video_encoder = AudioVideoEncoder(**asdict(cfg.audio_video_encoder))
+        self.audio_encoder = TransformerWithInputProjection(cfg.audio_encoder)
+        self.audio_video_encoder = AudioVideoEncoder(cfg.audio_video_encoder)
         self.video_encoder = VideoEncoder(cfg.video_encoder)
         self.text_encoder = PerceptionEncoderAVTextEncoder(cfg.text_encoder)
 
@@ -964,7 +876,11 @@ class PerceptionEncoderAVModel(PreTrainedModel):
             heads.extend(["audio_text", "visual_text", "audio_visual_text"])
 
         for head in heads:
-            indim = cfg.text_encoder.sub_config.hidden_size if head.endswith("text") else self.audio_video_encoder.dim
+            indim = (
+                cfg.text_encoder.sub_config.hidden_size
+                if head.endswith("text")
+                else self.audio_video_encoder.config.hidden_size
+            )
             self.add_module(
                 f"{head}_head",
                 ContrastiveHead(indim, cfg.output_dim, norm_type=cfg.contrastive_head_norm_type),
