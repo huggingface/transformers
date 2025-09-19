@@ -61,31 +61,69 @@ parse model output back into a standard message dict. This is what chat **parsin
 Parsing a chat response on a model that supports it is straightforward. Simply take the raw, decoded output from
 `generate()`, and pass it to the tokenizer's `parse_response` method:
 
-# TODO Make a full example with SmolLM3
 ```python
-inputs = tokenizer.apply_chat_template(chat, return_dict=True, return_tensors="pt", add_generation_prompt=True)
-generated_ids = model.generate(**inputs)
-output_ids = generated_ids[0][len(inputs.input_ids[0]) :]
-out_text = tokenizer.decode(output_ids, skip_special_tokens=False)
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
+checkpoint = "HuggingFaceTB/SmolLM3-3B"
+
+tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+model = AutoModelForCausalLM.from_pretrained(checkpoint, dtype="auto", device_map="auto")
+
+messages = [
+    {
+        "role": "user",
+        "content": "Hey! Can you summarize the end of the Cold War as briefly as possible? Like, comically briefly. It should really leave out almost most of the relevant information."
+    }
+]
+
+input_ids = tokenizer.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_tensors="pt"
+).to(model.device)
+
+outputs = model.generate(input_ids, max_new_tokens=1024)[0, input_ids.shape[1]:]
+out_text = tokenizer.decode(outputs)
 parsed = tokenizer.parse_response(out_text)
+print(parsed)
 ```
 
-`parse_response` should return a complete message dict that is ready to be appended to the chat history. 
-When the tokenizer does not support response parsing, `parse_response` will throw an error. Remember to include special
-tokens when calling `decode()`!
+And that's all you need to start using response parsing! `parse_response` should return a complete message dict that is ready to be appended to the chat history. 
+When the tokenizer does not support response parsing, `parse_response` will throw an error. We hope to add support
+to more tokenizers over time.
 
-## Understanding response schemas
+## Understanding a simple response schema
 
-Under the hood, `parse_response` uses a **JSON schema** to parse the model output. a JSON schema represents
+Under the hood, `parse_response` uses a **JSON schema** to parse the model output. A JSON schema represents
 the structure of the output message dict. The schema is augmented with additional fields that indicate how the 
-output message string should be parsed into the expected format. Let's take a look at what those schemas look like:
+output message string should be parsed into the expected format. Let's take a look at the schema for a SmolLM response,
+excluding tool calls for now:
 
-TODO Use a reasoning model as a simple example - a tool model will have a much bigger schema!
+```json
+{
+    "x-regex": "(?:<think>\\n?(?P<thinking>.+?)\\n?</think>)?\\s*(?P<content>.+?)?\\s*(?:<\\|im_end\\|>|$)",
+    "type": "object",
+    "properties": {
+        "role": {"const": "assistant"},
+        "content": {"type": "string"},
+        "thinking": {"type": "string"}
+    }
+}
+```
 
-## Writing schemas
+We can see that the schema describes a JSON "object" (a `dict`, in other words) with three keys: `role`, `content`, and `thinking`.
+Because all assistant responses have the role "assistant", the `role` key is a `const`(ant). The other two keys are strings, extracted
+from the named groups in the regex in the `x-regex` field.
 
-(not done yet)
+Like chat templates, response schemas are set as a property of the tokenizer. To enable response parsing, all you need
+to do is set `tokenizer.response_schema` to a valid schema dict, and `tokenizer.parse_response()` will work! Again, like
+chat templates, this schema will be saved with the processor, so once you set it, you can use `save_pretrained()` or `push_to_hub()` to
+save and share the schema. 
+
+## A more complex schema
+
+(todo walk through the cohere schema here)
 
 ## Schema reference
 
