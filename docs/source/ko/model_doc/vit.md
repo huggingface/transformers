@@ -143,30 +143,4 @@ ViT의 추론 및 커스텀 데이터에 대한 미세 조정과 관련된 데�
     - forward
 
 </pt>
-<tf>
-
-## TFViTModel [[transformers.TFViTModel]]
-
-[[autodoc]] TFViTModel
-    - call
-
-## TFViTForImageClassification [[transformers.TFViTForImageClassification]]
-
-[[autodoc]] TFViTForImageClassification
-    - call
-
-</tf>
-<jax>
-
-## FlaxVitModel [[transformers.FlaxViTModel]]
-
-[[autodoc]] FlaxViTModel
-    - __call__
-
-## FlaxViTForImageClassification [[transformers.FlaxViTForImageClassification]]
-
-[[autodoc]] FlaxViTForImageClassification
-    - __call__
-
-</jax>
 </frameworkcontent>

@@ -99,38 +99,4 @@ BLIP은 여러 멀티모달 작업을 수행할 수 있는 모델입니다:
     - forward
 
 </pt>
-<tf>
-
-## TFBlipModel[[transformers.TFBlipModel]]
-
-[[autodoc]] TFBlipModel
-    - call
-    - get_text_features
-    - get_image_features
-
-## TFBlipTextModel[[transformers.TFBlipTextModel]]
-
-[[autodoc]] TFBlipTextModel
-    - call
-
-## TFBlipVisionModel[[transformers.TFBlipVisionModel]]
-
-[[autodoc]] TFBlipVisionModel
-    - call
-
-## TFBlipForConditionalGeneration[[transformers.TFBlipForConditionalGeneration]]
-
-[[autodoc]] TFBlipForConditionalGeneration
-    - call
-
-## TFBlipForImageTextRetrieval[[transformers.TFBlipForImageTextRetrieval]]
-
-[[autodoc]] TFBlipForImageTextRetrieval
-    - call
-
-## TFBlipForQuestionAnswering[[transformers.TFBlipForQuestionAnswering]]
-
-[[autodoc]] TFBlipForQuestionAnswering
-    - call
-</tf>
 </frameworkcontent>

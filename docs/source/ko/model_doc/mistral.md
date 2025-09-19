@@ -206,28 +206,3 @@ pip install -U flash-attn --no-build-isolation
 
 [[autodoc]] MistralForTokenClassification
     - forward
-
-## FlaxMistralModel[[transformers.FlaxMistralModel]]
-
-[[autodoc]] FlaxMistralModel
-    - __call__
-
-## FlaxMistralForCausalLM[[transformers.FlaxMistralForCausalLM]]
-
-[[autodoc]] FlaxMistralForCausalLM
-    - __call__
-
-## TFMistralModel[[transformers.TFMistralModel]]
-
-[[autodoc]] TFMistralModel
-    - call
-
-## TFMistralForCausalLM[[transformers.TFMistralForCausalLM]]
-
-[[autodoc]] TFMistralForCausalLM
-    - call
-
-## TFMistralForSequenceClassification[[transformers.TFMistralForSequenceClassification]]
-
-[[autodoc]] TFMistralForSequenceClassification
-    - call

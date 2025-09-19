@@ -146,22 +146,4 @@ nearly 800 thousand customers were affected by the shutoffs. the aim is to reduc
     - from_encoder_decoder_pretrained
 
 </pt>
-<tf>
-
-## TFEncoderDecoderModel
-
-[[autodoc]] TFEncoderDecoderModel
-    - call
-    - from_encoder_decoder_pretrained
-
-</tf>
-<jax>
-
-## FlaxEncoderDecoderModel
-
-[[autodoc]] FlaxEncoderDecoderModel
-    - __call__
-    - from_encoder_decoder_pretrained
-
-</jax>
 </frameworkcontent>

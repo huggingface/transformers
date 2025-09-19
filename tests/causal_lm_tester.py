@@ -497,7 +497,7 @@ def _config_supports_rope_scaling(config: PretrainedConfig) -> bool:
     # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
     main_config_has_rope = hasattr(config, "rope_scaling") or hasattr(config, "rope_theta")
     sub_config_has_rope = any(
-        hasattr(config[sub_config], "rope_scaling") or hasattr(config[sub_config], "rope_theta")
+        hasattr(getattr(config, sub_config), "rope_scaling") or hasattr(getattr(config, sub_config), "rope_theta")
         for sub_config in config.sub_configs.keys()
     )
     return main_config_has_rope or sub_config_has_rope

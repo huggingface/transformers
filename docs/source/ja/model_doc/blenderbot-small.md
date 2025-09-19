@@ -84,27 +84,3 @@ Blender チャットボット モデルは、[Recipes for building an open-domai
 
 [[autodoc]] BlenderbotSmallForCausalLM
     - forward
-
-## TFBlenderbotSmallModel
-
-[[autodoc]] TFBlenderbotSmallModel
-    - call
-
-## TFBlenderbotSmallForConditionalGeneration
-
-[[autodoc]] TFBlenderbotSmallForConditionalGeneration
-    - call
-
-## FlaxBlenderbotSmallModel
-
-[[autodoc]] FlaxBlenderbotSmallModel
-    - __call__
-    - encode
-    - decode
-
-## FlaxBlenderbotForConditionalGeneration
-
-[[autodoc]] FlaxBlenderbotSmallForConditionalGeneration
-    - __call__
-    - encode
-    - decode
