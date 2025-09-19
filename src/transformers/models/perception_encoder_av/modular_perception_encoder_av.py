@@ -24,12 +24,6 @@ from ..qwen3.modeling_qwen3 import (
 )
 
 
-class NormalizeTypeConfig(str, enum.Enum):
-    NONE = "none"
-    L2 = "l2"
-    LAYER_NORM = "layernorm"
-
-
 class TransformerConfig(PretrainedConfig):
     def __init__(
         self,
@@ -117,7 +111,6 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         text_encoder: Optional[dict] = None,
         separate_text_heads: bool = False,
         output_dim: int = 1024,
-        contrastive_head_norm_type: NormalizeTypeConfig = NormalizeTypeConfig.L2,
         fixed_len_video: bool = False,
         **kwargs,
     ):
@@ -138,7 +131,6 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         self.text_encoder = PerceptionEncoderAVTextEncoderConfig(**text_encoder)
         self.separate_text_heads = separate_text_heads
         self.output_dim = output_dim
-        self.contrastive_head_norm_type = contrastive_head_norm_type
         self.fixed_len_video = fixed_len_video
 
 
@@ -243,32 +235,18 @@ class AlignModalities(torch.nn.Module):
         return upsampled, src_mask
 
 
-class L2(torch.nn.Module):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.normalize(x, p=2, dim=-1, eps=1e-6)
-
-
 class ContrastiveHead(torch.nn.Module):
     def __init__(
         self,
         in_dim: int,
         out_dim: int,
-        norm_type: NormalizeTypeConfig = NormalizeTypeConfig.NONE,
     ) -> None:
         super().__init__()
         self.layer_norm = torch.nn.LayerNorm(normalized_shape=in_dim, eps=1e-6)
         self.proj = torch.nn.Linear(in_dim, out_dim, bias=False)
-        if norm_type == NormalizeTypeConfig.L2:
-            self.norm = L2()
-        elif norm_type == NormalizeTypeConfig.LAYER_NORM:
-            self.norm = torch.nn.LayerNorm(out_dim, eps=1e-6)
-        else:
-            assert norm_type == NormalizeTypeConfig.NONE
-            self.norm = torch.nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        projected = self.proj(self.layer_norm(x))
-        return self.norm(projected)
+        return self.proj(self.layer_norm(x))
 
 
 class TextType(enum.Enum):
@@ -561,10 +539,7 @@ class PerceptionEncoderAVModel(PreTrainedModel):
                 if head.endswith("text")
                 else self.audio_video_encoder.config.hidden_size
             )
-            self.add_module(
-                f"{head}_head",
-                ContrastiveHead(indim, cfg.output_dim, norm_type=cfg.contrastive_head_norm_type),
-            )
+            self.add_module(f"{head}_head", ContrastiveHead(indim, cfg.output_dim))
 
     def encode_video(self, video):  # b n c h w
         _, raw_feat = self.video_encoder(video)

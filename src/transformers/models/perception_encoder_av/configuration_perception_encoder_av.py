@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_perception_encoder_av.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import enum
 import math
 from typing import Optional
 
@@ -13,12 +12,6 @@ import numpy as np
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-class NormalizeTypeConfig(str, enum.Enum):
-    NONE = "none"
-    L2 = "l2"
-    LAYER_NORM = "layernorm"
 
 
 class TransformerConfig(PretrainedConfig):
@@ -191,7 +184,6 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         text_encoder: Optional[dict] = None,
         separate_text_heads: bool = False,
         output_dim: int = 1024,
-        contrastive_head_norm_type: NormalizeTypeConfig = NormalizeTypeConfig.L2,
         fixed_len_video: bool = False,
         **kwargs,
     ):
@@ -212,7 +204,6 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
         self.text_encoder = PerceptionEncoderAVTextEncoderConfig(**text_encoder)
         self.separate_text_heads = separate_text_heads
         self.output_dim = output_dim
-        self.contrastive_head_norm_type = contrastive_head_norm_type
         self.fixed_len_video = fixed_len_video
 
 
