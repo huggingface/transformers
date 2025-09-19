@@ -1404,7 +1404,6 @@ def _get_device_map(
 
 
 def _find_missing_and_unexpected_keys(
-    cls,
     model: "PreTrainedModel",
     original_checkpoint_keys: list[str],
     checkpoint_keys: list[str],
@@ -5300,7 +5299,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Find missing and unexpected keys from the state dict
         missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
-            cls,
             model,
             original_checkpoint_keys,
             checkpoint_keys,
