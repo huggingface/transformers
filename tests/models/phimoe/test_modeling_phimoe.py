@@ -220,7 +220,7 @@ class PhimoeIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        response_tokens = PhimoeMiniWithStaticCache.generate(model, inputs, max_seq_len=10)
+        response_tokens = PhimoeMiniWithStaticCache.generate(model, inputs, max_seq_len=30)
 
         output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
 
