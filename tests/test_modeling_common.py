@@ -684,6 +684,7 @@ class ModelTesterMixin:
             "GPTNeoModelTester",
             "DPTModelTester",
             "Qwen3NextModelTester",
+            "LxmertModelTest",
         ]
         if self.model_tester.__class__.__name__ in exceptional_classes:
             return
@@ -693,7 +694,7 @@ class ModelTesterMixin:
             "FunnelModelTest": 5,
             "FunnelBaseModelTest": 4,
             "GroupViTVisionModelTest": 12,
-            "OwlModelTest": 12,
+            "OwlViTModelTest": 12,
             "OwlViTTextModelTest": 12,
             "OwlViTForObjectDetectionTest": 12,
             "Owlv2ModelTest": 12,
