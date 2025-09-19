@@ -55,7 +55,7 @@ class EfficientLoFTRModelTester:
         kv_aggregation_kernel_size: int = 1,
         q_aggregation_stride: int = 1,
         kv_aggregation_stride: int = 1,
-        num_attention_layers: int = 1,
+        num_attention_layers: int = 2,
         num_attention_heads: int = 8,
         hidden_size: int = 16,
         coarse_matching_threshold: float = 0.0,
