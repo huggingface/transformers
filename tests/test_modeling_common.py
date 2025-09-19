@@ -703,6 +703,10 @@ class ModelTesterMixin:
             "SamHQModelTest": 12,
             "Swin2SRModelTest": 3,
             "XLNetModelTest": 3,
+            "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
+            "DPTModelTest": 4,  # `test_modeling_dpt_hybrid.py`: not able to get it work after change `num_hidden_layers` and `neck_hidden_sizes`
+            "ZambaModelTest": 3, # `num_hidden_layers=2` gives `StopIteration` at `layers.append(ZambaHybridLayer(block, next(linear_layers), next(mamba_layers)))`
+            "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
         }
 
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)

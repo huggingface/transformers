@@ -49,7 +49,7 @@ class DPTModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=2,
+        num_hidden_layers=4,
         backbone_out_indices=[0, 1, 2, 3],
         num_attention_heads=4,
         intermediate_size=37,
