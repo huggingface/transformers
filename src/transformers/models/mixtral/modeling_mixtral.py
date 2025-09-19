@@ -53,7 +53,7 @@ from ...utils.generic import OutputRecorder
 from .configuration_mixtral import MixtralConfig
 
 
-class MixtralMlp(nn.Module):
+class MixtralMLP(nn.Module):
     def __init__(self, config: MixtralConfig):
         super().__init__()
         self.ffn_dim = config.intermediate_size
@@ -81,7 +81,7 @@ class MixtralExperts(nn.ModuleList):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
-            self.append(MixtralMlp(config))
+            self.append(MixtralMLP(config))
 
     def route_tokens_to_experts(self, hidden_states, router_logits):
         routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
