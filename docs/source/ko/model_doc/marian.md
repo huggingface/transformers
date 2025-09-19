@@ -188,30 +188,4 @@ GROUP_MEMBERS = {
     - forward
 
 </pt>
-<tf>
-
-## TFMarianModel
-
-[[autodoc]] TFMarianModel
-    - call
-
-## TFMarianMTModel
-
-[[autodoc]] TFMarianMTModel
-    - call
-
-</tf>
-<jax>
-
-## FlaxMarianModel
-
-[[autodoc]] FlaxMarianModel
-    - __call__
-
-## FlaxMarianMTModel
-
-[[autodoc]] FlaxMarianMTModel
-    - __call__
-
-</jax>
 </frameworkcontent>

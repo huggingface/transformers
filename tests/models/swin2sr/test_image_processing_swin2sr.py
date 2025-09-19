@@ -48,7 +48,7 @@ class Swin2SRImageProcessingTester:
         do_rescale=True,
         rescale_factor=1 / 255,
         do_pad=True,
-        pad_size=8,
+        size_divisor=8,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -59,14 +59,14 @@ class Swin2SRImageProcessingTester:
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
-        self.pad_size = pad_size
+        self.size_divisor = size_divisor
 
     def prepare_image_processor_dict(self):
         return {
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
             "do_pad": self.do_pad,
-            "pad_size": self.pad_size,
+            "size_divisor": self.size_divisor,
         }
 
     def expected_output_image_shape(self, images):
@@ -79,8 +79,8 @@ class Swin2SRImageProcessingTester:
         else:
             input_height, input_width = img.shape[-2:]
 
-        pad_height = (input_height // self.pad_size + 1) * self.pad_size - input_height
-        pad_width = (input_width // self.pad_size + 1) * self.pad_size - input_width
+        pad_height = (input_height // self.size_divisor + 1) * self.size_divisor - input_height
+        pad_width = (input_width // self.size_divisor + 1) * self.size_divisor - input_width
 
         return self.num_channels, input_height + pad_height, input_width + pad_width
 
@@ -116,11 +116,12 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_rescale"))
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
             self.assertTrue(hasattr(image_processing, "do_pad"))
-            self.assertTrue(hasattr(image_processing, "pad_size"))
+            self.assertTrue(hasattr(image_processing, "size_divisor"))
+            self.assertTrue(hasattr(image_processing, "pad_size"))  # deprecated but should be available
 
     def calculate_expected_size(self, image):
         old_height, old_width = get_image_size(image)
-        size = self.image_processor_tester.pad_size
+        size = self.image_processor_tester.size_divisor
 
         pad_height = (old_height // size + 1) * size - old_height
         pad_width = (old_width // size + 1) * size - old_width
@@ -186,10 +187,6 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
-
-    @unittest.skip(reason="No speed gain on CPU due to minimal processing.")
-    def test_fast_is_faster_than_slow(self):
-        pass
 
     def test_slow_fast_equivalence_batched(self):
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)

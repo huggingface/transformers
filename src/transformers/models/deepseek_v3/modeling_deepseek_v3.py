@@ -160,13 +160,18 @@ class DeepseekV3NaiveMoe(nn.ModuleList):
     def __init__(self, config):
         nn.Module.__init__(self)
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
             self += [DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size)]
 
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
+        return top_k_index, top_k_weights
+
+    def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
         """
         Args:
             hidden_states: (batch_size * sequence_length, hidden_dim)
@@ -176,6 +181,7 @@ class DeepseekV3NaiveMoe(nn.ModuleList):
             (batch_size * sequence_length, hidden_dim)
         """
         final_hidden_states = torch.zeros_like(hidden_states)
+        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
         expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
@@ -559,7 +565,7 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -583,7 +589,7 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids.to(hidden_states.device))
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(

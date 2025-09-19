@@ -236,31 +236,6 @@ class DbrxAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class DbrxRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.moe_jitter_eps = config.moe_jitter_eps
-        self.layer = nn.Linear(self.hidden_size, config.moe_num_experts, bias=False)
-        self.top_k = config.moe_top_k
-        self.moe_normalize_expert_weights = config.moe_normalize_expert_weights
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
-        if self.training and self.moe_jitter_eps is not None:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(
-                1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps
-            )
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        router_logits = self.layer(hidden_states)
-        router_logits = torch.nn.functional.softmax(router_logits, dim=1, dtype=router_logits.dtype)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
-        if self.moe_normalize_expert_weights is not None:
-            router_top_value = router_top_value / torch.norm(
-                router_top_value, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True
-            )
-        return router_logits, router_top_value, router_indices
-
-
 class DbrxExpertGLU(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -292,22 +267,31 @@ class DbrxExperts(nn.Module):
         self.mlp = DbrxExpertGLU(config)
         self.hidden_size = config.hidden_size
         self.ffn_hidden_size = config.ffn_hidden_size
+        self.moe_normalize_expert_weights = config.moe_normalize_expert_weights
+        self.top_k = config.moe_top_k
+
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        router_logits = torch.nn.functional.softmax(router_logits, dim=1, dtype=router_logits.dtype)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
+        if self.moe_normalize_expert_weights is not None:
+            router_top_value = router_top_value / torch.norm(
+                router_top_value, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True
+            )
+        return router_top_value, router_indices
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        router_logits: torch.Tensor,
-        router_top_value: torch.Tensor,
-        router_indices: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_size)
 
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        num_experts = router_scores.shape[1]
+        num_experts = top_k_weights.shape[1]
         next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -321,11 +305,28 @@ class DbrxExperts(nn.Module):
             w1 = self.mlp.w1.view(split_expert_shape)[expert_idx]
             w2 = self.mlp.w2.view(split_expert_shape)[expert_idx]
             states = self.mlp(current_state, w1, v1, w2)
-            states = states.view(-1, self.hidden_size) * router_scores[token_idx, expert_idx, None]
+            states = states.view(-1, self.hidden_size) * top_k_weights[token_idx, expert_idx, None]
             next_states.index_add_(0, token_idx, states)
 
         next_states = next_states.view(batch_size, -1, self.hidden_size)
         return next_states
+
+
+class DbrxRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.moe_jitter_eps = config.moe_jitter_eps
+        self.layer = nn.Linear(self.hidden_size, config.moe_num_experts, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
+        if self.training and self.moe_jitter_eps is not None:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(
+                1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps
+            )
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        router_logits = self.layer(hidden_states)
+        return router_logits
 
 
 class DbrxFFN(nn.Module):
@@ -337,9 +338,9 @@ class DbrxFFN(nn.Module):
         self.experts = DbrxExperts(config.ffn_config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        router_logits, router_top_value, router_indices = self.router(hidden_states)
-        output = self.experts(hidden_states, router_logits, router_top_value, router_indices)
-        return output, router_logits
+        router_logits = self.router(hidden_states)
+        output = self.experts(hidden_states, router_logits)
+        return output
 
 
 class DbrxNormAttentionNorm(nn.Module):

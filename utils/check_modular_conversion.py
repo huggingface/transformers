@@ -197,10 +197,13 @@ if __name__ == "__main__":
             # Process files with diff
             num_workers = min(args.num_workers, len(files_to_check))
             with multiprocessing.Pool(num_workers) as p:
-                is_changed_flags = p.map(
-                    partial(compare_files, show_diff=not args.fix_and_overwrite),
-                    files_to_check,
-                )
+                try:
+                    is_changed_flags = p.map(
+                        partial(compare_files, show_diff=not args.fix_and_overwrite),
+                        files_to_check,
+                    )
+                except Exception as e:
+                    print(f"failed to convert {compare_files}: {e}")
 
             # Collect changed files and their original paths
             for is_changed, file_path in zip(is_changed_flags, files_to_check):

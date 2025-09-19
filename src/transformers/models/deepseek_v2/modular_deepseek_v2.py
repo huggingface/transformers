@@ -38,7 +38,7 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
 )
 from ..llama4.modeling_llama4 import Llama4TextRotaryEmbedding
-from ..qwen2_moe.modular_qwen2_moe import Qwen2MoeExperts
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 
 
 logger = logging.get_logger(__name__)
@@ -237,29 +237,21 @@ def apply_rotary_emb(
     return xq_out, xk_out
 
 
-class DeepseekV2Router(nn.Module):
+class DeepseekV2Experts(Qwen2MoeExperts):
+    
     def __init__(self, config: DeepseekV2Config):
-        super().__init__()
-        self.config = config
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.n_routed_experts
+        super().__init__(config)
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group
         self.topk_group = config.topk_group
-        self.gating_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty((self.num_experts, self.gating_dim)))
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size, seq_len, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
-        scores = logits.softmax(dim=-1, dtype=torch.float32)
-
+        
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        batch_size , seq_len, _ = hidden_states.shape
         if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
+            topk_weight, topk_idx = torch.topk(router_logits, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(batch_size * seq_len, self.num_group, -1).max(dim=-1).values
+            group_scores = router_logits.view(batch_size * seq_len, self.num_group, -1).max(dim=-1).values
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
             group_mask = torch.zeros_like(group_scores)
             group_mask.scatter_(1, group_idx, 1)
@@ -268,15 +260,11 @@ class DeepseekV2Router(nn.Module):
                 .expand(batch_size * seq_len, self.num_group, self.num_experts // self.num_group)
                 .reshape(batch_size * seq_len, -1)
             )
-            tmp_scores = scores.masked_fill(~score_mask.bool(), 0.0)
+            tmp_scores = router_logits.masked_fill(~score_mask.bool(), 0.0)
             topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
 
         topk_weight = topk_weight * self.routed_scaling_factor
-        return logits, topk_idx, topk_weight
-
-
-class DeepseekV2Experts(Qwen2MoeExperts):
-    pass
+        return topk_idx, topk_weight
 
 
 class DeepseekV2Moe(nn.Module):
@@ -284,7 +272,7 @@ class DeepseekV2Moe(nn.Module):
         super().__init__()
         self.config = config
         self.experts = DeepseekV2Experts(config)
-        self.gate = DeepseekV2Router(config)
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         if config.n_shared_experts is not None:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
             self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
@@ -295,8 +283,7 @@ class DeepseekV2Moe(nn.Module):
         _, topk_indices, topk_weights = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        if self.config.n_shared_experts is not None:
-            hidden_states = hidden_states + self.shared_experts(residuals)
+        hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
 
