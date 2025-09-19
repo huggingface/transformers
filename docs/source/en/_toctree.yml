@@ -407,6 +407,8 @@
         title: Blenderbot Small
       - local: model_doc/bloom
         title: BLOOM
+      - local: model_doc/blt
+        title: BLT
       - local: model_doc/bort
         title: BORT
       - local: model_doc/byt5
@@ -437,6 +439,8 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
+      - local: model_doc/deepseek_v2
+        title: DeepSeek-V2
       - local: model_doc/deepseek_v3
         title: DeepSeek-V3
       - local: model_doc/dialogpt
@@ -761,12 +765,6 @@
         title: D-FINE
       - local: model_doc/dab-detr
         title: DAB-DETR
-      - local: model_doc/deepseek_v2
-        title: DeepSeek-V2
-      - local: model_doc/deepseek_vl
-        title: DeepseekVL
-      - local: model_doc/deepseek_vl_hybrid
-        title: DeepseekVLHybrid
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
@@ -849,10 +847,16 @@
         title: RT-DETR
       - local: model_doc/rt_detr_v2
         title: RT-DETRv2
+      - local: model_doc/sam2
+        title: SAM2
       - local: model_doc/segformer
         title: SegFormer
       - local: model_doc/seggpt
         title: SegGpt
+      - local: model_doc/sam
+        title: Segment Anything
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality
       - local: model_doc/superglue
         title: SuperGlue
       - local: model_doc/superpoint
@@ -975,6 +979,8 @@
         title: XLSR-Wav2Vec2
       title: Audio models
     - sections:
+      - local: model_doc/sam2_video
+        title: SAM2 Video
       - local: model_doc/timesformer
         title: TimeSformer
       - local: model_doc/vjepa2
@@ -1019,6 +1025,10 @@
         title: ColQwen2
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deepseek_vl
+        title: DeepseekVL
+      - local: model_doc/deepseek_vl_hybrid
+        title: DeepseekVLHybrid
       - local: model_doc/deplot
         title: DePlot
       - local: model_doc/donut
@@ -1137,14 +1147,6 @@
         title: Qwen3VL
       - local: model_doc/qwen3_vl_moe
         title: Qwen3VLMoe
-      - local: model_doc/sam2
-        title: SAM2
-      - local: model_doc/sam2_video
-        title: SAM2 Video
-      - local: model_doc/sam
-        title: Segment Anything
-      - local: model_doc/sam_hq
-        title: Segment Anything High Quality
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip
