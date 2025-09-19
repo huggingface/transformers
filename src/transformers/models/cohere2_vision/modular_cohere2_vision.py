@@ -107,7 +107,7 @@ class Cohere2VisionModel(AyaVisionModel):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -160,7 +160,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
     def get_image_features(self, pixel_values: torch.FloatTensor):
         return self.model.get_image_features(pixel_values=pixel_values)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

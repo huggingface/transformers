@@ -400,7 +400,7 @@ class InstructBlipVisionModel(InstructBlipPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs(post_ln_hiddens=False)
     @auto_docstring
     def forward(
         self,
@@ -915,7 +915,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
