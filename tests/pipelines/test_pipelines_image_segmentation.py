@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import io
 import tempfile
 import unittest
 
@@ -318,7 +318,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         ]
         # actual links to get files
         expected_masks = [x.replace("/blob/", "/resolve/") for x in expected_masks]
-        expected_masks = [Image.open(httpx.get(image, follow_redirects=True).content) for image in expected_masks]
+        expected_masks = [
+            Image.open(io.BytesIO(httpx.get(image, follow_redirects=True).content)) for image in expected_masks
+        ]
 
         # Convert masks to numpy array
         output_masks = [np.array(x) for x in output_masks]
