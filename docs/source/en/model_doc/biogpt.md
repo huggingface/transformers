@@ -71,7 +71,7 @@ inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     generated_ids = model.generate(**inputs, max_length=50)
-    
+
 output = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 print(output)
 ```
@@ -80,7 +80,7 @@ print(output)
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Ibuprofen is best used for" | transformers-cli run --task text-generation --model microsoft/biogpt --device 0
+echo -e "Ibuprofen is best used for" | transformers run --task text-generation --model microsoft/biogpt --device 0
 ```
 
 </hfoption>
@@ -103,7 +103,7 @@ bnb_config = BitsAndBytesConfig(
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/BioGPT-Large")
 model = AutoModelForCausalLM.from_pretrained(
-    "microsoft/BioGPT-Large", 
+    "microsoft/BioGPT-Large",
     quantization_config=bnb_config,
     dtype=torch.bfloat16,
     device_map="auto"
@@ -112,7 +112,7 @@ model = AutoModelForCausalLM.from_pretrained(
 input_text = "Ibuprofen is best used for"
 inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 with torch.no_grad():
-    generated_ids = model.generate(**inputs, max_length=50)    
+    generated_ids = model.generate(**inputs, max_length=50)
 output = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 print(output)
 ```
@@ -125,7 +125,7 @@ print(output)
 
    ```py
    from transformers import AutoModelForCausalLM
-   
+
    model = AutoModelForCausalLM.from_pretrained(
       "microsoft/biogpt",
       attn_implementation="eager"
