@@ -107,10 +107,6 @@ class Split(Enum):
 
 
 class SquadDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     args: SquadDataTrainingArguments
     features: list[SquadFeatures]
     mode: Split

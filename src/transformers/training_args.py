@@ -822,7 +822,6 @@ class TrainingArguments:
         "gradient_checkpointing_kwargs",
         "lr_scheduler_kwargs",
     ]
-    framework = "pt"
 
     output_dir: Optional[str] = field(
         default=None,
@@ -1705,7 +1704,7 @@ class TrainingArguments:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
-        if self.framework == "pt" and is_torch_available():
+        if is_torch_available():
             if self.fp16_backend and self.fp16_backend != "auto":
                 warnings.warn(
                     "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
@@ -1787,20 +1786,8 @@ class TrainingArguments:
                 )
 
         # Initialize device before we proceed
-        if self.framework == "pt" and is_torch_available():
+        if is_torch_available():
             self.device
-
-        # Disable average tokens when using single device
-        if self.average_tokens_across_devices:
-            try:
-                if self.world_size == 1:
-                    logger.info(
-                        "average_tokens_across_devices is True but world size is 1. Setting it to False automatically."
-                    )
-                    self.average_tokens_across_devices = False
-            except ImportError as e:
-                logger.warning(f"Can not specify world size due to {e}. Turn average_tokens_across_devices to False.")
-                self.average_tokens_across_devices = False
 
         if self.torchdynamo is not None:
             warnings.warn(
@@ -1825,7 +1812,7 @@ class TrainingArguments:
             if self.torch_compile_mode is not None:
                 os.environ[prefix + "MODE"] = self.torch_compile_mode
 
-        if self.framework == "pt" and is_torch_available() and self.torch_compile:
+        if is_torch_available() and self.torch_compile:
             if is_torch_tf32_available():
                 if self.tf32 is None and not self.fp16 or self.bf16:
                     device_str = "MUSA" if is_torch_musa_available() else "CUDA"
@@ -1842,7 +1829,7 @@ class TrainingArguments:
                 logger.warning(
                     "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
                 )
-        if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
+        if is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
                     if is_torch_musa_available():
