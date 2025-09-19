@@ -40,6 +40,12 @@ from transformers.commands.serving import ServeArguments, ServeCommand
 from transformers.utils import is_rich_available, is_torch_available
 
 
+try:
+    import readline  # noqa importing this enables GNU readline capabilities
+except ImportError:
+    # some platforms may not support readline: https://docs.python.org/3/library/readline.html
+    pass
+
 if platform.system() != "Windows":
     import pwd
 
