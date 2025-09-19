@@ -138,21 +138,21 @@ class GenericTester(unittest.TestCase):
         self.assertTrue(to_py_obj(t2) == x2)
 
         self.assertTrue(to_py_obj([t1, t2]) == [x1, x2])
-        
-    
+
     def test_model_output_subclass(self):
         # testing with “dict-like init” case
         out = CausalLMOutputWithPast({"logits": torch.ones(2, 3, 4)})
         self.assertTrue(out["logits"] is not None)
         self.assertTrue(out.loss is None)
         self.assertTrue(len(out.to_tuple()) == 1)
-        
+
         # testing with dataclass init case
-        out = CausalLMOutputWithPast(logits = torch.ones(2, 3, 4))
+        out = CausalLMOutputWithPast(logits=torch.ones(2, 3, 4))
         self.assertTrue(out["logits"] is not None)
         self.assertTrue(out.loss is None)
         self.assertTrue(len(out.to_tuple()) == 1)
-        
+
+
 class ValidationDecoratorTester(unittest.TestCase):
     def test_cases_no_warning(self):
         with warnings.catch_warnings(record=True) as raised_warnings:
