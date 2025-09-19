@@ -1450,15 +1450,6 @@ def _find_missing_and_unexpected_keys(
         missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
         unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys, prefix)
 
-    # Model-specific exceptions for missing and unexpected keys (e.g. if the modeling change over time, or any other reason...)
-    if cls._keys_to_ignore_on_load_missing is not None:
-        for pattern in cls._keys_to_ignore_on_load_missing:
-            missing_keys = [k for k in missing_keys if re.search(pattern, k) is None]
-
-    if cls._keys_to_ignore_on_load_unexpected is not None:
-        for pattern in cls._keys_to_ignore_on_load_unexpected:
-            unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
-
     return missing_keys, unexpected_keys
 
 
@@ -5546,6 +5537,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         device_mesh.get_local_rank(),
                         device_mesh,
                     )
+
+        # Model-specific exceptions for missing and unexpected keys (e.g. if the modeling change over time, or any other reason...)
+        # We should remove them here to avoid raising warnings if they are present in the lists
+        if cls._keys_to_ignore_on_load_missing is not None:
+            for pattern in cls._keys_to_ignore_on_load_missing:
+                missing_keys = [k for k in missing_keys if re.search(pattern, k) is None]
+
+        if cls._keys_to_ignore_on_load_unexpected is not None:
+            for pattern in cls._keys_to_ignore_on_load_unexpected:
+                unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
 
         # All potential warnings/infos
         if len(error_msgs) > 0:
