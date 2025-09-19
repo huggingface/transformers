@@ -711,9 +711,7 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
             module.A_log.data.uniform_(0, 16).log_()
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, Qwen3NextRMSNorm):
-            # Norms can exist without weights (in which case they are None from torch primitives)
-            if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.zero_()
+            module.weight.data.zero_()
 
 
 class Qwen3NextModel(Qwen3NextPreTrainedModel):

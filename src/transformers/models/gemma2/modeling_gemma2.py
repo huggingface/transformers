@@ -358,9 +358,7 @@ class Gemma2PreTrainedModel(PreTrainedModel):
 
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         if "RMSNorm" in module.__class__.__name__:
-            # Norms can exist without weights (in which case they are None from torch primitives)
-            if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.zero_()
+            module.weight.data.zero_()
 
 
 @auto_docstring
