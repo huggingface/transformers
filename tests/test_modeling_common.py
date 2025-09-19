@@ -678,6 +678,7 @@ class ModelTesterMixin:
         # TODO (if possible): Avoid exceptional cases
         # ⛔ DO NOT edit this list (unless there is really nothing to tweak in the model tester class and approved by the reviewer) ⛔!
         exceptional_num_hidden_layers = {
+            # TODO: There might be some way to fix
             "FunnelModelTest": 5,
             "FunnelBaseModelTest": 4,
             "GroupViTVisionModelTest": 12,
@@ -690,16 +691,13 @@ class ModelTesterMixin:
             "SamHQModelTest": 12,
             "Swin2SRModelTest": 3,
             "XLNetModelTest": 3,
-            "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "DPTModelTest": 4,  # `test_modeling_dpt_hybrid.py`: not able to get it work after change `num_hidden_layers` and `neck_hidden_sizes`
             "ZambaModelTest": 3, # `num_hidden_layers=2` gives `StopIteration` at `layers.append(ZambaHybridLayer(block, next(linear_layers), next(mamba_layers)))`
+            # Nothing we can't do
+            "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
         }
-
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
-
-        if hasattr(self.model_tester, "out_features") or hasattr(self.model_tester, "out_indices"):
-            self.skipTest(reason="bon")
 
         if hasattr(self.model_tester, "num_hidden_layers") and isinstance(self.model_tester.num_hidden_layers, int):
             assert self.model_tester.num_hidden_layers <= target_num_hidden_layers
