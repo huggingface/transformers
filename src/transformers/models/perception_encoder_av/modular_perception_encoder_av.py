@@ -143,81 +143,30 @@ class PerceptionEncoderAVConfig(PretrainedConfig):
 
 
 ## Patcher
-def pad1d(
-    x: torch.Tensor,
-    paddings: tuple[int, int],
-    mode: str = "constant",
-    value: float = 0.0,
-):
-    # Copied from https://github.com/facebookresearch/audiocraft/blob/main/audiocraft/modules/conv.py
-    """Tiny wrapper around F.pad, just to allow for reflect padding on small input.
-    If this is the case, we insert extra 0 padding to the right before the reflection happen.
-    """
-    length = x.shape[-1]
-    padding_left, padding_right = paddings
-    assert padding_left >= 0 and padding_right >= 0, (padding_left, padding_right)
-    if mode == "reflect":
-        max_pad = max(padding_left, padding_right)
-        extra_pad = 0
-        if length <= max_pad:
-            extra_pad = max_pad - length + 1
-            x = F.pad(x, (0, extra_pad))
-        padded = F.pad(x, paddings, mode, value)
-        end = padded.shape[-1] - extra_pad
-        return padded[..., :end]
-    else:
-        return F.pad(x, paddings, mode, value)
+class ConvBlock1d(torch.nn.Module):
+    def __init__(self, config: TransformerConfig):
+        super().__init__()
+        self.groupnorm = torch.nn.GroupNorm(num_groups=1, num_channels=config.hidden_size)
+        self.activation = torch.nn.SiLU()
+        self.project = torch.nn.Conv1d(
+            in_channels=config.hidden_size,
+            out_channels=config.hidden_size,
+            kernel_size=3,
+        )
 
-
-def get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0) -> int:
-    # Copied from https://github.com/facebookresearch/audiocraft/blob/main/audiocraft/modules/conv.py
-    """See `pad_for_conv1d`."""
-    length = x.shape[-1]
-    n_frames = (length - kernel_size + padding_total) / stride + 1
-    ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
-    return ideal_length - length
-
-
-class Conv1d(torch.nn.Conv1d):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        kernel_size = self.kernel_size[0]
-        stride = self.stride[0]
-        dilation = self.dilation[0]
-        kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
+    def _pad(self, x: torch.Tensor) -> int:
+        kernel_size = 3
+        stride = 1
+        length = x.shape[-1]
         padding_total = kernel_size - stride
-        extra_padding = get_extra_padding_for_conv1d(x, kernel_size, stride, padding_total)
+        n_frames = (length - kernel_size + padding_total) / stride + 1
+        ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
+        extra_padding = ideal_length - length
+
         # Asymmetric padding required for odd strides
         padding_right = padding_total // 2
         padding_left = padding_total - padding_right
-        x = pad1d(x, (padding_left, padding_right + extra_padding))
-        return super().forward(x)
-
-
-class ConvBlock1d(torch.nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        *,
-        kernel_size: int = 3,
-        stride: int = 1,
-        dilation: int = 1,
-        num_groups: int = 8,
-    ) -> None:
-        super().__init__()
-
-        self.groupnorm = torch.nn.GroupNorm(num_groups=num_groups, num_channels=in_channels)
-        self.activation = torch.nn.SiLU()
-        self.project = Conv1d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            dilation=dilation,
-        )
+        return F.pad(x, (padding_left, padding_right + extra_padding), mode="constant", value=0.0)
 
     def forward(
         self,
@@ -225,66 +174,19 @@ class ConvBlock1d(torch.nn.Module):
     ) -> torch.Tensor:
         x = self.groupnorm(x)
         x = self.activation(x)
-        return self.project(x)
+        return self.project(self._pad(x))
 
 
 class ResnetBlock1d(torch.nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        *,
-        kernel_size: int = 3,
-        stride: int = 1,
-        dilation: int = 1,
-        num_groups: int = 8,
-    ) -> None:
+    def __init__(self, config: TransformerConfig):
         super().__init__()
-
-        self.block1 = ConvBlock1d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            dilation=dilation,
-            num_groups=num_groups,
-        )
-
-        self.block2 = ConvBlock1d(
-            in_channels=out_channels,
-            out_channels=out_channels,
-            num_groups=num_groups,
-        )
-
-        self.to_out = (
-            Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=1)
-            if in_channels != out_channels
-            else torch.nn.Identity()
-        )
+        self.block1 = ConvBlock1d(config)
+        self.block2 = ConvBlock1d(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self.block1(x)
         h = self.block2(h)
-        return h + self.to_out(x)
-
-
-class Patcher(torch.nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-    ):
-        super().__init__()
-        self.block = ResnetBlock1d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            num_groups=1,
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.block(x)
-        x = rearrange(x, "b c (l 1) -> b (c 1) l")
-        return x
+        return h + x
 
 
 ## Text Encoder
@@ -544,22 +446,13 @@ class Transformer(torch.nn.Module):
     def __init__(self, config: TransformerConfig):
         super().__init__()
         self.config = config
-
         self.rope_embeddings = PerceptionEncoderAVRotaryEmbedding(config)
         self.layers = torch.nn.ModuleList(
             [PerceptionEncoderAVDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
         )
-
         self.norm = PerceptionEncoderAVRMSNorm(config.hidden_size, config.rms_norm_eps)
-
-        # output layer
         self.output = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-
-        self.x_embedder = Patcher(
-            in_channels=config.hidden_size,
-            out_channels=config.hidden_size,
-        )
-
+        self.x_embedder = ResnetBlock1d(config)
         self.cls_token = torch.nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
     def forward(
