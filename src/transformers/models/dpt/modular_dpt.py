@@ -18,6 +18,8 @@ import math
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Optional, Union
 
+import torch
+
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -30,8 +32,6 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     requires_backends,
 )
@@ -41,12 +41,9 @@ from ..beit.image_processing_beit_fast import BeitImageProcessorFast
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-if is_torch_available():
-    import torch
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
+else:
     from torchvision.transforms import functional as F
 
 
@@ -92,17 +89,14 @@ def get_resize_output_image_size(
 class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     ensure_multiple_of (`int`, *optional*, defaults to 1):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
         by `ensure_multiple_of` in `preprocess`.
-    do_pad (`bool`, *optional*, defaults to `False`):
-        Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
-        combination with DPT.
     size_divisor (`int`, *optional*):
         If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
         DINOv2 paper, which uses the model in combination with DPT.
     keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
         If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-        be overidden by `keep_aspect_ratio` in `preprocess`.
+        be overridden by `keep_aspect_ratio` in `preprocess`.
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
         Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
         is used for background, and background itself is not included in all classes of a dataset (e.g.
@@ -111,7 +105,6 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
     ensure_multiple_of: Optional[int]
     size_divisor: Optional[int]
-    do_pad: Optional[bool]
     keep_aspect_ratio: Optional[bool]
     do_reduce_labels: Optional[bool]
 

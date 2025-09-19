@@ -1464,8 +1464,6 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         # copied from DETR
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()

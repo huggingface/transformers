@@ -331,12 +331,11 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         if input.get("image", None) is not None:
             image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:
-                image_inputs = self.image_processor(images=image, return_tensors=self.framework)
-                if self.framework == "pt":
-                    image_inputs = image_inputs.to(self.dtype)
+                image_inputs = self.image_processor(images=image, return_tensors="pt")
+                image_inputs = image_inputs.to(self.dtype)
                 image_features.update(image_inputs)
             elif self.feature_extractor is not None:
-                image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
+                image_features.update(self.feature_extractor(images=image, return_tensors="pt"))
             elif self.model_type == ModelType.VisionEncoderDecoder:
                 raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
 
@@ -374,7 +373,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             encoding = {
                 "inputs": image_features["pixel_values"],
                 "decoder_input_ids": self.tokenizer(
-                    task_prompt, add_special_tokens=False, return_tensors=self.framework
+                    task_prompt, add_special_tokens=False, return_tensors="pt"
                 ).input_ids,
                 "return_dict_in_generate": True,
             }
@@ -417,12 +416,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             # This logic mirrors the logic in the question_answering pipeline
             p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
             for span_idx in range(num_spans):
-                if self.framework == "pt":
-                    span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}
-                    if "pixel_values" in image_features:
-                        span_encoding["image"] = image_features["pixel_values"]
-                else:
-                    raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
+                span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}
+                if "pixel_values" in image_features:
+                    span_encoding["image"] = image_features["pixel_values"]
 
                 input_ids_span_idx = encoding["input_ids"][span_idx]
                 # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
@@ -447,10 +443,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                         else:
                             bbox.append([0] * 4)
 
-                    if self.framework == "pt":
-                        span_encoding["bbox"] = torch.tensor(bbox).unsqueeze(0)
-                    elif self.framework == "tf":
-                        raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
+                    span_encoding["bbox"] = torch.tensor(bbox).unsqueeze(0)
                 yield {
                     **span_encoding,
                     "p_mask": p_mask[span_idx],
@@ -515,9 +508,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         for output in model_outputs:
             words = output["words"]
 
-            if self.framework == "pt" and output["start_logits"].dtype in (torch.bfloat16, torch.float16):
+            if output["start_logits"].dtype in (torch.bfloat16, torch.float16):
                 output["start_logits"] = output["start_logits"].float()
-            if self.framework == "pt" and output["end_logits"].dtype in (torch.bfloat16, torch.float16):
+            if output["end_logits"].dtype in (torch.bfloat16, torch.float16):
                 output["end_logits"] = output["end_logits"].float()
 
             starts, ends, scores, min_null_score = select_starts_ends(

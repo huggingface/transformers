@@ -42,6 +42,7 @@ from transformers import (
     SpecialTokensMixin,
     Trainer,
     TrainingArguments,
+    is_mlx_available,
     is_torch_available,
     logging,
 )
@@ -64,7 +65,7 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from transformers import PretrainedConfig, PreTrainedModel, TFPreTrainedModel
+    from transformers import PretrainedConfig, PreTrainedModel
 
 
 def use_cache_if_possible(func):
@@ -119,11 +120,11 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 
 def merge_model_tokenizer_mappings(
-    model_mapping: dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    model_mapping: dict["PretrainedConfig", "PreTrainedModel"],
     tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
 ) -> dict[
     Union["PreTrainedTokenizer", "PreTrainedTokenizerFast"],
-    tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tuple["PretrainedConfig", "PreTrainedModel"],
 ]:
     configurations = list(model_mapping.keys())
     model_tokenizer_mapping = OrderedDict([])
@@ -4685,3 +4686,33 @@ class TokenizerTesterMixin:
             # Only the ByteLevel pre-tokenizer has the `add_prefix_space` attribute, we have to ensure that it's set correctly
             if hasattr(fast_tokenizer.backend_tokenizer.pre_tokenizer, "add_prefix_space"):
                 self.assertEqual(fast_tokenizer.backend_tokenizer.pre_tokenizer.add_prefix_space, add_prefix_space)
+
+    def test_empty_input_string(self):
+        empty_input_string = ""
+        tokenizer_return_type = []
+        output_tensor_type = []
+
+        if is_torch_available():
+            import numpy as np
+            import torch
+
+            tokenizer_return_type.append("pt")
+            output_tensor_type.append(torch.int64)
+            tokenizer_return_type.append("np")
+            output_tensor_type.append(np.int64)
+
+        if is_mlx_available():
+            import mlx.core as mx
+
+            tokenizer_return_type.append("mlx")
+            output_tensor_type.append(mx.int32)
+
+        if len(tokenizer_return_type) == 0:
+            self.skipTest(reason="No expected framework from PT, or MLX found")
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(empty_input_string, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
