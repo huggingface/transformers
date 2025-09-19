@@ -48,22 +48,42 @@ Here is an interactive timeline to explore the different model architectures sup
 
 ### iframe
 
+scale 0.5
 <iframe
 	src="https://yonigozlan-transformers-timeline.hf.space"
 	frameborder="0"
 	width="100%"
-	height="400"
-	style="max-width: 800px; transform: scale(0.5); transform-origin: top left;"
+	height="1000"
+	style="transform: scale(0.5); transform-origin: top left;"
 ></iframe>
 
-
+scale 0.4
 <iframe
 	src="https://yonigozlan-transformers-timeline.hf.space"
 	frameborder="0"
 	width="100%"
-	height="400"
-	style="max-width: 800px;"
+	height="1250"
+	style="transform: scale(0.4); transform-origin: top left;"
 ></iframe>
+
+scale 0.6
+<iframe
+	src="https://yonigozlan-transformers-timeline.hf.space"
+	frameborder="0"
+	width="100%"
+	height="833"
+	style="transform: scale(0.6); transform-origin: top left;"
+></iframe>
+
+scale 0.8
+<iframe
+	src="https://yonigozlan-transformers-timeline.hf.space"
+	frameborder="0"
+	width="100%"
+	height="625"
+	style="transform: scale(0.8); transform-origin: top left;"
+></iframe>
+
 
 
 ## Features
