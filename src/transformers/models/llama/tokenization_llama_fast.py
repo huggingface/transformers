@@ -22,7 +22,7 @@ from tokenizers.models import BPE, Unigram
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging, requires_backends
-from ...convert_slow_tokenizer import _get_prepend_scheme, SpmTokenizer
+from ...create_fast_tokenizer import SpmTokenizer, _get_prepend_scheme
 
 
 logger = logging.get_logger(__name__)
