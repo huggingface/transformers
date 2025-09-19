@@ -227,6 +227,7 @@ if TYPE_CHECKING:
     from .modernbert_decoder import *
     from .moonshine import *
     from .moshi import *
+    from .moss_ttsd import *
     from .mpnet import *
     from .mpt import *
     from .mra import *
@@ -379,6 +380,7 @@ if TYPE_CHECKING:
     from .xlnet import *
     from .xlstm import *
     from .xmod import *
+    from .xy_tokenizer import *
     from .yolos import *
     from .yoso import *
     from .zamba import *
