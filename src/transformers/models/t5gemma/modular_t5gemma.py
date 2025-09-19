@@ -165,6 +165,8 @@ class T5GemmaConfig(PretrainedConfig):
         encoder.is_decoder = False
         encoder.dropout_rate = dropout_rate
         encoder.attention_dropout = attention_dropout
+        encoder.use_post_attention_norm = True
+        encoder.use_post_feedforward_norm = True
         self.encoder = encoder
 
         decoder.is_decoder = True
@@ -172,6 +174,8 @@ class T5GemmaConfig(PretrainedConfig):
         decoder.dropout_rate = dropout_rate
         decoder.attention_dropout = attention_dropout
         decoder.cross_attention_hidden_size = encoder.hidden_size
+        decoder.use_post_attention_norm = True
+        decoder.use_post_feedforward_norm = True
         self.decoder = decoder
 
         for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
@@ -349,11 +353,13 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
             layer_idx=layer_idx,
         )
         self.pre_self_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_self_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if self.config.use_post_attention_norm:
+            self.post_self_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.mlp = T5GemmaMLP(config)
         self.pre_feedforward_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if self.config.use_post_feedforward_norm:
+            self.post_feedforward_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -375,13 +381,15 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
             past_key_values=None,
             **kwargs,
         )
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
+        if self.config.use_post_attention_norm:
+            hidden_states = self.post_self_attn_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
 
         residual = hidden_states
         hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
+        if self.config.use_post_feedforward_norm:
+            hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
         return hidden_states
 
@@ -421,7 +429,8 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
             cache_position=cache_position,
             **kwargs,
         )
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
+        if self.config.use_post_attention_norm:
+            hidden_states = self.post_self_attn_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
 
         residual = hidden_states
@@ -440,7 +449,8 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         residual = hidden_states
         hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
+        if self.config.use_post_feedforward_norm:
+            hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
         return hidden_states
 

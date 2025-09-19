@@ -90,6 +90,11 @@ class T5GemmaModuleConfig(PretrainedConfig):
             scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             scaling factor when applying tanh softcapping on the attention scores.
+        use_post_attention_norm (`bool`, *optional*, defaults to `True`):
+            whether to use a post attention layer normalization layer.
+        use_post_feedforward_norm (`bool`, *optional*, defaults to `True`):
+            whether to use a post feedforward layer normalization layer.
+
 
     ```python
     >>> from transformers import T5GemmaModuleModel, T5GemmaModuleConfig
@@ -144,6 +149,8 @@ class T5GemmaModuleConfig(PretrainedConfig):
         layer_types=None,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
+        use_post_attention_norm=True,
+        use_post_feedforward_norm=True,
         **kwargs,
     ):
         super().__init__(
@@ -172,6 +179,8 @@ class T5GemmaModuleConfig(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
+        self.use_post_attention_norm = use_post_attention_norm
+        self.use_post_feedforward_norm = use_post_feedforward_norm
         self.layer_types = layer_types
 
         if self.layer_types is None:
@@ -282,6 +291,8 @@ class T5GemmaConfig(PretrainedConfig):
         encoder.is_decoder = False
         encoder.dropout_rate = dropout_rate
         encoder.attention_dropout = attention_dropout
+        encoder.use_post_attention_norm = True
+        encoder.use_post_feedforward_norm = True
         self.encoder = encoder
 
         decoder.is_decoder = True
@@ -289,6 +300,8 @@ class T5GemmaConfig(PretrainedConfig):
         decoder.dropout_rate = dropout_rate
         decoder.attention_dropout = attention_dropout
         decoder.cross_attention_hidden_size = encoder.hidden_size
+        decoder.use_post_attention_norm = True
+        decoder.use_post_feedforward_norm = True
         self.decoder = decoder
 
         for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
