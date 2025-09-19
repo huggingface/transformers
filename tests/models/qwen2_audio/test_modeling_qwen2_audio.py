@@ -63,6 +63,7 @@ class Qwen2AudioModelTester:
             "use_labels": True,
             "use_mrope": False,
             "vocab_size": 99,
+            "pad_token_id": 1,  # can't be the same as the audio token id
         },
         is_training=True,
         audio_config={
