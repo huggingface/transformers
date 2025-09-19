@@ -127,7 +127,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
         self.audio_token_index = audio_token_index
         self.tie_word_embeddings = tie_word_embeddings
         self.initializer_range = initializer_range
-        self.has_lora_adapater = has_lora_adapter
+        self.has_lora_adapter = has_lora_adapter
         self.downsample_rate = downsample_rate
         self.window_size = window_size
         self.is_training = is_training
@@ -152,7 +152,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
             audio_token_index=self.audio_token_index,
             tie_word_embeddings=self.tie_word_embeddings,
             initializer_range=self.initializer_range,
-            has_lora_adapter=self.has_lora_adapater,
+            has_lora_adapter=self.has_lora_adapter,
         )
 
     def prepare_config_and_inputs(self):

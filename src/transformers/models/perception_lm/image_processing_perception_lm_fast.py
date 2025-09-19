@@ -190,7 +190,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                         target_width=n_w * tile_size,
                         target_height=n_h * tile_size,
                     )
-                    # Llama3V dynamic tiling. Priortize biggest canvas.
+                    # Llama3V dynamic tiling. Prioritize biggest canvas.
                     if (scale < 1.0 and (image_width_height[0] >= optimal_image_width_height[0])) or (
                         scale >= 1.0 and (image_width_height[1] >= optimal_image_width_height[1])
                     ):
