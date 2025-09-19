@@ -158,59 +158,6 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
     - forward
 
 </pt>
-<tf>
-
-## TFBartModel[[transformers.TFBartModel]]
-
-[[autodoc]] TFBartModel
-    - call
-
-## TFBartForConditionalGeneration[[transformers.TFBartForConditionalGeneration]]
-
-[[autodoc]] TFBartForConditionalGeneration
-    - call
-
-## TFBartForSequenceClassification[[transformers.TFBartForSequenceClassification]]
-
-[[autodoc]] TFBartForSequenceClassification
-    - call
-
-</tf>
-<jax>
-
-## FlaxBartModel[[transformers.FlaxBartModel]]
-
-[[autodoc]] FlaxBartModel
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForConditionalGeneration[[transformers.FlaxBartForConditionalGeneration]]
-
-[[autodoc]] FlaxBartForConditionalGeneration
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForSequenceClassification[[transformers.FlaxBartForSequenceClassification]]
-
-[[autodoc]] FlaxBartForSequenceClassification
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForQuestionAnswering[[transformers.FlaxBartForQuestionAnswering]]
-
-[[autodoc]] FlaxBartForQuestionAnswering
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForCausalLM[[transformers.FlaxBartForCausalLM]]
-
-[[autodoc]] FlaxBartForCausalLM
-    - __call__
-</jax>
 </frameworkcontent>
 
 

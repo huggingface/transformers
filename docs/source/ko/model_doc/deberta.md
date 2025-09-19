@@ -115,38 +115,5 @@ DeBERTa를 시작하는 데 도움이 되는 Hugging Face와 community 자료 �
     - forward
 
 </pt>
-<tf>
-
-## TFDebertaModel[[transformers.TFDebertaModel]]
-
-[[autodoc]] TFDebertaModel
-    - call
-
-## TFDebertaPreTrainedModel[[transformers.TFDebertaPreTrainedModel]]
-
-[[autodoc]] TFDebertaPreTrainedModel
-    - call
-
-## TFDebertaForMaskedLM[[transformers.TFDebertaForMaskedLM]]
-
-[[autodoc]] TFDebertaForMaskedLM
-    - call
-
-## TFDebertaForSequenceClassification[[transformers.TFDebertaForSequenceClassification]]
-
-[[autodoc]] TFDebertaForSequenceClassification
-    - call
-
-## TFDebertaForTokenClassification[[transformers.TFDebertaForTokenClassification]]
-
-[[autodoc]] TFDebertaForTokenClassification
-    - call
-
-## TFDebertaForQuestionAnswering[[transformers.TFDebertaForQuestionAnswering]]
-
-[[autodoc]] TFDebertaForQuestionAnswering
-    - call
-
-</tf>
 </frameworkcontent>
 

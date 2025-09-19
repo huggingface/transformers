@@ -73,8 +73,6 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
-[[autodoc]] models.albert.modeling_tf_albert.TFAlbertForPreTrainingOutput
-
 <frameworkcontent>
 <pt>
 
@@ -113,81 +111,3 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
     - forward
 
 </pt>
-
-<tf>
-
-## TFAlbertModel
-
-[[autodoc]] TFAlbertModel
-    - call
-
-## TFAlbertForPreTraining
-
-[[autodoc]] TFAlbertForPreTraining
-    - call
-
-## TFAlbertForMaskedLM
-
-[[autodoc]] TFAlbertForMaskedLM
-    - call
-
-## TFAlbertForSequenceClassification
-
-[[autodoc]] TFAlbertForSequenceClassification
-    - call
-
-## TFAlbertForMultipleChoice
-
-[[autodoc]] TFAlbertForMultipleChoice
-    - call
-
-## TFAlbertForTokenClassification
-
-[[autodoc]] TFAlbertForTokenClassification
-    - call
-
-## TFAlbertForQuestionAnswering
-
-[[autodoc]] TFAlbertForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxAlbertModel
-
-[[autodoc]] FlaxAlbertModel
-    - __call__
-
-## FlaxAlbertForPreTraining
-
-[[autodoc]] FlaxAlbertForPreTraining
-    - __call__
-
-## FlaxAlbertForMaskedLM
-
-[[autodoc]] FlaxAlbertForMaskedLM
-    - __call__
-
-## FlaxAlbertForSequenceClassification
-
-[[autodoc]] FlaxAlbertForSequenceClassification
-    - __call__
-
-## FlaxAlbertForMultipleChoice
-
-[[autodoc]] FlaxAlbertForMultipleChoice
-    - __call__
-
-## FlaxAlbertForTokenClassification
-
-[[autodoc]] FlaxAlbertForTokenClassification
-    - __call__
-
-## FlaxAlbertForQuestionAnswering
-
-[[autodoc]] FlaxAlbertForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>

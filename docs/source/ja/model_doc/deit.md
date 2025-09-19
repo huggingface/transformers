@@ -127,27 +127,4 @@ DeiT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
     - forward
 
 </pt>
-<tf>
-
-## TFDeiTModel
-
-[[autodoc]] TFDeiTModel
-    - call
-
-## TFDeiTForMaskedImageModeling
-
-[[autodoc]] TFDeiTForMaskedImageModeling
-    - call
-
-## TFDeiTForImageClassification
-
-[[autodoc]] TFDeiTForImageClassification
-    - call
-
-## TFDeiTForImageClassificationWithTeacher
-
-[[autodoc]] TFDeiTForImageClassificationWithTeacher
-    - call
-
-</tf>
 </frameworkcontent>
