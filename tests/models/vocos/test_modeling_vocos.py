@@ -17,10 +17,8 @@ import inspect
 import json
 import tempfile
 import unittest
-from io import BytesIO
-from urllib.request import urlopen
 
-import librosa
+from datasets import Audio, load_dataset
 
 from transformers.testing_utils import (
     require_torch,
@@ -240,12 +238,10 @@ class VocosModelIntegrationTest(unittest.TestCase):
     """
 
     def setUp(self):
-        # load the same audio sample
-        audio_url = (
-            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
-        )
-        audio = librosa.load(BytesIO(urlopen(audio_url).read()), sr=24000)[0]
-        self.audio = torch.tensor(audio, dtype=torch.float32).unsqueeze(0)
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        dataset = dataset.cast_column("audio", Audio(sampling_rate=24000))
+        audio_np = dataset[0]["audio"]["array"]
+        self.audio = torch.tensor(audio_np, dtype=torch.float32).unsqueeze(0)
 
         with open("tests/fixtures/vocos/vocos_mel_integration.json", "r") as f:
             self.mel_expected = json.load(f)[0]
@@ -307,3 +303,85 @@ class VocosModelIntegrationTest(unittest.TestCase):
                 rtol=entry["rtol"],
                 atol=entry["atol"],
             )
+
+    def test_inference_batch_mel_vocos(self):
+        hf_repo_id = self.mel_expected["hf_repo_id"]
+        processor = VocosProcessor.from_pretrained(hf_repo_id)
+        model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
+
+        # batch processing [3, T]
+        audio_batch = self.audio.repeat(3, 1)
+        inputs = processor(audio=audio_batch, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            batch_audio_output = model(**inputs)
+
+        self.assertEqual(batch_audio_output.shape[0], 3)
+
+        # comparing batch results with individual processing
+        single_inputs = processor(audio=self.audio, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            single_audio_output = model(**single_inputs).squeeze(0)
+
+        for i in range(3):
+            torch.testing.assert_close(
+                batch_audio_output[i, : single_audio_output.shape[0]], single_audio_output, rtol=1e-4, atol=1e-4
+            )
+
+        # testing batch processing of a list of numpy arrays
+        audio_np = self.audio.squeeze(0).cpu().numpy()
+        audio_batch = [audio_np, audio_np, audio_np]
+        inputs = processor(audio=audio_batch, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            output_from_list = model(**inputs)
+
+        assert torch.allclose(output_from_list, batch_audio_output, rtol=1e-6, atol=1e-6)
+
+    def test_inference_batch_encodec_vocos(self):
+        hf_repo_id = self.encodec_expected[0]["hf_repo_id"]
+        model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
+        processor = VocosProcessor.from_pretrained(hf_repo_id)
+        for entry in self.encodec_expected:
+            bandwidth, rtol, atol = entry["bandwidth"], entry["rtol"], entry["atol"]
+
+            # batch processing from raw audio
+            audio_batch = self.audio.repeat(3, 1)
+            inputs = processor(audio=audio_batch, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                batch_output_from_audio = model(**inputs)
+
+            self.assertEqual(batch_output_from_audio.shape[0], 3)
+
+            # comparing batch results with individual processing
+            single_inputs = processor(audio=self.audio, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                single_output_from_audio = model(**single_inputs).squeeze(0)
+
+            for i in range(3):
+                torch.testing.assert_close(
+                    batch_output_from_audio[i, : single_output_from_audio.shape[0]],
+                    single_output_from_audio,
+                    rtol=rtol,
+                    atol=atol,
+                )
+
+            # batch processing from quantized codes
+            codes = torch.tensor(entry["input_codes"], dtype=torch.long)
+            codes_batch = codes.unsqueeze(1).repeat(1, 3, 1)
+            inputs = processor(codes=codes_batch, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                batch_output_from_codes = model(**inputs)
+
+            self.assertEqual(batch_output_from_codes.shape[0], 3)
+
+            # compare with single codes processing
+            single_inputs = processor(codes=codes, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                single_output_from_codes = model(**single_inputs).squeeze(0)
+
+            for i in range(3):
+                torch.testing.assert_close(
+                    batch_output_from_codes[i, : single_output_from_codes.shape[0]],
+                    single_output_from_codes,
+                    rtol=1e-4,
+                    atol=1e-4,
+                )
