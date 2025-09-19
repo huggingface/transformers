@@ -51,8 +51,8 @@ class GPT2ModelTester(CausalLMModelTester):
         config_class = GPT2Config
         base_model_class = GPT2Model
         causal_lm_class = GPT2LMHeadModel
-        sequence_class = GPT2ForSequenceClassification
-        token_class = GPT2ForTokenClassification
+        sequence_classification_class = GPT2ForSequenceClassification
+        token_classification_class = GPT2ForTokenClassification
         question_answering_class = GPT2ForQuestionAnswering
 
     def __init__(
