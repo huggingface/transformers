@@ -89,8 +89,6 @@ BEiT の使用を開始するのに役立つ公式 Hugging Face およびコミ�
 
 [[autodoc]] models.beit.modeling_beit.BeitModelOutputWithPooling
 
-[[autodoc]] models.beit.modeling_flax_beit.FlaxBeitModelOutputWithPooling
-
 ## BeitConfig
 
 [[autodoc]] BeitConfig

@@ -66,8 +66,6 @@ Generators](https://openreview.net/pdf?id=r1xMH1BtvB) 논문에서 제안되었�
 
 [[autodoc]] models.electra.modeling_electra.ElectraForPreTrainingOutput
 
-[[autodoc]] models.electra.modeling_tf_electra.TFElectraForPreTrainingOutput
-
 <frameworkcontent>
 <pt>
 

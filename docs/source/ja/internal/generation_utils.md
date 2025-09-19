@@ -75,36 +75,6 @@ generation_output[:2]
 
 [[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
-### TensorFlow
-
-[[autodoc]] generation.TFGreedySearchEncoderDecoderOutput
-
-[[autodoc]] generation.TFGreedySearchDecoderOnlyOutput
-
-[[autodoc]] generation.TFSampleEncoderDecoderOutput
-
-[[autodoc]] generation.TFSampleDecoderOnlyOutput
-
-[[autodoc]] generation.TFBeamSearchEncoderDecoderOutput
-
-[[autodoc]] generation.TFBeamSearchDecoderOnlyOutput
-
-[[autodoc]] generation.TFBeamSampleEncoderDecoderOutput
-
-[[autodoc]] generation.TFBeamSampleDecoderOnlyOutput
-
-[[autodoc]] generation.TFContrastiveSearchEncoderDecoderOutput
-
-[[autodoc]] generation.TFContrastiveSearchDecoderOnlyOutput
-
-### FLAX
-
-[[autodoc]] generation.FlaxSampleOutput
-
-[[autodoc]] generation.FlaxGreedySearchOutput
-
-[[autodoc]] generation.FlaxBeamSearchOutput
-
 ## LogitsProcessor
 
 [`LogitsProcessor`] を使用して、言語モデルのヘッドの予測スコアを変更できます。

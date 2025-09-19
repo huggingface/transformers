@@ -136,8 +136,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] models.gpt2.modeling_gpt2.GPT2DoubleHeadsModelOutput
 
-[[autodoc]] models.gpt2.modeling_tf_gpt2.TFGPT2DoubleHeadsModelOutput
-
 <frameworkcontent>
 <pt>
 

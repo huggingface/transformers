@@ -163,8 +163,6 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
-[[autodoc]] models.albert.modeling_tf_albert.TFAlbertForPreTrainingOutput
-
 <frameworkcontent>
 <pt>
 

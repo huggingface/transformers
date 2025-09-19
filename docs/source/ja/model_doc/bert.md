@@ -152,10 +152,6 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 [[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput
 
-[[autodoc]] models.bert.modeling_tf_bert.TFBertForPreTrainingOutput
-
-[[autodoc]] models.bert.modeling_flax_bert.FlaxBertForPreTrainingOutput
-
 <frameworkcontent>
 <pt>
 
