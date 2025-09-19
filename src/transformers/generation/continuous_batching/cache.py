@@ -79,7 +79,7 @@ class PagedAttentionCache:
         layer group, and the shape of the cache tensor is `[num_blocks * block_size, num_heads, head_size]`.
 
     Grouping layers into groups is useful because when we allocate one block to a group N, the block allocated is the
-        same for all layers in group N, equivalently it is allocated accross all cache tensors. This allows us to
+        same for all layers in group N, equivalently it is allocated across all cache tensors. This allows us to
         efficiently allocate and free blocks, and to efficiently read and write key and value states.
 
     For instance, imagine we have 8 blocks of cache and a model with two layer groups: a full-attention group with 3
@@ -349,7 +349,7 @@ class PagedAttentionMemoryHandler:
     The memory footprint consists of three main components:
     - Cache memory: the space needed to store the cache tensors:
         2 * layer_group_size * [num_pages, page_size] * cache_dtype
-    - Activation memory: the space temporarly taken by the largest activation during the model forward pass:
+    - Activation memory: the space temporarily taken by the largest activation during the model forward pass:
         peak_activation_per_token * max_tokens_per_batch * activation_dtype_size
     - Static tensors: the space taken by the input/output buffers and metadata tensors for batch processing, sum of:
         - inputs_ids + outputs_ids + position_ids + logits_indices: 4 * max_tokens_per_batch * int32_size

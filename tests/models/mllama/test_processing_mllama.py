@@ -274,12 +274,14 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             [self.image_token_id, self.bos_token_id, 2028, 374, 264, 1296, 11914, 13],
             [self.bos_token_id, 2028, 374, 264, 1296, 11914, 13, self.image_token_id, self.image_token_id, 2028, 374, 264, 1296, 11914, 13],
         ]
-        # fmt: onn
+        # fmt: on
         images = [[self.image1], [self.image1, self.image2]]
         inputs = processor(text=text, images=images, padding=True, size={"width": 256, "height": 256})
 
         self.assertEqual(inputs["pixel_values"].shape, (2, 2, 4, 3, 256, 256))
-        for input_ids_i, attention_mask_i, expected_ids_i in zip(inputs["input_ids"], inputs["attention_mask"], expected_ids):
+        for input_ids_i, attention_mask_i, expected_ids_i in zip(
+            inputs["input_ids"], inputs["attention_mask"], expected_ids
+        ):
             pad_ids = [id for id, m in zip(input_ids_i, attention_mask_i) if m == 0]
             input_ids = [id for id, m in zip(input_ids_i, attention_mask_i) if m == 1]
             self.assertEqual(input_ids, expected_ids_i)
@@ -291,24 +293,38 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Check that only first tile of first sample is attended to all text tokens
         first_sample_mask = cross_attention_mask[0].copy()
         first_image_first_tile_attention = first_sample_mask[:, :1, :1]  # text tokens, images, tiles
-        self.assertTrue(np.all(first_image_first_tile_attention == 1), f"Cross attention mask is not all ones: {first_image_first_tile_attention}")
+        self.assertTrue(
+            np.all(first_image_first_tile_attention == 1),
+            f"Cross attention mask is not all ones: {first_image_first_tile_attention}",
+        )
 
         # zero out first tile of first image
         first_image_first_tile_attention[:, :1, :1] = 0
-        self.assertTrue(np.all(first_image_first_tile_attention == 0), f"Cross attention mask is not all zeros: {first_image_first_tile_attention}")
+        self.assertTrue(
+            np.all(first_image_first_tile_attention == 0),
+            f"Cross attention mask is not all zeros: {first_image_first_tile_attention}",
+        )
 
         # second sample
         second_sample_mask = cross_attention_mask[1].copy()
         first_image_first_tile_attention = second_sample_mask[7:, :1, :1]  # text tokens, images, tiles
-        self.assertTrue(np.all(first_image_first_tile_attention == 1), f"Cross attention mask is not all ones: {first_image_first_tile_attention}")
+        self.assertTrue(
+            np.all(first_image_first_tile_attention == 1),
+            f"Cross attention mask is not all ones: {first_image_first_tile_attention}",
+        )
 
         second_image_two_tiles_attention = second_sample_mask[8:, 1:2, :2]  # text tokens, images, tiles
-        self.assertTrue(np.all(second_image_two_tiles_attention == 1), f"Cross attention mask is not all ones: {second_image_two_tiles_attention}")
+        self.assertTrue(
+            np.all(second_image_two_tiles_attention == 1),
+            f"Cross attention mask is not all ones: {second_image_two_tiles_attention}",
+        )
 
         # zero out both images masks
         second_sample_mask[7:, :1, :1] = 0
         second_sample_mask[8:, 1:2, :2] = 0
-        self.assertTrue(np.all(second_sample_mask == 0), f"Cross attention mask is not all zeros: {second_sample_mask}")
+        self.assertTrue(
+            np.all(second_sample_mask == 0), f"Cross attention mask is not all zeros: {second_sample_mask}"
+        )
 
     def test_process_interleaved_images_prompts_image_error(self):
         text = [
@@ -406,6 +422,6 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 max_length=3,
             )
 
-    @unittest.skip("Mllama can't process inouts with no image ttogether with multimodal inputs")
+    @unittest.skip("Mllama can't process inputs with no image ttogether with multimodal inputs")
     def test_processor_text_has_no_visual(self):
         pass

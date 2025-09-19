@@ -950,7 +950,7 @@ class GitModel(GitPreTrainedModel):
         self.visual_projection = GitProjection(config)
 
         if config.num_image_with_embedding is not None:
-            self.img_temperal_embedding = nn.ParameterList(
+            self.img_temporal_embedding = nn.ParameterList(
                 nn.Parameter(torch.zeros(1, 1, config.vision_config.hidden_size))
                 for _ in range(config.num_image_with_embedding)
             )
@@ -1115,7 +1115,7 @@ class GitModel(GitPreTrainedModel):
                     visual_features_frame = self.image_encoder(
                         pixel_values[:, frame_idx, :, :], interpolate_pos_encoding=interpolate_pos_encoding
                     ).last_hidden_state
-                    visual_features_frame += self.img_temperal_embedding[frame_idx]
+                    visual_features_frame += self.img_temporal_embedding[frame_idx]
                     visual_features.append(visual_features_frame)
 
                 # finally, concatenate all features along sequence dimension

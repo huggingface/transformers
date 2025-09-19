@@ -85,7 +85,7 @@ class Phi4MultimodalModelTester:
             hidden_size=32,
             num_attention_heads=8,
             intermediate_size=48,
-            depthwise_seperable_out_channel=128,
+            depthwise_separable_out_channel=128,
             nemo_conv_channels=128,
             initializer_range=1e-5,
         ),
