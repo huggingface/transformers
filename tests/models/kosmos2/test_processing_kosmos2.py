@@ -97,7 +97,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    def test_image_procesor_load_save_reload(self):
+    def test_image_processor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
         image_processor = CLIPImageProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
         with TemporaryDirectory() as tmp_dir:
