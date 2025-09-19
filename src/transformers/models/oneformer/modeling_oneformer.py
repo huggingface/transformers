@@ -2882,7 +2882,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
         text_inputs (`list[torch.Tensor]`, *optional*):
-            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
+            Tensor of shape `(num_queries, sequence_length)` to be fed to a model
 
         Example:
 
@@ -3068,7 +3068,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
         text_inputs (`list[torch.Tensor]`, *optional*):
-            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
+            Tensor of shape `(num_queries, sequence_length)` to be fed to a model
         mask_labels (`list[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
         class_labels (`list[torch.LongTensor]`, *optional*):
