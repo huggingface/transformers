@@ -22,7 +22,6 @@
 from typing import Callable, Optional, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
@@ -263,7 +262,11 @@ class FlexOlmoAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class FlexOlmoNaiveMoe(nn.ModuleList):
+class FlexOlmoExperts(nn.ModuleList):
+    """
+    ModuleList of experts.
+    """
+
     def __init__(self, config):
         super().__init__()
         for _ in range(config.num_experts):
@@ -272,35 +275,32 @@ class FlexOlmoNaiveMoe(nn.ModuleList):
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
 
-    def forward(self, hidden_states, router_logits):
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
         if self.norm_topk_prob:
-            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        # we cast back to the input dtype
-        routing_weights = routing_weights.to(hidden_states.dtype)
+            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
+        return top_k_index, top_k_weights
 
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
+    def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            hidden_states: (batch_size * sequence_length, hidden_dim)
+            selected_experts: (batch_size * sequence_length, top_k)
+            routing_weights: (batch_size * sequence_length, top_k)
+        Returns:
+            (batch_size * sequence_length, hidden_dim)
+        """
+        final_hidden_states = torch.zeros_like(hidden_states)
+        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be selected
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
-        # Loop over all available experts in the model and perform the computation on each expert
-        for expert_idx in range(self.num_experts):
-            expert_layer = self[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx])
-
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
+            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
@@ -312,7 +312,7 @@ class FlexOlmoSparseMoeBlock(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
         self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
-        self.experts = FlexOlmoNaiveMoe(config)
+        self.experts = FlexOlmoExperts(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -321,7 +321,7 @@ class FlexOlmoSparseMoeBlock(nn.Module):
         final_hidden_states = self.experts(hidden_states, router_logits).reshape(
             batch_size, sequence_length, hidden_dim
         )
-        return final_hidden_states, router_logits
+        return final_hidden_states
 
 
 class FlexOlmoDecoderLayer(GradientCheckpointingLayer):

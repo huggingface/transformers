@@ -120,19 +120,13 @@ class LongcatFlashTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
         self.top_k = config.moe_topk
-        self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
         self.router_bias = getattr(config, "router_bias", False)
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
-
-    @torch.no_grad()
-    def get_topk_indices(self, scores):
-        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        return topk_indices
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
@@ -142,6 +136,12 @@ class LongcatFlashTopkRouter(nn.Module):
         topk_weights = scores.gather(1, topk_indices)
         topk_weights = topk_weights * self.routed_scaling_factor
         return topk_indices, topk_weights
+
+    @torch.no_grad()
+    def get_topk_indices(self, scores):
+        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        return topk_indices
 
 
 class LongcatFlashMoE(nn.Module):

@@ -1380,12 +1380,16 @@ class Zamba2Model(Zamba2PreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        target_length = cache_position[-1] + 1
+        if cache_position is None:
+            target_length = sequence_length
+        else:
+            target_length = cache_position[-1] + 1
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        if cache_position is not None:
+            causal_mask *= (torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)).to(torch.bool)
         causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit

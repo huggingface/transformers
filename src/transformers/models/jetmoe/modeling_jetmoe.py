@@ -511,7 +511,7 @@ class JetMoeBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class JetMoeMlp(nn.Module):
+class JetMoeMLP(nn.Module):
     def __init__(self, config: JetMoeConfig):
         super().__init__()
         self.ffn_dim = config.intermediate_size
@@ -539,7 +539,7 @@ class JetMoeExperts(nn.ModuleList):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
-            self.append(JetMoeMlp(config))
+            self.append(JetMoeMLP(config))
 
     def route_tokens_to_experts(self, hidden_states, router_logits):
         routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
@@ -584,7 +584,6 @@ class JetMoeSparseMoeBlock(nn.Module):
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         router_logits = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_dim)
         hidden_states = self.experts(hidden_states, router_logits)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, router_logits

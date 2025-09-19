@@ -237,37 +237,12 @@ class Glm4MoeTopkRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
         self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts), dtype=torch.float32))
 
-    @torch.no_grad()
-    def get_topk_indices(self, scores):
-        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
-        group_scores = (
-            scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
-        )
-        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        return topk_indices
-
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
-        topk_indices = self.get_topk_indices(scores)
-        topk_weights = scores.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
+        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+        return scores_for_choice
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -300,15 +275,34 @@ class Glm4MoeNaiveMoe(nn.ModuleList):
         nn.Module.__init__(self)
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
+        self.n_routed_experts = config.n_routed_experts
+        self.n_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.routed_scaling_factor = config.routed_scaling_factor
         for _ in range(self.num_experts):
             self += [Glm4MoeMLP(config, intermediate_size=config.moe_intermediate_size)]
 
     def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        top_k_weights = top_k_weights.to(hidden_states.dtype)
-        return top_k_index, top_k_weights
+        group_scores = (
+            router_logits.view(-1, self.n_group, self.n_routed_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .reshape(-1, self.n_routed_experts)
+        )
+        scores_for_choice = router_logits.masked_fill(~score_mask.bool(), 0.0)
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        topk_weights = router_logits.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return topk_indices, topk_weights
 
     def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
         """
