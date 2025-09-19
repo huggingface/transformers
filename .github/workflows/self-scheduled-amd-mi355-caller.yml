@@ -3,7 +3,7 @@ name: Self-hosted runner scale set (AMD mi355 scheduled CI caller)
 # Note: For every job in this workflow, the name of the runner scale set is finalized in the runner yaml i.e. huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml
 # For example, 1gpu : amd-mi355-ci-1gpu
 #              2gpu : amd-mi355-ci-2gpu
-
+ 
 on:
   workflow_run:
     workflows: ["Self-hosted runner (AMD scheduled CI caller)"]
