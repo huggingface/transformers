@@ -61,7 +61,7 @@ class Qwen3VLMoeVisionText2TextModelTester:
             "model_type": "qwen3_vl_moe",
             "num_attention_heads": 4,
             "num_key_value_heads": 2,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "moe_intermediate_size": 16,
             "num_experts_per_tok": 4,
             "num_experts": 8,

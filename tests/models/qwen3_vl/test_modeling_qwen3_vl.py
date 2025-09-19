@@ -61,7 +61,7 @@ class Qwen3VLVisionText2TextModelTester:
             "max_position_embeddings": 512,
             "model_type": "qwen3_vl",
             "num_attention_heads": 4,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_key_value_heads": 2,
             "rope_theta": 10000,
             "tie_word_embeddings": True,
