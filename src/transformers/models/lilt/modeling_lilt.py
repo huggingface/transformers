@@ -479,12 +479,10 @@ class LiltLayer(GradientCheckpointingLayer):
 
 
 class LiltEncoder(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertEncoder.__init__ with Bert->Lilt
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([LiltLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
+        self.layer = nn.ModuleList([LiltLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,

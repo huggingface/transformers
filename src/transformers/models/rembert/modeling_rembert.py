@@ -262,7 +262,7 @@ class RemBertAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.forward
+    # copied from transformers.models.bert.modeling_bert.BertAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -333,7 +333,7 @@ class RemBertLayer(GradientCheckpointingLayer):
         self.intermediate = RemBertIntermediate(config)
         self.output = RemBertOutput(config)
 
-    # Copied from transformers.models.bert.modeling_bert.BertLayer.forward
+    # copied from transformers.models.bert.modeling_bert.BertLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
