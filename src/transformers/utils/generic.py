@@ -318,6 +318,8 @@ class ModelOutput(OrderedDict):
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:
+                # reset first field to None
+                setattr(self, class_fields[0].name, None)
                 for idx, element in enumerate(iterator):
                     if not isinstance(element, (list, tuple)) or len(element) != 2 or not isinstance(element[0], str):
                         if idx == 0:
@@ -850,7 +852,7 @@ def check_model_inputs(func):
         }
 
         # We let cross attentions to be saved separately because some models add `cross-attn` layer
-        # when certain condtions are met. Let's output cross attention if attentions are requested (for BC)
+        # when certain conditions are met. Let's output cross attention if attentions are requested (for BC)
         if "output_attentions" in recordable_keys:
             recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
 
