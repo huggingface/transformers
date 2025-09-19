@@ -97,7 +97,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             ```python
             >>> from transformers import LlamaTokenizerFast
 
-            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=True, from_slow=True)
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=True, from_scratch=True)
             >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
             [1, 15043, 29871, 1, 869]
             ```
@@ -105,13 +105,16 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             ```python
             >>> from transformers import LlamaTokenizerFast
 
-            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False, from_slow=True)
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False, from_scratch=True)
             >>> tokenizer.encode("Hello <s>.")  # 29889 is '.'
             [1, 15043, 29871, 1, 29889]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
         add_prefix_space (`bool`, *optional*):
             Whether or not the tokenizer should automatically add a prefix space
+        from_scratch (`bool`, *optional*, defaults to `False`):
+            Whether to create an empty trainable tokenizer from scratch. When `True`, creates a minimal tokenizer
+            with only basic special tokens that can be trained on new data.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -130,53 +133,32 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_bos_token=True,
         add_eos_token=False,
         use_default_system_prompt=False,
-        legacy=None,
+        legacy=False,
         add_prefix_space=None,
         **kwargs,
     ):
-        if legacy is None:
-            logger.warning_once(
-                f"You are using the default legacy behaviour of the {self.__class__}. This is"
-                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
-                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
-                " means, and thoroughly read the reason why this was added as explained in"
-                " https://github.com/huggingface/transformers/pull/24565 - if you loaded a llama tokenizer from a GGUF file"
-                " you can ignore this message."
-            )
-            legacy = True
-        self.legacy = False
-        legacy = False
+        self.legacy = legacy
         
         # Set add_prefix_space attribute for use in override methods
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
 
-        # Handle from_slow parameter - when True, force SpmTokenizer path even if tokenizer.json exists
-        from_slow = kwargs.pop("from_slow", False)
+        # Handle from_scratch parameter - when True, create empty trainable tokenizer
+        from_scratch = kwargs.pop("from_scratch", False)
 
-        # Handle tokenizer creation
-        if tokenizer_file is not None and not from_slow:
-            # Load from existing tokenizer.json file (unless from_slow=True)
+        if tokenizer_file is not None and not from_scratch:
             from tokenizers import Tokenizer as TokenizerFast
             fast_tokenizer = TokenizerFast.from_file(tokenizer_file)
-        elif vocab_file is not None:
-            # Create LLaMA-specific tokenizer using SpmTokenizer
-            # This path is used when:
-            # 1. vocab_file is provided and no tokenizer_file
-            # 2. from_slow=True (forces SpmTokenizer path even if tokenizer.json exists)
+        else:
             spm_tokenizer = SpmTokenizer(
-                vocab_file=vocab_file,
                 handle_byte_fallback=True,
                 legacy=legacy,
                 add_prefix_space=add_prefix_space if add_prefix_space is not None else True,
                 vocab=self._vocab,
-                #unk_id=self._unk_id,
                 normalizer=self._normalizer,
                 pre_tokenizer=self._pre_tokenizer,
                 decoder=self._decoder,
             )
             fast_tokenizer = spm_tokenizer.create_tokenizer()
-        else:
-            raise ValueError("Either tokenizer_file or vocab_file must be provided")
 
         # Initialize the base class with the fast tokenizer
         super().__init__(
@@ -198,7 +180,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self.use_default_system_prompt = use_default_system_prompt
         self.vocab_file = vocab_file
 
-    def _vocab(self, proto):
+    def _vocab(self):
         """Vocabulary handling for this tokenizer."""
         # First 3 special pieces are fixed for LLaMA
         vocab = [
@@ -206,7 +188,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             ("<s>", 0.0),
             ("</s>", 0.0),
         ]
-        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
 
     def _decoder(self, replacement, add_prefix_space):

@@ -1334,7 +1334,6 @@ class SpmTokenizer:
     
     def __init__(
         self,
-        vocab_file: str,
         handle_byte_fallback: bool = True,
         legacy: bool = False,
         add_prefix_space: bool = True,
@@ -1346,9 +1345,6 @@ class SpmTokenizer:
         decoder: Optional[callable] = None,
         post_processor: Optional[callable] = None,
     ):
-        requires_backends(self, "protobuf")
-        
-        self.vocab_file = vocab_file
         self.handle_byte_fallback = handle_byte_fallback
         self.legacy = legacy
         self.add_prefix_space = add_prefix_space
@@ -1360,82 +1356,31 @@ class SpmTokenizer:
         self._pre_tokenizer_fn = pre_tokenizer
         self._decoder_fn = decoder
         self._post_processor_fn = post_processor
-        
-        # Load the protobuf model
-        model_pb2 = import_protobuf()
-        m = model_pb2.ModelProto()
-        with open(vocab_file, "rb") as f:
-            m.ParseFromString(f.read())
-        self.proto = m
 
-    def vocab(self, proto):
+    def vocab(self):
         if self._vocab_fn is not None:
-            return self._vocab_fn(proto)
-        return [(piece.piece, piece.score) for piece in proto.pieces]
+            return self._vocab_fn()
+        # Return empty vocab for training
+        return []
 
-    def unk_id(self, proto):
+    def unk_id(self):
         if self._unk_id_fn is not None:
-            return self._unk_id_fn(proto)
-        return proto.trainer_spec.unk_id
+            return self._unk_id_fn()
+        return 0  # Default unk_id
 
-    def tokenizer(self, proto):
-        model_type = proto.trainer_spec.model_type
-        vocab_scores = self.vocab(proto)
+    def tokenizer(self):
+        # Always create empty trainable tokenizer
+        minimal_vocab = [("<unk>", 0.0)]
+        return Tokenizer(Unigram(minimal_vocab, unk_id=self.unk_id(), byte_fallback=self.handle_byte_fallback))
 
-        if model_type == 1:
-            tokenizer = Tokenizer(
-                Unigram(
-                    vocab_scores,
-                    unk_id=self.unk_id(proto),
-                    byte_fallback=self.handle_byte_fallback,
-                )
-            )
-        elif model_type == 2:
-            _, merges = SentencePieceExtractor(self.vocab_file).extract(vocab_scores)
-            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
-            tokenizer = Tokenizer(
-                BPE(
-                    bpe_vocab,
-                    merges,
-                    unk_token=proto.trainer_spec.unk_piece,
-                    fuse_unk=True,
-                    byte_fallback=self.handle_byte_fallback,
-                    dropout=None,
-                )
-            )
-        else:
-            raise Exception(
-                "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
-            )
-
-        # Add special tokens
-        spm_added_tokens = [
-            (id, p.piece, p.type == 3 or p.piece in self.special_tokens)
-            for id, p in enumerate(proto.pieces)
-            if p.type in [3, 4]
-        ]
-        tokenizer.add_tokens(
-            [
-                AddedToken(token, normalized=False, special=special)
-                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
-            ]
-        )
-
-        return tokenizer
-
-    def normalizer(self, proto):
+    def normalizer(self):
         if self._normalizer_fn is not None:
-            return self._normalizer_fn(proto)
-        
-        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+            return self._normalizer_fn()
         _normalizers = [
             normalizers.Strip(left=False, right=True),
             normalizers.Replace(Regex(" {2,}"), "▁"),
         ]
-        if not precompiled_charsmap:
-            return normalizers.Sequence(_normalizers)
-        else:
-            return normalizers.Sequence([normalizers.Precompiled(precompiled_charsmap)] + _normalizers)
+        return normalizers.Sequence(_normalizers)
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         if self._pre_tokenizer_fn is not None:
@@ -1457,11 +1402,11 @@ class SpmTokenizer:
         return None
 
     def create_tokenizer(self) -> Tokenizer:
-        """Create and return the configured tokenizer."""
-        tokenizer = self.tokenizer(self.proto)
+        """Create and return the configured empty trainable tokenizer."""
+        tokenizer = self.tokenizer()
 
         # Tokenizer assemble
-        normalizer = self.normalizer(self.proto)
+        normalizer = self.normalizer()
         if normalizer is not None:
             tokenizer.normalizer = normalizer
 
@@ -1483,6 +1428,50 @@ class SpmTokenizer:
 ## NOTE: LLaMA-specific converter moved to `models/llama/tokenization_llama_fast.py`.
 ## The slow->fast conversion for LLaMA is now handled directly in the fast file.
 
+class LlamaConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def vocab(self, proto):
+        vocab = [
+            (self.original_tokenizer.convert_ids_to_tokens(0), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(1), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(2), 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def normalizer(self, proto):
+        if getattr(self.original_tokenizer, "legacy", True):
+            sequence = []
+            if getattr(self.original_tokenizer, "add_prefix_space", True):
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None  # non-legacy, no normalizer
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        if not getattr(self.original_tokenizer, "legacy", True):  # non-legacy, we need a replace
+            prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+            return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+        return None
+
+    def post_processor(self):
+        # the processor is defined in the LlamaTokenizerFast class.
+        return None
 
 class MarkupLMConverter(Converter):
     def converted(self) -> Tokenizer:
