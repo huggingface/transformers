@@ -2708,6 +2708,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             except Exception as e:
                 if attn_implementation == "flash_attention_2":
                     self._flash_attn_2_can_dispatch()  # will fail as fa2 is not available but raise the proper exception
+
+                # error properly out if a kernel was specifically requested
+                if isinstance(e, ImportError):
+                    raise e
+
                 logger.warning_once(
                     f"Could not find a kernel matching `{applicable_attn_implementation}` compatible with your device in the "
                     f"hub:\n{e}.\nUsing default attention implementation instead (sdpa if available, eager otherwise)."
