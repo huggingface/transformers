@@ -102,8 +102,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
+    cos = cos[position_ids].unsqueeze(unsqueeze_dim)
+    sin = sin[position_ids].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -448,6 +448,7 @@ class PhimoeSparseMoeBlock(nn.Module):
         self.ffn_dim = config.intermediate_size
         self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
+        self.router_jitter_noise = config.router_jitter_noise
         self.gate = PhimoeRouter(config)
         self.experts = PhimoeExperts(config)
 
@@ -462,7 +463,7 @@ class PhimoeSparseMoeBlock(nn.Module):
             training=self.training,
         )
         final_hidden_states = self.experts(
-            hidden_states.reshape(batch_size, sequence_length, hidden_dim), routing_weights, selected_experts
+            hidden_states.reshape(batch_size, sequence_length, hidden_dim), selected_experts, routing_weights
         )
         return final_hidden_states
 
