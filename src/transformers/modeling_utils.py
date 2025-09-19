@@ -5349,6 +5349,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # in the submodule
             key_renaming_mapping = {k: v[len(_prefix) :] for k, v in key_renaming_mapping.items()}
             checkpoint_keys = list(key_renaming_mapping.values())
+            unexpected_keys = [k[len(_prefix) :] if k.startswith(_prefix) else k for k in unexpected_keys]
             # We need to update the device map as well
             if device_map is not None:
                 device_map = {k[len(_prefix) :] if k.startswith(_prefix) else k: v for k, v in device_map.items()}
@@ -5356,7 +5357,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             task_specific_expected_keys = [s for s in model.state_dict() if not s.startswith(_prefix)]
             base_model_expected_keys = list(model_to_load.state_dict().keys())
             if any(
-                key in task_specific_expected_keys and key not in base_model_expected_keys for key in checkpoint_keys
+                key in task_specific_expected_keys and key not in base_model_expected_keys for key in unexpected_keys
             ):
                 raise ValueError(
                     "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
