@@ -47,7 +47,7 @@ from ..m2m_100.modeling_m2m_100 import (
 from ..musicgen.modeling_musicgen import MusicgenAttention, MusicgenDecoder
 from ..switch_transformers.modeling_switch_transformers import load_balancing_loss_func
 from .configuration_nllb_moe import NllbMoeConfig
-
+from ..bart.modeling_bart import eager_attention_forward 
 
 logger = logging.get_logger(__name__)
 
@@ -56,7 +56,6 @@ class NllbMoeScaledWordEmbedding(M2M100ScaledWordEmbedding):
     pass
 
 
-# Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding
 class NllbMoeSinusoidalPositionalEmbedding(M2M100SinusoidalPositionalEmbedding):
     pass
 
@@ -311,37 +310,6 @@ class NllbMoeSparseMLP(nn.Module):
 
         top_1_expert_index = torch.argmax(top_1_mask, dim=-1)
         return hidden_states, (router_probs, top_1_expert_index)
-
-
-# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
-    dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
-    **kwargs,
-):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
-
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
-
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 class NllbMoeAttention(MusicgenAttention):
