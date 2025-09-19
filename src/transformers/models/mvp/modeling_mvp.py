@@ -949,7 +949,6 @@ class MvpModel(MvpPreTrainedModel):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple, Seq2SeqModelOutput]:
         r"""
-
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1102,7 +1101,6 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
-
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1253,7 +1251,6 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Seq2SeqSequenceClassifierOutput]:
         r"""
-
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1415,7 +1412,6 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Seq2SeqQuestionAnsweringModelOutput]:
         r"""
-
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 

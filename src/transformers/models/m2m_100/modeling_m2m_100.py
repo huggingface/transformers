@@ -1279,7 +1279,6 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
-
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 

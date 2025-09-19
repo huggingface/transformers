@@ -1164,7 +1164,6 @@ class PegasusModel(PegasusPreTrainedModel):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple, Seq2SeqModelOutput]:
         r"""
-
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -1334,7 +1333,6 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
-
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 

@@ -1281,7 +1281,6 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[Seq2SeqLMOutput, tuple[torch.FloatTensor]]:
         r"""
-
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
