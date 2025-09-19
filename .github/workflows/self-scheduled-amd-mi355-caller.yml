@@ -16,11 +16,11 @@ on:
 jobs:
   model-ci:
     name: Model CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@devmi355
     with:
       job: run_models_gpu
       slack_report_channel: "#amd-hf-ci"
-      runner_scale_set: amd-mi355-ci
+      runner_group: hfc-amd-mi355
       docker: huggingface/testing-rocm7.0-preview
       ci_event: Scheduled CI (AMD) - mi355
       report_repo_id: hf-transformers-bot/transformers-ci-dummy
@@ -28,11 +28,11 @@ jobs:
 
   torch-pipeline:
     name: Torch pipeline CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@devmi355
     with:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#amd-hf-ci"
-      runner_scale_set: amd-mi355-ci
+      runner_group: hfc-amd-mi355
       docker: huggingface/testing-rocm7.0-preview
       ci_event: Scheduled CI (AMD) - mi355
       report_repo_id: hf-transformers-bot/transformers-ci-dummy
@@ -40,11 +40,11 @@ jobs:
 
   example-ci:
     name: Example CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@devmi355
     with:
       job: run_examples_gpu
       slack_report_channel: "#amd-hf-ci"
-      runner_scale_set: amd-mi355-ci
+      runner_group: hfc-amd-mi355
       docker: huggingface/testing-rocm7.0-preview
       ci_event: Scheduled CI (AMD) - mi355
       report_repo_id: hf-transformers-bot/transformers-ci-dummy
@@ -52,11 +52,11 @@ jobs:
 
   deepspeed-ci:
     name: DeepSpeed CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
-    with:
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@devmi355
+    with:  
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#amd-hf-ci"
-      runner_scale_set: amd-mi355-ci
+      runner_group: hfc-amd-mi355
       docker: huggingface/testing-rocm7.0-preview
       ci_event: Scheduled CI (AMD) - mi355
       report_repo_id: hf-transformers-bot/transformers-ci-dummy
