@@ -23,6 +23,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import TransformersKwargs, logging
@@ -32,6 +33,8 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
 )
 from ..llama.tokenization_llama import LlamaTokenizer
 
@@ -359,6 +362,19 @@ class GemmaMLP(LlamaMLP):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+
+
+class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+
+class GemmaPreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        if "RMSNorm" in module.__class__.__name__:
+            module.weight.data.zero_()
 
 
 class GemmaModel(LlamaModel):
