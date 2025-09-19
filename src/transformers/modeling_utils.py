@@ -5299,11 +5299,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Find missing and unexpected keys from the state dict
         missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
-            model,
-            original_checkpoint_keys,
-            checkpoint_keys,
-            loading_base_model_from_task_state_dict,
-            hf_quantizer,
+            model, original_checkpoint_keys, checkpoint_keys, loading_base_model_from_task_state_dict, hf_quantizer
         )
         # Find all the keys with shape mismatch (if we ignore the mismatch, the weights need to be newly initialized the
         # same way as missing keys)
@@ -5321,7 +5317,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         key_renaming_mapping = {
             k: v for k, v in key_renaming_mapping.items() if v not in mismatched_keys and v not in unexpected_keys
         }
-
         checkpoint_keys = list(key_renaming_mapping.values())
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
