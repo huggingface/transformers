@@ -47,15 +47,11 @@ from .utils import (
     copy_func,
     download_url,
     extract_commit_hash,
-    is_flax_available,
-    is_jax_tensor,
     is_mlx_available,
     is_numpy_array,
     is_offline_mode,
     is_protobuf_available,
     is_remote_url,
-    is_tf_available,
-    is_tf_tensor,
     is_tokenizers_available,
     is_torch_available,
     is_torch_device,
@@ -72,10 +68,6 @@ from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
-    if is_tf_available():
-        import tensorflow as tf
-    if is_flax_available():
-        import jax.numpy as jnp  # noqa: F401
 
 
 def import_protobuf_decode_error(error_message=""):
@@ -214,13 +206,13 @@ class BatchEncoding(UserDict):
             space to token space the `tokenizers.Encoding` instance or list of instance (for batches) hold this
             information.
         tensor_type (`Union[None, str, TensorType]`, *optional*):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
         prepend_batch_axis (`bool`, *optional*, defaults to `False`):
             Whether or not to add a batch axis when converting to tensors (see `tensor_type` above). Note that this
             parameter has an effect if the parameter `tensor_type` is set, *otherwise has no effect*.
         n_sequences (`Optional[int]`, *optional*):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
     """
 
@@ -714,22 +706,7 @@ class BatchEncoding(UserDict):
         if not isinstance(tensor_type, TensorType):
             tensor_type = TensorType(tensor_type)
 
-        # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW:
-            if not is_tf_available():
-                raise ImportError(
-                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
-                )
-            import tensorflow as tf
-
-            def as_tensor(value, dtype=None):
-                if len(flatten(value)) == 0 and dtype is None:
-                    dtype = tf.int32
-                return tf.constant(value, dtype=dtype)
-
-            is_tensor = tf.is_tensor
-
-        elif tensor_type == TensorType.PYTORCH:
+        if tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
@@ -742,18 +719,6 @@ class BatchEncoding(UserDict):
                 return torch.tensor(value, dtype=dtype)
 
             is_tensor = torch.is_tensor
-
-        elif tensor_type == TensorType.JAX:
-            if not is_flax_available():
-                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
-            import jax.numpy as jnp  # noqa: F811
-
-            def as_tensor(value, dtype=None):
-                if len(flatten(value)) == 0 and dtype is None:
-                    dtype = jnp.int32
-                return jnp.array(value, dtype=dtype)
-
-            is_tensor = is_jax_tensor
 
         elif tensor_type == TensorType.MLX:
             if not is_mlx_available():
@@ -1269,7 +1234,6 @@ ENCODE_KWARGS_DOCSTRING = r"""
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
 """
@@ -1614,10 +1578,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
                 values are:
-                - `'tf'`: Return TensorFlow `tf.Tensor` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
             return_dict (`bool`, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             tokenizer_kwargs (`dict[str: Any]`, *optional*): Additional kwargs to pass to the tokenizer.
@@ -2042,6 +2004,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             local_files_only=local_files_only,
                             revision=revision,
                             cache_dir=cache_dir,
+                            token=token,
                         ):
                             template = template.removesuffix(".jinja")
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
@@ -2699,7 +2662,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """,
         """
         Returns:
-            `list[int]`, `torch.Tensor`, `tf.Tensor` or `np.ndarray`: The tokenized ids of the text.
+            `list[int]`, `torch.Tensor`, or `np.ndarray`: The tokenized ids of the text.
         """,
     )
     def encode(
@@ -2923,11 +2886,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             "verbose": verbose,
         }
 
-        if return_tensors in ("tf", "jax"):
-            logger.warning_once(
-                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
-                "recommend migrating to PyTorch classes or pinning your version of Transformers."
-            )
         all_kwargs.update(kwargs)
         if text is None and text_target is None:
             raise ValueError("You need to specify either `text` or `text_target`.")
@@ -3307,7 +3265,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         <Tip>
 
-        If the `encoded_inputs` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+        If the `encoded_inputs` passed are dictionary of numpy arrays, or PyTorch tensors, the
         result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
         PyTorch tensors, you will lose the specific device of your tensors however.
 
@@ -3320,7 +3278,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 list[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
                 collate function.
 
-                Instead of `list[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors), see
+                Instead of `list[int]` you can have tensors (numpy arrays, or PyTorch tensors), see
                 the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
@@ -3350,7 +3308,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             verbose (`bool`, *optional*, defaults to `True`):
@@ -3384,7 +3341,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
 
-        # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
+        # If we have PyTorch/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
@@ -3397,16 +3354,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     break
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
-            if is_tf_tensor(first_element):
-                return_tensors = "tf" if return_tensors is None else return_tensors
-            elif is_torch_tensor(first_element):
+            if is_torch_tensor(first_element):
                 return_tensors = "pt" if return_tensors is None else return_tensors
             elif isinstance(first_element, np.ndarray):
                 return_tensors = "np" if return_tensors is None else return_tensors
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
-                    "Should be one of a python, numpy, pytorch or tensorflow object."
+                    "Should be one of a python, numpy, or pytorch object."
                 )
 
             for key, value in encoded_inputs.items():
@@ -3860,7 +3815,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def batch_decode(
         self,
-        sequences: Union[list[int], list[list[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        sequences: Union[list[int], list[list[int]], "np.ndarray", "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -3869,7 +3824,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
-            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
+            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
@@ -3894,7 +3849,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def decode(
         self,
-        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -3906,7 +3861,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
@@ -4104,7 +4059,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `True`):

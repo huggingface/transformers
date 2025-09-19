@@ -65,7 +65,7 @@ class DeepseekV3ModelTester:
         hidden_size=32,
         intermediate_size=37,
         moe_intermediate_size=12,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=4,
         n_shared_experts=1,

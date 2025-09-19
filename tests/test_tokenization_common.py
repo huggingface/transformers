@@ -42,9 +42,7 @@ from transformers import (
     SpecialTokensMixin,
     Trainer,
     TrainingArguments,
-    is_flax_available,
     is_mlx_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -67,7 +65,7 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from transformers import PretrainedConfig, PreTrainedModel, TFPreTrainedModel
+    from transformers import PretrainedConfig, PreTrainedModel
 
 
 def use_cache_if_possible(func):
@@ -122,11 +120,11 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 
 def merge_model_tokenizer_mappings(
-    model_mapping: dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    model_mapping: dict["PretrainedConfig", "PreTrainedModel"],
     tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
 ) -> dict[
     Union["PreTrainedTokenizer", "PreTrainedTokenizerFast"],
-    tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tuple["PretrainedConfig", "PreTrainedModel"],
 ]:
     configurations = list(model_mapping.keys())
     model_tokenizer_mapping = OrderedDict([])
@@ -4703,18 +4701,6 @@ class TokenizerTesterMixin:
             tokenizer_return_type.append("np")
             output_tensor_type.append(np.int64)
 
-        if is_tf_available():
-            import tensorflow as tf
-
-            tokenizer_return_type.append("tf")
-            output_tensor_type.append(tf.int32)
-
-        if is_flax_available():
-            import jax.numpy as jnp
-
-            tokenizer_return_type.append("jax")
-            output_tensor_type.append(jnp.int32)
-
         if is_mlx_available():
             import mlx.core as mx
 
@@ -4722,7 +4708,7 @@ class TokenizerTesterMixin:
             output_tensor_type.append(mx.int32)
 
         if len(tokenizer_return_type) == 0:
-            self.skipTest(reason="No expected framework from PT, TF, JAX or MLX found")
+            self.skipTest(reason="No expected framework from PT, or MLX found")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
