@@ -153,9 +153,8 @@ class VideoClassificationPipeline(Pipeline):
         video = read_video_pyav(container, indices)
         video = list(video)
 
-        model_inputs = self.image_processor(video, return_tensors=self.framework)
-        if self.framework == "pt":
-            model_inputs = model_inputs.to(self.dtype)
+        model_inputs = self.image_processor(video, return_tensors="pt")
+        model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -166,16 +165,13 @@ class VideoClassificationPipeline(Pipeline):
         if top_k > self.model.config.num_labels:
             top_k = self.model.config.num_labels
 
-        if self.framework == "pt":
-            if function_to_apply == "softmax":
-                probs = model_outputs.logits[0].softmax(-1)
-            elif function_to_apply == "sigmoid":
-                probs = model_outputs.logits[0].sigmoid()
-            else:
-                probs = model_outputs.logits[0]
-            scores, ids = probs.topk(top_k)
+        if function_to_apply == "softmax":
+            probs = model_outputs.logits[0].softmax(-1)
+        elif function_to_apply == "sigmoid":
+            probs = model_outputs.logits[0].sigmoid()
         else:
-            raise ValueError(f"Unsupported framework: {self.framework}")
+            probs = model_outputs.logits[0]
+        scores, ids = probs.topk(top_k)
 
         scores = scores.tolist()
         ids = ids.tolist()

@@ -71,18 +71,5 @@ CvT を始めるのに役立つ公式 Hugging Face およびコミュニティ (
     - forward
 
 </pt>
-<tf>
-
-## TFCvtModel
-
-[[autodoc]] TFCvtModel
-    - call
-
-## TFCvtForImageClassification
-
-[[autodoc]] TFCvtForImageClassification
-    - call
-
-</tf>
 </frameworkcontent>
 

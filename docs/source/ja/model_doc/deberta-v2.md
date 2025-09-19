@@ -124,44 +124,6 @@ v2 の新機能:
     - forward
 
 </pt>
-<tf>
-
-## TFDebertaV2Model
-
-[[autodoc]] TFDebertaV2Model
-    - call
-
-## TFDebertaV2PreTrainedModel
-
-[[autodoc]] TFDebertaV2PreTrainedModel
-    - call
-
-## TFDebertaV2ForMaskedLM
-
-[[autodoc]] TFDebertaV2ForMaskedLM
-    - call
-
-## TFDebertaV2ForSequenceClassification
-
-[[autodoc]] TFDebertaV2ForSequenceClassification
-    - call
-
-## TFDebertaV2ForTokenClassification
-
-[[autodoc]] TFDebertaV2ForTokenClassification
-    - call
-
-## TFDebertaV2ForQuestionAnswering
-
-[[autodoc]] TFDebertaV2ForQuestionAnswering
-    - call
-
-## TFDebertaV2ForMultipleChoice
-
-[[autodoc]] TFDebertaV2ForMultipleChoice
-    - call
-
-</tf>
 </frameworkcontent>
 
 

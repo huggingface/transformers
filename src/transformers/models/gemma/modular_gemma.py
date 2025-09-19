@@ -23,6 +23,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import TransformersKwargs, logging
@@ -32,6 +33,8 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
 )
 from ..llama.tokenization_llama import LlamaTokenizer
 
@@ -79,9 +82,6 @@ class GemmaConfig(PretrainedConfig):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The legacy activation function. It is overwritten by the `hidden_activation`.
-        hidden_activation (`str` or `function`, *optional*):
-            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
-            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -142,7 +142,6 @@ class GemmaConfig(PretrainedConfig):
         num_key_value_heads=16,
         head_dim=256,
         hidden_act="gelu_pytorch_tanh",
-        hidden_activation=None,
         max_position_embeddings=8192,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
@@ -165,7 +164,6 @@ class GemmaConfig(PretrainedConfig):
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
-        self.hidden_activation = hidden_activation
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
@@ -364,6 +362,19 @@ class GemmaMLP(LlamaMLP):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+
+
+class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+
+class GemmaPreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        if "RMSNorm" in module.__class__.__name__:
+            module.weight.data.zero_()
 
 
 class GemmaModel(LlamaModel):

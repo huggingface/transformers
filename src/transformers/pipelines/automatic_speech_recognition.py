@@ -134,9 +134,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model ([`PreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
+            [`PreTrainedModel`].
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
         tokenizer ([`PreTrainedTokenizer`]):
@@ -168,11 +168,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             </Tip>
 
-        framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
-            installed. If no framework is specified, will default to the one currently installed. If no framework is
-            specified and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
-            no model is provided.
         device (Union[`int`, `torch.device`], *optional*):
             Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
             model on the associated CUDA device id.
@@ -592,7 +587,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
         stride = None
         for outputs in model_outputs:
-            if self.framework == "pt" and outputs[key].dtype in (torch.bfloat16, torch.float16):
+            if outputs[key].dtype in (torch.bfloat16, torch.float16):
                 items = outputs[key].to(torch.float32).numpy()
             else:
                 items = outputs[key].numpy()

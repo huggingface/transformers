@@ -30,7 +30,6 @@ from .configuration_colqwen2 import ColQwen2Config
 if is_torch_available():
     import torch
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -121,10 +120,8 @@ class ColQwen2Processor(ColPaliProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -336,9 +333,6 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        if pixel_values is not None:
-            pixel_values = pixel_values.to(dtype=self.dtype)  # (batch_size, max_num_patches, pixel_values)
-
         # Handle the custom "pixel_values" input obtained with `ColQwen2Processor` through unpadding
         if pixel_values is not None and image_grid_thw is not None:
             # NOTE: image_grid_thw: (batch_size, 3) where image_grid_thw[i] = (num_patches_h, num_patches_w, temporal_patch_size)
@@ -375,9 +369,6 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(inputs_embeds.device)
-
         vlm_output = self.vlm.model(
             input_ids=None,
             position_ids=position_ids,
@@ -394,7 +385,8 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
-        embeddings = self.embedding_proj_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
+        proj_dtype = self.embedding_proj_layer.weight.dtype
+        embeddings = self.embedding_proj_layer(last_hidden_states.to(proj_dtype))  # (batch_size, sequence_length, dim)
 
         # L2 normalization
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)

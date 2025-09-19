@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -155,8 +154,6 @@ class MegaRotaryRelativePositionalBias(nn.Module):
         self.sine, self.cosine = MegaRotaryRelativePositionalBias.get_sinusoid_embeddings(
             config.max_positions, self.embed_dim
         )
-        # alpha and beta parameters for the rotary bias; beta renamed to b_param to avoid clashes with tf/flax weight handling
-        # in loading pretrained weights
         self.alpha = nn.Parameter(torch.Tensor(1, self.embed_dim))
         self.b_param = nn.Parameter(torch.Tensor(1, self.embed_dim))
         self.register_buffer("_float_tensor", torch.FloatTensor([0.0]))

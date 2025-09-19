@@ -16,13 +16,13 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any
 
 from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
-from ...utils import TensorType, is_torch_available, logging
+from ...utils import is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -230,16 +230,21 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         encoder_inputs = self._generate_dummy_inputs_for_encoder_and_decoder(
-            tokenizer, batch_size, seq_length, is_pair, framework
+            tokenizer,
+            batch_size,
+            seq_length,
+            is_pair,
         )
 
         # Generate decoder inputs
         decoder_seq_length = seq_length if not self.use_past else 1
         decoder_inputs = self._generate_dummy_inputs_for_encoder_and_decoder(
-            tokenizer, batch_size, decoder_seq_length, is_pair, framework
+            tokenizer,
+            batch_size,
+            decoder_seq_length,
+            is_pair,
         )
         decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
         common_inputs = dict(**encoder_inputs, **decoder_inputs)
@@ -298,10 +303,12 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         common_inputs = self._generate_dummy_inputs_for_encoder_and_decoder(
-            tokenizer, batch_size, seq_length, is_pair, framework
+            tokenizer,
+            batch_size,
+            seq_length,
+            is_pair,
         )
 
         if self.use_past:
@@ -338,7 +345,6 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         # Copied from OnnxConfig.generate_dummy_inputs
         # Did not use super(OnnxConfigWithPast, self).generate_dummy_inputs for code clarity.
@@ -355,7 +361,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
         # Generate dummy inputs according to compute batch and sequence
         dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
-        common_inputs = dict(tokenizer(dummy_input, return_tensors=framework))
+        common_inputs = dict(tokenizer(dummy_input, return_tensors="pt"))
         return common_inputs
 
     def generate_dummy_inputs(
@@ -364,16 +370,21 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         if self.task in ["default", "seq2seq-lm"]:
             common_inputs = self._generate_dummy_inputs_for_default_and_seq2seq_lm(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+                tokenizer,
+                batch_size=batch_size,
+                seq_length=seq_length,
+                is_pair=is_pair,
             )
 
         else:
             common_inputs = self._generate_dummy_inputs_for_causal_lm(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+                tokenizer,
+                batch_size=batch_size,
+                seq_length=seq_length,
+                is_pair=is_pair,
             )
 
         return common_inputs

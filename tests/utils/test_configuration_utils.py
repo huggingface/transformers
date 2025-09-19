@@ -39,8 +39,6 @@ config_common_kwargs = {
     "output_attentions": True,
     "torchscript": True,
     "dtype": "float16",
-    "use_bfloat16": True,
-    "tf_legacy_loss": True,
     "pruned_heads": {"a": 1},
     "tie_word_embeddings": False,
     "is_decoder": True,
