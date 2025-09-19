@@ -292,7 +292,7 @@ class TapasAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.forward
+    # Copied from transformers.models.rembert.modeling_rembert.RemBertAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -363,7 +363,7 @@ class TapasLayer(GradientCheckpointingLayer):
         self.intermediate = TapasIntermediate(config)
         self.output = TapasOutput(config)
 
-    # Copied from transformers.models.bert.modeling_bert.BertLayer.forward
+    # Copied from transformers.models.rembert.modeling_rembert.RemBertLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,

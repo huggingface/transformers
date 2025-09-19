@@ -616,7 +616,7 @@ class ModelTesterMixin:
                 for k, v in inputs_dict.items()
             }
         elif model_class.__name__ in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES):
-            inputs_dict.pop("attention_mask")
+            inputs_dict.pop("attention_mask", None)
         elif model_class.__name__ == MODEL_FOR_PRETRAINING_MAPPING_NAMES["hiera"]:
             config = self.model_tester.get_config()
             mask_spatial_shape = [
@@ -1757,6 +1757,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
@@ -1791,6 +1792,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
@@ -1829,6 +1831,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
 
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
@@ -1865,6 +1868,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
 
             heads_to_prune = {1: [1, 2]}
             config.pruned_heads = heads_to_prune
@@ -3398,7 +3402,9 @@ class ModelTesterMixin:
                 f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
             )
 
-    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
         This test is only for inference and runs with `dtype=torch.bfloat16`.
@@ -3476,6 +3482,16 @@ class ModelTesterMixin:
                     if model.config.is_encoder_decoder:
                         second_inputs["decoder_attention_mask"] = dummy_attention_mask
 
+                # Use prepare for class to account for special attributes (e.g. in QnA models)
+                first_inputs = self._prepare_for_class(first_inputs, model_class)
+                first_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in first_inputs.items()
+                }
+                second_inputs = self._prepare_for_class(second_inputs, model_class)
+                second_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in second_inputs.items()
+                }
+
                 model = model_class.from_pretrained(
                     tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
                 )
@@ -3523,14 +3539,14 @@ class ModelTesterMixin:
                 )
 
                 # Check the results
-                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=4e-2, rtol=4e-2)
+                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
                 if padding_side == "left":
-                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=4e-2, rtol=4e-2)
+                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
                     # Check it can run in training mode
                     model.train()
                     _ = model(**second_inputs)
                 else:
-                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=4e-2, rtol=4e-2)
+                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
 
         # In this case, the test should appear as skipped, not successful
         if not _has_run_at_least_one_model:
