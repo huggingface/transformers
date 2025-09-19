@@ -99,6 +99,9 @@ PRIVATE_MODELS = [
     "Glm4vVisionModel",
     "Glm4vMoeVisionModel",
     "EvollaSaProtPreTrainedModel",
+    "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
+    "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
+    "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "Ovis2VisionModel",
 ]
 
@@ -180,6 +183,10 @@ IGNORE_NON_TESTED = (
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "BltPatcher",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
+        "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
+        "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
+        "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
     ]
 )
@@ -402,6 +409,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CsmDepthDecoderModel",  # Building part of a bigger model
     "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
     "CsmForConditionalGeneration",  # Building part of a bigger model
+    "BltPatcher",  # Building part of a bigger model, tested implicitly through BltForCausalLM
     "Florence2VisionBackbone",  # Building part of a bigger model
 ]
 
@@ -1147,6 +1155,9 @@ def ignore_undocumented(name: str) -> bool:
         return True
     # MMBT model does not really work.
     if name.startswith("MMBT"):
+        return True
+    # BLT models are internal building blocks, tested implicitly through BltForCausalLM
+    if name.startswith("Blt"):
         return True
     if name in SHOULD_HAVE_THEIR_OWN_PAGE:
         return True
