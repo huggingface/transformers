@@ -1108,10 +1108,18 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        logits = self.lm_head(hidden_states)
 
+        if logits_to_keep is not None:
+            # Mask all logits except those in logits_to_keep
+            if isinstance(logits_to_keep, int):
+                topk = torch.topk(logits, logits_to_keep, dim=-1)
+                indices = topk.indices
+            else:
+                indices = logits_to_keep
+            mask = torch.full_like(logits, float('-inf'))
+            mask.scatter_(-1, indices, logits.gather(-1, indices))
+            logits = mask
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
