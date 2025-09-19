@@ -28,7 +28,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import ids_tensor
+from ...test_modeling_common import floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -59,18 +59,20 @@ class GPT2ModelTester(CausalLMModelTester):
         parent,
         use_token_type_ids=True,
         num_choices=4,
+        **kwargs,
     ):
-        super().__init__(parent, use_token_type_ids=use_token_type_ids)
+        super().__init__(parent, use_token_type_ids=use_token_type_ids, **kwargs)
         self.num_choices = num_choices
 
     def prepare_config_and_inputs(
-        self, full_inputs=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+        self, extra_inputs=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
+        # Overwritten: `GPT2DoubleHeadsModel` uses extra inputs
         (config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels) = (
             super().prepare_config_and_inputs()
         )
 
-        if full_inputs:
+        if extra_inputs:
             mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
             head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
             config_and_inputs = (
@@ -103,16 +105,48 @@ class GPT2ModelTester(CausalLMModelTester):
         return config_and_inputs
 
     def get_config(self, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False):
+        # Overwritten: `GPT2Config` has extra flags and we want to test them
         config = super().get_config()
         config.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         config.reorder_and_upcast_attn = reorder_and_upcast_attn
         return config
 
     def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs(full_inputs=True)
+        # Overwritten: we want `token_type_ids` as part of the common inputs
+        config_and_inputs = self.prepare_config_and_inputs(extra_inputs=True)
         config, input_ids, _, head_mask, token_type_ids, _, _, _, _ = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
         return config, inputs_dict
+
+    def prepare_config_and_inputs_for_decoder(self):
+        # Extra function: used in `encoder_decoder` tests
+        (
+            config,
+            input_ids,
+            input_mask,
+            head_mask,
+            token_type_ids,
+            _,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.prepare_config_and_inputs(extra_inputs=True)
+
+        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        return (
+            config,
+            input_ids,
+            input_mask,
+            head_mask,
+            token_type_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        )
 
 
 @require_torch
@@ -172,7 +206,7 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_gpt2_double_lm_head_model(self):
         # extra test: model-specific class
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(full_inputs=True)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(extra_inputs=True)
         config, input_ids, input_mask, _, token_type_ids, mc_token_ids, _, _, _ = config_and_inputs
         model = GPT2DoubleHeadsModel(config)
         model.to(torch_device)
