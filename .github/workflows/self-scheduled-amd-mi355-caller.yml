@@ -4,6 +4,7 @@ name: Self-hosted runner scale set (AMD mi355 scheduled CI caller)
 # For example, 1gpu : amd-mi355-ci-1gpu
 #              2gpu : amd-mi355-ci-2gpu
 
+
 on:
   workflow_run:
     workflows: ["Self-hosted runner (AMD scheduled CI caller)"]
