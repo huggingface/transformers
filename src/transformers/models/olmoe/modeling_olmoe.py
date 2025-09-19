@@ -19,14 +19,13 @@
 from typing import Callable, Optional, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -267,44 +266,62 @@ class OlmoeAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class OlmoeNaiveMoe(nn.ModuleList):
-    def __init__(self, config):
+class OlmoeMlp(nn.Module):
+    def __init__(self, config: OlmoeConfig):
         super().__init__()
-        for _ in range(config.num_experts):
-            self.append(OlmoeMLP(config))
-        self.num_experts = config.num_experts
+        self.ffn_dim = config.intermediate_size
+        self.hidden_dim = config.hidden_size
+
+        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
+        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states):
+        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
+        current_hidden_states = self.w2(current_hidden_states)
+        return current_hidden_states
+
+
+class OlmoeNaiveMoe(nn.ModuleList):
+    """
+    ModuleList of experts.
+    """
+
+    def __init__(self, config: OlmoeConfig):
+        super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
+        self.num_experts = config.num_local_experts
+        for _ in range(self.num_experts):
+            self.append(OlmoeMlp(config))
 
-    def forward(self, hidden_states, router_logits):
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
         if self.norm_topk_prob:
-            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        # we cast back to the input dtype
-        routing_weights = routing_weights.to(hidden_states.dtype)
+            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
+        return top_k_index, top_k_weights
 
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
+    def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            hidden_states: (batch_size * sequence_length, hidden_dim)
+            selected_experts: (batch_size * sequence_length, top_k)
+            routing_weights: (batch_size * sequence_length, top_k)
+        Returns:
+            (batch_size * sequence_length, hidden_dim)
+        """
+        final_hidden_states = torch.zeros_like(hidden_states)
+        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be selected
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
-        # Loop over all available experts in the model and perform the computation on each expert
-        for expert_idx in range(self.num_experts):
-            expert_layer = self[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx])
-
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
+            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
@@ -325,7 +342,7 @@ class OlmoeSparseMoeBlock(nn.Module):
         final_hidden_states = self.experts(hidden_states, router_logits).reshape(
             batch_size, sequence_length, hidden_dim
         )
-        return final_hidden_states, router_logits
+        return final_hidden_states
 
 
 class OlmoeDecoderLayer(GradientCheckpointingLayer):
@@ -356,7 +373,7 @@ class OlmoeDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -434,13 +451,6 @@ class OlmoeModel(OlmoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -448,8 +458,9 @@ class OlmoeModel(OlmoePreTrainedModel):
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-
-        causal_mask = create_causal_mask(
+        # FIXEM: SHOULD NOT HAVE SLIDING
+        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
+        causal_mask = mask_function(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
