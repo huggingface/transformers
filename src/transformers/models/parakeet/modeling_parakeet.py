@@ -578,11 +578,12 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
         elif activation == 'tanh':
             activation = torch.nn.Tanh()
 
-        self.layers = torch.nn.Sequential(
+        layers = (
             [activation]
             + ([torch.nn.Dropout(p=dropout)] if dropout else [])
             + [torch.nn.Linear(config.joint_hidden, num_classes)]
         )
+        self.layers = torch.nn.Sequential(*layers)
 
         self.post_init()
 
@@ -1067,12 +1068,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 )
 
         return None
-#        return CausalLMOutput(
-#            loss=loss,
-#            logits=logits,
-#            hidden_states=encoder_outputs.hidden_states,
-#            attentions=encoder_outputs.attentions,
-#        )
 
     def generate(
         self,
@@ -1083,14 +1078,10 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         encoder_outputs = self.encoder(
             input_features=input_features,
-#            attention_mask=attention_mask,
             **kwargs,
         )
 
         output = self.greedy_decode(encoder_outputs.last_hidden_state)
-
-        # greedy decoding
-#        sequences = output.logits.argmax(dim=-1)
 
         # mask out padded tokens
         if attention_mask is not None:
