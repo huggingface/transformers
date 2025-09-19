@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import unittest
 
 import pytest
 
-from transformers import DynamicCache, GPT2Config, is_torch_available
+from transformers import GPT2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -28,11 +27,9 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
-from ...test_pipeline_mixin import PipelineTesterMixin
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
@@ -56,42 +53,63 @@ class GPT2ModelTester(CausalLMModelTester):
         causal_lm_class = GPT2LMHeadModel
         sequence_class = GPT2ForSequenceClassification
         token_class = GPT2ForTokenClassification
+        question_answering_class = GPT2ForQuestionAnswering
 
-    def create_and_check_cached_forward_with_and_without_attention_mask(self, config, input_ids, *args):
-        # Relevant issue: https://github.com/huggingface/transformers/issues/31943
-        model = GPT2Model(config)
-        model.to(torch_device)
-        model.eval()
+    def __init__(
+        self,
+        use_token_type_ids=True,
+        num_choices=4,
+    ):
+        super().__init__(self, use_token_type_ids=use_token_type_ids)
+        self.num_choices = num_choices
 
-        # We want this for SDPA, eager works with a `None` attention mask
-        assert model.config._attn_implementation == "sdpa", (
-            "This test assumes the model to have the SDPA implementation for its attention calculations."
+    def prepare_config_and_inputs(
+        self,
+        full_inputs = False,
+        gradient_checkpointing=False,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False
+    ):
+        (config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels) = (
+            super().prepare_config_and_inputs()
         )
 
-        # Prepare cache and non_cache input, needs a full attention mask
-        cached_len = input_ids.shape[-1] // 2
-        input_mask = torch.ones(size=input_ids.size()).to(torch_device)
-        cache_inputs = {"input_ids": input_ids[:, :cached_len], "attention_mask": input_mask[:, :cached_len]}
-        non_cache_inputs = {"input_ids": input_ids[:, cached_len:], "attention_mask": input_mask}
+        if full_inputs:
+            mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
+            head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
+            config_and_inputs = (
+                config,
+                input_ids,
+                input_mask,
+                head_mask,
+                token_type_ids,
+                mc_token_ids,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            )
+        else:
+            config_and_inputs = (
+                config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            )
 
-        # Cached forward once with the attention mask provided and the other time without it (which should assume full attention)
-        cache_outputs = model(**cache_inputs)
-        # Caches are mutable (unlike legacy tuples), so we need to copy them before using multiple times
-        pkv_copy = DynamicCache(config=config)
-        pkv_copy.update(
-            cache_outputs.past_key_values.layers[0].keys, cache_outputs.past_key_values.layers[0].values, 0
+        config = self.get_config(
+            gradient_checkpointing=gradient_checkpointing,
+            scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
+            reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
-        pkv_copy.update(
-            cache_outputs.past_key_values.layers[1].keys, cache_outputs.past_key_values.layers[1].values, 1
-        )
-        full_outputs_with_attention_mask = model(**non_cache_inputs, past_key_values=pkv_copy).last_hidden_state
-        full_outputs_without_attention_mask = model(
-            non_cache_inputs["input_ids"], past_key_values=cache_outputs.past_key_values
-        ).last_hidden_state
 
-        self.parent.assertTrue(
-            torch.allclose(full_outputs_with_attention_mask, full_outputs_without_attention_mask, atol=1e-5)
-        )
+        return config_and_inputs
+
+    def get_config(
+        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+    ):
+        config = super().get_config()
+        config.gradient_checkpointing = gradient_checkpointing
+        config.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
+        config.reorder_and_upcast_attn = reorder_and_upcast_attn
+        return config
+
 
 # class GPT2ModelTester:
 #     def __init__(
@@ -583,53 +601,39 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
                 )
         return inputs_dict
 
-    def setUp(self):
-        self.model_tester = GPT2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPT2Config, n_embd=37)
-
-    def tearDown(self):
-        super().tearDown()
-        # clean-up as much as possible GPU memory occupied by PyTorch
-        cleanup(torch_device)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_gpt2_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_model(*config_and_inputs)
-
-    def test_gpt2_model_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_model_past(*config_and_inputs)
-
-    def test_gpt2_model_att_mask_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_model_attention_mask_past(*config_and_inputs)
-
-    def test_gpt2_model_past_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_model_past_large_inputs(*config_and_inputs)
-
-    def test_gpt2_lm_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
-
     def test_gpt2_double_lm_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_double_lm_head_model(*config_and_inputs)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(full_inputs=True)
+        config, input_ids, input_mask, _, token_type_ids, mc_token_ids, _, _, _ = config_and_inputs
+        model = GPT2DoubleHeadsModel(config)
+        model.to(torch_device)
+        model.eval()
 
-    def test_gpt2_question_answering_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_for_question_answering(*config_and_inputs)
+        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+        multiple_choice_token_type_ids = (
+            token_type_ids.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+        )
 
-    def test_gpt2_sequence_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
+        inputs = {
+            "input_ids": multiple_choice_inputs_ids,
+            "mc_token_ids": mc_token_ids,
+            "attention_mask": multiple_choice_input_mask,
+            "token_type_ids": multiple_choice_token_type_ids,
+            "labels": multiple_choice_inputs_ids,
+        }
 
-    def test_gpt2_token_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_for_token_classification(*config_and_inputs)
+        result = model(**inputs)
+        self.assertEqual(result.loss.shape, ())
+        self.assertEqual(
+            result.logits.shape,
+            (
+                self.model_tester.batch_size,
+                self.model_tester.num_choices,
+                self.model_tester.seq_length,
+                self.model_tester.vocab_size,
+            ),
+        )
+        self.assertEqual(result.mc_logits.shape, (self.model_tester.batch_size, self.model_tester.num_choices))
 
     def test_gpt2_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -646,10 +650,6 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_gpt2_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_weight_initialization(*config_and_inputs)
-
-    def test_cached_forward_with_and_without_attention_mask(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_cached_forward_with_and_without_attention_mask(*config_and_inputs)
 
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
