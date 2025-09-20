@@ -1601,7 +1601,7 @@ class TrainingArguments:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
         if is_torch_available():
             if self.bf16 or self.bf16_full_eval:
-                if self.use_cpu and not is_torch_available() and not is_torch_xla_available():
+                if self.use_cpu and not is_torch_xla_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.use_cpu:
