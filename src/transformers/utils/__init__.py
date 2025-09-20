@@ -165,6 +165,7 @@ from .import_utils import (
     is_in_notebook,
     is_ipex_available,
     is_jinja_available,
+    is_jmespath_available,
     is_jumanpp_available,
     is_kenlm_available,
     is_kernels_available,

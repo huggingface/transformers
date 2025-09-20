@@ -61,6 +61,7 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
+from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -1429,6 +1430,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
+        self.response_schema = kwargs.pop("response_schema", None)
+
         super().__init__(**kwargs)
 
         self.extra_special_tokens = kwargs.pop("extra_special_tokens", {})
@@ -1793,6 +1796,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 )
 
         return chat_template
+
+    def parse_response(self, response: str, schema: Optional[Union[list, dict]] = None):
+        if schema is None:
+            if getattr(self, "response_schema", None) is None:
+                raise AttributeError("This tokenizer does not have a `response_schema` for parsing chat responses!")
+            schema = self.response_schema
+        return recursive_parse(response, schema)
 
     @classmethod
     def from_pretrained(
@@ -2509,6 +2519,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer_config, saved_raw_chat_template_files = self.save_chat_templates(
             save_directory, tokenizer_config, filename_prefix, save_jinja_files
         )
+        if getattr(self, "response_schema", None) is not None:
+            tokenizer_config["response_schema"] = self.response_schema
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
