@@ -605,3 +605,8 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         )
         inputs = image_processor(images=[image_5], return_tensors="pt")
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 50, 50]))
+
+    def test_deprecated_max_size(self):
+        # Should not crash, but log a warning
+        processor = ConditionalDetrImageProcessor(max_size=512)
+        self.assertIsInstance(processor, ConditionalDetrImageProcessor)
