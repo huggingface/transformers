@@ -54,6 +54,7 @@ else:
             ("llava_onevision", "LlavaOnevisionVideoProcessor"),
             ("perception_lm", "PerceptionLMVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
+            ("qwen3_omni_moe", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),
             ("qwen2_vl", "Qwen2VLVideoProcessor"),
             ("qwen3_vl", "Qwen3VLVideoProcessor"),
