@@ -65,7 +65,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Hello, I'm a language model" | transformers-cli run --task text-generation --model EleutherAI/gpt-neo-1.3B --device 0
+echo -e "Hello, I'm a language model" | transformers run --task text-generation --model EleutherAI/gpt-neo-1.3B --device 0
 ```
 
 </hfoption>

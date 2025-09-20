@@ -81,10 +81,10 @@ print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers">
 
 ```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers-cli run --task fill-mask --model google-bert/bert-base-uncased --device 0
+echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model google-bert/bert-base-uncased --device 0
 ```
 
 </hfoption>

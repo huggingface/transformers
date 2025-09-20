@@ -29,7 +29,7 @@ You can find all the original RoCBert checkpoints under the [weiweishi](https://
 
 > [!TIP]
 > This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
-> 
+>
 > Click on the RoCBert models in the right sidebar for more examples of how to apply RoCBert to different Chinese language tasks.
 
 The example below demonstrates how to predict the [MASK] token with [`Pipeline`], [`AutoModel`], and from the command line.
@@ -82,7 +82,7 @@ print(f"The predicted token is: {predicted_token}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "這家餐廳的拉麵是我[MASK]過的最好的拉麵之" | transformers-cli run --task fill-mask --model weiweishi/roc-bert-base-zh --device 0
+echo -e "這家餐廳的拉麵是我[MASK]過的最好的拉麵之" | transformers run --task fill-mask --model weiweishi/roc-bert-base-zh --device 0
 ```
 
 </hfoption>

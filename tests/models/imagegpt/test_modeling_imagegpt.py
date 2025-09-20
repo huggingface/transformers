@@ -316,10 +316,6 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             expected_arg_names = ["input_ids"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
-    def test_left_padding_compatibility(self):
-        pass
-
     @unittest.skip(reason="Model inputs don't fit test pattern")  # and it's not used enough to be worth fixing :)
     def test_past_key_values_format(self):
         pass

@@ -52,14 +52,14 @@ pipeline("Plants create energy through a process known as")
 <hfoption id="AutoModel">
 
 ```python
-import torch  
-from transformers import AutoModelForCausalLM, AutoTokenizer  
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", dtype=torch.bfloat16, device_map="auto")  
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)  
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", dtype=torch.bfloat16, device_map="auto")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
-output = model.generate(**input_ids)  
+output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
@@ -67,7 +67,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model mistralai/Mamba-Codestral-7B-v0.1 --device 0
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model mistralai/Mamba-Codestral-7B-v0.1 --device 0
 ```
 
 </hfoption>
@@ -97,14 +97,14 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
   - `cuda_kernels_forward` uses the original CUDA kernels if they're available in your environment. It is slower during prefill because it requires a "warmup run" due to the higher CPU overhead (see [these](https://github.com/state-spaces/mamba/issues/389#issuecomment-2171755306) [comments](https://github.com/state-spaces/mamba/issues/355#issuecomment-2147597457) for more details).
 
 - There are no positional embeddings in this model, but there is an `attention_mask` and a specific logic to mask out hidden states in two places in the case of batched generation (see this [comment](https://github.com/state-spaces/mamba/issues/66#issuecomment-1863563829) for more details). This (and the addition of the reimplemented Mamba 2 kernels) results in a slight discrepancy between batched and cached generation.
- 
-- The SSM algorithm heavily relies on tensor contractions, which have matmul equivalents but the order of operations is slightly different. This makes the difference greater at smaller precisions. 
+
+- The SSM algorithm heavily relies on tensor contractions, which have matmul equivalents but the order of operations is slightly different. This makes the difference greater at smaller precisions.
 
 - Hidden states that correspond to padding tokens is shutdown in 2 places and is mostly tested with left-padding. Right-padding propagates noise down the line and is not guaranteed to yield satisfactory results. `tokenizer.padding_side = "left"` ensures you are using the correct padding side.
 
 - The example below demonstrates how to fine-tune Mamba 2 with [PEFT](https://huggingface.co/docs/peft).
 
-```python 
+```python
 from datasets import load_dataset
 from peft import LoraConfig
 from trl import SFTConfig, SFTTrainer

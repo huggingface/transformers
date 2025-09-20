@@ -45,7 +45,7 @@ import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    task="text-generation", 
+    task="text-generation",
     model="CohereLabs/c4ai-command-r7b-12-2024",
     dtype=torch.float16,
     device_map=0
@@ -66,9 +66,9 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
 model = AutoModelForCausalLM.from_pretrained(
-    "CohereLabs/c4ai-command-r7b-12-2024", 
-    dtype=torch.float16, 
-    device_map="auto", 
+    "CohereLabs/c4ai-command-r7b-12-2024",
+    dtype=torch.float16,
+    device_map="auto",
     attn_implementation="sdpa"
 )
 
@@ -90,7 +90,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```bash
 # pip install -U flash-attn --no-build-isolation
-transformers-cli chat CohereLabs/c4ai-command-r7b-12-2024 --dtype auto --attn_implementation flash_attention_2
+transformers chat CohereLabs/c4ai-command-r7b-12-2024 --dtype auto --attn_implementation flash_attention_2
 ```
 
 </hfoption>
@@ -107,10 +107,10 @@ from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
 model = AutoModelForCausalLM.from_pretrained(
-    "CohereLabs/c4ai-command-r7b-12-2024", 
-    dtype=torch.float16, 
-    device_map="auto", 
-    quantization_config=bnb_config, 
+    "CohereLabs/c4ai-command-r7b-12-2024",
+    dtype=torch.float16,
+    device_map="auto",
+    quantization_config=bnb_config,
     attn_implementation="sdpa"
 )
 
@@ -141,5 +141,3 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] Cohere2ForCausalLM
     - forward
-
-
