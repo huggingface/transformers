@@ -1,0 +1,387 @@
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch Vocos model."""
+
+import inspect
+import json
+import tempfile
+import unittest
+
+from datasets import Audio, load_dataset
+
+from transformers.testing_utils import (
+    require_torch,
+    torch_device,
+)
+from transformers.utils import is_torch_available
+
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import VocosModel, VocosProcessor
+
+
+from transformers import VocosConfig
+
+
+class VocosModelTester:
+    def __init__(self, parent):
+        self.parent = parent
+        self.batch_size = 2
+        self.input_channels = 8
+        self.hidden_dim = 16
+        self.intermediate_dim = 32
+        self.num_layers = 2
+        self.kernel_size = 3
+        self.padding = 1
+        self.layer_scale_init_value = 0.1
+        self.use_adaptive_norm = False
+        self.num_bandwidths = 1
+        self.layer_norm_eps = 1e-6
+        self.n_fft = 16
+        self.hop_length = 8
+        self.spec_padding = "center"
+        self.seq_length = 10
+
+    def get_config(self):
+        return VocosConfig(
+            input_channels=self.input_channels,
+            hidden_dim=self.hidden_dim,
+            intermediate_dim=self.intermediate_dim,
+            num_layers=self.num_layers,
+            kernel_size=self.kernel_size,
+            padding=self.padding,
+            layer_scale_init_value=self.layer_scale_init_value,
+            use_adaptive_norm=self.use_adaptive_norm,
+            num_bandwidths=self.num_bandwidths,
+            layer_norm_eps=self.layer_norm_eps,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            spec_padding=self.spec_padding,
+        )
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+        input_values = floats_tensor([self.batch_size, self.input_channels, self.seq_length])
+        return config, input_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config, features = self.prepare_config_and_inputs()
+        return config, {"features": features}
+
+    def create_and_check_model(self, config, features):
+        model = VocosModel(config=config).to(torch_device).eval()
+        with torch.no_grad():
+            audio = model(features.to(torch_device))
+        if config.spec_padding == "center":
+            # the expected output using PyTorch's ISTFT
+            expected_len = (self.seq_length - 1) * config.hop_length
+        else:
+            # when padding is same "same" padding, the expected output using the custom ISTFT implementation
+            pad = (config.n_fft - config.hop_length) // 2
+            expected_len = (self.seq_length - 1) * config.hop_length + config.n_fft - 2 * pad
+        self.parent.assertEqual(audio.shape, (self.batch_size, expected_len))
+
+
+@require_torch
+class VocosModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (VocosModel,) if is_torch_available() else ()
+    test_pruning = False
+    test_head_masking = False
+    test_torchscript = False
+    test_resize_embeddings = False
+    test_attention_outputs = False
+    has_attentions = False
+    test_missing_keys = False
+    test_can_init_all_missing_weights = False
+
+    def setUp(self):
+        self.model_tester = VocosModelTester(self)
+        self.config_tester = ConfigTester(
+            self, config_class=VocosConfig, common_properties=[], has_text_modality=False
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VocosModel(config)
+        signature = inspect.signature(model.forward)
+        arg_names = list(signature.parameters.keys())
+        self.assertListEqual(arg_names, ["features", "bandwidth"])
+
+    @unittest.skip(
+        reason="The VocosModel is not transformers based, thus it does not have the usual `hidden_states` logic"
+    )
+    def test_save_load(self):
+        pass
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "embed.weight",
+                    "dwconv.weight",
+                    "pwconv1.weight",
+                    "pwconv2.weight",
+                    "out_proj.weight",
+                ]
+                if param.requires_grad:
+                    if any(x in name for x in uniform_init_parms):
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+    @unittest.skip(
+        reason="The VocosModel is not transformers based, thus it does not have the usual `hidden_states` logic"
+    )
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="We cannot configure to output a smaller model.")
+    def test_model_is_small(self):
+        pass
+
+    @unittest.skip(reason="The VocosModel does not have `inputs_embeds` logics")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="VocosModel only has one output format.")
+    def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip(reason="VocosModel does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="VocosModel does not output any loss term in the forward pass")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="VocosModel does not output any loss term in the forward pass")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="VocosModel does not output any loss term in the forward pass")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="The VocosModel does not have the usual `attention` logic")
+    def test_torchscript_output_attentions(self):
+        pass
+
+    @unittest.skip("VocosModel cannot be tested with meta device")
+    def test_can_load_with_meta_device_context_manager(self):
+        pass
+
+    @unittest.skip(reason="The VocosModel does not have the usual `hidden_states` logic")
+    def test_torchscript_output_hidden_state(self):
+        pass
+
+    def test_save_load_strict(self):
+        config, _ = self.model_tester.prepare_config_and_inputs()
+        model = VocosModel(config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            _, info = VocosModel.from_pretrained(tmpdirname, output_loading_info=True)
+        self.assertEqual(info["missing_keys"], [])
+
+
+@require_torch
+class VocosModelIntegrationTest(unittest.TestCase):
+    """
+    See code for reproducing expected outputs: https://gist.github.com/Manalelaidouni/853f4c902ab0ce0a512e5217d87d564c
+    """
+
+    def setUp(self):
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        dataset = dataset.cast_column("audio", Audio(sampling_rate=24000))
+        audio_np = dataset[0]["audio"]["array"]
+        self.audio = torch.tensor(audio_np, dtype=torch.float32).unsqueeze(0)
+
+        with open("tests/fixtures/vocos/vocos_mel_integration.json", "r") as f:
+            self.mel_expected = json.load(f)[0]
+        with open("tests/fixtures/vocos/vocos_encodec_integration.json", "r") as f:
+            self.encodec_expected = json.load(f)
+
+    def test_inference_mel_vocos(self):
+        hf_repo_id = self.mel_expected["hf_repo_id"]
+        processor = VocosProcessor.from_pretrained(hf_repo_id)
+        model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
+
+        EXPECTED_AUDIO = torch.tensor(self.mel_expected["reconstructed_audio"], dtype=torch.float32).to(torch_device)
+
+        inputs = processor(self.audio, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            audio_output = model(**inputs)
+
+        torch.testing.assert_close(
+            audio_output.squeeze(0)[: EXPECTED_AUDIO.shape[0]],
+            EXPECTED_AUDIO,
+            rtol=self.mel_expected["rtol"],
+            atol=self.mel_expected["atol"],
+        )
+
+    def test_inference_encodec_vocos(self):
+        hf_repo_id = self.encodec_expected[0]["hf_repo_id"]
+        model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
+        processor = VocosProcessor.from_pretrained(hf_repo_id)
+
+        for entry in self.encodec_expected:
+            # now resconstructing audio from raw audio :
+            inputs = processor(audio=self.audio, bandwidth=entry["bandwidth"], return_tensors="pt")
+            with torch.no_grad():
+                output_from_audio = model(**inputs.to(torch_device))
+
+            EXPECTED_AUDIO = torch.tensor(entry["reconstructed_from_audio"], dtype=torch.float32).to(torch_device)
+
+            torch.testing.assert_close(
+                output_from_audio.squeeze(0)[: EXPECTED_AUDIO.shape[0]],
+                EXPECTED_AUDIO,
+                rtol=entry["rtol"],
+                atol=entry["atol"],
+            )
+
+            # now testing resconstructing audio from quantized codes :
+            codes = torch.tensor(entry["input_codes"], dtype=torch.long)
+            inputs = processor(codes=codes, bandwidth=entry["bandwidth"], return_tensors="pt")
+
+            with torch.no_grad():
+                output_from_codes = model(**inputs.to(torch_device))
+
+            EXPECTED_AUDIO_FROM_CODES = torch.tensor(entry["reconstructed_from_codes"], dtype=torch.float32).to(
+                torch_device
+            )
+
+            torch.testing.assert_close(
+                output_from_codes.squeeze(0)[: EXPECTED_AUDIO_FROM_CODES.shape[0]],
+                EXPECTED_AUDIO_FROM_CODES,
+                rtol=entry["rtol"],
+                atol=entry["atol"],
+            )
+
+    def test_inference_batch_mel_vocos(self):
+        hf_repo_id = self.mel_expected["hf_repo_id"]
+        processor = VocosProcessor.from_pretrained(hf_repo_id)
+        model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
+
+        # batch processing [3, T]
+        audio_batch = self.audio.repeat(3, 1)
+        inputs = processor(audio=audio_batch, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            batch_audio_output = model(**inputs)
+
+        self.assertEqual(batch_audio_output.shape[0], 3)
+
+        # comparing batch results with individual processing
+        single_inputs = processor(audio=self.audio, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            single_audio_output = model(**single_inputs).squeeze(0)
+
+        for i in range(3):
+            torch.testing.assert_close(
+                batch_audio_output[i, : single_audio_output.shape[0]], single_audio_output, rtol=1e-4, atol=1e-4
+            )
+
+        # testing batch processing of a list of numpy arrays
+        audio_np = self.audio.squeeze(0).cpu().numpy()
+        audio_batch = [audio_np, audio_np, audio_np]
+        inputs = processor(audio=audio_batch, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            output_from_list = model(**inputs)
+
+        assert torch.allclose(output_from_list, batch_audio_output, rtol=1e-6, atol=1e-6)
+
+    def test_inference_batch_encodec_vocos(self):
+        hf_repo_id = self.encodec_expected[0]["hf_repo_id"]
+        model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
+        processor = VocosProcessor.from_pretrained(hf_repo_id)
+        for entry in self.encodec_expected:
+            bandwidth, rtol, atol = entry["bandwidth"], entry["rtol"], entry["atol"]
+
+            # batch processing from raw audio
+            audio_batch = self.audio.repeat(3, 1)
+            inputs = processor(audio=audio_batch, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                batch_output_from_audio = model(**inputs)
+
+            self.assertEqual(batch_output_from_audio.shape[0], 3)
+
+            # comparing batch results with individual processing
+            single_inputs = processor(audio=self.audio, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                single_output_from_audio = model(**single_inputs).squeeze(0)
+
+            for i in range(3):
+                torch.testing.assert_close(
+                    batch_output_from_audio[i, : single_output_from_audio.shape[0]],
+                    single_output_from_audio,
+                    rtol=rtol,
+                    atol=atol,
+                )
+
+            # batch processing from quantized codes
+            codes = torch.tensor(entry["input_codes"], dtype=torch.long)
+            codes_batch = codes.unsqueeze(1).repeat(1, 3, 1)
+            inputs = processor(codes=codes_batch, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                batch_output_from_codes = model(**inputs)
+
+            self.assertEqual(batch_output_from_codes.shape[0], 3)
+
+            # compare with single codes processing
+            single_inputs = processor(codes=codes, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                single_output_from_codes = model(**single_inputs).squeeze(0)
+
+            for i in range(3):
+                torch.testing.assert_close(
+                    batch_output_from_codes[i, : single_output_from_codes.shape[0]],
+                    single_output_from_codes,
+                    rtol=1e-4,
+                    atol=1e-4,
+                )
