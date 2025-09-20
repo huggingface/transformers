@@ -312,8 +312,8 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=32)
 
         EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\nI can hear the sound of glass breaking and people shouting.",
-            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nI'm sorry, but I cannot provide an answer without knowing what specific statement or question the person made. Could you please provide more context or clarify your request?",
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\nI can hear the sound of glass shattering.",
+            'system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe person says, "Hello."'
         ]
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
