@@ -14,7 +14,6 @@ jobs:
     with:
       runner: amd-mi325-ci-1gpu
       commit_sha: ${{ github.sha }}
-      upload_to_hub: true
       run_id: ${{ github.run_id }}
       benchmark_repo_id: hf-internal-testing/transformers-daily-benchmarks
     secrets: inherit
