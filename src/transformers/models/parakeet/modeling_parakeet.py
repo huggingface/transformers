@@ -572,6 +572,7 @@ class ParakeetTDTJoint(ParakeetPreTrainedModel):
 
         num_classes = config.vocab_size + 1 + len(config.durations)
 
+        assert activation == 'relu'
         if activation == 'relu':
             activation = torch.nn.ReLU(inplace=True)
         elif activation == 'sigmoid':
@@ -603,8 +604,6 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetTDTDecoderConfig):
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
-
         self.embed = torch.nn.Embedding(config.vocab_size + 1, config.pred_hidden) # +1 for blank
         self.dec_rnn = self.rnn(
                            config.pred_hidden,
@@ -702,52 +701,17 @@ class ParakeetTDTPredictor(ParakeetPreTrainedModel):
         dtype = _p.dtype
 
         # If y is not None, it is of shape [B, U] with dtype long.
-        if y is not None:
-            if y.device != device:
-                y = y.to(device)
+        assert y is not None
+        if y.device != device:
+            y = y.to(device)
 
-            # (B, U) -> (B, U, H)
-            y = self.embed(y)
-        else:
-            assert False
-            # Y is not provided, assume zero tensor with shape [B, 1, H] is required
-            # Emulates output of embedding of pad token.
-            if batch_size is None:
-                B = 1 if state is None else state[0].size(1)
-            else:
-                B = batch_size
+        # (B, U) -> (B, U, H)
+        y = self.embed(y)
 
-            y = torch.zeros((B, 1, self.pred_hidden), device=device, dtype=dtype)
-
-        # Prepend blank "start of sequence" symbol (zero tensor)
-#        if add_sos:
-#            B, U, H = y.shape
-#            start = torch.zeros((B, 1, H), device=y.device, dtype=y.dtype)
-#            y = torch.cat([start, y], dim=1).contiguous()  # (B, U + 1, H)
-#        else:
-        start = None  # makes del call later easier
-
-        # If in training mode, and random_state_sampling is set,
-        # initialize state to random normal distribution tensor.
-#        if state is None:
-#            if self.random_state_sampling and self.training:
-#                state = self.initialize_state(y)
-
-        # Forward step through RNN
-
-
-#        print("BEFORE TRANSPOSE", y.shape)
         y = y.transpose(0, 1)  # (U + 1, B, H)
-#        print("AFTER  TRANSPOSE", y.shape)
 
         g, hid = self.dec_rnn(y, state)
         g = g.transpose(0, 1)  # (B, U + 1, H)
-
-        del y, start, state
-
-#        # Adapter module forward step
-#        if self.is_adapter_available():
-#            g = self.forward_enabled_adapters(g)
 
         return g, hid
 
@@ -1112,17 +1076,11 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 token = token.item()
                 duration = duration.item()
 
-#                print("TIME TOKEN DURATION", t, token, duration)
-#                print("two values", v, v_duration)
-
                 if token != 1024:
                     hyp.append(token)
                     last_label = token
-#                    print("ADDING", token, "at", t)
                     last_label = torch.LongTensor([[last_label]]) #.to(self.decoder.device)
                     g, hidden_prime = self.decoder(last_label, hidden_prime)
-#                else:
-#                    print("BLANK")
 
                 if duration == 0:
                     symbols_added += 1
@@ -1131,8 +1089,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                     break
             if symbols_added == 2:
                 t += 1
-#            print("T IS", t)
-        print("HYP IS",hyp)
         return hyp
 
 

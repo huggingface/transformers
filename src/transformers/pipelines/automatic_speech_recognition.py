@@ -556,9 +556,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         elif self.type == 'tdt':
             inputs = {
                 self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
-#                "attention_mask": attention_mask,
             }
             outputs = self.model.generate(**inputs)
+            out = {"tokens": torch.LongTensor(outputs).view([1, -1])}
+
 
         else:
             inputs = {
