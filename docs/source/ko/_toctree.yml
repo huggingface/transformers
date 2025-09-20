@@ -31,8 +31,8 @@
       title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
     - local: image_processors
       title: 이미지 프로세서
-    - local: in_translation
-      title: (번역중) Video processors
+    - local: video_processors
+      title: 비디오 프로세서
     - local: in_translation
       title: (번역중) Backbones
     - local: in_translation
