@@ -25,7 +25,6 @@ import re
 import shutil
 import subprocess
 import sys
-import warnings
 from collections import OrderedDict
 from enum import Enum
 from functools import lru_cache
@@ -588,21 +587,6 @@ def is_torch_bf16_gpu_available() -> bool:
     if is_torch_musa_available():
         return torch.musa.is_bf16_supported()
     return False
-
-
-def is_torch_bf16_cpu_available() -> Union[tuple[bool, str], bool]:
-    return is_torch_available()
-
-
-def is_torch_bf16_available() -> bool:
-    # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
-    # has become ambiguous and therefore deprecated
-    warnings.warn(
-        "The util is_torch_bf16_available is deprecated, please use is_torch_bf16_gpu_available "
-        "or is_torch_bf16_cpu_available instead according to whether it's used with cpu or gpu",
-        FutureWarning,
-    )
-    return is_torch_bf16_gpu_available()
 
 
 @lru_cache
