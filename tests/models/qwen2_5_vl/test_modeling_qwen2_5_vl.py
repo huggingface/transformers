@@ -83,7 +83,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
         max_window_layers=3,
         model_type="qwen2_5_vl",
         num_attention_heads=4,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_key_value_heads=2,
         rope_theta=10000,
         tie_word_embeddings=True,
