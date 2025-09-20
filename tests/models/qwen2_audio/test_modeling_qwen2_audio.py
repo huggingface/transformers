@@ -207,7 +207,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device)
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16)
 
         url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
         messages = [
@@ -264,7 +264,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device)
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16)
 
         conversation1 = [
             {
@@ -339,7 +339,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_multiturn(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device)
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16)
 
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
