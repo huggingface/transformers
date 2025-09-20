@@ -24,7 +24,6 @@ from transformers import T5GemmaConfig, T5GemmaModuleConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     torch_device,
 )
 
@@ -1225,7 +1224,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
     # Update hidden size for encoder and decoder
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
             # TODO: raushan, fix for composite models after making VLMs support new attn API
@@ -1510,7 +1509,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
     # Update hidden size for encoder
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
             # TODO: raushan, fix for composite models after making VLMs support new attn API
