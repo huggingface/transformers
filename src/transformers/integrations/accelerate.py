@@ -22,12 +22,10 @@ The `init_empty_weights` and `init_on_device` functions were copied from `accele
 
 from contextlib import contextmanager
 
-from ..utils import is_torch_available, logging
+import torch
+import torch.nn as nn
 
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
+from ..utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -68,7 +66,7 @@ def init_empty_weights(include_buffers: bool = False):
 
 
 @contextmanager
-def init_on_device(device: "torch.device", include_buffers: bool = False):
+def init_on_device(device: torch.device, include_buffers: bool = False):
     """
     A context manager under which models are initialized with all parameters on the specified device.
 
@@ -141,7 +139,7 @@ def init_on_device(device: "torch.device", include_buffers: bool = False):
             setattr(torch, torch_function_name, old_torch_function)
 
 
-def find_tied_parameters(model: "nn.Module", **kwargs):
+def find_tied_parameters(model: nn.Module, **kwargs):
     """
     Find the tied parameters in a given model.
 

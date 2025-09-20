@@ -18,6 +18,7 @@ import re
 import warnings
 from typing import Any, Optional, Union
 
+import torch
 from packaging import version
 
 from ..utils import (
@@ -25,13 +26,9 @@ from ..utils import (
     find_adapter_config_file,
     is_accelerate_available,
     is_peft_available,
-    is_torch_available,
     logging,
 )
 
-
-if is_torch_available():
-    import torch
 
 if is_accelerate_available():
     from accelerate import dispatch_model
@@ -101,7 +98,7 @@ class PeftAdapterMixin:
         offload_folder: Optional[str] = None,
         offload_index: Optional[int] = None,
         peft_config: Optional[dict[str, Any]] = None,
-        adapter_state_dict: Optional[dict[str, "torch.Tensor"]] = None,
+        adapter_state_dict: Optional[dict[str, torch.Tensor]] = None,
         low_cpu_mem_usage: bool = False,
         is_trainable: bool = False,
         adapter_kwargs: Optional[dict[str, Any]] = None,
