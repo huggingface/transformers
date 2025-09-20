@@ -118,6 +118,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("pixtral", "PixtralProcessor"),
         ("pop2piano", "Pop2PianoProcessor"),
         ("qwen2_5_omni", "Qwen2_5OmniProcessor"),
+        ("qwen3_omni_moe", "Qwen3OmniMoeProcessor"),
         ("qwen2_5_vl", "Qwen2_5_VLProcessor"),
         ("qwen2_audio", "Qwen2AudioProcessor"),
         ("qwen2_vl", "Qwen2VLProcessor"),
