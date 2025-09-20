@@ -150,8 +150,16 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             # bias could be loaded by regular set_module_tensor_to_device() from accelerate,
             # but it would wrongly use uninitialized weight there.
             return True
-        else:
-            return False
+        elif (
+            self.quantization_config.target_parameters is not None
+        ):  # Check if the parameter name is in the list of target parameters for quantization
+            return any(
+                target_param
+                for target_param in self.quantization_config.target_parameters
+                if param_name.endswith("." + target_param) or param_name == target_param
+            )
+
+        return False
 
     def create_quantized_param(
         self,
@@ -187,8 +195,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             module._parameters[tensor_name] = new_value
             return
 
-        if not isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
-            raise ValueError("this function only loads `Linear4bit components`")
+        # if not isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
+        #    raise ValueError("this function only loads `Linear4bit components`")
+
         if (
             old_value.device == torch.device("meta")
             and target_device not in ["meta", torch.device("meta")]
@@ -203,7 +212,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
             if not self.is_serializable:
                 raise ValueError(
-                    "Detected int4 weights but the version of bitsandbytes is not compatible with int4 serialization. "
+                    "Detected 4bit weights but the version of bitsandbytes is not compatible with 4bit serialization. "
                     "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
                 )
 
@@ -221,29 +230,61 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     if unexpected_keys is not None and k in unexpected_keys:
                         unexpected_keys.remove(k)
 
-            param_kwargs = {}
-            if self.is_bnb_supports_quant_storage_module:
-                param_kwargs["module"] = module
+            if isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
+                param_kwargs = {}
+                if self.is_bnb_supports_quant_storage_module:
+                    param_kwargs["module"] = module
 
-            new_value = bnb.nn.Params4bit.from_prequantized(
-                data=param_value,
-                quantized_stats=quantized_stats,
-                requires_grad=False,
-                device=target_device,
-                **param_kwargs,
-            )
+                module._parameters[tensor_name] = bnb.nn.Params4bit.from_prequantized(
+                    data=param_value,
+                    quantized_stats=quantized_stats,
+                    requires_grad=False,
+                    device=target_device,
+                    **param_kwargs,
+                )
+            elif self.quantization_config.target_parameters:
+                # Normal nn.Parameter, i.e. outside of a Linear4bit layer.
+                import bitsandbytes.nn.parametrize
+
+                # Load the parameter on the target device
+                module._parameters[tensor_name] = torch.nn.Parameter(
+                    param_value.to(target_device), requires_grad=False
+                )
+
+                # Apply the bitsandbytes parametrization to support dequantization
+                bitsandbytes.nn.parametrize.replace_parameter_4bit_prequantized(
+                    module,
+                    tensor_name,
+                    qs_dict=quantized_stats,
+                    device=target_device,
+                )
+
         else:
             new_value = param_value.to("cpu")
 
             # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
             # Since weights are saved in the correct "orientation", we skip transposing when loading.
-            if issubclass(module.source_cls, Conv1D):
+            if hasattr(module, "source_cls") and issubclass(module.source_cls, Conv1D):
                 new_value = new_value.T
 
-            kwargs = old_value.__dict__
-            new_value = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(target_device)
+            if isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
+                kwargs = old_value.__dict__
+                module._parameters[tensor_name] = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(
+                    target_device
+                )
+            else:
+                # This is a regular parameter, i.e. outside of a Linear4bit layer.
+                import bitsandbytes.nn.parametrize
 
-        module._parameters[tensor_name] = new_value
+                module._parameters[tensor_name] = torch.nn.Parameter(
+                    param_value.to(target_device), requires_grad=False
+                )
+                bitsandbytes.nn.parametrize.replace_parameter_4bit(
+                    module,
+                    tensor_name,
+                    compress_statistics=self.quantization_config.bnb_4bit_use_double_quant,
+                    quant_type=self.quantization_config.bnb_4bit_quant_type,
+                )
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.adjust_max_memory
     def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
@@ -284,7 +325,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             )
         return device_map
 
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer._process_model_before_weight_loading
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
@@ -316,6 +356,32 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
+
+        if self.quantization_config.target_parameters:
+            # TODO: consider when param is in a module specified by modules_to_not_convert
+            matched_params = [
+                param_name
+                for param_name, _ in model.named_parameters()
+                if any(
+                    filter(
+                        lambda target_param: param_name.endswith("." + target_param) or param_name == target_param,
+                        self.quantization_config.target_parameters,
+                    )
+                )
+            ]
+
+            if any(matched_params):
+                for param_name in matched_params:
+                    module, tensor_name = get_module_from_name(model, param_name)
+
+                    param = model.get_parameter(param_name)
+
+                    quant_param = torch.nn.Parameter(
+                        torch.empty((param.numel() + 1) // 2, dtype=torch.uint8),
+                        requires_grad=False,
+                    )
+
+                    setattr(module, tensor_name, quant_param)
 
         model.config.quantization_config = self.quantization_config
 
@@ -352,6 +418,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
     def _dequantize(self, model):
         from ..integrations import dequantize_and_replace
+
+        # TODO: support target_parameters
 
         model = dequantize_and_replace(
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
