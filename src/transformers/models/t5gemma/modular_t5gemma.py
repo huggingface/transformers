@@ -210,6 +210,19 @@ class T5GemmaConfig(PretrainedConfig):
         # Always return self, regardless of the decoder option.
         return self
 
+    @property
+    def num_hidden_layers(self) -> int:
+        """Number of hidden layers in the encoder."""
+        return self.encoder.num_hidden_layers
+
+    @num_hidden_layers.setter
+    def num_hidden_layers(self, value):
+        """Set number of hidden layers in the encoder."""
+        raise NotImplementedError(
+            "This model does not support setting `num_hidden_layers`. "
+            "Please set `encoder.num_hidden_layers` and `decoder.num_hidden_layers` separately."
+        )
+
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
     pass
