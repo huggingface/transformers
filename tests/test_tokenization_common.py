@@ -4462,7 +4462,7 @@ class TokenizerTesterMixin:
 
                     # Load tokenizer from a folder without legacy files
                     tokenizer = self.rust_tokenizer_class.from_pretrained(tmp_dir)
-                    training_args = TrainingArguments(output_dir=tmp_dir, do_train=True, no_cuda=True)
+                    training_args = TrainingArguments(output_dir=tmp_dir, do_train=True, use_cpu=True)
                     trainer = Trainer(model=model, args=training_args, processing_class=tokenizer)
 
                     # Should not raise an error
