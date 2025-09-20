@@ -2617,7 +2617,7 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
         return position_embeddings
 
     def forward(
-        self, batch_size: int, interpolate_pos_encoding: bool = False, input_size: torch.Size = None
+        self, batch_size: int, interpolate_pos_encoding: bool = False, input_size: Optional[torch.Size] = None
     ) -> torch.Tensor:
         position_embeddings = self.position_embeddings
 

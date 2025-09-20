@@ -691,7 +691,7 @@ class SamImageProcessor(BaseImageProcessor):
         Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
         Args:
-            image (`np.array`):
+            image (`np.ndarray`):
                 Input original image
             target_size (`int`):
                 Target size of the resized image
@@ -758,7 +758,7 @@ class SamImageProcessor(BaseImageProcessor):
                 List of IoU scores.
             original_size (`tuple[int,int]`):
                 Size of the original image.
-            cropped_box_image (`np.array`):
+            cropped_box_image (`np.ndarray`):
                 The cropped image.
             pred_iou_thresh (`float`, *optional*, defaults to 0.88):
                 The threshold for the iou scores.
@@ -807,7 +807,7 @@ class SamImageProcessor(BaseImageProcessor):
                 List of IoU scores.
             original_size (`tuple[int,int]`):
                 Size of the original image.
-            cropped_box_image (`np.array`):
+            cropped_box_image (`np.ndarray`):
                 The cropped image.
             pred_iou_thresh (`float`, *optional*, defaults to 0.88):
                 The threshold for the iou scores.
