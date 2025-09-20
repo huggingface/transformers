@@ -233,9 +233,9 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14755, 220, 16, 25, 220, 151647,
             *[151646] * 101,
             151648, 198, 3838, 594, 429, 5112, 30, 151645, 198, 151644, 77091, 198,
-        ]])
+        ]], device=torch_device)
         # fmt: on
-        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
+        torch.testing.assert_close(inputs["input_ids"], EXPECTED_INPUT_IDS)
 
         EXPECTED_DECODED_TEXT = (
             "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nAudio 1: <|audio_bos|>"
@@ -337,7 +337,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    def test_small_model_integration_test_multiturn(self):
+    def test_small_model_integration_test_multiurn(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16)
 
