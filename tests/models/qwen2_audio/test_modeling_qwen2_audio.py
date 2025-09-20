@@ -198,6 +198,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 @require_torch
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
+        cleanup(torch_device, gc_collect=True)
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
     def tearDown(self):
@@ -206,7 +207,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_single(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device)
 
         url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
         messages = [
@@ -223,7 +224,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         formatted_prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
 
-        inputs = self.processor(text=formatted_prompt, audios=[raw_audio], return_tensors="pt", padding=True)
+        inputs = self.processor(text=formatted_prompt, audios=[raw_audio], return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=32)
 
@@ -263,7 +264,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device)
 
         conversation1 = [
             {
@@ -322,7 +323,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                                 )[0]
                             )
 
-        inputs = self.processor(text=text, audios=audios, return_tensors="pt", padding=True)
+        inputs = self.processor(text=text, audios=audios, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=32)
 
@@ -338,7 +339,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_multiturn(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device)
 
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -379,7 +380,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                             )[0]
                         )
 
-        inputs = self.processor(text=formatted_prompt, audios=audios, return_tensors="pt", padding=True)
+        inputs = self.processor(text=formatted_prompt, audios=audios, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=32, top_k=1)
 
