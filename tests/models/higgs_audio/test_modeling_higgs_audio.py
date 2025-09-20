@@ -132,20 +132,10 @@ class HiggsAudioModelTester:
         self.audio_length = audio_length
 
     def get_config(self):
-        llm_config = LlamaConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-        )
-
         audio_num_codebooks = self.num_quantizers
         audio_codebook_size = self.codebook_size
 
         higgs_audio_config = HiggsAudioConfig(
-            llm_config,
             audio_adapter_type=self.audio_adapter_type,
             audio_dual_ffn_layers=self.audio_dual_ffn_layers,
             audio_decoder_proj_num_layers=self.audio_decoder_proj_num_layers,
@@ -159,6 +149,12 @@ class HiggsAudioModelTester:
             audio_out_token_idx=self.audio_out_token_idx,
             audio_out_bos_token_id=self.audio_out_bos_token_id,
             audio_eos_token_id=self.audio_eos_token_id,
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
         )
         return higgs_audio_config
 
