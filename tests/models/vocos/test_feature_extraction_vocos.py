@@ -118,36 +118,36 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         self.feat_extract_tester = VocosFeatureExtractionTester(self)
         self.EXPECTED_INPUT_FEATURES = torch.tensor(
             [
-                -1.7868,
-                -2.6268,
-                -4.2176,
-                -3.1553,
-                -2.8303,
-                -2.9688,
-                -2.5228,
-                -2.2364,
-                -2.2634,
-                -2.6506,
-                -2.9499,
-                -2.9495,
-                -3.6546,
-                -2.4890,
-                -2.5498,
-                -2.1440,
-                -2.7317,
-                -2.8661,
-                -3.9949,
-                -3.0592,
-                -3.9502,
-                -3.6474,
-                -3.6898,
-                -3.2182,
-                -3.0109,
-                -2.3629,
-                -2.7947,
-                -2.7480,
-                -2.9207,
-                -2.8100,
+                -1.7733538150787354,
+                -2.6277995109558105,
+                -4.34464168548584,
+                -3.113943099975586,
+                -2.854297637939453,
+                -2.973206043243408,
+                -2.4957544803619385,
+                -2.252488851547241,
+                -2.255256175994873,
+                -2.6200737953186035,
+                -2.978632926940918,
+                -2.915842056274414,
+                -3.6588683128356934,
+                -2.4617226123809814,
+                -2.5469284057617188,
+                -2.164539098739624,
+                -2.7375283241271973,
+                -2.8342182636260986,
+                -3.9451725482940674,
+                -3.013962745666504,
+                -3.843592643737793,
+                -3.688326358795166,
+                -3.601658821105957,
+                -3.2761828899383545,
+                -3.0132853984832764,
+                -2.340486526489258,
+                -2.8324050903320312,
+                -2.718107223510742,
+                -2.8961753845214844,
+                -2.846886396408081,
             ]
         )
 
@@ -237,7 +237,7 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/vocos-mel-24khz")
         input_features = feature_extractor(speech, return_tensors="pt").input_features
         self.assertEqual(input_features.shape, (1, 100, 549))
-        torch.testing.assert_close(input_features[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(input_features[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)
 
     @patch("transformers.models.vocos.feature_extraction_vocos.is_torch_available", return_value=False)
     def test_integration_numpy_backend(self, _mock_torch_avail):
@@ -247,4 +247,4 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         self.assertEqual(input_features.shape, (1, 100, 549))
 
         # numpy backend produces same values as torch, within tolerance ofc
-        torch.testing.assert_close(input_features[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(input_features[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)
