@@ -754,6 +754,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         Trains a tokenizer on a new corpus with the same defaults (in terms of special tokens or tokenization pipeline)
         as the current one.
 
+        Note that the `train_new_from_iterator()` method in the 🤗 Tokenizers library uses BPE to construct the vocabulary, not a true WordPiece implementation.
+
         Args:
             text_iterator (generator of `list[str]`):
                 The training corpus. Should be a generator of batches of texts, for instance a list of lists of texts
