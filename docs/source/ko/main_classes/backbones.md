@@ -14,12 +14,12 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 백본 (Backbone)
+# 백본 (Backbone) [[backbones]] 
 
-백본(backbone)은 객체 탐지나 이미지 분류와 같은 상위 수준의 컴퓨터 비전 작업을 위해 특징(feature) 추출에 사용되는 모델을 말합니다. Transformers 라이브러리는 사전 학습된 모델 가중치로부터 Transformers 백본을 초기화할 수 있는 [AutoBackbone] 클래스를 제공하며, 다음 두 가지 유틸리티 클래스도 포함합니다:
+백본(backbone)은 객체 탐지나 이미지 분류와 같은 상위 수준의 컴퓨터 비전 작업을 위해 특성(feature) 추출에 사용되는 모델을 말합니다. Transformers 라이브러리는 사전 학습된 모델 가중치로부터 Transformers 백본을 초기화할 수 있는 [AutoBackbone] 클래스를 제공하며, 다음 두 가지 유틸리티 클래스도 포함합니다:
 
-[~utils.BackboneMixin]은 Transformers 또는 [timm](https://hf.co/docs/timm/index)에서 백본을 초기화할 수 있게 해주며, 출력 특징과 인덱스를 반환하는 기능을 포함합니다.
-[~utils.BackboneConfigMixin]은 백본 설정의 출력 특징과 인덱스를 지정합니다.
+[~utils.BackboneMixin]은 Transformers 또는 [timm](https://hf.co/docs/timm/index)에서 백본을 초기화할 수 있게 해주며, 출력 특성과 인덱스를 반환하는 기능을 포함합니다.
+[~utils.BackboneConfigMixin]은 백본 설정의 출력 특성과 인덱스를 지정합니다.
 
 [timm](https://hf.co/docs/timm/index) 모델은 [TimmBackbone]과 [TimmBackboneConfig] 클래스를 사용하여 불러옵니다.
 
@@ -39,22 +39,22 @@ rendered properly in your Markdown viewer.
 * [Swin Transformer v2](../model_doc/swinv2)
 * [ViTDet](../model_doc/vitdet)
 
-## AutoBackbone
+## AutoBackbone [[transformers.AutoBackbone]]
 
 [[autodoc]] AutoBackbone
 
-## BackboneMixin
+## BackboneMixin [[transformers.utils.BackboneMixin]]
 
 [[autodoc]] utils.BackboneMixin
 
-## BackboneConfigMixin
+## BackboneConfigMixin [[transformers.utils.BackboneConfigMixin]]
 
 [[autodoc]] utils.BackboneConfigMixin
 
-## TimmBackbone
+## TimmBackbone [[transformers.TimmBackbone]]
 
 [[autodoc]] models.timm_backbone.TimmBackbone
 
-## TimmBackboneConfig
+## TimmBackboneConfig [[transformers.TimmBackboneConfig]]
 
 [[autodoc]] models.timm_backbone.TimmBackboneConfig
