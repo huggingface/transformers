@@ -306,7 +306,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
         return preprocess_params, forward_params, {}
 
-    def preprocess(self, pipeline_input, sequential=None, padding=True, truncation=None):
+    def preprocess(self, pipeline_input, padding=True, truncation=None):
         if truncation is None:
             if self.type == "tapas":
                 truncation = "drop_rows_to_fit"
