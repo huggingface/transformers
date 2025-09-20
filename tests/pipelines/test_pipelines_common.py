@@ -21,8 +21,8 @@ import unittest
 from pathlib import Path
 
 import datasets
-from huggingface_hub import HfFolder, Repository, delete_repo
-from requests.exceptions import HTTPError
+from huggingface_hub import delete_repo, snapshot_download
+from huggingface_hub.errors import HfHubHTTPError
 
 from transformers import (
     AutomaticSpeechRecognitionPipeline,
@@ -209,7 +209,7 @@ class CommonPipelineTest(unittest.TestCase):
     @require_torch
     def test_auto_model_pipeline_registration_from_local_dir(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(local_dir=tmp_dir, clone_from="hf-internal-testing/tiny-random-custom-architecture")
+            snapshot_download("hf-internal-testing/tiny-random-custom-architecture", local_dir=tmp_dir)
             pipe = pipeline("text-generation", tmp_dir, trust_remote_code=True)
 
             self.assertIsInstance(pipe, TextGenerationPipeline)  # Assert successful load
@@ -874,13 +874,12 @@ class DynamicPipelineTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     @classmethod
     def tearDownClass(cls):
         try:
             delete_repo(token=cls._token, repo_id="test-dynamic-pipeline")
-        except HTTPError:
+        except HfHubHTTPError:
             pass
 
     @unittest.skip("Broken, TODO @Yih-Dar")

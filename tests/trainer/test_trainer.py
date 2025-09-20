@@ -32,7 +32,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
-from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
+from huggingface_hub import ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
 
@@ -5284,7 +5284,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
@@ -5469,14 +5468,10 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 )
                 branch = "v1.0"
                 create_branch(repo_id=trainer.hub_model_id, branch=branch, token=self._token, exist_ok=True)
-                url = trainer.push_to_hub(revision=branch)
+                push_commit = trainer.push_to_hub(revision=branch)
 
-            # Extract branch from the url
-            re_search = re.search(r"tree/([^/]+)/", url)
-            self.assertIsNotNone(re_search)
-
-            branch_name = re_search.groups()[0]
-            self.assertEqual(branch_name, branch)
+            commits = list_repo_commits(repo_id=trainer.hub_model_id, revision=branch, token=self._token)
+            self.assertEqual(commits[0].commit_id, push_commit.oid)
 
 
 @require_torch

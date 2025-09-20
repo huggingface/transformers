@@ -17,9 +17,6 @@ File utilities: utilities related to download and cache models
 This module should not be update anymore and is only left for backward compatibility.
 """
 
-from huggingface_hub import get_full_repo_name  # for backward compatibility
-from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
-
 from . import __version__
 
 # Backward compatibility imports, to make sure all those objects can be found in file_utils

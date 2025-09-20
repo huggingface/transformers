@@ -28,7 +28,7 @@ from pathlib import Path
 from check_config_docstrings import get_checkpoint_from_config_class
 from datasets import load_dataset
 from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model
-from huggingface_hub import Repository, create_repo, hf_api, upload_folder
+from huggingface_hub import Repository, create_repo, hf_api, upload_folder  # TODO: remove Repository
 
 from transformers import (
     CONFIG_MAPPING,

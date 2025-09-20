@@ -11,10 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import io
 import unittest
 
-import requests
+import httpx
 
 from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
 from transformers.pipelines import ImageToTextPipeline, pipeline
@@ -172,7 +172,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     def test_generation_pt_blip(self):
         pipe = pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
         url = "https://huggingface.co/datasets/sayakpaul/sample-datasets/resolve/main/pokemon.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         outputs = pipe(image)
         self.assertEqual(outputs, [{"generated_text": "a pink pokemon pokemon with a blue shirt and a blue shirt"}])
@@ -182,7 +182,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     def test_generation_pt_git(self):
         pipe = pipeline("image-to-text", model="microsoft/git-base-coco")
         url = "https://huggingface.co/datasets/sayakpaul/sample-datasets/resolve/main/pokemon.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         outputs = pipe(image)
         self.assertEqual(outputs, [{"generated_text": "a cartoon of a purple character."}])
@@ -192,7 +192,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     def test_conditional_generation_pt_blip(self):
         pipe = pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         prompt = "a photography of"
 
@@ -207,7 +207,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     def test_conditional_generation_pt_git(self):
         pipe = pipeline("image-to-text", model="microsoft/git-base-coco")
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         prompt = "a photo of a"
 
@@ -222,7 +222,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     def test_conditional_generation_pt_pix2struct(self):
         pipe = pipeline("image-to-text", model="google/pix2struct-ai2d-base")
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         prompt = "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud"
 

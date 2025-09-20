@@ -27,12 +27,11 @@ import uuid
 import warnings
 from pathlib import Path
 
+import httpx
 import pytest
-import requests
-from huggingface_hub import HfApi, HfFolder
+from huggingface_hub import HfApi
 from parameterized import parameterized
 from pytest import mark
-from requests.exceptions import HTTPError
 
 from transformers import (
     AutoConfig,
@@ -393,7 +392,7 @@ class ModelUtilsTest(TestCasePlus):
             # First attempt will fail with a connection error
             if not hasattr(test_func, "attempt"):
                 test_func.attempt = 1
-                raise requests.exceptions.ConnectionError("Connection failed")
+                raise httpx.ConnectError("Connection failed")
             # Second attempt will succeed
             return True
 
@@ -1146,14 +1145,16 @@ class ModelUtilsTest(TestCasePlus):
         response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = {}
-        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "failed", request=mock.Mock(), response=mock.Mock()
+        )
         response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -2093,10 +2094,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         initial_model = BertModel(config)
 
         initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
-        headers = {"Authorization": f"Bearer {self.token}"}
-        requests.put(
-            f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
-        )
+        self.api.update_repo_settings(self.repo_name, gated="auto")
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
 
         with self.subTest("Initial and converted models are equal"):
@@ -2157,7 +2155,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
 
         initial_model.push_to_hub(self.repo_name, token=self.token, max_shard_size="200kb", safe_serialization=False)
         headers = {"Authorization": f"Bearer {self.token}"}
-        requests.put(
+        httpx.put(
             f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
         )
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
@@ -2256,7 +2254,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
 
     @mock.patch("transformers.safetensors_conversion.spawn_conversion")
     def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
-        spawn_conversion_mock.side_effect = HTTPError()
+        spawn_conversion_mock.side_effect = httpx.HTTPError("failed")
 
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2276,7 +2274,6 @@ class ModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub(self):

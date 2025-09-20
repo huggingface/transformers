@@ -27,8 +27,8 @@ from typing import Optional, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
+import httpx
 import huggingface_hub
-import requests
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
@@ -58,7 +58,6 @@ from huggingface_hub.utils import (
     hf_raise_for_status,
     send_telemetry,
 )
-from requests.exceptions import HTTPError
 
 from . import __version__, logging
 from .generic import working_or_temp_dir
@@ -176,7 +175,7 @@ def list_repo_templates(
             ]
         except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
             raise  # valid errors => do not catch
-        except (HTTPError, OfflineModeIsEnabled, requests.exceptions.ConnectionError):
+        except (HfHubHTTPError, OfflineModeIsEnabled, httpx.NetworkError):
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files
@@ -199,7 +198,7 @@ def is_remote_url(url_or_filename):
 
 def define_sagemaker_information():
     try:
-        instance_data = requests.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
+        instance_data = httpx.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
         dlc_container_used = instance_data["Image"]
         dlc_tag = instance_data["Image"].split(":")[1]
     except Exception:
@@ -554,7 +553,7 @@ def cached_files(
                 ) from e
         # snapshot_download will not raise EntryNotFoundError, but hf_hub_download can. If this is the case, it will be treated
         # later on anyway and re-raised if needed
-        elif isinstance(e, HTTPError) and not isinstance(e, EntryNotFoundError):
+        elif isinstance(e, HfHubHTTPError) and not isinstance(e, EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
             raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}") from e
@@ -677,18 +676,13 @@ def has_file(
         response = get_session().head(
             hf_hub_url(path_or_repo, filename=filename, revision=revision, repo_type=repo_type),
             headers=build_hf_headers(token=token, user_agent=http_user_agent()),
-            allow_redirects=False,
-            proxies=proxies,
+            follow_redirects=False,
             timeout=10,
         )
-    except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+    except httpx.ProxyError:
         # Actually raise for those subclasses of ConnectionError
         raise
-    except (
-        requests.exceptions.ConnectionError,
-        requests.exceptions.Timeout,
-        OfflineModeIsEnabled,
-    ):
+    except (httpx.ConnectError, httpx.TimeoutException, OfflineModeIsEnabled):
         return has_file_in_cache
 
     try:
@@ -712,7 +706,7 @@ def has_file(
         ) from e
     except EntryNotFoundError:
         return False  # File does not exist
-    except requests.HTTPError:
+    except HfHubHTTPError:
         # Any authentication/authorization error will be caught here => default to cache
         return has_file_in_cache
 
