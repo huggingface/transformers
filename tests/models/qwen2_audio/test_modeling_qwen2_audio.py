@@ -226,6 +226,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(text=formatted_prompt, audios=[raw_audio], return_tensors="pt", padding=True).to(torch_device)
 
+        torch.manual_seed(42)
         output = model.generate(**inputs, max_new_tokens=32)
 
         # fmt: off
@@ -307,6 +308,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(text=text, audios=audios, return_tensors="pt", padding=True).to(torch_device)
 
+        torch.manual_seed(42)
         output = model.generate(**inputs, max_new_tokens=32)
 
         EXPECTED_DECODED_TEXT = [
@@ -364,6 +366,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(text=formatted_prompt, audios=audios, return_tensors="pt", padding=True).to(torch_device)
 
+        torch.manual_seed(42)
         output = model.generate(**inputs, max_new_tokens=32, top_k=1)
 
         EXPECTED_DECODED_TEXT = [
