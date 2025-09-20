@@ -62,7 +62,10 @@ from transformers.utils.versions import require_version
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.57.0.dev0")
 
-require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
+require_version(
+    "datasets>=1.18.0",
+    "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,28 +77,45 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
     feature_extractor_name: Optional[str] = field(
-        default=None, metadata={"help": "feature extractor name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "feature extractor name or path if not the same as model_name"
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where to store the pretrained models downloaded from huggingface.co"
+        },
     )
     use_fast_tokenizer: bool = field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     token: str = field(
         default=None,
@@ -117,14 +137,18 @@ class ModelArguments:
         },
     )
     freeze_feature_encoder: bool = field(
-        default=True, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
+        default=True,
+        metadata={"help": "Whether to freeze the feature encoder layers of the model."},
     )
     freeze_encoder: bool = field(
-        default=False, metadata={"help": "Whether to freeze the entire encoder of the seq2seq model."}
+        default=False,
+        metadata={"help": "Whether to freeze the entire encoder of the seq2seq model."},
     )
     forced_decoder_ids: list[list[int]] = field(
         default=None,
-        metadata={"help": "Deprecated. Please use the `language` and `task` arguments instead."},
+        metadata={
+            "help": "Deprecated. Please use the `language` and `task` arguments instead."
+        },
     )
     suppress_tokens: list[int] = field(
         default=None,
@@ -150,13 +174,18 @@ class DataTrainingArguments:
     """
 
     dataset_name: str = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -182,11 +211,15 @@ class DataTrainingArguments:
     )
     audio_column_name: str = field(
         default="audio",
-        metadata={"help": "The name of the dataset column containing the audio data. Defaults to 'audio'"},
+        metadata={
+            "help": "The name of the dataset column containing the audio data. Defaults to 'audio'"
+        },
     )
     text_column_name: str = field(
         default="text",
-        metadata={"help": "The name of the dataset column containing the text data. Defaults to 'text'"},
+        metadata={
+            "help": "The name of the dataset column containing the text data. Defaults to 'text'"
+        },
     )
     max_duration_in_seconds: float = field(
         default=20.0,
@@ -198,7 +231,10 @@ class DataTrainingArguments:
         },
     )
     min_duration_in_seconds: float = field(
-        default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
+        default=0.0,
+        metadata={
+            "help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"
+        },
     )
     preprocessing_only: bool = field(
         default=False,
@@ -238,7 +274,9 @@ class DataTrainingArguments:
     )
     task: str = field(
         default="transcribe",
-        metadata={"help": "Task, either `transcribe` for speech recognition or `translate` for speech translation."},
+        metadata={
+            "help": "Task, either `transcribe` for speech recognition or `translate` for speech translation."
+        },
     )
 
 
@@ -259,22 +297,32 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     decoder_start_token_id: int
     forward_attention_mask: bool
 
-    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
+    def __call__(
+        self, features: list[dict[str, Union[list[int], torch.Tensor]]]
+    ) -> dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
-        input_features = [{model_input_name: feature[model_input_name]} for feature in features]
+        input_features = [
+            {model_input_name: feature[model_input_name]} for feature in features
+        ]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
-        batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
+        batch = self.processor.feature_extractor.pad(
+            input_features, return_tensors="pt"
+        )
 
         if self.forward_attention_mask:
-            batch["attention_mask"] = torch.LongTensor([feature["attention_mask"] for feature in features])
+            batch["attention_mask"] = torch.LongTensor(
+                [feature["attention_mask"] for feature in features]
+            )
 
         labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
 
         # replace padding with -100 to ignore loss correctly
-        labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
+        labels = labels_batch["input_ids"].masked_fill(
+            labels_batch.attention_mask.ne(1), -100
+        )
 
         # if bos token is appended in previous tokenization step,
         # cut bos token here as it's append later anyways
@@ -291,12 +339,16 @@ def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments)
+    )
 
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -317,7 +369,9 @@ def main():
     transformers.utils.logging.enable_default_handler()
     transformers.utils.logging.enable_explicit_format()
 
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(
+        logging.INFO if is_main_process(training_args.local_rank) else logging.WARN
+    )
 
     # Log on each process the small summary:
     logger.warning(
@@ -333,14 +387,20 @@ def main():
 
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif (
+            last_checkpoint is not None and training_args.resume_from_checkpoint is None
+        ):
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
@@ -372,7 +432,10 @@ def main():
             trust_remote_code=model_args.trust_remote_code,
         )
 
-    if data_args.audio_column_name not in next(iter(raw_datasets.values())).column_names:
+    if (
+        data_args.audio_column_name
+        not in next(iter(raw_datasets.values())).column_names
+    ):
         raise ValueError(
             f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'. "
             "Make sure to set `--audio_column_name` to the correct audio column - one of "
@@ -391,7 +454,11 @@ def main():
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        (
+            model_args.config_name
+            if model_args.config_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
@@ -403,14 +470,22 @@ def main():
         config.update({"apply_spec_augment": model_args.apply_spec_augment})
 
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.model_name_or_path,
+        (
+            model_args.feature_extractor_name
+            if model_args.feature_extractor_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        (
+            model_args.tokenizer_name
+            if model_args.tokenizer_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
@@ -427,7 +502,9 @@ def main():
     )
 
     if model.config.decoder_start_token_id is None:
-        raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
+        raise ValueError(
+            "Make sure that `config.decoder_start_token_id` is correctly defined"
+        )
 
     if model_args.freeze_feature_encoder:
         model.freeze_feature_encoder()
@@ -436,7 +513,10 @@ def main():
         model.freeze_encoder()
         model.model.encoder.gradient_checkpointing = False
 
-    if hasattr(model.generation_config, "is_multilingual") and model.generation_config.is_multilingual:
+    if (
+        hasattr(model.generation_config, "is_multilingual")
+        and model.generation_config.is_multilingual
+    ):
         # We only need to set the language and task ids in a multilingual setting
         tokenizer.set_prefix_tokens(language=data_args.language, task=data_args.task)
         model.generation_config.language = data_args.language
@@ -466,16 +546,25 @@ def main():
         model.generation_config.suppress_tokens = model_args.suppress_tokens
 
     # 6. Resample speech dataset if necessary
-    dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
+    dataset_sampling_rate = (
+        next(iter(raw_datasets.values()))
+        .features[data_args.audio_column_name]
+        .sampling_rate
+    )
     if dataset_sampling_rate != feature_extractor.sampling_rate:
         raw_datasets = raw_datasets.cast_column(
-            data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+            data_args.audio_column_name,
+            datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate),
         )
 
     # 7. Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
-    max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
-    min_input_length = data_args.min_duration_in_seconds * feature_extractor.sampling_rate
+    max_input_length = (
+        data_args.max_duration_in_seconds * feature_extractor.sampling_rate
+    )
+    min_input_length = (
+        data_args.min_duration_in_seconds * feature_extractor.sampling_rate
+    )
     audio_column_name = data_args.audio_column_name
     num_workers = data_args.preprocessing_num_workers
     text_column_name = data_args.text_column_name
@@ -489,16 +578,22 @@ def main():
     )
 
     if data_args.max_train_samples is not None:
-        raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
+        raw_datasets["train"] = raw_datasets["train"].select(
+            range(data_args.max_train_samples)
+        )
 
     if data_args.max_eval_samples is not None:
-        raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_eval_samples))
+        raw_datasets["eval"] = raw_datasets["eval"].select(
+            range(data_args.max_eval_samples)
+        )
 
     def prepare_dataset(batch):
         # process audio
         sample = batch[audio_column_name]
         inputs = feature_extractor(
-            sample["array"], sampling_rate=sample["sampling_rate"], return_attention_mask=forward_attention_mask
+            sample["array"],
+            sampling_rate=sample["sampling_rate"],
+            return_attention_mask=forward_attention_mask,
         )
         # process audio length
         batch[model_input_name] = inputs.get(model_input_name)[0]
@@ -507,7 +602,11 @@ def main():
             batch["attention_mask"] = inputs.get("attention_mask")[0]
 
         # process targets
-        input_str = batch[text_column_name].lower() if do_lower_case else batch[text_column_name]
+        input_str = (
+            batch[text_column_name].lower()
+            if do_lower_case
+            else batch[text_column_name]
+        )
         batch["labels"] = tokenizer(input_str).input_ids
         return batch
 
@@ -583,7 +682,9 @@ def main():
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
         processing_class=feature_extractor,
         data_collator=data_collator,
-        compute_metrics=compute_metrics if training_args.predict_with_generate else None,
+        compute_metrics=(
+            compute_metrics if training_args.predict_with_generate else None
+        ),
     )
 
     # 12. Training
@@ -602,7 +703,9 @@ def main():
             if data_args.max_train_samples is not None
             else len(vectorized_datasets["train"])
         )
-        metrics["train_samples"] = min(max_train_samples, len(vectorized_datasets["train"]))
+        metrics["train_samples"] = min(
+            max_train_samples, len(vectorized_datasets["train"])
+        )
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
         trainer.save_state()
@@ -617,20 +720,29 @@ def main():
             num_beams=training_args.generation_num_beams,
         )
         max_eval_samples = (
-            data_args.max_eval_samples if data_args.max_eval_samples is not None else len(vectorized_datasets["eval"])
+            data_args.max_eval_samples
+            if data_args.max_eval_samples is not None
+            else len(vectorized_datasets["eval"])
         )
-        metrics["eval_samples"] = min(max_eval_samples, len(vectorized_datasets["eval"]))
+        metrics["eval_samples"] = min(
+            max_eval_samples, len(vectorized_datasets["eval"])
+        )
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
     # 14. Write Training Stats
-    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "automatic-speech-recognition"}
+    kwargs = {
+        "finetuned_from": model_args.model_name_or_path,
+        "tasks": "automatic-speech-recognition",
+    }
     if data_args.dataset_name is not None:
         kwargs["dataset_tags"] = data_args.dataset_name
         if data_args.dataset_config_name is not None:
             kwargs["dataset_args"] = data_args.dataset_config_name
-            kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            kwargs["dataset"] = (
+                f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            )
         else:
             kwargs["dataset"] = data_args.dataset_name
 
