@@ -66,7 +66,7 @@ The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface
 
 ```bash
 python run_speech_recognition_ctc.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_11_0" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo" \
@@ -102,7 +102,7 @@ The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface
 ```bash
 torchrun \
 	--nproc_per_node 8 run_speech_recognition_ctc.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_11_0" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo-dist" \
@@ -149,7 +149,7 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 ```bash
 **torchrun \
 	--nproc_per_node 4 run_speech_recognition_ctc_streaming.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_11_0" \
 	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
 	--tokenizer_name_or_path="anton-l/wav2vec2-tokenizer-turkish" \
 	--dataset_config_name="tr" \
@@ -285,7 +285,7 @@ Now, let's run an example and upload it to the Hub under `wav2vec2-common_voice-
 
 ```sh
 python run_speech_recognition_ctc.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_11_0" \
 	--model_name_or_path="facebook/mms-1b-all" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-mms-demo" \
@@ -321,7 +321,7 @@ the adapter weights in the same model repo, you can run:
 
 ```sh
 python run_speech_recognition_ctc.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_11_0" \
 	--model_name_or_path="facebook/mms-1b-all" \
 	--dataset_config_name="sw" \
 	--output_dir="./wav2vec2-common_voice-tr-mms-demo" \
