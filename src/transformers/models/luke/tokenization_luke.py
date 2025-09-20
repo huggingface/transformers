@@ -37,7 +37,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
     to_py_obj,
 )
-from ...utils import add_end_docstrings, is_tf_tensor, is_torch_tensor, logging
+from ...utils import add_end_docstrings, is_torch_tensor, logging
 
 
 logger = logging.get_logger(__name__)
@@ -1403,7 +1403,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
         in the batch. Padding side (left/right) padding token ids are defined at the tokenizer level (with
         `self.padding_side`, `self.pad_token_id` and `self.pad_token_type_id`) .. note:: If the `encoded_inputs` passed
-        are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the result will use the same type unless
+        are dictionary of numpy arrays or PyTorch tensors  the result will use the same type unless
         you provide a different tensor type with `return_tensors`. In the case of PyTorch tensors, you will lose the
         specific device of your tensors however.
 
@@ -1412,8 +1412,8 @@ class LukeTokenizer(PreTrainedTokenizer):
                 Tokenized inputs. Can represent one input ([`BatchEncoding`] or `dict[str, list[int]]`) or a batch of
                 tokenized inputs (list of [`BatchEncoding`], *dict[str, list[list[int]]]* or *list[dict[str,
                 list[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
-                collate function. Instead of `list[int]` you can have tensors (numpy arrays, PyTorch tensors or
-                TensorFlow tensors), see the note above for the return type.
+                collate function. Instead of `list[int]` you can have tensors (numpy arrays, or PyTorch tensors),
+                see the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -1441,7 +1441,6 @@ class LukeTokenizer(PreTrainedTokenizer):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             verbose (`bool`, *optional*, defaults to `True`):
@@ -1466,7 +1465,7 @@ class LukeTokenizer(PreTrainedTokenizer):
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
 
-        # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
+        # If we have PyTorch/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
@@ -1480,16 +1479,14 @@ class LukeTokenizer(PreTrainedTokenizer):
                 first_element = required_input[index][0]
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
-            if is_tf_tensor(first_element):
-                return_tensors = "tf" if return_tensors is None else return_tensors
-            elif is_torch_tensor(first_element):
+            if is_torch_tensor(first_element):
                 return_tensors = "pt" if return_tensors is None else return_tensors
             elif isinstance(first_element, np.ndarray):
                 return_tensors = "np" if return_tensors is None else return_tensors
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
-                    "Should be one of a python, numpy, pytorch or tensorflow object."
+                    "Should be one of a python, numpy, or pytorch object."
                 )
 
             for key, value in encoded_inputs.items():

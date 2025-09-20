@@ -20,6 +20,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
@@ -186,10 +187,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             decoder_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the decoder. Can be either:
@@ -197,10 +194,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args (remaining positional arguments, *optional*):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
@@ -322,7 +315,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
         encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

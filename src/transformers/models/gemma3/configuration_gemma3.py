@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
@@ -241,19 +240,7 @@ class Gemma3TextConfig(PretrainedConfig):
                 "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
-
-    @property
-    def sliding_window_pattern(self):
-        warnings.warn(
-            "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.55.0.",
-            FutureWarning,
-        )
-        return self._sliding_window_pattern
-
-    @sliding_window_pattern.setter
-    def sliding_window_pattern(self, value):
-        self._sliding_window_pattern = value
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 class Gemma3Config(PretrainedConfig):

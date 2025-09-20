@@ -43,7 +43,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> list[np.array]:
+def divide_to_patches(image: np.ndarray, patch_size: int, input_data_format) -> list[np.array]:
     """
     Divides an image into patches of a specified size.
 
@@ -232,10 +232,7 @@ class AriaImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_normalize=do_normalize,
@@ -341,7 +338,7 @@ class AriaImageProcessor(BaseImageProcessor):
         )
 
     def _resize_for_patching(
-        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
+        self, image: np.ndarray, target_resolution: tuple, resample, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
@@ -374,7 +371,7 @@ class AriaImageProcessor(BaseImageProcessor):
         return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
 
     def _pad_for_patching(
-        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
+        self, image: np.ndarray, target_resolution: tuple, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
@@ -454,7 +451,7 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def get_image_patches(
         self,
-        image: np.array,
+        image: np.ndarray,
         grid_pinpoints: list[tuple[int, int]],
         patch_size: int,
         resample: PILImageResampling,

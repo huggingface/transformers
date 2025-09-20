@@ -21,7 +21,6 @@ from typing import Callable, Optional
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import MSELoss
 
@@ -415,8 +414,6 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv3d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()

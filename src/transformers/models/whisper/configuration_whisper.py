@@ -16,7 +16,7 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
@@ -26,7 +26,6 @@ from ...utils import logging
 if TYPE_CHECKING:
     from ...feature_extraction_utils import FeatureExtractionMixin
     from ...tokenization_utils_base import PreTrainedTokenizerBase
-    from ...utils import TensorType
 
 logger = logging.get_logger(__name__)
 
@@ -310,7 +309,6 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
         sampling_rate: int = 22050,
         time_duration: float = 5.0,
         frequency: int = 220,
@@ -320,7 +318,6 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
             self,
             preprocessor=preprocessor.feature_extractor,
             batch_size=batch_size,
-            framework=framework,
             sampling_rate=sampling_rate,
             time_duration=time_duration,
             frequency=frequency,
@@ -329,7 +326,10 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
         seq_length = encoder_sequence_length // 2 if self.use_past else seq_length
 
         decoder_inputs = super().generate_dummy_inputs(
-            preprocessor.tokenizer, batch_size, seq_length, is_pair, framework
+            preprocessor.tokenizer,
+            batch_size,
+            seq_length,
+            is_pair,
         )
 
         dummy_inputs["input_features"] = encoder_inputs.pop("input_features")

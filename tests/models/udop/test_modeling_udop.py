@@ -15,6 +15,7 @@
 import copy
 import inspect
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -55,7 +55,7 @@ class UdopModelTester:
         use_attention_mask=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=32,
@@ -425,7 +425,7 @@ class UdopEncoderOnlyModelTester:
         is_training=False,
         use_attention_mask=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         decoder_layers=2,
         num_attention_heads=4,
         d_ff=37,

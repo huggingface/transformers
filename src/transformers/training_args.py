@@ -20,6 +20,7 @@ import warnings
 from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
+from functools import cached_property
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -37,7 +38,6 @@ from .trainer_utils import (
 from .utils import (
     ACCELERATE_MIN_VERSION,
     ExplicitEnum,
-    cached_property,
     is_accelerate_available,
     is_apex_available,
     is_ipex_available,
@@ -77,8 +77,10 @@ if is_accelerate_available():
 
     from .trainer_pt_utils import AcceleratorConfig
 
-    if is_accelerate_available("1.10.1"):
-        from accelerate.parallelism_config import ParallelismConfig
+if is_accelerate_available("1.10.1"):
+    from accelerate.parallelism_config import ParallelismConfig
+else:
+    ParallelismConfig = Any
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -391,9 +393,6 @@ class TrainingArguments:
             seed.
         jit_mode_eval (`bool`, *optional*, defaults to `False`):
             Whether or not to use PyTorch jit trace for inference.
-        use_ipex (`bool`, *optional*, defaults to `False`):
-            Use Intel extension for PyTorch when it is available. [IPEX
-            installation](https://github.com/intel/intel-extension-for-pytorch).
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change.
@@ -823,7 +822,6 @@ class TrainingArguments:
         "gradient_checkpointing_kwargs",
         "lr_scheduler_kwargs",
     ]
-    framework = "pt"
 
     output_dir: Optional[str] = field(
         default=None,
@@ -1060,15 +1058,6 @@ class TrainingArguments:
     jit_mode_eval: bool = field(
         default=False, metadata={"help": "Whether or not to use PyTorch jit trace for inference"}
     )
-    use_ipex: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Use Intel extension for PyTorch when it is available, installation:"
-                " 'https://github.com/intel/intel-extension-for-pytorch'"
-            )
-        },
-    )
     bf16: bool = field(
         default=False,
         metadata={
@@ -1276,7 +1265,7 @@ class TrainingArguments:
             )
         },
     )
-    parallelism_config: Optional["ParallelismConfig"] = field(
+    parallelism_config: Optional[ParallelismConfig] = field(
         default=None,
         metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.10.1`")},
     )
@@ -1507,10 +1496,14 @@ class TrainingArguments:
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
     )
 
-    include_num_input_tokens_seen: Optional[bool] = field(
+    include_num_input_tokens_seen: Optional[Union[str, bool]] = field(
         default=False,
         metadata={
-            "help": "If set to `True`, will track the number of input tokens seen throughout training. (May be slower in distributed training)"
+            "help": (
+                "Whether to track the number of input tokens seen. "
+                "Can be `'all'` to count all tokens, `'non_padding'` to count only non-padding tokens, "
+                "or a boolean (`True` maps to `'all'`, `False` to `'no'`)."
+            )
         },
     )
 
@@ -1622,12 +1615,6 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.use_cpu = self.no_cuda
-        if self.use_ipex:
-            warnings.warn(
-                "using `use_ipex` is deprecated and will be removed in version 4.54 of 🤗 Transformers. "
-                "You only need PyTorch for the needed optimizations on Intel CPU and XPU.",
-                FutureWarning,
-            )
 
         self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
@@ -1717,7 +1704,7 @@ class TrainingArguments:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
-        if self.framework == "pt" and is_torch_available():
+        if is_torch_available():
             if self.fp16_backend and self.fp16_backend != "auto":
                 warnings.warn(
                     "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
@@ -1799,20 +1786,8 @@ class TrainingArguments:
                 )
 
         # Initialize device before we proceed
-        if self.framework == "pt" and is_torch_available():
+        if is_torch_available():
             self.device
-
-        # Disable average tokens when using single device
-        if self.average_tokens_across_devices:
-            try:
-                if self.world_size == 1:
-                    logger.info(
-                        "average_tokens_across_devices is True but world size is 1. Setting it to False automatically."
-                    )
-                    self.average_tokens_across_devices = False
-            except ImportError as e:
-                logger.warning(f"Can not specify world size due to {e}. Turn average_tokens_across_devices to False.")
-                self.average_tokens_across_devices = False
 
         if self.torchdynamo is not None:
             warnings.warn(
@@ -1837,7 +1812,7 @@ class TrainingArguments:
             if self.torch_compile_mode is not None:
                 os.environ[prefix + "MODE"] = self.torch_compile_mode
 
-        if self.framework == "pt" and is_torch_available() and self.torch_compile:
+        if is_torch_available() and self.torch_compile:
             if is_torch_tf32_available():
                 if self.tf32 is None and not self.fp16 or self.bf16:
                     device_str = "MUSA" if is_torch_musa_available() else "CUDA"
@@ -1854,7 +1829,7 @@ class TrainingArguments:
                 logger.warning(
                     "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
                 )
-        if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
+        if is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
                     if is_torch_musa_available():
@@ -1873,14 +1848,8 @@ class TrainingArguments:
                         torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
 
-        # if training args is specified, it will override the one specified in the accelerate config
-        if self.half_precision_backend != "apex":
-            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-            if self.fp16:
-                mixed_precision_dtype = "fp16"
-            elif self.bf16:
-                mixed_precision_dtype = "bf16"
-            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
+        # NOTE: Mixed precision environment variable setting moved to after DeepSpeed processing
+        # to ensure DeepSpeed config can override TrainingArguments defaults
 
         if self.report_to is None:
             logger.info(
@@ -2090,6 +2059,16 @@ class TrainingArguments:
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
+        # Set mixed precision environment variable after DeepSpeed processing
+        # This ensures DeepSpeed config overrides have been applied to fp16/bf16 settings
+        if self.half_precision_backend != "apex":
+            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+            if self.fp16:
+                mixed_precision_dtype = "fp16"
+            elif self.bf16:
+                mixed_precision_dtype = "bf16"
+            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
+
         if self.use_cpu:
             self.dataloader_pin_memory = False
 
@@ -2152,6 +2131,11 @@ class TrainingArguments:
                 "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead."
             )
             self.include_for_metrics.append("inputs")
+
+        if self.include_num_input_tokens_seen is True:
+            self.include_num_input_tokens_seen = "all"
+        elif self.include_num_input_tokens_seen is False:
+            self.include_num_input_tokens_seen = "no"
 
     def __str__(self):
         self_as_dict = asdict(self)
@@ -2236,7 +2220,7 @@ class TrainingArguments:
         else:
             AcceleratorState._reset_state(reset_partial_state=True)
             self.distributed_state = None
-        if not self.use_ipex and "ACCELERATE_USE_IPEX" not in os.environ:
+        if "ACCELERATE_USE_IPEX" not in os.environ:
             os.environ["ACCELERATE_USE_IPEX"] = "false"
 
         self._n_gpu = 1

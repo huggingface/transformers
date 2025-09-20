@@ -18,7 +18,6 @@ import math
 from typing import Any, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -771,7 +770,7 @@ class DbrxBlock(GradientCheckpointingLayer):
             attention_mask (`torch.Tensor`, *optional*): attention mask of size (batch_size, sequence_length)
                 if flash attention is used or (batch_size, 1, query_sequence_length, key_sequence_length)
                 if default attention is used.
-            past_key_values (`Tuple(torch.Tensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*): Whether or not to return the attentions tensors of all
                 attention layers. See `attentions` under returned tensors for more detail.
             output_router_logits (`bool`, *optional*): Whether or not to return the router logits.
@@ -909,10 +908,6 @@ class DbrxModel(DbrxPreTrainedModel):
             inputs_embeds = self.wte(input_ids)
 
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.emb_pdrop, training=self.training)
-
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)

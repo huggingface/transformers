@@ -373,7 +373,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
     def affine_transform(
         self,
-        image: np.array,
+        image: np.ndarray,
         center: tuple[float],
         scale: tuple[float],
         rotation: float,
@@ -465,10 +465,8 @@ class VitPoseImageProcessor(BaseImageProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -487,10 +485,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         if isinstance(boxes, list) and len(images) != len(boxes):
             raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")

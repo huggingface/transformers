@@ -74,7 +74,7 @@ class Idefics3VisionText2TextModelTester:
             "vocab_size": 100,
             "hidden_size": 64,
             "intermediate_size": 56,
-            "num_hidden_layers": 3,
+            "num_hidden_layers": 2,
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
             "hidden_act": "silu",
@@ -349,12 +349,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
-        pass
-
-    @unittest.skip(
-        reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
-    )
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
     @pytest.mark.generate

@@ -125,10 +125,6 @@ class PaliGemmaProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
@@ -161,7 +157,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to GemmaTokenizerFast's [`~GemmaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -196,10 +192,8 @@ class PaliGemmaProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
             suffix (`str`, `list[str]`, `list[list[str]]`):
                 The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
                 for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".

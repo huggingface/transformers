@@ -93,7 +93,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class: PreTrainedTokenizer = None
+    slow_tokenizer_class: Optional[type[PreTrainedTokenizer]] = None
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)

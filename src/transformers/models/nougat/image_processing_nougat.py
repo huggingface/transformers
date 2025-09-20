@@ -122,7 +122,7 @@ class NougatImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-    def python_find_non_zero(self, image: np.array):
+    def python_find_non_zero(self, image: np.ndarray):
         """This is a reimplementation of a findNonZero function equivalent to cv2."""
         non_zero_indices = np.column_stack(np.nonzero(image))
         idxvec = non_zero_indices[:, [1, 0]]
@@ -140,7 +140,7 @@ class NougatImageProcessor(BaseImageProcessor):
 
     def crop_margin(
         self,
-        image: np.array,
+        image: np.ndarray,
         gray_threshold: int = 200,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -419,10 +419,8 @@ class NougatImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -451,18 +449,13 @@ class NougatImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size,  # There is no pad divisibility in this processor, but pad requires the size arg.
             do_resize=do_resize,
             size=size,
             resample=resample,

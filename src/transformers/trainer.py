@@ -139,6 +139,7 @@ from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
     ADAPTER_WEIGHTS_NAME,
     CONFIG_NAME,
+    GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
@@ -240,10 +241,9 @@ if is_accelerate_available():
     DATA_SAMPLERS = [RandomSampler]
     if version.parse(accelerate_version) > version.parse("1.3.0"):
         from accelerate.utils import TorchTensorParallelPlugin
-    if version.parse(accelerate_version) > version.parse("0.23.0"):
-        from accelerate.data_loader import SeedableRandomSampler
+    from accelerate.data_loader import SeedableRandomSampler
 
-        DATA_SAMPLERS += [SeedableRandomSampler]
+    DATA_SAMPLERS += [SeedableRandomSampler]
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
@@ -2483,8 +2483,7 @@ class Trainer:
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                     self.model, self.optimizer, self.lr_scheduler
                 )
-        elif self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
-            # In this case we are in DDP + LOMO, which should be supported
+        else:
             self.optimizer = self.accelerator.prepare(self.optimizer)
 
         if self.is_fsdp_enabled:
@@ -2532,7 +2531,6 @@ class Trainer:
         start_time = time.time()
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
-        steps_trained_progress_bar = None
 
         # Check if continuing training from a checkpoint
         if resume_from_checkpoint is not None and os.path.isfile(
@@ -2593,18 +2591,18 @@ class Trainer:
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
-            if epoch == epochs_trained and resume_from_checkpoint is not None and steps_trained_in_current_epoch == 0:
-                self._load_rng_state(resume_from_checkpoint)
-
-            rng_to_sync = False
-            steps_skipped = 0
-            if steps_trained_in_current_epoch > 0:
-                epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
-                steps_skipped = steps_trained_in_current_epoch
-                steps_trained_in_current_epoch = 0
-                rng_to_sync = True
-
             step = -1
+            rng_to_sync = False
+
+            # Handle resumption from checkpoint
+            if epoch == epochs_trained and resume_from_checkpoint is not None:
+                if steps_trained_in_current_epoch > 0 and not args.ignore_data_skip:
+                    epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
+                    step = steps_trained_in_current_epoch - 1
+                    rng_to_sync = True
+                elif steps_trained_in_current_epoch == 0:
+                    self._load_rng_state(resume_from_checkpoint)
+
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
             remainder = steps_in_epoch % args.gradient_accumulation_steps
@@ -2627,7 +2625,7 @@ class Trainer:
                     # Since we perform prefetching, we need to manually set sync_gradients
                     self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
 
-                    if self.args.include_num_input_tokens_seen:
+                    if self.args.include_num_input_tokens_seen not in ["no", False]:
                         main_input_name = getattr(self.model, "main_input_name", "input_ids")
                         if main_input_name not in inputs:
                             logger.warning(
@@ -2636,24 +2634,31 @@ class Trainer:
                                 "a `main_input_name` attribute to the model class you are using."
                             )
                         else:
-                            input_tokens = inputs[main_input_name].numel()
+                            if self.args.include_num_input_tokens_seen == "non_padding":
+                                if "attention_mask" in inputs:
+                                    input_tokens = inputs["attention_mask"].sum()
+                                elif (
+                                    self.processing_class is not None
+                                    and hasattr(self.processing_class, "pad_token_id")
+                                    and self.processing_class.pad_token_id is not None
+                                ):
+                                    input_tokens = (
+                                        inputs[main_input_name] != self.processing_class.pad_token_id
+                                    ).sum()
+                                else:
+                                    logger.warning(
+                                        "Could not determine method to count non-padding tokens, falling back to counting all tokens."
+                                    )
+                                    input_tokens = inputs[main_input_name].numel()
+                            else:
+                                input_tokens = inputs[main_input_name].numel()
+
                             input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
                             self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
+
                     if rng_to_sync:
                         self._load_rng_state(resume_from_checkpoint)
                         rng_to_sync = False
-
-                    # Skip past any already trained steps if resuming training
-                    if steps_trained_in_current_epoch > 0:
-                        steps_trained_in_current_epoch -= 1
-                        if steps_trained_progress_bar is not None:
-                            steps_trained_progress_bar.update(1)
-                        if steps_trained_in_current_epoch == 0:
-                            self._load_rng_state(resume_from_checkpoint)
-                        continue
-                    elif steps_trained_progress_bar is not None:
-                        steps_trained_progress_bar.close()
-                        steps_trained_progress_bar = None
 
                     if step % args.gradient_accumulation_steps == 0:
                         self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
@@ -2746,7 +2751,7 @@ class Trainer:
 
                         model.zero_grad()
                         self.state.global_step += 1
-                        self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
+                        self.state.epoch = epoch + (step + 1) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
                         self._maybe_log_save_evaluate(
                             tr_loss,
@@ -3777,7 +3782,7 @@ class Trainer:
         """
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
-        if self.args.include_num_input_tokens_seen:
+        if self.args.include_num_input_tokens_seen != "no":
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
             if start_time is not None:
                 logs.update(speed_metrics("train", start_time, num_tokens=self.state.num_input_tokens_seen))
@@ -4137,7 +4142,7 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            loss *= self.accelerator.num_processes
+            loss *= self.accelerator.num_processes if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
 
@@ -4189,9 +4194,7 @@ class Trainer:
         elif (tp_size := getattr(self.model, "_tp_size", 0)) is not None and tp_size > 1:
             self._save(output_dir)
         elif self.is_fsdp_enabled:
-            if ("FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)) and (
-                version.parse(accelerate_version) > version.parse("0.24.1")
-            ):
+            if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
@@ -5034,7 +5037,7 @@ class Trainer:
 
         output_dir = self.args.output_dir
         # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
-        modeling_files = [CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
+        modeling_files = [CONFIG_NAME, GENERATION_CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
         #  Add sharded checkpoints if we have an index
         for index_file in [WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME]:
             index_path = os.path.join(checkpoint_folder, index_file)
@@ -5577,7 +5580,7 @@ class Trainer:
 
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
-    ) -> tuple[list, Optional[torch.Tensor]]:
+    ) -> tuple[list, Optional[Union[torch.Tensor, int]]]:
         """
         Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
         """
@@ -5613,15 +5616,19 @@ class Trainer:
                 pass
 
         if num_items_in_batch is not None:
-            if self.args.average_tokens_across_devices:
-                num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum()
+            if self.args.average_tokens_across_devices and self.args.world_size >= 1:
+                num_items_in_batch = self.accelerator.gather(num_items_in_batch.to(device)).sum()
+            elif self.args.n_gpu >= 1:
+                # In DP case, if we don't average, we need to divide by the number of gpu. This is the simplest approximation.
+                # Otherwise, we would have to scatter labels and calculate num_items_in_batch for each gpu.
+                num_items_in_batch = num_items_in_batch // self.args.n_gpu
 
             if torch.is_tensor(num_items_in_batch):
                 num_items_in_batch = num_items_in_batch.to(device)
 
                 if self.args.n_gpu > 1 and num_items_in_batch.dim() == 0:
-                    # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
-                    num_items_in_batch = num_items_in_batch.unsqueeze(0)
+                    # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
+                    num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
                 if pc := getattr(self.accelerator, "parallelism_config", None):
                     num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size

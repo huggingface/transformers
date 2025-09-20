@@ -40,6 +40,12 @@ from transformers.commands.serving import ServeArguments, ServeCommand
 from transformers.utils import is_rich_available, is_torch_available
 
 
+try:
+    import readline  # noqa importing this enables GNU readline capabilities
+except ImportError:
+    # some platforms may not support readline: https://docs.python.org/3/library/readline.html
+    pass
+
 if platform.system() != "Windows":
     import pwd
 
@@ -289,8 +295,14 @@ class ChatArguments:
     def __post_init__(self):
         """Only used for BC `torch_dtype` argument."""
         # In this case only the BC torch_dtype was given
-        if self.torch_dtype is not None and self.dtype == "auto":
-            self.dtype = self.torch_dtype
+        if self.torch_dtype is not None:
+            if self.dtype is None:
+                self.dtype = self.torch_dtype
+            elif self.torch_dtype != self.dtype:
+                raise ValueError(
+                    f"`torch_dtype` {self.torch_dtype} and `dtype` {self.dtype} have different values. `torch_dtype` is deprecated and "
+                    "will be removed in 4.59.0, please set `dtype` instead."
+                )
 
 
 def chat_command_factory(args: Namespace):

@@ -761,7 +761,7 @@ class KyutaiSpeechToTextDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
             kwargs (`dict`, *optional*):
@@ -867,10 +867,6 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
-
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -1082,7 +1078,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         self.codec_model = AutoModel.from_config(config.codec_config)
 
         # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
-        # yet the codec_model needs a generation config to initalize it's cache for streaming inference
+        # yet the codec_model needs a generation config to initialize it's cache for streaming inference
         # we therefore initialize a generation config for the codec model
         self.codec_model.generation_config = GenerationConfig.from_model_config(config.codec_config)
 

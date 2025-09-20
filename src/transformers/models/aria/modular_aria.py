@@ -16,6 +16,8 @@ from collections.abc import Iterable
 from typing import Optional, Union
 
 import numpy as np
+import torch
+from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -39,7 +41,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -61,10 +62,6 @@ from ..llava_next.image_processing_llava_next import divide_to_patches
 
 
 logger = logging.get_logger(__name__)
-
-if is_torch_available():
-    import torch
-    from torch import nn
 
 
 def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
@@ -618,10 +615,7 @@ class AriaImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_normalize=do_normalize,
@@ -727,7 +721,7 @@ class AriaImageProcessor(BaseImageProcessor):
         )
 
     def _resize_for_patching(
-        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
+        self, image: np.ndarray, target_resolution: tuple, resample, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
@@ -760,7 +754,7 @@ class AriaImageProcessor(BaseImageProcessor):
         return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
 
     def _pad_for_patching(
-        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
+        self, image: np.ndarray, target_resolution: tuple, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
@@ -840,7 +834,7 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def get_image_patches(
         self,
-        image: np.array,
+        image: np.ndarray,
         grid_pinpoints: list[tuple[int, int]],
         patch_size: int,
         resample: PILImageResampling,
