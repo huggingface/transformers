@@ -1,10 +1,5 @@
 # coding=utf-8
-# Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,50 +12,68 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""Tokenization classes for LLaMA."""
-
 import os
 from shutil import copyfile
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Optional
 
-import sentencepiece as spm
+from tokenizers import processors
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers.models import BPE, Unigram
 
-from ...convert_slow_tokenizer import import_protobuf
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging
-from ...utils.import_utils import requires
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...utils import is_sentencepiece_available, logging, requires_backends
+from ...create_fast_tokenizer import SpmTokenizer, _get_prepend_scheme
 
-
-if TYPE_CHECKING:
-    from ...tokenization_utils_base import TextInput
 
 logger = logging.get_logger(__name__)
-
-VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
-
-SPIECE_UNDERLINE = "▁"
+VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
 
 B_INST, E_INST = "[INST]", "[/INST]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
 
+# fmt: off
 DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
 answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
  that your responses are socially unbiased and positive in nature.
 
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not \
-correct. If you don't know the answer to a question, please don't share false information."""  # fmt: skip
+correct. If you don't know the answer to a question, please don't share false information."""
+# fmt: on
 
 
-@requires(backends=("sentencepiece",))
-class LlamaTokenizer(PreTrainedTokenizer):
+class LlamaTokenizer(PreTrainedTokenizerFast):
     """
-    Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
-    no padding token in the original model.
+    Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
+
+    This uses notably ByteFallback and no normalization.
+
+    ```python
+    >>> from transformers import LlamaTokenizer
+
+    >>> tokenizer = LlamaTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
+    >>> tokenizer.encode("Hello this is a test")
+    [1, 15043, 445, 338, 263, 1243]
+    ```
+
+    If you want to change the `bos_token` or the `eos_token`, make sure to specify them when initializing the model, or
+    call `tokenizer.update_post_processor()` to make sure that the post-processing is correctly done (otherwise the
+    values of the first token and final token of an encoded sequence will not be correct). For more details, checkout
+    [post-processors] (https://huggingface.co/docs/tokenizers/api/post-processors) documentation.
+
+
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
-            Path to the vocabulary file.
+        vocab_file (`str`, *optional*):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        tokenizer_file (`str`, *optional*):
+            [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
         unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -68,36 +81,12 @@ class LlamaTokenizer(PreTrainedTokenizer):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
         eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-        pad_token (`str` or `tokenizers.AddedToken`, *optional*):
-            A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
-            attention mechanisms or loss computation.
-        sp_model_kwargs (`dict[str, Any]`, `Optional`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
-            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
-            to set:
-
-            - `enable_sampling`: Enable subword regularization.
-            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
-
-              - `nbest_size = {0,1}`: No sampling is performed.
-              - `nbest_size > 1`: samples from the nbest_size results.
-              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
-                using forward-filtering-and-backward-sampling algorithm.
-
-            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
-              BPE-dropout.
-
         add_bos_token (`bool`, *optional*, defaults to `True`):
             Whether or not to add an `bos_token` at the start of sequences.
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an `eos_token` at the end of sequences.
-        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
-            extra spaces.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
-            Whether or not the default system prompt for Llama should be used.
-        spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
-            Whether or not to add spaces between special tokens.
+            Whether or not the default system prompt for Llama should be used
         legacy (`bool`, *optional*):
             Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
             and #25224 which includes fixes to properly handle tokens that appear after special tokens.
@@ -106,310 +95,128 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
             - `legacy=True`:
             ```python
-            >>> from transformers import LlamaTokenizerFast
+            >>> from transformers import LlamaTokenizer
 
-            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=True, from_slow=True)
+            >>> tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=True, from_scratch=True)
             >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
             [1, 15043, 29871, 1, 869]
             ```
             - `legacy=False`:
             ```python
-            >>> from transformers import LlamaTokenizerFast
+            >>> from transformers import LlamaTokenizer
 
-            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False, from_slow=True)
+            >>> tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False, from_scratch=True)
             >>> tokenizer.encode("Hello <s>.")  # 29889 is '.'
             [1, 15043, 29871, 1, 29889]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
-        add_prefix_space (`bool`, *optional*, defaults to `True`):
-            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. Again, this should be set with `from_slow=True` to make sure it's taken into account.
+        add_prefix_space (`bool`, *optional*):
+            Whether or not the tokenizer should automatically add a prefix space
+        from_scratch (`bool`, *optional*, defaults to `False`):
+            Whether to create an empty trainable tokenizer from scratch. When `True`, creates a minimal tokenizer
+            with only basic special tokens that can be trained on new data.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    slow_tokenizer_class = None  # No slow tokenizer class needed
+    padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
-        vocab_file,
+        vocab_file=None,
+        tokenizer_file=None,
+        clean_up_tokenization_spaces=False,
         unk_token="<unk>",
         bos_token="<s>",
         eos_token="</s>",
-        pad_token=None,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
-        clean_up_tokenization_spaces=False,
         use_default_system_prompt=False,
-        spaces_between_special_tokens=False,
-        legacy=None,
-        add_prefix_space=True,
+        legacy=False,
+        add_prefix_space=None,
         **kwargs,
     ):
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
-
-        if legacy is None:
-            logger.warning_once(
-                f"You are using the default legacy behaviour of the {self.__class__}. This is"
-                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
-                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
-                " means, and thoroughly read the reason why this was added as explained in"
-                " https://github.com/huggingface/transformers/pull/24565 - if you loaded a llama tokenizer from a GGUF file"
-                " you can ignore this message"
-            )
-            legacy = True
-
         self.legacy = legacy
-        self.vocab_file = vocab_file
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
-        self.use_default_system_prompt = use_default_system_prompt
-        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
-        self.add_prefix_space = add_prefix_space
+        
+        # Set add_prefix_space attribute for use in override methods
+        self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
 
+        # Handle from_scratch parameter - when True, create empty trainable tokenizer
+        from_scratch = kwargs.pop("from_scratch", False)
+
+        if tokenizer_file is not None and not from_scratch:
+            from tokenizers import Tokenizer as TokenizerFast
+            fast_tokenizer = TokenizerFast.from_file(tokenizer_file)
+        else:
+            spm_tokenizer = SpmTokenizer(
+                handle_byte_fallback=True,
+                legacy=legacy,
+                add_prefix_space=add_prefix_space if add_prefix_space is not None else True,
+                vocab=self._vocab,
+                normalizer=self._normalizer,
+                pre_tokenizer=self._pre_tokenizer,
+                decoder=self._decoder,
+            )
+            fast_tokenizer = spm_tokenizer.create_tokenizer()
+
+        # Initialize the base class with the fast tokenizer
         super().__init__(
+            tokenizer_object=fast_tokenizer,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             use_default_system_prompt=use_default_system_prompt,
-            spaces_between_special_tokens=spaces_between_special_tokens,
-            legacy=legacy,
             add_prefix_space=add_prefix_space,
+            legacy=legacy,
             **kwargs,
         )
+        self._add_bos_token = add_bos_token
+        self._add_eos_token = add_eos_token
+        self.update_post_processor()
+        self.use_default_system_prompt = use_default_system_prompt
+        self.vocab_file = vocab_file
 
-    @property
-    def unk_token_length(self):
-        return len(self.sp_model.encode(str(self.unk_token)))
-
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
-    def get_spm_processor(self, from_slow=False):
-        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if self.legacy or from_slow:  # no dependency on protobuf
-            tokenizer.Load(self.vocab_file)
-            return tokenizer
-
-        with open(self.vocab_file, "rb") as f:
-            sp_model = f.read()
-            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
-            model = model_pb2.ModelProto.FromString(sp_model)
-            normalizer_spec = model_pb2.NormalizerSpec()
-            normalizer_spec.add_dummy_prefix = False
-            model.normalizer_spec.MergeFrom(normalizer_spec)
-            sp_model = model.SerializeToString()
-            tokenizer.LoadFromSerializedProto(sp_model)
-        return tokenizer
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        state["sp_model_proto"] = self.sp_model.serialized_model_proto()
-        return state
-
-    def __setstate__(self, d):
-        self.__dict__.update(d)
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
-
-    @property
-    def vocab_size(self):
-        """Returns vocab size"""
-        return self.sp_model.get_piece_size()
-
-    def get_vocab(self):
-        """Returns vocab as a dict"""
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
+    def _vocab(self):
+        """Vocabulary handling for this tokenizer."""
+        # First 3 special pieces are fixed for LLaMA
+        vocab = [
+            ("<unk>", 0.0),
+            ("<s>", 0.0),
+            ("</s>", 0.0),
+        ]
         return vocab
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", **kwargs) -> list[str]:
-        """
-        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
-        first token is special.
-        """
-        if self.legacy or len(text) == 0:
-            return super().tokenize(text, **kwargs)
+    def _decoder(self, replacement, add_prefix_space):
+        """Decoder configuration for this tokenizer."""
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
 
-        text = text.replace(SPIECE_UNDERLINE, " ")
-        if self.add_prefix_space:
-            text = SPIECE_UNDERLINE + text
+    def _normalizer(self):
+        """Normalizer configuration for this tokenizer."""
+        if self.legacy:
+            sequence = []
+            if self.add_prefix_space:
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None
 
-        tokens = super().tokenize(text, **kwargs)
-
-        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
-            tokens = tokens[1:]
-        return tokens
-
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
-    def _tokenize(self, text, **kwargs):
-        """
-        Returns a tokenized string.
-
-        We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
-        SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
-        `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
-        `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
-        `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
-        """
-        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return self.sp_model.encode(text, out_type=str)
-
-        # 1. Encode string + prefix ex: "<unk> Hey"
-        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
-        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
-        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
-
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
-        return self.sp_model.piece_to_id(token)
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        token = self.sp_model.IdToPiece(index)
-        return token
-
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
-        # since we manually add the prefix space, we have to remove it when decoding
-        if tokens[0].startswith(SPIECE_UNDERLINE) and self.add_prefix_space:
-            tokens[0] = tokens[0][1:]
-
-        current_sub_tokens = []
-        out_string = ""
-        prev_is_special = False
-        for i, token in enumerate(tokens):
-            # make sure that special tokens are not decoded using sentencepiece model
-            if token in self.all_special_tokens:
-                if not prev_is_special and i != 0 and self.legacy:
-                    out_string += " "
-                out_string += self.sp_model.decode(current_sub_tokens) + token
-                prev_is_special = True
-                current_sub_tokens = []
-            else:
-                if prev_is_special and i == 1 and self.add_prefix_space and not token.startswith(SPIECE_UNDERLINE):
-                    out_string += " "
-                current_sub_tokens.append(token)
-                prev_is_special = False
-        out_string += self.sp_model.decode(current_sub_tokens)
-        return out_string
-
-    def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> tuple[str]:
-        """
-        Save the vocabulary and special tokens file to a directory.
-
-        Args:
-            save_directory (`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            `Tuple(str)`: Paths to the files saved.
-        """
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-        elif not os.path.isfile(self.vocab_file):
-            with open(out_vocab_file, "wb") as fi:
-                content_spiece_model = self.sp_model.serialized_model_proto()
-                fi.write(content_spiece_model)
-
-        return (out_vocab_file,)
-
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
-
-        output = bos_token_id + token_ids_0 + eos_token_id
-
-        if token_ids_1 is not None:
-            output = output + bos_token_id + token_ids_1 + eos_token_id
-
-        return output
-
-    def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
-    ) -> list[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        bos_token_id = [1] if self.add_bos_token else []
-        eos_token_id = [1] if self.add_eos_token else []
-
-        if token_ids_1 is None:
-            return bos_token_id + ([0] * len(token_ids_0)) + eos_token_id
-        return (
-            bos_token_id
-            + ([0] * len(token_ids_0))
-            + eos_token_id
-            + bos_token_id
-            + ([0] * len(token_ids_1))
-            + eos_token_id
-        )
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An ALBERT
-        sequence pair mask has the following format:
-
-        ```
-        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence |
-        ```
-
-        if token_ids_1 is None, only returns the first portion of the mask (0s).
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of ids.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-        """
-        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
-
-        output = [0] * len(bos_token_id + token_ids_0 + eos_token_id)
-
-        if token_ids_1 is not None:
-            output += [1] * len(bos_token_id + token_ids_1 + eos_token_id)
-
-        return output
+    def _pre_tokenizer(self, replacement, add_prefix_space):
+        """Pre-tokenizer configuration for this tokenizer."""
+        if not self.legacy:
+            prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
+            return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+        return None
 
 
 __all__ = ["LlamaTokenizer"]
