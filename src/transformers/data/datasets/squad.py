@@ -118,9 +118,9 @@ class SquadDataset(Dataset):
         tokenizer: PreTrainedTokenizer,
         limit_length: Optional[int] = None,
         mode: Union[str, Split] = Split.train,
-        is_language_sensitive: Optional[bool] = False,
+        is_language_sensitive: bool = False,
         cache_dir: Optional[str] = None,
-        dataset_format: Optional[str] = "pt",
+        dataset_format: str = "pt",
     ):
         self.args = args
         self.is_language_sensitive = is_language_sensitive

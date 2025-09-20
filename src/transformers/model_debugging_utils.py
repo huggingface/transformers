@@ -269,8 +269,8 @@ def log_model_debug_trace(debug_path, model):
 
 def _attach_debugger_logic(
     model,
-    debug_path: Optional[str] = ".",
-    do_prune_layers: Optional[bool] = True,
+    debug_path: str = ".",
+    do_prune_layers: bool = True,
     use_repr: bool = True,
 ):
     """
@@ -399,8 +399,8 @@ def _attach_debugger_logic(
 def model_addition_debugger_context(
     model,
     debug_path: Optional[str] = None,
-    do_prune_layers: Optional[bool] = True,
-    use_repr: Optional[bool] = True,
+    do_prune_layers: bool = True,
+    use_repr: bool = True,
 ):
     """
     # Model addition debugger - context manager for model adders
