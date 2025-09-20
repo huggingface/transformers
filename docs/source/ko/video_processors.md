@@ -14,18 +14,17 @@ rendered properly in your Markdown viewer.
 
 -->
 
+# 비디오 프로세서[[video-processor]]
 
-# Video Processor
+**Video Processor**는 비디오 모델을 위한 입력 특징을 준비하고, 출력의 후처리를 담당하는 유틸리티입니다. 크기 조정, 정규화, PyTorch로의 변환과 같은 변환을 제공합니다.
 
-A **Video Processor** is a utility responsible for preparing input features for video models, as well as handling the post-processing of their outputs. It provides transformations such as resizing, normalization, and conversion into PyTorch. 
+비디오 프로세서는 이미지와는 다른 인자 집합으로 비디오를 처리할 수 있도록 이미지 프로세서의 기능을 확장합니다. 원시 비디오 데이터와 모델 사이의 다리 역할을 하여 입력 특징이 VLM에 최적화되도록 보장합니다.
 
-The video processor extends the functionality of image processors by allowing the models to handle videos with a distinct set of arguments compared to images. It serves as the bridge between raw video data and the model, ensuring that input features are optimized for the VLM.
+Hugging Face [Hub](https://hf.co) 또는 로컬 디렉터리에 있는 비디오 모델로부터 비디오 프로세서 구성(이미지 크기, 정규화 및 리스케일 여부 등)을 로드하려면 [`~BaseVideoProcessor.from_pretrained`]를 사용하세요. 각 사전 학습된 모델의 구성은 [video_preprocessor_config.json] 파일에 저장되어야 하지만, 이전 모델은 구성이 [preprocessor_config.json](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf/blob/main/preprocessor_config.json) 파일에 저장되어 있을 수 있습니다. 후자는 권장되지 않으며 향후 제거될 예정입니다.
 
-Use [`~BaseVideoProcessor.from_pretrained`] to load a video processors configuration (image size, whether to normalize and rescale, etc.) from a video model on the Hugging Face [Hub](https://hf.co) or local directory. The configuration for each pretrained model should be saved in a [video_preprocessor_config.json] file but older models might have the config saved in [preprocessor_config.json](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf/blob/main/preprocessor_config.json) file. Note that the latter is less preferred and will be removed in the future.
+### 사용 예시[[usage-example]]
 
-
-### Usage Example
-Here's an example of how to load a video processor with [`llava-hf/llava-onevision-qwen2-0.5b-ov-hf`](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf) model:
+다음은 [`llava-hf/llava-onevision-qwen2-0.5b-ov-hf`](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf) 모델과 함께 비디오 프로세서를 로드하는 예시입니다:
 
 ```python
 from transformers import AutoVideoProcessor
@@ -33,9 +32,9 @@ from transformers import AutoVideoProcessor
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
 ```
 
-Currently, if using base image processor for videos, it processes video data by treating each frame as an individual image and applying transformations frame-by-frame. While functional, this approach is not highly efficient. Using `AutoVideoProcessor` allows us to take advantage of **fast video processors**, leveraging the [torchvision](https://pytorch.org/vision/stable/index.html) library. Fast processors handle the whole batch of videos at once, without iterating over each video or frame. These updates introduce GPU acceleration and significantly enhance processing speed, especially for tasks requiring high throughput.
+현재, 비디오에 기본 이미지 프로세서를 사용하면, 각 프레임을 개별 이미지로 간주하고 프레임 단위로 변환을 적용하여 비디오 데이터를 처리합니다. 이는 충분히 동작은 하지만 효율이 높지 않습니다. `AutoVideoProcessor`를 사용하면 [torchvision](https://pytorch.org/vision/stable/index.html) 라이브러리를 활용하는 **fast video processors**의 이점을 누릴 수 있습니다. Fast 프로세서는 각 비디오나 프레임을 순회하지 않고 비디오 배치를 한 번에 처리합니다. 이러한 개선은 GPU 가속을 도입해, 특히 높은 처리량이 필요한 작업에서 처리 속도를 크게 향상시킵니다.
 
-Fast video processors are available for all models and are loaded by default when an `AutoVideoProcessor` is initialized. When using a fast video processor, you can also set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise. For even more speed improvement, we can compile the processor when using 'cuda' as device.
+Fast video processors는 모든 모델에서 사용할 수 있으며 `AutoVideoProcessor`를 초기화하면 기본으로 로드됩니다. Fast video processors를 사용할 때는 처리 대상 디바이스를 지정하기 위해 `device` 인자를 설정할 수도 있습니다. 입력이 텐서라면 기본적으로 입력과 동일한 디바이스 혹은 CPU에서 처리가 수행됩니다. 추가적인 속도 향상을 위해 디바이스로 'cuda'를 사용할 때 프로세서를 컴파일할 수 있습니다.
 
 ```python
 import torch
