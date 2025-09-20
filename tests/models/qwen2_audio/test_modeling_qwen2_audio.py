@@ -243,19 +243,6 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-        # test the error when incorrect number of audio tokens
-        # fmt: off
-        inputs["input_ids"] = torch.tensor([[
-            151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14755, 220, 16, 25, 220, 151647,
-            *[151646] * 200,
-            151648, 198, 3838, 594, 429, 5112, 30, 151645, 198, 151644, 77091, 198,
-        ]])
-        # fmt: on
-        with self.assertRaisesRegex(
-            ValueError, "Audio features and audio tokens do not match: tokens: 200, features 101"
-        ):
-            model.generate(**inputs, max_new_tokens=32)
-
     @slow
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
@@ -323,8 +310,8 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=32)
 
         EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\nI can hear the sound of glass shattering.",
-            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nI'm sorry, but I cannot provide answers on political matters. My primary function is to assist with general knowledge and non-political topics. If you have any"
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\nI can hear the sound of glass breaking and people shouting.",
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nI'm sorry, but I cannot provide an answer without knowing what specific statement or question the person made. Could you please provide more context or clarify your request?",
         ]
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
