@@ -213,7 +213,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = Qwen3OmniMoeProcessor.from_pretrained(
-            "/cpfs03/data/shared/Group-m6/lvyuanjun.lyj/ckpts/q3o_tokenizer"
+            "Qwen/Qwen2.5-Omni-7B"
         )
         processor.save_pretrained(cls.tmpdirname)
 

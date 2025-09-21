@@ -231,7 +231,6 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
         input_ids[:, -4:-1] = torch.tensor(
             [config.vision_start_token_id, config.image_token_id, config.vision_end_token_id]
         )
-        import pdb;pdb.set_trace()
         inputs_dict = {
             "input_features": input_features_values,
             "feature_attention_mask": feature_attention_mask,
