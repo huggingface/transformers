@@ -35,7 +35,6 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
-            "add_generation_prompt": True,
         },
         "audio_kwargs": {
             "sound_token": "<sound>",
@@ -73,7 +72,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         r"""
         Main method to prepare one or several text sequence(s) and audio waveform(s) for the model. This
         method expands `<sound>` placeholders in the text based on the post-pool frame counts of the
-        audio windows, applies the tokenizer's chat template to the text, and extracts log-mel features
+        audio windows, then tokenizes the provided strings as-is, and extracts log-mel features
         with [`WhisperFeatureExtractor`].
 
         Args:
@@ -87,9 +86,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             audio features (`input_features`, `feature_attention_mask`).
         """
 
-        # -----------------------
         # Normalize & validate IO
-        # -----------------------
         if isinstance(text, str):
             texts: list[str] = [text]
         elif isinstance(text, list) and all(isinstance(t, str) for t in text):
@@ -118,9 +115,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         if not sound_token or not isinstance(sound_token, str):
             raise ValueError("`sound_token` must be a non-empty string.")
 
-        # -----------------------
         # Window planning per sample
-        # -----------------------
         if (
             not hasattr(self.feature_extractor, "chunk_length")
             or not hasattr(self.feature_extractor, "sampling_rate")
@@ -156,9 +151,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 e = min((i + 1) * window_size, T_cap)
                 flat_chunks.append(wav[s:e])
 
-        # -----------------------
         # Feature extraction (audio)
-        # -----------------------
         audio_inputs = self.feature_extractor(
             flat_chunks,
             sampling_rate=sampling_rate,
@@ -167,9 +160,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         )
         audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
-        # -----------------------
         # Post-pool frame counts per window (match encoder schedule)
-        # -----------------------
         feat_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
         frames_per_window: list[int] = []
         for L_mel in feat_lengths:
@@ -177,9 +168,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             K = (L1 - 2) // 2 + 1
             frames_per_window.append(max(1, K))
 
-        # -----------------------
         # Expand text per sample
-        # -----------------------
         expanded_texts: list[str] = []
         w_ptr = 0
         for idx, t in enumerate(texts):
@@ -190,47 +179,23 @@ class AudioFlamingo3Processor(ProcessorMixin):
             sample = t
             n_placeholders = sample.count(sound_token)
 
-            if n_placeholders and n_placeholders != n_win:
+            if n_placeholders != 1:
                 raise ValueError(
-                    f"Sample {idx}: found {n_placeholders} '{sound_token}' placeholders, "
-                    f"but audio was split into {n_win} window(s)."
+                    f"Sample {idx}: expected exactly 1 '{sound_token}' in the (already templated) text. "
+                    "Place it where audio should appear; the processor will expand it."
                 )
 
-            if n_placeholders == 0:
-                # No placeholders: prepend all expanded tokens
-                prefix = "".join(sound_token * k for k in Ks)
-                sample = prefix + sample
-            else:
-                # Replace each placeholder in order with k repeated tokens
-                for k in Ks:
-                    sample = sample.replace(sound_token, sound_token * k, 1)
+            sound_tokens = "".join(sound_token * k for k in Ks)
+            sample = sample.replace(sound_token, sound_tokens)
 
             expanded_texts.append(sample)
 
-        # -----------------------
-        # Tokenize with chat template
-        # -----------------------
-        add_generation_prompt = bool(call_kwargs["text_kwargs"].pop("add_generation_prompt", True))
-        prompts = [
-            self.tokenizer.apply_chat_template(
-                [{"role": "user", "content": txt}],
-                add_generation_prompt=add_generation_prompt,
-                tokenize=False,
-            )
-            for txt in expanded_texts
-        ]
-        padding_side = kwargs.pop("padding_side", None)
-        text_inputs = self.tokenizer(
-            prompts,
-            padding_side=padding_side,
-            **call_kwargs["text_kwargs"],
-        )
+        # Tokenize
+        text_inputs = self.tokenizer(expanded_texts, **call_kwargs["text_kwargs"])
 
-        # -----------------------
         # Pack and return
-        # -----------------------
         text_inputs.update(audio_inputs)
-        tensor_type = kwargs.pop("tensor_type", None)
+        tensor_type = kwargs.get("return_tensors")
         return BatchFeature(data=text_inputs, tensor_type=tensor_type)
 
     @property
