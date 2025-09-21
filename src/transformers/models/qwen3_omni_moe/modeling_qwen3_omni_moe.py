@@ -1837,7 +1837,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     base_model_prefix = "thinker"
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
     _no_split_modules = [
-        "Qwen3_VL_VisionBlock",
         "Qwen3OmniMoeAudioEncoderLayer",
         "Qwen3OmniMoeThinkerTextDecoderLayer",
     ]
