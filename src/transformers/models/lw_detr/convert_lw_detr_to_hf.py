@@ -43,9 +43,9 @@ HUB_MODEL_REPO = "xbsu/LW-DETR"
 # Mapping of model names to their checkpoint files
 HUB_CHECKPOINTS = {
     # LW-DETR models trained on Objects365
-    "lwdetr_tiny_30e_objects365": "LWDETR_tiny_30e_objects365.pth", # OK
-    "lwdetr_small_30e_objects365": "LWDETR_small_30e_objects365.pth", # OK
-    "lwdetr_medium_30e_objects365": "LWDETR_medium_30e_objects365.pth", # OK
+    "lwdetr_tiny_30e_objects365": "LWDETR_tiny_30e_objects365.pth",
+    "lwdetr_small_30e_objects365": "LWDETR_small_30e_objects365.pth",
+    "lwdetr_medium_30e_objects365": "LWDETR_medium_30e_objects365.pth",
     "lwdetr_large_30e_objects365": "LWDETR_large_30e_objects365.pth",
     "lwdetr_xlarge_30e_objects365": "LWDETR_xlarge_30e_objects365.pth",
     # LW-DETR models trained on COCO
@@ -152,23 +152,15 @@ MODEL_CONFIGS = {
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # backbone encoder
-    r"backbone.0.encoder.pos_embed":                        r"backbone.conv_encoder.model.embeddings.position_embeddings",
-    r"backbone.0.encoder.patch_embed.proj":                 r"backbone.conv_encoder.model.embeddings.projection",
-    r"backbone.0.encoder.blocks.(\d+).gamma_1":             r"backbone.conv_encoder.model.encoder.layer.\1.gamma_1",
-    r"backbone.0.encoder.blocks.(\d+).gamma_2":             r"backbone.conv_encoder.model.encoder.layer.\1.gamma_2",
-    r"backbone.0.encoder.blocks.(\d+).norm1.weight":        r"backbone.conv_encoder.model.encoder.layer.\1.norm1.weight",
-    r"backbone.0.encoder.blocks.(\d+).norm1.bias":          r"backbone.conv_encoder.model.encoder.layer.\1.norm1.bias",
-    r"backbone.0.encoder.blocks.(\d+).attn.q_bias":         r"backbone.conv_encoder.model.encoder.layer.\1.attention.q_bias",
-    r"backbone.0.encoder.blocks.(\d+).attn.v_bias":         r"backbone.conv_encoder.model.encoder.layer.\1.attention.v_bias",
-    r"backbone.0.encoder.blocks.(\d+).attn.proj.weight":    r"backbone.conv_encoder.model.encoder.layer.\1.attention.proj.weight",
-    r"backbone.0.encoder.blocks.(\d+).attn.proj.bias":      r"backbone.conv_encoder.model.encoder.layer.\1.attention.proj.bias",
-    r"backbone.0.encoder.blocks.(\d+).attn.qkv.weight":     r"backbone.conv_encoder.model.encoder.layer.\1.attention.qkv.weight",
-    r"backbone.0.encoder.blocks.(\d+).norm2.weight":        r"backbone.conv_encoder.model.encoder.layer.\1.norm2.weight",
-    r"backbone.0.encoder.blocks.(\d+).norm2.bias":          r"backbone.conv_encoder.model.encoder.layer.\1.norm2.bias",
-    r"backbone.0.encoder.blocks.(\d+).mlp.fc1.weight":      r"backbone.conv_encoder.model.encoder.layer.\1.mlp.fc1.weight",
-    r"backbone.0.encoder.blocks.(\d+).mlp.fc1.bias":        r"backbone.conv_encoder.model.encoder.layer.\1.mlp.fc1.bias",
-    r"backbone.0.encoder.blocks.(\d+).mlp.fc2.weight":      r"backbone.conv_encoder.model.encoder.layer.\1.mlp.fc2.weight",
-    r"backbone.0.encoder.blocks.(\d+).mlp.fc2.bias":        r"backbone.conv_encoder.model.encoder.layer.\1.mlp.fc2.bias",
+    r"backbone.0.encoder.pos_embed":                            r"backbone.conv_encoder.model.embeddings.position_embeddings",
+    r"backbone.0.encoder.patch_embed.proj":                     r"backbone.conv_encoder.model.embeddings.projection",
+    r"backbone.0.encoder.blocks.(\d+).gamma_1":                 r"backbone.conv_encoder.model.encoder.layer.\1.gamma_1",
+    r"backbone.0.encoder.blocks.(\d+).gamma_2":                 r"backbone.conv_encoder.model.encoder.layer.\1.gamma_2",
+    r"backbone.0.encoder.blocks.(\d+).norm1.(weight|bias)":     r"backbone.conv_encoder.model.encoder.layer.\1.layernorm_before.\2",
+    r"backbone.0.encoder.blocks.(\d+).attn.proj.(weight|bias)": r"backbone.conv_encoder.model.encoder.layer.\1.attention.output.\2",
+    r"backbone.0.encoder.blocks.(\d+).norm2.(weight|bias)":     r"backbone.conv_encoder.model.encoder.layer.\1.layernorm_after.\2",
+    r"backbone.0.encoder.blocks.(\d+).mlp.fc1.(weight|bias)":   r"backbone.conv_encoder.model.encoder.layer.\1.intermediate.fc1.\2",
+    r"backbone.0.encoder.blocks.(\d+).mlp.fc2.(weight|bias)":   r"backbone.conv_encoder.model.encoder.layer.\1.intermediate.fc2.\2",
 
     # backbone projector scaling layers, sampling layers are dealt with seperately depending on the config
     r"backbone.0.projector.stages.(\d+).0.cv1.conv.(weight|bias)":                                                      r"backbone.conv_encoder.projector.scale_layers.\1.projector_layer.conv1.conv.\2",
@@ -218,6 +210,33 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None, key_map
             new_text = re.sub(pattern, replacement, new_text)
         output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
     return output_dict
+
+def backbone_read_in_q_k_v(state_dict, config):
+    hidden_size = config.backbone_config.hidden_size
+    # backbone encoder self-attention layers
+    for i in range(config.backbone_config.num_hidden_layers):
+        # read in weights + bias of input projection layer of self-attention
+        in_proj_weight = state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.qkv.weight")
+        if config.backbone_config.use_cae:
+            in_proj_bias = torch.cat([
+                state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.q_bias"),
+                state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.v_bias"),
+            ])
+        else:
+            in_proj_bias = state_dict.pop(f"backbone.0.encoder.blocks.{i}.attn.qkv.bias")
+
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
+        state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[hidden_size:2*hidden_size, :]
+        state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
+        if config.backbone_config.use_cae:
+            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
+            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
+        else:
+            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
+            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[hidden_size:2*hidden_size]
+            state_dict[f"backbone.conv_encoder.model.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
+    return state_dict
 
 def read_in_q_k_v(state_dict, config):
     d_model = config.d_model
@@ -435,6 +454,7 @@ def convert_lw_detr_checkpoint(
     # Convert keys if needed
     if ORIGINAL_TO_CONVERTED_KEY_MAPPING:
         backbone_projector_sampling_key_mapping = get_backbone_projector_sampling_key_mapping(lw_detr_config)
+        state_dict = backbone_read_in_q_k_v(state_dict, lw_detr_config)
         state_dict = read_in_q_k_v(state_dict, lw_detr_config)
         key_mapping = ORIGINAL_TO_CONVERTED_KEY_MAPPING | backbone_projector_sampling_key_mapping
         all_keys = list(state_dict.keys())
@@ -488,7 +508,7 @@ def main():
     )
     parser.add_argument("--checkpoint_path", type=str, help="Path to the checkpoint file (if not using hub download)")
     parser.add_argument("--push_to_hub", action="store_true", help="Push model to the hub")
-    parser.add_argument("--organization", type=str, default="huggingface", help="Organization to push the model to")
+    parser.add_argument("--organization", type=str, default="stevenbucaille", help="Organization to push the model to")
 
     args = parser.parse_args()
 
