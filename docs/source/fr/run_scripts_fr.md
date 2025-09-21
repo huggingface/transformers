@@ -106,23 +106,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 </pt>
-<tf>
-
-Le script d'exemple télécharge et prétraite un jeu de données à partir de la bibliothèque  🤗 [Datasets](https://huggingface.co/docs/datasets/). Ensuite, le script ajuste un modèle à l'aide de Keras sur une architecture qui prend en charge la tâche de résumé. L'exemple suivant montre comment ajuster le modèle [T5-small](https://huggingface.co/google-t5/t5-small) sur le jeu de données [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). Le modèle T5 nécessite un argument supplémentaire source_prefix en raison de la façon dont il a été entraîné. Cette invite permet à T5 de savoir qu'il s'agit d'une tâche de résumé.
-
-```bash
-python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
 </frameworkcontent>
 
 ## Entraînement distribué et précision mixte
@@ -174,23 +157,6 @@ python xla_spawn.py --num_cores 8 \
     --predict_with_generate
 ```
 </pt>
-<tf>
-Les scripts TensorFlow utilisent une [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) pour l'entraînement sur TPU. Pour utiliser un TPU, passez le nom de la ressource TPU à l'argument tpu.
-
-```bash
-python run_summarization.py  \
-    --tpu name_of_tpu_resource \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
 </frameworkcontent>
 
 ## Exécuter un script avec 🤗 Accelerate 

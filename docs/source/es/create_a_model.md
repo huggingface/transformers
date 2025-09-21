@@ -137,31 +137,6 @@ Cuando cargues tus pesos del preentrenamiento, el modelo por defecto se carga au
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </pt>
-<tf>
-  
-Carga los atributos de tu configuración personalizada en el modelo de la siguiente forma:
-
-```py
->>> from transformers import TFDistilBertModel
-
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
->>> tf_model = TFDistilBertModel(my_config)
-```
-
-Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentrenamiento, por lo que no serás capaz de usar este modelo para nada útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto en cuestión de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápido, consumiendo solo una fracción de los recursos que un entrenamiento completo hubiera requerido. 
-
-Puedes crear un modelo preentrenado con [`~TFPreTrainedModel.from_pretrained`]:
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Cuando cargues tus pesos del preentrenamiento, el modelo por defecto se carga automáticamente si este nos lo proporciona 🤗 Transformers. Sin embargo, siempre puedes reemplazar (todos o algunos de) los atributos del modelo por defecto por los tuyos:
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
-```
-</tf>
 </frameworkcontent>
 
 ### Cabezas de modelo 
@@ -189,25 +164,6 @@ Puedes reutilizar este punto de guardado o *checkpoint* para otra tarea fácilme
 >>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </pt>
-<tf>
-
-Por ejemplo,  [`TFDistilBertForSequenceClassification`] es un modelo DistilBERT base con una cabeza de clasificación de secuencias. La cabeza de clasificación de secuencias es una capa superior que precede a la recolección de las salidas.
-
-```py
->>> from transformers import TFDistilBertForSequenceClassification
-
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Puedes reutilizar este punto de guardado o *checkpoint* para otra tarea fácilmente cambiando a una cabeza de un modelo diferente. Para una tarea de respuesta a preguntas, puedes usar la cabeza del modelo [`TFDistilBertForQuestionAnswering`]. La cabeza de respuesta a preguntas es similar a la de clasificación de secuencias, excepto porque consta de una capa lineal delante de la salida de los *hidden states*. 
-
-
-```py
->>> from transformers import TFDistilBertForQuestionAnswering
-
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-```
-</tf>
 </frameworkcontent>
 
 ## Tokenizer

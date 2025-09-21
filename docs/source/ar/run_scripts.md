@@ -99,26 +99,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 </pt>
-<tf>
-    
-- يقوم النص البرمجي التوضيحي بتنزيل مجموعة بيانات ومعالجتها مسبقًا من مكتبة 🤗 [Datasets](https://huggingface.co/docs/datasets/).
-- ثم يقوم النص البرمجي بضبط نموذج بيانات دقيق باستخدام Keras على بنية تدعم الملخص.
-- يوضح المثال التالي كيفية ضبط نموذج [T5-small](https://huggingface.co/google-t5/t5-small) على مجموعة بيانات [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail).
-- يتطلب نموذج T5 ماعمل `source_prefix` إضافية بسبب الطريقة التي تم تدريبه بها. يتيح هذا المطالبة لـ T5 معرفة أن هذه مهمة التلخيص.
-
-```bash
-python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
 </frameworkcontent>
 
 ## التدريب الموزع والدقة المختلطة
@@ -170,23 +150,6 @@ python xla_spawn.py --num_cores 8 \
     --predict_with_generate
 ```
 </pt>
-<tf>
-    
-تُعد وحدات معالجة الدقة الفائقة (TPUs) مصممة خصيصًا لتسريع الأداء. تستخدم نصوص TensorFlow البرمجية استراتيجية [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) للتدريب على وحدات معالجة الدقة الفائقة (TPUs). لاستخدام وحدة معالجة الدقة الفائقة (TPU)، قم بتمرير اسم مورد وحدة معالجة الدقة الفائقة (TPU) إلى حجة `tpu`.
-```bash
-python run_summarization.py  \
-    --tpu name_of_tpu_resource \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
 </frameworkcontent>
 
 ## تشغيل نص برمجي باستخدام 🤗 Accelerate
