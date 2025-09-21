@@ -411,7 +411,4 @@ model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration
 
-## Qwen3OmniMoeVisionPreTrainedModel
-
-[[autodoc]] Qwen3OmniMoeVisionPreTrainedModel
 
