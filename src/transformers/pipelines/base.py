@@ -61,12 +61,8 @@ if is_torch_available() or TYPE_CHECKING:
     from torch.utils.data import DataLoader, Dataset
 
     from ..modeling_utils import PreTrainedModel
-
-    # Re-export for backward compatibility
-    from .pt_utils import KeyDataset
 else:
     Dataset = None
-    KeyDataset = None
 
 
 logger = logging.get_logger(__name__)
