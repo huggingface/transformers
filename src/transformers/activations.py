@@ -220,8 +220,14 @@ class XIELUActivation(nn.Module):
         self._eps_scalar = float(self.eps.detach().cpu().float().item())
 
         self._xielu_cuda_obj = None
+
         try:
+            import os
+
             import xielu.ops  # noqa: F401
+
+            if int(os.environ.get("XIELU_DISABLE_CUDA", 0)) == 1:
+                raise Exception("Environment variable XIELU_DISABLE_CUDA is set to 1")
 
             self._xielu_cuda_obj = torch.classes.xielu.XIELU()
             msg = "Using experimental xIELU CUDA."
