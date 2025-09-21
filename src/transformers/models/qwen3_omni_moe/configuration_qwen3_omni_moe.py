@@ -399,13 +399,20 @@ class Qwen3OmniMoeThinkerConfig(PretrainedConfig):
             The config dictionary of the vision backbone.
         text_config (`dict`, *optional*):
             The config dictionary of the text backbone.
-        audio_token_id (`<fill_type>`, *optional*, defaults to 151646): <fill_docstring>
-        image_token_id (`<fill_type>`, *optional*, defaults to 151655): <fill_docstring>
-        video_token_id (`<fill_type>`, *optional*, defaults to 151656): <fill_docstring>
+        audio_token_index (`int`, *optional*, defaults to 151646):
+            The audio token index to encode the audio prompt.
+        image_token_index (`int`, *optional*, defaults to 151655):
+            The image token index to encode the image prompt.
+        video_token_index (`int`, *optional*, defaults to 151656):
+            The video token index to encode the video prompt.
         position_id_per_seconds (`int`, *optional*, defaults to 25):
             The increment of position id per second.
+        seconds_per_chunk (`int`, *optional*, defaults to 2):
+            The duration in seconds of the chunk of audio and video data.
         audio_start_token_id (`int`, *optional*, defaults to 151647):
             The audio start token index to encode the audio prompt.
+        audio_end_token_id (`int`, *optional*, defaults to 151648):
+            The audio end token index to encode the audio prompt.
         user_token_id (`int, *optional*, defaults to 872):
             The user token index to encode the user token.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -1180,16 +1187,8 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
     Args:
         thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
         talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
-        code2wav_config (`<fill_type>`, *optional*): <fill_docstring>
+        token2wav_config (`dict`, *optional*): Configuration of the underlying codec sub-model.
         enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and token2wav module.
-        im_start_token_id (`<fill_type>`, *optional*, defaults to 151644): <fill_docstring>
-        im_end_token_id (`<fill_type>`, *optional*, defaults to 151645): <fill_docstring>
-        tts_pad_token_id (`<fill_type>`, *optional*, defaults to 151671): <fill_docstring>
-        tts_bos_token_id (`<fill_type>`, *optional*, defaults to 151672): <fill_docstring>
-        tts_eos_token_id (`<fill_type>`, *optional*, defaults to 151673): <fill_docstring>
-        system_token_id (`<fill_type>`, *optional*, defaults to 8948): <fill_docstring>
-        user_token_id (`<fill_type>`, *optional*, defaults to 872): <fill_docstring>
-        assistant_token_id (`<fill_type>`, *optional*, defaults to 77091): <fill_docstring>
 
     Example:
 

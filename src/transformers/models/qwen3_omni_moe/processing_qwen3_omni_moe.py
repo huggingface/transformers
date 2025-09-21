@@ -23,7 +23,6 @@ import re
 from typing import Optional, Union
 
 import numpy as np
-import torch
 
 from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
@@ -78,7 +77,7 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def _get_feat_extract_output_lengths(input_lengths: torch.LongTensor):
+def _get_feat_extract_output_lengths(input_lengths):
     """
     Computes the output length of the convolutional layers and the output length of the audio encoder
     """
