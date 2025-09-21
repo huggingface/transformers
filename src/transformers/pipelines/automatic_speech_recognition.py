@@ -212,7 +212,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "ctc_with_lm"
         elif model.config.model_type == "parakeet_tdt":
             self.type = 'tdt'
-        elif model.config.model_type == "parakeet_ctc":
+        elif model.config.model_type == "parakeet":
             self.type = "ctc"
         else:
             print("can't find model type", model.config.model_type)

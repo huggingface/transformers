@@ -258,7 +258,7 @@ class ParakeetConfig(PretrainedConfig):
     and pre-trained models at [nvidia/parakeet-ctc-1.1b](https://huggingface.co/nvidia/parakeet-ctc-1.1b).
     """
 
-    model_type = "parakeet_ctc"
+    model_type = "parakeet"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"encoder_config": ParakeetEncoderConfig}
 
@@ -294,8 +294,6 @@ class ParakeetConfig(PretrainedConfig):
             raise ValueError(
                 f"`encoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
             )
-
-        self.model_type = 'tdt'
 
         self.vocab_size = vocab_size
         self.blank_token_id = blank_token_id

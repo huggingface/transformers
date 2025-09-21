@@ -309,7 +309,7 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
     model_name = config.get("name", "").lower()
     if "parakeet" in model_name:
         if "ctc" in model_name:
-            model_info["model_type"] = "parakeet_ctc"
+            model_info["model_type"] = "parakeet"
         if "tdt" in model_name:
             model_info["model_type"] = "parakeet_tdt"
     elif "canary" in model_name:
@@ -368,7 +368,7 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
 
     # Set model type based on CTC detection
     if is_ctc:
-        model_info["model_type"] = "parakeet_ctc"
+        model_info["model_type"] = "parakeet"
         assert not is_tdt
     if is_tdt:
         model_info["model_type"] = "parakeet_tdt"
@@ -470,8 +470,8 @@ def create_hf_config_from_nemo(
 
     # Add model-specific metadata
     if model_info["is_ctc_model"]:
-        architectures = ["parakeet_ctc"]
-        base_model_type = "parakeet_ctc"
+        architectures = ["parakeet"]
+        base_model_type = "parakeet"
     elif model_info["is_tdt_model"]:
         architectures = ["parakeet_tdt"]
         base_model_type = "parakeet_tdt"
@@ -710,7 +710,7 @@ def create_hf_model(
                 vocab_size=vocab_size,
                 blank_token_id=vocab_size,
                 tdt_loss_reduction="mean",
-                model_type='tdt',
+                model_type='parakeet_tdt',
                 encoder_config=hf_config,
                 decoder_config=hf_config,
             )
