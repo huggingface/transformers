@@ -324,8 +324,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3", "Qwen3Model"),
         ("qwen3_moe", "Qwen3MoeModel"),
         ("qwen3_next", "Qwen3NextModel"),
-        ("qwen3_omni_moe", "Qwen3OmniMoeModel"),
-        ("qwen3_omni_moe_thinker", "Qwen3OmniMoeThinkerModel"),
         ("qwen3_vl", "Qwen3VLModel"),
         ("qwen3_vl_moe", "Qwen3VLMoeModel"),
         ("qwen3_vl_moe_text", "Qwen3VLMoeTextModel"),

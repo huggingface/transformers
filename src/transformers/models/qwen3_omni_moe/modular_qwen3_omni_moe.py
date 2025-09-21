@@ -523,14 +523,8 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        codebook_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of each codebook vector in the discrete audio representation.
         codebook_size (`int`, *optional*, defaults to 2048):
             Number of entries in each residual codebook used for acoustic token quantization.
-        semantic_codebook_size (`int`, *optional*, defaults to 4096):
-            Number of entries in the semantic codebook used for higher-level audio semantics.
-        vector_quantization_hidden_dimension (`int`, *optional*, defaults to 512):
-            Hidden dimension size used internally in the vector quantization module.
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the hidden states and embeddings in the autoregressive transformer decoder.
         max_position_embeddings (`int`, *optional*, defaults to 8000):
@@ -557,8 +551,6 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
             Number of transformer blocks in the autoregressive decoder.
         num_quantizers (`int`, *optional*, defaults to 16):
             Number of residual vector quantizers used in the vocoder for fine-grained audio reconstruction.
-        num_semantic_quantizers (`int`, *optional*, defaults to 1):
-            Number of quantizers dedicated to modeling semantic-level audio information.
         upsample_rates (`Tuple[int]`, *optional*, defaults to `(8, 5, 4, 3)`):
             Rate at which features are upsampled in the final waveform synthesis stage.
         upsampling_ratios (`Tuple[int]`, *optional*, defaults to `(2, 2)`):
@@ -585,10 +577,7 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
 
     def __init__(
         self,
-        codebook_dim=512,
         codebook_size=2048,
-        semantic_codebook_size=4096,
-        vector_quantization_hidden_dimension=512,
         hidden_size=1024,
         max_position_embeddings=8000,
         rope_theta=10000,
@@ -602,7 +591,6 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
         rms_norm_eps=1e-5,
         num_hidden_layers=8,
         num_quantizers=16,
-        num_semantic_quantizers=1,
         upsample_rates=(8, 5, 4, 3),
         upsampling_ratios=(2, 2),
         decoder_dim=1536,
@@ -610,10 +598,7 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.codebook_dim = codebook_dim
         self.codebook_size = codebook_size
-        self.semantic_codebook_size = semantic_codebook_size
-        self.vector_quantization_hidden_dimension = vector_quantization_hidden_dimension
         self.hidden_size = hidden_size
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
@@ -627,7 +612,6 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.num_hidden_layers = num_hidden_layers
         self.num_quantizers = num_quantizers
-        self.num_semantic_quantizers = num_semantic_quantizers
         self.upsample_rates = upsample_rates
         self.upsampling_ratios = upsampling_ratios
         self.decoder_dim = decoder_dim

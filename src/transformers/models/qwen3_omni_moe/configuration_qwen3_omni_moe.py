@@ -399,20 +399,13 @@ class Qwen3OmniMoeThinkerConfig(PretrainedConfig):
             The config dictionary of the vision backbone.
         text_config (`dict`, *optional*):
             The config dictionary of the text backbone.
-        audio_token_index (`int`, *optional*, defaults to 151646):
-            The audio token index to encode the audio prompt.
-        image_token_index (`int`, *optional*, defaults to 151655):
-            The image token index to encode the image prompt.
-        video_token_index (`int`, *optional*, defaults to 151656):
-            The video token index to encode the video prompt.
+        audio_token_id (`<fill_type>`, *optional*, defaults to 151646): <fill_docstring>
+        image_token_id (`<fill_type>`, *optional*, defaults to 151655): <fill_docstring>
+        video_token_id (`<fill_type>`, *optional*, defaults to 151656): <fill_docstring>
         position_id_per_seconds (`int`, *optional*, defaults to 25):
             The increment of position id per second.
-        seconds_per_chunk (`int`, *optional*, defaults to 2):
-            The duration in seconds of the chunk of audio and video data.
         audio_start_token_id (`int`, *optional*, defaults to 151647):
             The audio start token index to encode the audio prompt.
-        audio_end_token_id (`int`, *optional*, defaults to 151648):
-            The audio end token index to encode the audio prompt.
         user_token_id (`int, *optional*, defaults to 872):
             The user token index to encode the user token.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -1055,14 +1048,8 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        codebook_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of each codebook vector in the discrete audio representation.
         codebook_size (`int`, *optional*, defaults to 2048):
             Number of entries in each residual codebook used for acoustic token quantization.
-        semantic_codebook_size (`int`, *optional*, defaults to 4096):
-            Number of entries in the semantic codebook used for higher-level audio semantics.
-        vector_quantization_hidden_dimension (`int`, *optional*, defaults to 512):
-            Hidden dimension size used internally in the vector quantization module.
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the hidden states and embeddings in the autoregressive transformer decoder.
         max_position_embeddings (`int`, *optional*, defaults to 8000):
@@ -1089,8 +1076,6 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
             Number of transformer blocks in the autoregressive decoder.
         num_quantizers (`int`, *optional*, defaults to 16):
             Number of residual vector quantizers used in the vocoder for fine-grained audio reconstruction.
-        num_semantic_quantizers (`int`, *optional*, defaults to 1):
-            Number of quantizers dedicated to modeling semantic-level audio information.
         upsample_rates (`Tuple[int]`, *optional*, defaults to `(8, 5, 4, 3)`):
             Rate at which features are upsampled in the final waveform synthesis stage.
         upsampling_ratios (`Tuple[int]`, *optional*, defaults to `(2, 2)`):
@@ -1117,10 +1102,7 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
 
     def __init__(
         self,
-        codebook_dim=512,
         codebook_size=2048,
-        semantic_codebook_size=4096,
-        vector_quantization_hidden_dimension=512,
         hidden_size=1024,
         max_position_embeddings=8000,
         rope_theta=10000,
@@ -1134,7 +1116,6 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
         rms_norm_eps=1e-5,
         num_hidden_layers=8,
         num_quantizers=16,
-        num_semantic_quantizers=1,
         upsample_rates=(8, 5, 4, 3),
         upsampling_ratios=(2, 2),
         decoder_dim=1536,
@@ -1142,10 +1123,7 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.codebook_dim = codebook_dim
         self.codebook_size = codebook_size
-        self.semantic_codebook_size = semantic_codebook_size
-        self.vector_quantization_hidden_dimension = vector_quantization_hidden_dimension
         self.hidden_size = hidden_size
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
@@ -1159,7 +1137,6 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.num_hidden_layers = num_hidden_layers
         self.num_quantizers = num_quantizers
-        self.num_semantic_quantizers = num_semantic_quantizers
         self.upsample_rates = upsample_rates
         self.upsampling_ratios = upsampling_ratios
         self.decoder_dim = decoder_dim
@@ -1187,8 +1164,16 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
     Args:
         thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
         talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
-        token2wav_config (`dict`, *optional*): Configuration of the underlying codec sub-model.
+        code2wav_config (`<fill_type>`, *optional*): <fill_docstring>
         enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and token2wav module.
+        im_start_token_id (`<fill_type>`, *optional*, defaults to 151644): <fill_docstring>
+        im_end_token_id (`<fill_type>`, *optional*, defaults to 151645): <fill_docstring>
+        tts_pad_token_id (`<fill_type>`, *optional*, defaults to 151671): <fill_docstring>
+        tts_bos_token_id (`<fill_type>`, *optional*, defaults to 151672): <fill_docstring>
+        tts_eos_token_id (`<fill_type>`, *optional*, defaults to 151673): <fill_docstring>
+        system_token_id (`<fill_type>`, *optional*, defaults to 8948): <fill_docstring>
+        user_token_id (`<fill_type>`, *optional*, defaults to 872): <fill_docstring>
+        assistant_token_id (`<fill_type>`, *optional*, defaults to 77091): <fill_docstring>
 
     Example:
 
