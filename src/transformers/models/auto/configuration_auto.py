@@ -290,9 +290,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
         ("paligemma", "PaliGemmaConfig"),
-        ("parakeet", "ParakeetTDTConfig"),
-#        ("parakeet_tdt", "ParakeetTDTConfig"),
-#        ("parakeet", "ParakeetConfig"),
+        ("parakeet_tdt", "ParakeetTDTConfig"),
+        ("parakeet_ctc", "ParakeetConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -728,8 +727,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
         ("paligemma", "PaliGemma"),
-        ("parakeet", "ParakeetForCTC"),
-#        ("parakeet", "ParakeetForTDT"),
+        ("parakeet_ctc", "ParakeetForCTC"),
         ("parakeet_tdt", "ParakeetForTDT"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
@@ -922,6 +920,8 @@ DEPRECATED_MODELS = [
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
+        ("parakeet_ctc", "parakeet"),
+        ("parakeet_tdt", "parakeet"),
         ("openai-gpt", "openai"),
         ("data2vec-audio", "data2vec"),
         ("data2vec-text", "data2vec"),

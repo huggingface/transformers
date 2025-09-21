@@ -311,7 +311,7 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
         if "ctc" in model_name:
             model_info["model_type"] = "parakeet_ctc"
         if "tdt" in model_name:
-            model_info["model_type"] = "parakeet"
+            model_info["model_type"] = "parakeet_tdt"
     elif "canary" in model_name:
         model_info["model_type"] = "canary"
     elif "conformer" in model_name:
@@ -350,8 +350,12 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
         is_ctc = True
 
     # Check model name
-    if "ctc" in model_name or "parakeet" in model_name:
+    if "ctc" in model_name:
         is_ctc = True
+
+    # Check model name
+    if "tdt" in model_name and "parakeet" in model_name:
+        is_tdt = True
 
     # Check for CTC-specific config parameters
     if model_info["decoder_cfg"]:
@@ -364,9 +368,12 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
 
     # Set model type based on CTC detection
     if is_ctc:
-        model_info["model_type"] = "parakeet"
+        model_info["model_type"] = "parakeet_ctc"
+        assert not is_tdt
     if is_tdt:
-        model_info["model_type"] = "parakeet"
+        model_info["model_type"] = "parakeet_tdt"
+
+    
 
     logger.info(f"Detected model type: {model_info['model_type']}")
     logger.info(f"Encoder type: {model_info['encoder_type']}")
@@ -463,11 +470,11 @@ def create_hf_config_from_nemo(
 
     # Add model-specific metadata
     if model_info["is_ctc_model"]:
-        architectures = ["parakeet"]
-        base_model_type = "parakeet"
+        architectures = ["parakeet_ctc"]
+        base_model_type = "parakeet_ctc"
     elif model_info["is_tdt_model"]:
-        architectures = ["parakeet"]
-        base_model_type = "parakeet"
+        architectures = ["parakeet_tdt"]
+        base_model_type = "parakeet_tdt"
     else:
         raise ValueError("Unsupported model type. Only CTC and TDT models are supported in this converter.")
 
@@ -934,7 +941,8 @@ def verify_conversion(output_dir: str) -> bool:
     """Verify that the conversion was successful by loading the model."""
     logger.info("Verifying conversion...")
 
-    try:
+#    try:
+    if True:
         from transformers import AutoConfig, AutoModelForCTC
 
         # Load config to determine model type
@@ -967,9 +975,9 @@ def verify_conversion(output_dir: str) -> bool:
         logger.info("✅ Verification PASSED")
         return True
 
-    except Exception as e:
-        logger.error(f"❌ Verification FAILED: {e}")
-        return False
+#    except Exception as e:
+#        logger.error(f"❌ Verification FAILED: {e}")
+#        return False
 
 def verify_conversion_tdt(output_dir: str) -> bool:
     """Verify that the conversion was successful by loading the model."""
@@ -1047,7 +1055,11 @@ def main():
 
         # Verify if requested
         if args.verify:
-            verification_success = verify_conversion_tdt(model_path)
+            if 'ctc' in args.path_to_nemo_model:
+                verification_success = verify_conversion(model_path)
+            elif 'tdt' in args.path_to_nemo_model:
+                verification_success = verify_conversion_tdt(model_path)
+
             conversion_info["verification_passed"] = verification_success
 
         # Print summary

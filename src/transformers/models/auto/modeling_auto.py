@@ -1571,8 +1571,8 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("data2vec-audio", "Data2VecAudioForCTC"),
         ("hubert", "HubertForCTC"),
         ("mctct", "MCTCTForCTC"),
-#        ("parakeet", "ParakeetForCTC"),
-        ("parakeet", "ParakeetForTDT"), # TODO
+        ("parakeet_ctc", "ParakeetForCTC"),
+#        ("parakeet_tdt", "ParakeetForTDT"), TODO(hainan)
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
         ("unispeech", "UniSpeechForCTC"),
@@ -1586,8 +1586,8 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TDT_MAPPING_NAMES = OrderedDict(
     [
-        # Model for Connectionist temporal classification (CTC) mapping
-        ("parakeet", "ParakeetForTDT"),
+        # Model for TDT mapping
+        ("parakeet_tdt", "ParakeetForTDT"),
     ]
 )
 

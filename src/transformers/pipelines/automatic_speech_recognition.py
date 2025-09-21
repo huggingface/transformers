@@ -210,10 +210,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         ):
             self.decoder = decoder
             self.type = "ctc_with_lm"
-        elif model.config.model_type == "parakeet":  # TODO(hainan)
+        elif model.config.model_type == "parakeet_tdt":
             self.type = 'tdt'
-        else:
+        elif model.config.model_type == "parakeet_ctc":
             self.type = "ctc"
+        else:
+            print("can't find model type", model.config.model_type)
+            assert False
 
         super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
 

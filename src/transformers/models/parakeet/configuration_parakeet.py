@@ -258,7 +258,7 @@ class ParakeetConfig(PretrainedConfig):
     and pre-trained models at [nvidia/parakeet-ctc-1.1b](https://huggingface.co/nvidia/parakeet-ctc-1.1b).
     """
 
-    model_type = "parakeet"
+    model_type = "parakeet_ctc"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"encoder_config": ParakeetEncoderConfig}
 
@@ -318,8 +318,7 @@ class ParakeetConfig(PretrainedConfig):
 
 class ParakeetTDTConfig(PretrainedConfig):
 
-    model_type = "parakeet"
-#    model_type = "parakeet_tdt"
+    model_type = "parakeet_tdt"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"encoder_config": ParakeetEncoderConfig, "decoder_config": ParakeetTDTDecoderConfig, "joint_config": ParakeetTDTJointConfig}
 
