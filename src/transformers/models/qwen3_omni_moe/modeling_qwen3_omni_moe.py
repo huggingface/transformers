@@ -2181,6 +2181,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             logits=logits,
             aux_loss=aux_loss,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
             rope_deltas=self.rope_deltas,
         )
