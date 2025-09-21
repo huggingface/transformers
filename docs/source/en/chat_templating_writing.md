@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 
 A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templates/) template stored in the tokenizer's [chat_template](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.PreTrainedTokenizer.chat_template) attribute. Jinja is a templating language that allows you to write Python-like code and syntax.
 
-
 ```jinja
 {%- for message in messages %}
     {{- '<|' + message['role'] + |>\n' }}
@@ -30,8 +29,8 @@ A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templat
 ```
 
 If you stare at this for a while, you should realize that this is actually very like Python, albeit with some strange
-`{%-` syntax. The template iterates over a list of messages, and for each message, it prints the role and content of 
-the message, followed by an end-of-sequence token. If `add_generation_prompt=True`, it adds 
+`{%-` syntax. The template iterates over a list of messages, and for each message, it prints the role and content of
+the message, followed by an end-of-sequence token. If `add_generation_prompt=True`, it adds
 the starting header for an assistant message to the end of the conversation.
 
 Load the written template as a string and assign it to the tokenizer's `chat_template` attribute. Once set, the template is used whenever you call [`~PreTrainedTokenizerBase.apply_chat_template`]. It is also saved
@@ -42,7 +41,7 @@ edit this file directly to change the template, which is often easier than manip
 
 The easiest way to start writing Jinja templates is to refer to existing templates. Use `print(tokenizer.chat_template)` on any chat model to see the template it's using. Try starting with simple models that don't call any tools or support RAG because tool-use models can have very complex templates. Finally, take a look at the [Jinja documentation](https://jinja.palletsprojects.com/en/stable/templates/#synopsis) for more details about formatting and syntax.
 
-There are some specific tips and pitfalls you may encounter while writing chat templates specifically, though, and this section will cover some of them in more detail. 
+There are some specific tips and pitfalls you may encounter while writing chat templates specifically, though, and this section will cover some of them in more detail.
 
 ### Writing multimodal chat templates
 
@@ -107,7 +106,6 @@ We strongly recommend using `-` to ensure only the intended content is printed.
 ```
 
 ### Special variables and callables
-
 
 The only constants in a template are the `messages` variable and the `add_generation_prompt` boolean. However, you have
 access to **any other keyword arguments that are passed** to the [`~PreTrainedTokenizerBase.apply_chat_template`] method.

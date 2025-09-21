@@ -18,8 +18,7 @@ rendered properly in your Markdown viewer.
 
 Multimodal chat models accept inputs like images, audio or video, in addition to text. The `content` key in a multimodal chat history is a list containing multiple items of different types. This is unlike text-only chat models whose `content` key is a single string.
 
-
-In the same way the [Tokenizer](./fast_tokenizer) class handles chat templates and tokenization for text-only models, 
+In the same way the [Tokenizer](./fast_tokenizer) class handles chat templates and tokenization for text-only models,
 the [Processor](./processors) class handles preprocessing, tokenization and chat templates for multimodal models. Their [`~ProcessorMixin.apply_chat_template`] methods are almost identical.
 
 This guide will show you how to chat with multimodal models with the high-level [`ImageTextToTextPipeline`] and at a lower level using the [`~ProcessorMixin.apply_chat_template`] and [`~GenerationMixin.generate`] methods.
@@ -57,7 +56,6 @@ out = pipe(text=messages, max_new_tokens=128)
 print(out[0]['generated_text'][-1]['content'])
 ```
 
-
 ```
 Ahoy, me hearty! These be two feline friends, likely some tabby cats, taking a siesta on a cozy pink blanket. They're resting near remote controls, perhaps after watching some TV or just enjoying some quiet time together. Cats sure know how to find comfort and relaxation, don't they?
 ```
@@ -66,9 +64,8 @@ Aside from the gradual descent from pirate-speak into modern American English (i
 
 ## Using `apply_chat_template`
 
-Like [text-only models](./chat_templating), use the [`~ProcessorMixin.apply_chat_template`] method to prepare the chat messages for multimodal models. 
+Like [text-only models](./chat_templating), use the [`~ProcessorMixin.apply_chat_template`] method to prepare the chat messages for multimodal models.
 This method handles the tokenization and formatting of the chat messages, including images and other media types. The resulting inputs are passed to the model for generation.
-
 
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
@@ -99,7 +96,6 @@ processed_chat = processor.apply_chat_template(messages, add_generation_prompt=T
 print(list(processed_chat.keys()))
 ```
 
-
 ```
 ['input_ids', 'attention_mask', 'pixel_values', 'image_grid_thw']
 ```
@@ -112,7 +108,6 @@ print(processor.decode(out[0]))
 ```
 
 The decoded output contains the full conversation so far, including the user message and the placeholder tokens that contain the image information. You may need to trim the previous conversation from the output before displaying it to the user.
-
 
 ## Video inputs
 
@@ -200,7 +195,6 @@ Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input
 
 The `num_frames` parameter controls how many frames to uniformly sample from the video. Each checkpoint has a maximum frame count it was pretrained with and exceeding this count can significantly lower generation quality. It's important to choose a frame count that fits both the model capacity and your hardware resources. If `num_frames` isn't specified, the entire video is loaded without any frame sampling.
 
-
 ```python
 processed_chat = processor.apply_chat_template(
     messages,
@@ -265,4 +259,3 @@ print(processed_chat.keys())
 
 </hfoption>
 </hfoptions>
-

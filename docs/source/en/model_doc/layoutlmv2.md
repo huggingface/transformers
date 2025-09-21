@@ -145,7 +145,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - See also: [Question answering task guide](../tasks/question_answering)
 - See also: [Document question answering task guide](../tasks/document_question_answering)
 
-
 <PipelineTag pipeline="token-classification"/>
 
 - A notebook on how to [finetune LayoutLMv2 for token-classification on CORD dataset](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLMv2/CORD/Fine_tuning_LayoutLMv2ForTokenClassification_on_CORD.ipynb).

@@ -127,7 +127,6 @@ Note that if we had tried to run the model in full float32 precision, a whopping
 
 If you are unsure in which format the model weights are stored on the Hub, you can always look into the checkpoint's config under `"dtype"`, *e.g.* [here](https://huggingface.co/meta-llama/Llama-2-7b-hf/blob/6fdf2e60f86ff2481f2241aaee459f85b5b0bbb9/config.json#L21). It is recommended to set the model to the same precision type as written in the config when loading with `from_pretrained(..., dtype=...)` except when the original type is float32 in which case one can use both `float16` or `bfloat16` for inference.
 
-
 Let's define a `flush(...)` function to free all allocated memory so that we can accurately measure the peak allocated GPU memory.
 
 ```python
@@ -221,7 +220,6 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 Significantly less! We're down to just a bit over 15 GBs and could therefore run this model on consumer GPUs like the 4090.
 We're seeing a very nice gain in memory efficiency and more or less no degradation to the model's output. However, we can also notice a slight slow-down during inference.
-
 
 We delete the models and flush the memory again.
 ```python
@@ -772,7 +770,6 @@ GQA was only recently proposed which is why there is less adoption at the time o
 The most notable application of GQA is [Llama-v2](https://huggingface.co/meta-llama/Llama-2-70b-hf).
 
 > As a conclusion, it is strongly recommended to make use of either GQA or MQA if the LLM is deployed with auto-regressive decoding and is required to handle large input sequences as is the case for example for chat.
-
 
 ## Conclusion
 

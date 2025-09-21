@@ -36,7 +36,6 @@ You can find all the original OPT checkpoints under the [OPT](https://huggingfac
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 

@@ -32,7 +32,6 @@ bitsandbytes offers two main quantization features:
 
 > **Note:** For a user-friendly quantization experience, you can use the `bitsandbytes` [community space](https://huggingface.co/spaces/bnb-community/bnb-my-repo).
 
-
 Run the command below to install bitsandbytes.
 
 ```bash

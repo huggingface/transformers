@@ -57,7 +57,6 @@ Here are some speed comparisons between the base and fast image processors for t
 
 These benchmarks were run on an [AWS EC2 g5.2xlarge instance](https://aws.amazon.com/ec2/instance-types/g5/), utilizing an NVIDIA A10G Tensor Core GPU.
 
-
 ## ImageProcessingMixin
 
 [[autodoc]] image_processing_utils.ImageProcessingMixin
@@ -71,7 +70,6 @@ These benchmarks were run on an [AWS EC2 g5.2xlarge instance](https://aws.amazon
 ## BaseImageProcessor
 
 [[autodoc]] image_processing_utils.BaseImageProcessor
-
 
 ## BaseImageProcessorFast
 

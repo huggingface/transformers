@@ -124,7 +124,6 @@ trainer = SFTTrainer(
 trainer.train()
 ```
 
-
 ## Mamba2Config
 
 [[autodoc]] Mamba2Config

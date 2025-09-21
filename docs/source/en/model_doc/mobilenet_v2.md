@@ -30,9 +30,7 @@ You can all the original MobileNet checkpoints under the [Google](https://huggin
 > [!TIP]
 > Click on the MobileNet V2 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.
 
-
 The examples below demonstrate how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
-
 
 <hfoptions id="usage-img-class">
 <hfoption id="Pipeline">
@@ -81,7 +79,6 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 </hfoption>
 </hfoptions>
-
 
 ## Notes
 

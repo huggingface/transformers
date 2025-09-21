@@ -197,7 +197,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 >>> trainer.push_to_hub()
 ```
 
-
 <Tip>
 
 For a more in-depth example of how to finetune a model for multiple choice, take a look at the corresponding

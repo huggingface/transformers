@@ -175,7 +175,6 @@ To get an even better understanding of the data, visualize an example in the dat
     <img src="https://i.imgur.com/oVQb9SF.png" alt="CPPE-5 Image Example"/>
 </div>
 
-
 To visualize the bounding boxes with associated labels, you can get the labels from the dataset's metadata, specifically
 the `category` field.
 You'll also want to create dictionaries that map a label id to a label class (`id2label`) and the other way around (`label2id`).

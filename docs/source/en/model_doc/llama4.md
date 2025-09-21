@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Llama4
 
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -52,7 +51,6 @@ You can find all the original Llama checkpoints under the [meta-llama](https://h
 The examples below demonstrates how to generate with [`Pipeline`] or the [`AutoModel`]. We additionally add an example
 showcasing how to toggle the right attributes to enable very long-context generations, as some flavors of Llama 4
 have context lengths going up to 10 million tokens.
-
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -255,7 +253,6 @@ Updating the default attention function can significantly improve compute perfor
 As of release, the Llama 4 model supports the following attention methods: `eager`, `flex_attention`, `sdpa`. We recommend using `flex_attention` for best results.
 Switching attention mechanism is done at the model initialization step:
 
-
 <hfoptions id="Attention">
 <hfoption id="Flex Attention">
 
@@ -310,15 +307,12 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 </hfoption>
 </hfoptions>
 
-
 ### Quantization
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for available quantization backends.
 At time of release, both FBGEMM and LLM-Compressor are supported; more quantization methods will be supported in the days that follow the release.
 
 See below for examples using both:
-
-
 
 Here is an example loading an BF16 model in FP8 using the FBGEMM approach:
 

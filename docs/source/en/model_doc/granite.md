@@ -15,7 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2024-08-23 and added to Hugging Face Transformers on 2024-08-27.*
 
-
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
@@ -109,7 +108,6 @@ input_ids = tokenizer("Explain artificial intelligence to a 10 year old", return
 outputs = model.generate(**inputs, max_length=50, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
-
 
 ## GraniteConfig
 

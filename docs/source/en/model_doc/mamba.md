@@ -27,7 +27,6 @@ rendered properly in your Markdown viewer.
 
 You can find all the original Mamba checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization.
 
-
 > [!TIP]
 > This model was contributed by [Molbap](https://huggingface.co/Molbap) and [AntonV](https://huggingface.co/AntonV).
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.

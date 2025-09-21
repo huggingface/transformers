@@ -42,7 +42,7 @@ Currently 6 checkpoints are available for MatCha:
 - `google/matcha-chartqa`: MatCha model fine-tuned on ChartQA dataset. It can be used to answer questions about charts.
 - `google/matcha-plotqa-v1`: MatCha model fine-tuned on PlotQA dataset. It can be used to answer questions about plots.
 - `google/matcha-plotqa-v2`: MatCha model fine-tuned on PlotQA dataset. It can be used to answer questions about plots.
-- `google/matcha-chart2text-statista`: MatCha model fine-tuned on Statista dataset. 
+- `google/matcha-chart2text-statista`: MatCha model fine-tuned on Statista dataset.
 - `google/matcha-chart2text-pew`: MatCha model fine-tuned on Pew dataset.
 
 The models finetuned on `chart2text-pew` and `chart2text-statista` are more suited for summarization, whereas the models finetuned on `plotqa` and `chartqa` are more suited for question answering.

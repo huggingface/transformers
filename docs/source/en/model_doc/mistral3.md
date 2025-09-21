@@ -27,7 +27,6 @@ rendered properly in your Markdown viewer.
 
 You can find the original Mistral 3 checkpoints under the [Mistral AI](https://huggingface.co/mistralai/models?search=mistral-small-3) organization.
 
-
 > [!TIP]
 > This model was contributed by [cyrilvallez](https://huggingface.co/cyrilvallez) and [yonigozlan](https://huggingface.co/yonigozlan).
 > Click on the Mistral3 models in the right sidebar for more examples of how to apply Mistral3 to different tasks.
@@ -103,10 +102,10 @@ decoded_output
 </hfoption>
 </hfoptions>
 
-## Notes 
+## Notes
 
-- Mistral 3 supports text-only generation. 
-```py 
+- Mistral 3 supports text-only generation.
+```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
@@ -142,7 +141,7 @@ print(decoded_output)
 ```"
 ````
 
-- Mistral 3 accepts batched image and text inputs. 
+- Mistral 3 accepts batched image and text inputs.
 ```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
@@ -184,7 +183,7 @@ messages = [
 , "Describe this imageThe image depicts a vibrant street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese"]
 ```
 
-- Mistral 3 also supported batched image and text inputs with a different number of images for each text. The example below quantizes the model with bitsandbytes. 
+- Mistral 3 also supported batched image and text inputs with a different number of images for each text. The example below quantizes the model with bitsandbytes.
 
 ```py
 import torch

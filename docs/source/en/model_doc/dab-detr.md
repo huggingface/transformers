@@ -108,7 +108,6 @@ Option 3: Instantiate DAB-DETR with randomly initialized weights for backbone + 
 >>> model = DabDetrForObjectDetection(config)
 ```
 
-
 ## DabDetrConfig
 
 [[autodoc]] DabDetrConfig

@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 The BridgeTower model was proposed in [BridgeTower: Building Bridges Between Encoders in Vision-Language Representative Learning](https://huggingface.co/papers/2206.08657) by Xiao Xu, Chenfei Wu, Shachar Rosenman, Vasudev Lal, Wanxiang Che, Nan Duan. The goal of this model is to build a
 bridge between each uni-modal encoder and the cross-modal encoder to enable comprehensive and detailed interaction at each layer of the cross-modal encoder thus achieving remarkable performance on various downstream tasks with almost negligible additional performance and computational costs.
 
-This paper has been accepted to the [AAAI'23](https://aaai.org/Conferences/AAAI-23/) conference. 
+This paper has been accepted to the [AAAI'23](https://aaai.org/Conferences/AAAI-23/) conference.
 
 The abstract from the paper is the following:
 
@@ -130,7 +130,6 @@ Tips:
 - Please refer to [Table 5](https://huggingface.co/papers/2206.08657) for BridgeTower's performance on Image Retrieval and other down stream tasks.
 - The PyTorch version of this model is only available in torch 1.10 and higher.
 
-
 ## BridgeTowerConfig
 
 [[autodoc]] BridgeTowerConfig
@@ -177,4 +176,3 @@ Tips:
 
 [[autodoc]] BridgeTowerForImageAndTextRetrieval
     - forward
-

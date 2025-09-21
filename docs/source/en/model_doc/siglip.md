@@ -31,7 +31,6 @@ Unlike CLIP, SigLIP employs a pairwise sigmoid loss on image-text pairs during t
 
 You can find all the original SigLIP checkpoints under the [SigLIP](https://huggingface.co/collections/google/siglip-659d5e62f0ae1a57ae0e83ba) collection.
 
-
 > [!TIP]
 > Click on the SigLIP models in the right sidebar for more examples of how to apply SigLIP to different image and text tasks.
 
@@ -126,7 +125,6 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
     )
     ```
 
-
 ## SiglipConfig
 
 [[autodoc]] SiglipConfig
@@ -178,7 +176,6 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 
 [[autodoc]] SiglipVisionModel
     - forward
-
 
 ## SiglipForImageClassification
 

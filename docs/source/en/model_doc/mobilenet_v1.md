@@ -32,7 +32,6 @@ You can all the original MobileNet checkpoints under the [Google](https://huggin
 
 The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
-
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
@@ -83,7 +82,6 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 <!-- Quantization - Not applicable -->
 <!-- Attention Visualization - Not applicable for this model type -->
-
 
 ## Notes
 

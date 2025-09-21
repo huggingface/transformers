@@ -53,7 +53,6 @@ Additionally, the `max_image_size` parameter, which controls the size of each sq
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [andimarafioti](https://huggingface.co/andito).
 
-
 ## Idefics3Config
 
 [[autodoc]] Idefics3Config
@@ -75,7 +74,6 @@ This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) 
 
 [[autodoc]] Idefics3ForConditionalGeneration
     - forward
-
 
 ## Idefics3ImageProcessor
 [[autodoc]] Idefics3ImageProcessor

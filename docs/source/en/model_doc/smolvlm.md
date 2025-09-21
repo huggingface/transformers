@@ -47,8 +47,6 @@ Additionally, the `max_image_size` parameter, which controls the size of each sq
 
 This model was contributed by [orrzohar](https://huggingface.co/orrzohar).
 
-
-
 ## Usage example
 
 ### Single Media inference

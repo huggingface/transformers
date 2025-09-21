@@ -24,7 +24,6 @@ rendered properly in your Markdown viewer.
 
 This model was contributed by [pglo](https://huggingface.co/pglo).
 
-
 ## Model details
 
 Zamba-7B-v1 is a hybrid between state-space models (Specifically [Mamba](https://github.com/state-spaces/mamba)) and transformer, and was trained using next-token prediction. Zamba uses a shared transformer layer after every 6 mamba blocks. It uses the [Mistral v0.1 tokenizer](https://huggingface.co/mistralai/Mistral-7B-v0.1). We came to this architecture after a series of ablations at small scales. Zamba-7B-v1 was pre-trained on 1T tokens of text and code data.
@@ -32,7 +31,6 @@ Zamba-7B-v1 is a hybrid between state-space models (Specifically [Mamba](https:/
 <img src=https://github.com/user-attachments/assets/c2cff209-b901-483c-87aa-774b82a0769f width=30% height=40% />
 
 ## Quick start
-
 
 ### Presequities
 
@@ -48,7 +46,6 @@ pip install mamba-ssm causal-conv1d>=1.2.0
 You also have to have the model on a CUDA device.
 
 You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly lower latencies. In order to do that, you'll need to specify `use_mamba_kernels=False` when loading the model.
-
 
 ## Inference
 
@@ -66,38 +63,31 @@ outputs = model.generate(**input_ids, max_new_tokens=100)
 print(tokenizer.decode(outputs[0]))
 ```
 
-
 ## Model card
 
 The model cards can be found at:
 * [Zamba-7B](https://huggingface.co/Zyphra/Zamba-7B-v1)
 
-
 ## Issues
 For issues with model output, or community discussion, please use the Hugging Face community [forum](https://huggingface.co/Zyphra/Zamba-7B-v1/discussions)
-
 
 ## License
 
 The model weights are open-sourced via an Apache 2.0 license.
 
-
 ## ZambaConfig
 
 [[autodoc]] ZambaConfig
-
 
 ## ZambaModel
 
 [[autodoc]] ZambaModel
     - forward
 
-
 ## ZambaForCausalLM
 
 [[autodoc]] ZambaForCausalLM
     - forward
-
 
 ## ZambaForSequenceClassification
 

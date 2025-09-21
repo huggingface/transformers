@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Image-to-Image task is the task where an application receives an image and outputs another image. This has various subtasks, including image enhancement (super resolution, low light enhancement, deraining and so on), image inpainting, and more. 
+Image-to-Image task is the task where an application receives an image and outputs another image. This has various subtasks, including image enhancement (super resolution, low light enhancement, deraining and so on), image inpainting, and more.
 
 This guide will show you how to:
 - Use an image-to-image pipeline for super resolution task,
@@ -32,7 +32,7 @@ Let's begin by installing the necessary libraries.
 pip install transformers
 ```
 
-We can now initialize the pipeline with a [Swin2SR model](https://huggingface.co/caidas/swin2SR-lightweight-x2-64). We can then infer with the pipeline by calling it with an image. As of now, only [Swin2SR models](https://huggingface.co/models?sort=trending&search=swin2sr) are supported in this pipeline. 
+We can now initialize the pipeline with a [Swin2SR model](https://huggingface.co/caidas/swin2SR-lightweight-x2-64). We can then infer with the pipeline by calling it with an image. As of now, only [Swin2SR models](https://huggingface.co/models?sort=trending&search=swin2sr) are supported in this pipeline.
 
 ```python
 from transformers import pipeline, infer_device
@@ -60,7 +60,7 @@ print(image.size)
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat.jpg" alt="Photo of a cat"/>
 </div>
 
-We can now do inference with the pipeline. We will get an upscaled version of the cat image. 
+We can now do inference with the pipeline. We will get an upscaled version of the cat image.
 
 ```python
 upscaled = pipe(image)
@@ -79,7 +79,7 @@ model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-lightweig
 processor = Swin2SRImageProcessor("caidas/swin2SR-lightweight-x2-64")
 ```
 
-`pipeline` abstracts away the preprocessing and postprocessing steps that we have to do ourselves, so let's preprocess the image. We will pass the image to the processor and then move the pixel values to GPU. 
+`pipeline` abstracts away the preprocessing and postprocessing steps that we have to do ourselves, so let's preprocess the image. We will pass the image to the processor and then move the pixel values to GPU.
 
 ```python
 pixel_values = processor(image, return_tensors="pt").pixel_values
@@ -96,7 +96,7 @@ import torch
 with torch.no_grad():
   outputs = model(pixel_values)
 ```
-Output is an object of type `ImageSuperResolutionOutput` that looks like below 👇 
+Output is an object of type `ImageSuperResolutionOutput` that looks like below 👇
 
 ```
 (loss=None, reconstruction=tensor([[[[0.8270, 0.8269, 0.8275,  ..., 0.7463, 0.7446, 0.7453],

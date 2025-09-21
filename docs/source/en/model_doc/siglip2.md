@@ -32,7 +32,6 @@ rendered properly in your Markdown viewer.
 - NaFlex supports different resolutions and maintains the native image aspect ratio
 - FixRes supports fixed resolutions and is backwards compatible with [SigLIP](./siglip)
 
-
 You can find all the original SigLIP2 checkpoints under the [SigLIP2](https://huggingface.co/collections/google/siglip2-67b5dcef38c175486e240107) collection.
 
 > [!TIP]

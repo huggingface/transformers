@@ -142,7 +142,6 @@ visualizer("Plants create energy through a process known as")
 
 [[autodoc]] LlamaConfig
 
-
 ## LlamaTokenizer
 
 [[autodoc]] LlamaTokenizer
@@ -164,7 +163,6 @@ visualizer("Plants create energy through a process known as")
 
 [[autodoc]] LlamaModel
     - forward
-
 
 ## LlamaForCausalLM
 

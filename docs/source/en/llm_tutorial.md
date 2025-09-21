@@ -154,7 +154,6 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 | `repetition_penalty` | `float` | Set it to `>1.0` if you're seeing the model repeat itself often. Larger values apply a larger penalty. |
 | `eos_token_id` | `list[int]` | The token(s) that will cause generation to stop. The default value is usually good, but you can specify a different token. |
 
-
 ## Pitfalls
 
 The section below covers some common issues you may encounter during text generation and how to solve them.

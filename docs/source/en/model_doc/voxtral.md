@@ -78,7 +78,7 @@ print(decoded_outputs[0])
 print("=" * 80)
 ```
 
-➡️ multi-audio + text instruction 
+➡️ multi-audio + text instruction
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device

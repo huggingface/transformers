@@ -134,13 +134,13 @@ for i in indices:
 ```
 
 <div style="display: flex; align-items: center;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_1.png" 
-         alt="Document 1" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_1.png"
+         alt="Document 1"
          style="height: 200px; object-fit: contain; margin-right: 10px;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_2.png" 
-         alt="Document 2" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_2.png"
+         alt="Document 2"
          style="height: 200px; object-fit: contain;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_3.png" 
-         alt="Document 3" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_3.png"
+         alt="Document 3"
          style="height: 200px; object-fit: contain;">
 </div>

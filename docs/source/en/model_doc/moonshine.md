@@ -101,4 +101,3 @@ transcription[0]
 [[autodoc]] MoonshineForConditionalGeneration
     - forward
     - generate
-

@@ -26,7 +26,6 @@ rendered properly in your Markdown viewer.
 
 [Qwen2.5-VL](https://huggingface.co/papers/2502.13923) is a multimodal vision-language model, available in 3B, 7B, and 72B parameters, pretrained on 4.1T tokens. The model introduces window attention in the ViT encoder to accelerate training and inference, dynamic FPS sampling on the spatial and temporal dimensions for better video understanding across different sampling rates, and an upgraded MRoPE (multi-resolutional rotary positional encoding) mechanism to better capture and learn temporal dynamics.
 
-
 You can find all the original Qwen2.5-VL checkpoints under the [Qwen2.5-VL](https://huggingface.co/collections/Qwen/qwen25-vl-6795ffac22b334a837c0f9a5) collection.
 
 > [!TIP]
@@ -221,9 +220,9 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     max_pixels = 2048*2048
     processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
     ```
-    
+
     Higher resolution can require more compute whereas reducing the resolution can save memory as follows:
-    
+
     ```python
     min_pixels = 256*28*28
     max_pixels = 1024*28*28 

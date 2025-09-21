@@ -206,7 +206,6 @@ To see all architectures and checkpoints compatible with this task, we recommend
 
 </Tip>
 
-
 ### Load SceneParse150 dataset
 
 Start by loading a smaller subset of the SceneParse150 dataset from the 🤗 Datasets library. This'll give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
@@ -473,7 +472,6 @@ Reload the dataset and load an image for inference.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-image.png" alt="Image of bedroom"/>
 </div>
 
-
 We will now see how to infer without a pipeline. Process the image with an image processor and place the `pixel_values` on a GPU:
 
 ```py
@@ -502,7 +500,6 @@ Next, rescale the logits to the original image size:
 
 >>> pred_seg = upsampled_logits.argmax(dim=1)[0]
 ```
-
 
 To visualize the results, load the [dataset color palette](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) as `ade_palette()` that maps each class to their RGB values.
 

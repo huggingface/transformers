@@ -33,8 +33,6 @@ You can find all the original SuperPoint checkpoints under the [Magic Leap Commu
 >
 > Click on the SuperPoint models in the right sidebar for more examples of how to apply SuperPoint to different computer vision tasks.
 
-
-
 The example below demonstrates how to detect interest points in an image with the [`AutoModel`] class.
 <hfoptions id="usage">
 <hfoption id="AutoModel">

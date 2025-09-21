@@ -39,7 +39,6 @@ The example below demonstrates how to chat with the model with [`Pipeline`] or t
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-
 ```python
 import torch
 from transformers import pipeline

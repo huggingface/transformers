@@ -42,7 +42,6 @@ vllm serve meta-llama/Llama-3.2-1B \
 
 Refer to the [vLLM docs](https://docs.vllm.ai/en/latest/models/supported_models.html#transformers) for more usage examples and tips on using a Transformers as the backend.
 
-
 ## SGLang
 
 [SGLang](https://github.com/InternLM/sglang) is a high-performance, OpenAI-compatible server and runtime designed for chat-based LLMs. It offers fast inference, role-based conversation handling, and support for custom pipelines, making it great for building real-world LLM apps.
@@ -57,12 +56,6 @@ print(llm.generate(["The capital of France is"], {"max_new_tokens": 20})[0])
 ```
 
 Add `impl transformers` to `sglang.launch_server` to launch a server with a Transformers' model.
-          
-      
-    
-    
-  
-
 
 ```bash
 python3 -m sglang.launch_server \
@@ -133,7 +126,7 @@ class MyModel(PreTrainedModel):
 3. This step is optional, but if you want to support tensor parallel and/or pipeline parallel features, add the following keys to the config.
     * `base_model_tp_plan` enables [tensor parallelism](./perf_infer_gpu_multi) by mapping fully qualified layer name patterns to tensor parallel styles. Only the `"colwise"` and `"rowwise"` partitioning strategies are currently supported.
     * `base_model_pp_plan` enables pipeline parallelism by mapping direct child layer names to tuples of lists of strings. The list in the first element of the tuple contains the names of the input arguments. The list in the last element of the tuple contains the names of the variables the layer outputs to in the modeling code.
- 
+
  Expand the code below for an example.
 
 <details>
@@ -201,7 +194,6 @@ class MyMultimodalModelForConditionalGeneration(MyMultimodalPreTrainedModel, Gen
         self.lm_head = nn.Linear(hidden_dim, vocab_size)
 ```
 </details>
-
 
 2. A multimodal model config must be nested with the following fields.
     * text_config: decoder language model config

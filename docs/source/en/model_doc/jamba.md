@@ -140,18 +140,15 @@ print(assistant_response)
 
 [[autodoc]] JambaConfig
 
-
 ## JambaModel
 
 [[autodoc]] JambaModel
     - forward
 
-
 ## JambaForCausalLM
 
 [[autodoc]] JambaForCausalLM
     - forward
-
 
 ## JambaForSequenceClassification
 

@@ -15,7 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2023-02-23 and added to Hugging Face Transformers on 2024-07-08.*
 
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -107,7 +106,7 @@ Image.fromarray(depth.astype("uint8"))
             outputs_flipped=outputs_flipped,
         )
    ```
-   
+
 ## Resources
 - Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ZoeDepth) for an inference example.
 

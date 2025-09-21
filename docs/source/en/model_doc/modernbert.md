@@ -128,4 +128,3 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 The ModernBert model can be fine-tuned using the HuggingFace Transformers library with its [official script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/question-answering/run_qa.py) for question-answering tasks.
 
-

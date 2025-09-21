@@ -16,22 +16,22 @@ rendered properly in your Markdown viewer.
 
 # Mask Generation
 
-Mask generation is the task of generating semantically meaningful masks for an image. 
-This task is very similar to [image segmentation](semantic_segmentation), but many differences exist. Image segmentation models are trained on labeled datasets and are limited to the classes they have seen during training; they return a set of masks and corresponding classes, given an image. 
+Mask generation is the task of generating semantically meaningful masks for an image.
+This task is very similar to [image segmentation](semantic_segmentation), but many differences exist. Image segmentation models are trained on labeled datasets and are limited to the classes they have seen during training; they return a set of masks and corresponding classes, given an image.
 
-Mask generation models are trained on large amounts of data and operate in two modes. 
-- Prompting mode: In this mode, the model takes in an image and a prompt, where a prompt can be a 2D point location (XY coordinates) in the image within an object or a bounding box surrounding an object. In prompting mode, the model only returns the mask over the object 
-that the prompt is pointing out. 
-- Segment Everything mode: In segment everything, given an image, the model generates every mask in the image. To do so, a grid of points is generated and overlaid on the image for inference. 
+Mask generation models are trained on large amounts of data and operate in two modes.
+- Prompting mode: In this mode, the model takes in an image and a prompt, where a prompt can be a 2D point location (XY coordinates) in the image within an object or a bounding box surrounding an object. In prompting mode, the model only returns the mask over the object
+that the prompt is pointing out.
+- Segment Everything mode: In segment everything, given an image, the model generates every mask in the image. To do so, a grid of points is generated and overlaid on the image for inference.
 
-Mask generation task is supported by [Segment Anything Model (SAM)](model_doc/sam). It's a powerful model that consists of a Vision Transformer-based image encoder, a prompt encoder, and a two-way transformer mask decoder. Images and prompts are encoded, and the decoder takes these embeddings and generates valid masks. 
+Mask generation task is supported by [Segment Anything Model (SAM)](model_doc/sam). It's a powerful model that consists of a Vision Transformer-based image encoder, a prompt encoder, and a two-way transformer mask decoder. Images and prompts are encoded, and the decoder takes these embeddings and generates valid masks.
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sam.png" alt="SAM Architecture"/>
 </div>
 
-SAM serves as a powerful foundation model for segmentation as it has large data coverage. It is trained on 
-[SA-1B](https://ai.meta.com/datasets/segment-anything/), a dataset with 1 million images and 1.1 billion masks. 
+SAM serves as a powerful foundation model for segmentation as it has large data coverage. It is trained on
+[SA-1B](https://ai.meta.com/datasets/segment-anything/), a dataset with 1 million images and 1.1 billion masks.
 
 In this guide, you will learn how to:
 - Infer in segment everything mode with batching,
@@ -114,7 +114,6 @@ Below is the original image in grayscale with colorful maps overlaid. Very impre
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_segmented.png" alt="Visualized"/>
 </div>
 
-
 ## Model Inference
 
 ### Point Prompting
@@ -132,7 +131,7 @@ processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 
 To do point prompting, pass the input point to the processor, then take the processor output
 and pass it to the model for inference. To post-process the model output, pass the outputs and
-`original_sizes` and `reshaped_input_sizes` we take from the processor's initial output. We need to pass these 
+`original_sizes` and `reshaped_input_sizes` we take from the processor's initial output. We need to pass these
 since the processor resizes the image, and the output needs to be extrapolated.
 
 ```python
@@ -177,9 +176,8 @@ plt.show()
 ### Box Prompting
 
 You can also do box prompting in a similar fashion to point prompting. You can simply pass the input box in the format of a list
-`[x_min, y_min, x_max, y_max]` format along with the image to the `processor`. Take the processor output and directly pass it 
+`[x_min, y_min, x_max, y_max]` format along with the image to the `processor`. Take the processor output and directly pass it
 to the model, then post-process the output again.
-
 
 ```python
 # bounding box around the bee
@@ -219,7 +217,7 @@ plt.show()
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/bbox.png" alt="Visualized Bbox"/>
 </div>
 
-You can see the inference output below. 
+You can see the inference output below.
 
 ```python
 fig, ax = plt.subplots()
@@ -233,4 +231,3 @@ plt.show()
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/box_inference.png" alt="Visualized Inference"/>
 </div>
-

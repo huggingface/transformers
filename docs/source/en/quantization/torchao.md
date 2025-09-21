@@ -30,7 +30,6 @@ See the table below for additional torchao features.
 > [!TIP]
 > Refer to the torchao [README.md](https://github.com/pytorch/ao#torchao-pytorch-architecture-optimization) for more details about the library.
 
-
 torchao supports the [quantization techniques](https://github.com/pytorch/ao/blob/main/torchao/quantization/README.md) below.
 
 - A16W8 Float8 Dynamic Quantization
@@ -43,7 +42,6 @@ torchao supports the [quantization techniques](https://github.com/pytorch/ao/blo
 
 torchao also supports module level configuration by specifying a dictionary from fully qualified name of module and its corresponding quantization config. This allows skip quantizing certain layers and using different quantization config for different modules.
 
-
 Check the table below to see if your hardware is compatible.
 
 | Component | Compatibility |
@@ -51,8 +49,6 @@ Check the table below to see if your hardware is compatible.
 | CUDA Versions | ✅ cu118, cu126, cu128 |
 | XPU Versions | ✅ pytorch2.8 |
 | CPU | ✅ change `device_map="cpu"` (see examples below) |
-
-
 
 Install torchao from PyPi or the PyTorch index with the following commands.
 
@@ -67,7 +63,7 @@ pip install --upgrade torchao transformers
 </hfoption>
 <hfoption id="PyTorch Index">
 Stable Release from the PyTorch index
-    
+
 ```bash
 pip install torchao --index-url https://download.pytorch.org/whl/cu126 # options are cpu/cu118/cu126/cu128
 ```
@@ -183,7 +179,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ### A100 GPU
 <hfoptions id="examples-A100-GPU">
 <hfoption id="int8-dynamic-and-weight-only">
-    
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -282,7 +278,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ### Intel XPU
 <hfoptions id="examples-Intel-XPU">
 <hfoption id="int8-dynamic-and-weight-only">
-    
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -343,11 +339,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
-
 ### CPU
 <hfoptions id="examples-CPU">
 <hfoption id="int8-dynamic-and-weight-only">
-    
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -485,7 +480,6 @@ Note: autoquant is for GPU only right now.
 
 Create a [`TorchAoConfig`] and set to `"autoquant"`. Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method. Finally, call `finalize_autoquant` on the quantized model to finalize the quantization and log the input shapes.
 
-
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -509,7 +503,6 @@ quantized_model.finalize_autoquant()
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-
 ## Serialization
 
 torchao implements [torch.Tensor subclasses](https://pytorch.org/docs/stable/notes/extending.html#subclassing-torch-tensor) for maximum flexibility in supporting new quantized torch.Tensor formats. [Safetensors](https://huggingface.co/docs/safetensors/en/index) serialization and deserialization does not work with torchao.
@@ -518,7 +511,7 @@ To avoid arbitrary user code execution, torchao sets `weights_only=True` in [tor
 
 <hfoptions id="serialization-examples">
 <hfoption id="save-locally">
-    
+
 ```py
 # don't serialize model with Safetensors
 output_dir = "llama3-8b-int4wo-128"
@@ -526,7 +519,7 @@ quantized_model.save_pretrained("llama3-8b-int4wo-128", safe_serialization=False
 ```
 </hfoption>
 <hfoption id="push-to-huggingface-hub">
-    
+
 ```py
 # don't serialize model with Safetensors
 USER_ID = "your_huggingface_user_id"
@@ -536,7 +529,6 @@ tokenizer.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
 ```
 </hfoption>
 </hfoptions>
-
 
 ## Loading quantized models
 
@@ -640,8 +632,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 > | `"int8_dynamic_activation_int8_weight"` | `Int8DynamicActivationInt8WeightConfig()` |
 >
 > All configuration objects accept parameters for customization (e.g., `group_size`, `scheme`, `layout`).
-
-
 
 ## Resources
 

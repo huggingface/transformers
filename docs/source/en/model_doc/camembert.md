@@ -84,7 +84,6 @@ echo -e "Le camembert est un délicieux fromage <mask>." | transformers run --ta
 
 </hfoptions>
 
-
 Quantization reduces the memory burden of large models by representing weights in lower precision. Refer to the [Quantization](../quantization/overview) overview for available options.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) quantization to quantize the weights to 8-bits.

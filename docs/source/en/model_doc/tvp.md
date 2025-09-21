@@ -165,7 +165,6 @@ Tips:
 - Checkpoints for pre-trained [tvp-base](https://huggingface.co/Intel/tvp-base) is released.
 - Please refer to [Table 2](https://huggingface.co/papers/2303.04995) for TVP's performance on Temporal Video Grounding task.
 
-
 ## TvpConfig
 
 [[autodoc]] TvpConfig
