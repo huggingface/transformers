@@ -61,6 +61,7 @@ outputs = pipeline(text=messages, max_new_tokens=50, return_full_text=False)
 outputs[0]["generated_text"]
 'The image depicts a vibrant and lush garden scene featuring a variety of wildflowers and plants. The central focus is on a large, pinkish-purple flower, likely a Greater Celandine (Chelidonium majus), with a'
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -99,12 +100,14 @@ decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :
 decoded_output
 'The image depicts a vibrant and lush garden scene featuring a variety of wildflowers and plants. The central focus is on a large, pinkish-purple flower, likely a Greater Celandine (Chelidonium majus), with a'
 ```
+
 </hfoption>
 </hfoptions>
 
 ## Notes
 
 - Mistral 3 supports text-only generation.
+
 ```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
@@ -135,13 +138,16 @@ print(decoded_output)
  5. Je me casse, à plus!
 
 ```
+
  /\_/\
 ( o.o )
  > ^ <
+
 ```"
 ````
 
 - Mistral 3 accepts batched image and text inputs.
+
 ```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device

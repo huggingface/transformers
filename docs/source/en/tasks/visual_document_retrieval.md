@@ -40,6 +40,7 @@ dataset = dataset["train"]
 dataset = dataset.filter(lambda example: example["specific_detail_query"] is not None)
 dataset
 ```
+
 ```
 Dataset({
     features: ['image', 'raw_queries', 'broad_topical_query', 'broad_topical_explanation', 'specific_detail_query', 'specific_detail_explanation', 'visual_element_query', 'visual_element_explanation', 'parsed_into_json'],

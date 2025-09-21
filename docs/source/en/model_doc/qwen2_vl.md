@@ -203,6 +203,7 @@ min_pixels = 256*28*28
 max_pixels = 1024*28*28 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
 ```
+
 This ensures each image gets encoded using a number between 256-1024 tokens. The 28 comes from the fact that the model uses a patch size of 14 and a temporal patch size of 2 (14 x 2 = 28).
 
 #### Multiple Image Inputs

@@ -80,6 +80,7 @@ from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 visualizer = AttentionMaskVisualizer("Helsinki-NLP/opus-mt-en-de")
 visualizer("Hello, how are you?")
 ```
+
 <div class="flex justify-center">
    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/marianmt-attn-mask.png"/>
 </div>

@@ -100,6 +100,7 @@ print(text_prompt)
 - If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by each llava checkpoint:
 
 [llava-interleave models](https://huggingface.co/collections/llava-hf/llava-interleave-668e19a97da0036aad4a2f19) requires the following format:
+
 ```bash
 "<|im_start|>user <image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant"
 ```
@@ -111,6 +112,7 @@ For multiple turns conversation:
 ```
 
 [llava-1.5 models](https://huggingface.co/collections/llava-hf/llava-15-65f762d5b6941db5c2ba07e0) requires the following format:
+
 ```bash
 "USER: <image>\n<prompt> ASSISTANT:"
 ```

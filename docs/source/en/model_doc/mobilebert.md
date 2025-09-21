@@ -46,6 +46,7 @@ pipeline = pipeline(
 )
 pipeline("The capital of France is [MASK].")
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 

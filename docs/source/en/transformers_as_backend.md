@@ -32,6 +32,7 @@ vLLM automatically selects the best backend, and if a model isn’t natively sup
 from vllm import LLM
 llm = LLM(model="meta-llama/Llama-3.2-1B", model_impl="transformers")
 ```
+
 Add `--model-impl transformers` to `vllm serve` to launch a server with a Transformers' model.
 
 ```bash
@@ -151,6 +152,7 @@ class MyConfig(PretrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 ```
+
 </details>
 
 ### Multimodal models
@@ -193,6 +195,7 @@ class MyMultimodalModelForConditionalGeneration(MyMultimodalPreTrainedModel, Gen
         self.model = MyMultimodalModel(config)
         self.lm_head = nn.Linear(hidden_dim, vocab_size)
 ```
+
 </details>
 
 2. A multimodal model config must be nested with the following fields.
@@ -238,6 +241,7 @@ class MyMultimodalProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
 ```
+
 </details>
 
 ## Resources

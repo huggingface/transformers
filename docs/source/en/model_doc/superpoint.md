@@ -99,6 +99,7 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
     ```
 
 - You can then print the keypoints on the image of your choice to visualize the result:
+
     ```py
     import matplotlib.pyplot as plt
     plt.axis("off")

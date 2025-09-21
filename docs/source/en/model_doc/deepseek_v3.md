@@ -61,6 +61,7 @@ outputs = model.generate(inputs, max_new_tokens=50)
 print(tokenizer.batch_decode(outputs))
 print(time.time()-start)
 ```
+
 This generated:
 
 ``````
@@ -157,16 +158,19 @@ Want to dive deeper or see a specific framework’s implementation (e.g., OpenAI
 ``````
 
 Use the following to run it
+
 ```bash
 torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0|1 --rdzv-id an_id --rdzv-backend c10d --rdzv-endpoint master_addr:master_port run_deepseek_r1.py
 ```
 
 If you have:
+
 ```bash
 [rank0]: ncclInternalError: Internal check failed.
 [rank0]: Last error:
 [rank0]: Bootstrap : no socket interface found
 ```
+
 error, it means NCCL was probably not loaded.
 
 ## DeepseekV3Config

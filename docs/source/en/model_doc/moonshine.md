@@ -83,6 +83,7 @@ predicted_ids = model.generate(**input_features, cache_implementation="static")
 transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
 transcription[0]
 ```
+
 </hfoption>
 </hfoptions>
 

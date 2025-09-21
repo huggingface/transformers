@@ -68,12 +68,14 @@ inputs = tokenizer("Explain quantum computing in simple terms", return_tensors="
 outputs = model.generate(**inputs, max_length=50, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 <hfoption id="transformers CLI">
 
 ```python
 echo -e "Explain quantum computing simply." | transformers run --task text-generation --model ibm-granite/granite-3.3-8b-instruct --device 0
 ```
+
 </hfoption>
 </hfoptions>
 

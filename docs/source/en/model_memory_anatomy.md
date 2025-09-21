@@ -27,7 +27,7 @@ we'll need to install a few libraries:
 pip install transformers datasets accelerate nvidia-ml-py
 ```
 
-The `nvidia-ml-py` library allows us to monitor the memory usage of the models from within Python. You might be familiar 
+The `nvidia-ml-py` library allows us to monitor the memory usage of the models from within Python. You might be familiar
 with the `nvidia-smi` command in the terminal - this library allows to access the same information in Python directly.
 
 Then, we create some dummy data: random token IDs between 100 and 30000 and binary labels for a classifier.

@@ -45,6 +45,7 @@ pipeline = pipeline(
 pipeline("Plants create <mask> through a process known as photosynthesis.")
 
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 

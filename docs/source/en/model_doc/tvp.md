@@ -47,6 +47,7 @@ The [`TvpProcessor`] wraps [`BertTokenizer`] and [`TvpImageProcessor`] into a si
 encode the text and prepare the images respectively.
 
 The following example shows how to run temporal video grounding using [`TvpProcessor`] and [`TvpForVideoGrounding`].
+
 ```python
 import av
 import cv2

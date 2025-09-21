@@ -60,6 +60,7 @@ messages = [
 pipe(text=messages,max_new_tokens=20, return_full_text=False)
 
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -109,6 +110,7 @@ output_text = processor.batch_decode(
 )
 print(output_text)
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -129,9 +131,11 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 )
 
 ```
+
 ### Notes
 
 - Use Qwen2.5-VL for video inputs by setting `"type": "video"` as shown below.
+
     ```python
     conversation = [
         {
@@ -158,8 +162,10 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
     print(output_text)
     ```
+
 - Use Qwen2.5-VL for a mixed batch of inputs (images, videos, text). Add labels when handling multiple images or videos for better reference
  as show below.
+
     ```python
     import torch
     from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
@@ -228,6 +234,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     max_pixels = 1024*28*28 
     processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
     ```
+
 ## Qwen2_5_VLConfig
 
 [[autodoc]] Qwen2_5_VLConfig

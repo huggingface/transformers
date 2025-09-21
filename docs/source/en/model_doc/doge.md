@@ -42,6 +42,7 @@ inputs = tokenizer("Hey how are you doing?", return_tensors="pt")
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.batch_decode(outputs))
 ```
+
 </details>
 
 <details>
@@ -80,6 +81,7 @@ outputs = model.generate(
     streamer=steamer
 )
 ```
+
 </details>
 
 ## DogeConfig

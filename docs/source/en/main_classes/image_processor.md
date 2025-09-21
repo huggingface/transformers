@@ -26,6 +26,7 @@ from transformers import AutoImageProcessor
 
 processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", use_fast=True)
 ```
+
 Note that `use_fast` will be set to `True` by default in a future release.
 
 When using a fast image processor, you can also set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise.

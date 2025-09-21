@@ -151,6 +151,7 @@ with torch.no_grad():
 generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
 print(f"Generated text: {generated_text}")
 ```
+
 </hfoption>
 
 <hfoption id="transformers CLI">
@@ -166,7 +167,6 @@ echo "The future of artificial intelligence is" | transformers run --task text-g
 
 [[autodoc]] ModernBertDecoderConfig
 
-
 ## ModernBertDecoderModel
 
 [[autodoc]] ModernBertDecoderModel
@@ -181,4 +181,3 @@ echo "The future of artificial intelligence is" | transformers run --task text-g
 
 [[autodoc]] ModernBertDecoderForSequenceClassification
     - forward
-

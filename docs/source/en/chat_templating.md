@@ -43,6 +43,7 @@ chat = [
 
 tokenizer.apply_chat_template(chat, tokenize=False)
 ```
+
 ```md
 <s>[INST] Hello, how are you? [/INST]I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]
 ```
@@ -62,6 +63,7 @@ chat = [
 
 tokenizer.apply_chat_template(chat, tokenize=False)
 ```
+
 ```md
 <|user|>\nHello, how are you?</s>\n<|assistant|>\nI'm doing great. How can I help you today?</s>\n<|user|>\nI'd like to show off how chat templating works!</s>\n
 ```
@@ -110,6 +112,7 @@ Pass the tokenized chat to [`~GenerationMixin.generate`] to generate a response.
 outputs = model.generate(tokenized_chat, max_new_tokens=128) 
 print(tokenizer.decode(outputs[0]))
 ```
+
 ```md
 <|system|>
 You are a friendly chatbot who always responds in the style of a pirate</s>
@@ -135,6 +138,7 @@ Let's see an example to understand what `add_generation_prompt` is actually doin
 tokenized_chat = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
 tokenized_chat
 ```
+
 ```md
 <|im_start|>user
 Hi there!<|im_end|>
@@ -150,6 +154,7 @@ Now, let's format the same chat with `add_generation_prompt=True`:
 tokenized_chat = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 tokenized_chat
 ```
+
 ```md
 <|im_start|>user
 Hi there!<|im_end|>
@@ -211,6 +216,7 @@ dataset = Dataset.from_dict({"chat": [chat1, chat2]})
 dataset = dataset.map(lambda x: {"formatted_chat": tokenizer.apply_chat_template(x["chat"], tokenize=False, add_generation_prompt=False)})
 print(dataset['formatted_chat'][0])
 ```
+
 ```md
 <|user|>
 Which is bigger, the moon or the sun?</s>

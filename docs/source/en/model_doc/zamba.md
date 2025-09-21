@@ -35,14 +35,17 @@ Zamba-7B-v1 is a hybrid between state-space models (Specifically [Mamba](https:/
 ### Presequities
 
 Zamba requires you use `transformers` version 4.46.0 or higher:
+
 ```bash
 pip install transformers>=4.45.0
 ```
 
 In order to run optimized Mamba implementations, you first need to install `mamba-ssm` and `causal-conv1d`:
+
 ```bash
 pip install mamba-ssm causal-conv1d>=1.2.0
 ```
+
 You also have to have the model on a CUDA device.
 
 You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly lower latencies. In order to do that, you'll need to specify `use_mamba_kernels=False` when loading the model.

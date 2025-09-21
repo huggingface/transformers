@@ -91,6 +91,7 @@ input_ids = tokenizer("Plants create energy through a process known as", return_
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 ## Notes
 
 - Codestral Mamba has `groups=8` which are similar to the number of kv heads in an attention-based model.

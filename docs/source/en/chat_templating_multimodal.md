@@ -143,6 +143,7 @@ messages = [
 ```
 
 ### Example: Passing decoded video objects
+
 ```python
 import numpy as np
 
@@ -162,7 +163,9 @@ messages = [
     },
 ]
 ```
+
 You can also use existing (`"load_video()"`) function to load a video, edit the video in memory and pass it in the messages.
+
 ```python
 
 # Make sure a video backend library (pyav, decord, or torchvision) is available.

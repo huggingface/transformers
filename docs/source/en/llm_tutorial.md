@@ -24,6 +24,7 @@ In Transformers, the [`~GenerationMixin.generate`] API handles text generation, 
 
 > [!TIP]
 > You can also chat with a model directly from the command line. ([reference](./conversations.md#transformers))
+>
 > ```shell
 > transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
@@ -35,6 +36,7 @@ Before you begin, it's helpful to install [bitsandbytes](https://hf.co/docs/bits
 ```bash
 !pip install -U transformers bitsandbytes
 ```
+
 Bitsandbytes supports multiple backends in addition to CUDA-based GPUs. Refer to the multi-backend installation [guide](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend) to learn more.
 
 Load a LLM with [`~PreTrainedModel.from_pretrained`] and add the following two parameters to reduce the memory requirements.

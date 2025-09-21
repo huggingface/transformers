@@ -39,6 +39,7 @@ If `do_resize` is set to `True`, the model resizes images so that the longest ed
 The default resizing behavior can be customized by passing a dictionary to the `size` parameter. For example, `{"longest_edge": 4 * 512}` is the default, but you can change it to a different value if needed.
 
 Here’s how to control resizing and set a custom size:
+
 ```python
 image_processor = SmolVLMImageProcessor(do_resize=True, size={"longest_edge": 2 * 512}, max_image_size=512)
 ```

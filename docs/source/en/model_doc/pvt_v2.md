@@ -48,6 +48,7 @@ This model was contributed by [FoamoftheSea](https://huggingface.co/FoamoftheSea
 - ImageNet pretrained weights for all model sizes can be found on the [hub](https://huggingface.co/models?other=pvt_v2).
 
  The best way to get started with the PVTv2 is to load the pretrained checkpoint with the size of your choosing using `AutoModelForImageClassification`:
+
 ```python
 import requests
 import torch

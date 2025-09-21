@@ -86,6 +86,7 @@ embed_2 = infer(image_2)
 similarity = cosine_similarity(embed_1, embed_2)  
 print(similarity)
 ```
+
 </hfoption>
 </hfoptions>
 

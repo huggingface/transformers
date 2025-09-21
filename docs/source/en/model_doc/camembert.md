@@ -50,6 +50,7 @@ from transformers import pipeline
 pipeline = pipeline("fill-mask", model="camembert-base", dtype=torch.float16, device=0)
 pipeline("Le camembert est un délicieux fromage <mask>.")
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -72,6 +73,7 @@ predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
 ```
+
 </hfoption>
 
 <hfoption id="transformers CLI">

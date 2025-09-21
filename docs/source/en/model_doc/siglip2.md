@@ -156,6 +156,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 
    NaFlex resizes the input image so the height and width are multiples of the patch size after resizing. It keeps the aspect ratio distortion as low as possible and produces a sequence length of at most the desired target sequence length (`max_num_patches`). After resizing, the image is split into a sequence of patches and a mask with padding information is added.
 - Toggle the `attn_implementation` parameter to either `"sdpa"` or `"flash_attention_2"` to use a more memory-efficient attention.
+
     ```py
     # pip install -U flash-attn --no-build-isolation
 
@@ -168,6 +169,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
         device_map=device,
     )
     ```
+
 ## Siglip2Config
 
 [[autodoc]] Siglip2Config

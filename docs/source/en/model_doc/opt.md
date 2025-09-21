@@ -64,12 +64,14 @@ model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 generated_ids = model.generate(**model_inputs, max_new_tokens=30, do_sample=False)
 tokenizer.batch_decode(generated_ids)[0]
 ```
+
 </hfoption>
 <hfoption id="transformers CLI">
 
 ```py
 echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model facebook/opt-125m --device 0
 ```
+
 </hfoption>
 </hfoptions>
 

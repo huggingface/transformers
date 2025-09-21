@@ -86,11 +86,13 @@ print(text_prompt)
 ```
 
 - If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by VipLLaVa checkpoints:
+
 ```bash
 A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n<prompt>###Assistant:
 ```
 
 For multiple turns conversation:
+
 ```bash
 A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n<prompt1>###Assistant: <answer1>###Human: <prompt2>###Assistant:
 ```

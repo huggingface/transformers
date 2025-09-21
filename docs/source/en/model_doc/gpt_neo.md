@@ -43,6 +43,7 @@ from transformers import pipeline
 pipeline = pipeline(task="text-generation", model="EleutherAI/gpt-neo-1.3B", dtype=torch.float16, device=0)
 pipeline("Hello, I'm a language model")
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 

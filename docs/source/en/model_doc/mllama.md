@@ -49,11 +49,13 @@ resized_embeddings = model._get_resized_lm_head(old_embeddings, new_num_tokens=n
 resized_embeddings.requires_grad_(old_embeddings.weight.requires_grad)
 model.set_output_embeddings(resized_embeddings)
 ```
+
 </Tip>
 
 ## Usage Example
 
 #### Instruct model
+
 ```python
 import torch
 from transformers import MllamaForConditionalGeneration, AutoProcessor
@@ -79,6 +81,7 @@ print(processor.decode(output[0]))
 ```
 
 #### Base model
+
 ```python
 import requests
 import torch

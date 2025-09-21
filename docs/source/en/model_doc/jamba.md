@@ -75,6 +75,7 @@ input_ids = tokenizer("Plants create energy through a process known as", return_
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 <hfoption id="transformers CLI">
 

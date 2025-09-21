@@ -275,6 +275,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     dtype=torch.bfloat16,
 )
 ```
+
 </hfoption>
 <hfoption id="SDPA">
 The `sdpa` attention method is generally more compute-efficient than the `eager` method.
@@ -290,6 +291,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     dtype=torch.bfloat16,
 )
 ```
+
 </hfoption>
 <hfoption id="Eager">
 The `eager` attention method is set by default, so no need for anything different when loading the model:
@@ -304,6 +306,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     dtype=torch.bfloat16,
 )
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -372,6 +375,7 @@ outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
 outputs = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[-1]:])
 print(outputs[0])
 ```
+
 </hfoption>
 </hfoptions>
 

@@ -66,6 +66,7 @@ For summarization, it is an example to use MVP and MVP with summarization-specif
 ```
 
 For data-to-text generation, it is an example to use MVP and multi-task pre-trained variants.
+
 ```python
 >>> from transformers import MvpTokenizerFast, MvpForConditionalGeneration
 

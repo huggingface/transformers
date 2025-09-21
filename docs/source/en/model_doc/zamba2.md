@@ -37,6 +37,7 @@ This model was contributed by [pglo](https://huggingface.co/pglo).
 ### Presequities
 
 Zamba2 requires you use `transformers` version 4.48.0 or higher:
+
 ```bash
 pip install transformers>=4.48.0
 ```

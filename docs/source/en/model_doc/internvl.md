@@ -69,6 +69,7 @@ Here is how you can use the `image-text-to-text` pipeline to perform inference w
 >>> outputs[0]["generated_text"]
 'The image showcases a vibrant scene of nature, featuring several flowers and a bee. \n\n1. **Foreground Flowers**: \n   - The primary focus is on a large, pink cosmos flower with a prominent yellow center. The petals are soft and slightly r'
 ```
+
 ### Inference on a single image
 
 This example demonstrates how to perform inference on a single image with the InternVL models using chat templates.

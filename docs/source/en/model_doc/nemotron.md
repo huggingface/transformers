@@ -108,6 +108,7 @@ Please refer to our [paper](https://huggingface.co/papers/2407.14679) for the fu
 ### Citation
 
 If you find our work helpful, please consider citing our paper:
+
 ```
 @article{minitron2024,
       title={Compact Language Models via Pruning and Knowledge Distillation},

@@ -171,6 +171,7 @@ To get an even better understanding of the data, visualize an example in the dat
 
 >>> image
 ```
+
 <div class="flex justify-center">
     <img src="https://i.imgur.com/oVQb9SF.png" alt="CPPE-5 Image Example"/>
 </div>
@@ -575,6 +576,7 @@ Finally, bring everything together, and call [`~transformers.Trainer.train`]:
 
 >>> trainer.train()
 ```
+
 <div>
 
   <progress value='3210' max='3210' style='width:300px; height:20px; vertical-align: middle;'></progress>
@@ -1486,6 +1488,7 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 ```
 
 Load model and image processor from the Hugging Face Hub (skip to use already trained in this session):
+
 ```py
 >>> from transformers import infer_device
 

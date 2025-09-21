@@ -83,6 +83,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 echo -e "Explain quantum computing simply." | transformers run --task text-generation --model google/gemma-2-2b --device 0
 ```
+
 </hfoption>
 </hfoptions>
 

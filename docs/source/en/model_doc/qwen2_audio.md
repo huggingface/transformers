@@ -78,6 +78,7 @@ In the following, we demonstrate how to use `Qwen2-Audio-7B-Instruct` for the in
 
 ### Voice Chat Inference
 In the voice chat mode, users can freely engage in voice interactions with Qwen2-Audio without text input:
+
 ```python
 from io import BytesIO
 from urllib.request import urlopen
@@ -118,6 +119,7 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 
 ### Audio Analysis Inference
 In the audio analysis, users could provide both audio and text instructions for analysis:
+
 ```python
 from io import BytesIO
 from urllib.request import urlopen
@@ -166,6 +168,7 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 
 ### Batch Inference
 We also support batch inference:
+
 ```python
 from io import BytesIO
 from urllib.request import urlopen

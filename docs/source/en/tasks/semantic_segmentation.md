@@ -69,6 +69,7 @@ results
 ```
 
 The segmentation pipeline output includes a mask for every predicted class.
+
 ```bash
 [{'score': None,
   'label': 'road',
@@ -107,6 +108,7 @@ Taking a look at the mask for the car class, we can see every car is classified 
 ```python
 results[-1]["mask"]
 ```
+
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/semantic_segmentation_output.png" alt="Semantic Segmentation Output"/>
 </div>
@@ -135,11 +137,13 @@ As you can see below, there are multiple cars classified, and there's no classif
   'label': 'person',
   'mask': <PIL.Image.Image image mode=L size=612x415>}]
 ```
+
 Checking out one of the car masks below.
 
 ```python
 results[2]["mask"]
 ```
+
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/instance_segmentation_output.png" alt="Semantic Segmentation Output"/>
 </div>
@@ -151,6 +155,7 @@ panoptic_segmentation = pipeline("image-segmentation", "facebook/mask2former-swi
 results = panoptic_segmentation(image)
 results
 ```
+
 As you can see below, we have more classes. We will later illustrate to see that every pixel is classified into one of the classes.
 
 ```bash

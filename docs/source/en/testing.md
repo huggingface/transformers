@@ -209,9 +209,11 @@ Example:
 ```
 
 Just run the following line to automatically test every docstring example in the desired file:
+
 ```bash
 pytest --doctest-modules <path_to_file_or_dir>
 ```
+
 If the file has a markdown extension, you should add the `--doctest-glob="*.md"` argument.
 
 ### Run only modified tests
@@ -506,6 +508,7 @@ Certain devices will require an additional import after importing `torch` for th
 ```bash
 TRANSFORMERS_TEST_BACKEND="torch_npu" pytest tests/utils/test_logging.py
 ```
+
 Alternative backends may also require the replacement of device-specific functions. For example `torch.cuda.manual_seed` may need to be replaced with a device-specific seed setter like `torch.npu.manual_seed` or `torch.xpu.manual_seed` to correctly set a random seed on the device. To specify a new backend with backend-specific device functions when running the test suite, create a Python device specification file `spec.py` in the format:
 
 ```python
@@ -522,6 +525,7 @@ MANUAL_SEED_FN = torch.npu.manual_seed
 EMPTY_CACHE_FN = torch.npu.empty_cache
 DEVICE_COUNT_FN = torch.npu.device_count
 ```
+
 This format also allows for specification of any additional imports required. To use this file to replace equivalent methods in the test suite, set the environment variable `TRANSFORMERS_TEST_DEVICE_SPEC` to the path of the spec file, e.g. `TRANSFORMERS_TEST_DEVICE_SPEC=spec.py`.
 
 Currently, only `MANUAL_SEED_FN`, `EMPTY_CACHE_FN` and `DEVICE_COUNT_FN` are supported for device-specific dispatch.

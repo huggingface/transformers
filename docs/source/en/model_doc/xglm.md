@@ -66,7 +66,6 @@ This model was contributed by [Suraj](https://huggingface.co/valhalla). The orig
 
 [[autodoc]] XGLMTokenizerFast
 
-
 ## XGLMModel
 
 [[autodoc]] XGLMModel

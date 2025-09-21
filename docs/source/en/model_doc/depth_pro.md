@@ -102,12 +102,14 @@ The network is supplemented with a focal length estimation head. A small convolu
 The `use_fov_model` parameter in `DepthProConfig` controls whether **FOV prediction** is enabled. By default, it is set to `False` to conserve memory and computation. When enabled, the **FOV encoder** is instantiated based on the `fov_model_config` parameter, which defaults to a `Dinov2Model`. The `use_fov_model` parameter can also be passed when initializing the `DepthProForDepthEstimation` model.
 
 The pretrained model at checkpoint `apple/DepthPro-hf` uses the FOV encoder. To use the pretrained-model without FOV encoder, set `use_fov_model=False` when loading the model, which saves computation.
+
 ```py
 >>> from transformers import DepthProForDepthEstimation
 >>> model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", use_fov_model=False)
 ```
 
 To instantiate a new model with FOV encoder, set `use_fov_model=True` in the config.
+
 ```py
 >>> from transformers import DepthProConfig, DepthProForDepthEstimation
 >>> config = DepthProConfig(use_fov_model=True)
@@ -115,6 +117,7 @@ To instantiate a new model with FOV encoder, set `use_fov_model=True` in the con
 ```
 
 Or set `use_fov_model=True` when initializing the model, which overrides the value in config.
+
 ```py
 >>> from transformers import DepthProConfig, DepthProForDepthEstimation
 >>> config = DepthProConfig()

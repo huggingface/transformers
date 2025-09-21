@@ -64,6 +64,7 @@ print(tokenizer.decode(outputs[0]))
 ```
 
 If you have flash-attention installed (`pip install flash-attn`), it is possible to generate faster. (The HuggingFace documentation for flash-attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2).)
+
 ```python
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch
@@ -86,6 +87,7 @@ print(tokenizer.decode(outputs[0]))
 ```
 
 You can also generate faster using the PyTorch scaled dot product attention. (The HuggingFace documentation for scaled dot product attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention).)
+
 ```python
 from transformers import DbrxForCausalLM, AutoTokenizer
 import torch

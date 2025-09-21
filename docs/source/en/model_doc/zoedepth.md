@@ -96,6 +96,7 @@ Image.fromarray(depth.astype("uint8"))
 ## Notes
 
 - In the [original implementation](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131) ZoeDepth performs inference on both the original and flipped images and averages the results. The `post_process_depth_estimation` function handles this by passing the flipped outputs to the optional `outputs_flipped` argument as shown below.
+
    ```py
     with torch.no_grad():
         outputs = model(pixel_values)

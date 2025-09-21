@@ -131,6 +131,7 @@ visualizer("UN Chief says there is no military solution in Syria")
  - For non-English languages, specify the language's [BCP-47](https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200) code with the `src_lang` keyword as shown below.
 
  - See example below for a translation from Romanian to German.
+
     ```python
     >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 

@@ -89,6 +89,7 @@ sf.write("speech.wav", waveform.squeeze().detach().numpy(), samplerate=22050)
 ```
 
 4. Run inference with a pipeline and specify which vocoder to use
+
 ```python
 from transformers import pipeline, FastSpeech2ConformerHifiGan
 import soundfile as sf

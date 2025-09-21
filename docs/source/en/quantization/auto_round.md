@@ -50,6 +50,7 @@ Currently, only offline mode is supported to generate quantized models.
 <hfoption id="quantization cmd">
 
 ### Command Line Usage
+
 ```bash
 auto-round \
     --model facebook/opt-125m \
@@ -98,6 +99,7 @@ autoround.quantize_and_save(output_dir, format='auto_round')
 
 ### AutoRoundBest recipe
 This setting provides the best accuracy in most scenarios but is 4–5× slower than the standard AutoRound recipe. It is especially recommended for 2-bit quantization and is a good choice if sufficient resources are available.
+
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
@@ -120,6 +122,7 @@ autoround = AutoRound(
 output_dir = "./tmp_autoround"
 autoround.quantize_and_save(output_dir, format='auto_round') 
 ```
+
 </hfoption>
 
 <hfoption id="quantization auto-round-light">

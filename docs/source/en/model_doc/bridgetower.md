@@ -54,6 +54,7 @@ The [`BridgeTowerProcessor`] wraps [`RobertaTokenizer`] and [`BridgeTowerImagePr
 encode the text and prepare the images respectively.
 
 The following example shows how to run contrastive learning using [`BridgeTowerProcessor`] and [`BridgeTowerForContrastiveLearning`].
+
 ```python
 >>> from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
 >>> import requests
@@ -76,6 +77,7 @@ The following example shows how to run contrastive learning using [`BridgeTowerP
 ```
 
 The following example shows how to run image-text retrieval using [`BridgeTowerProcessor`] and [`BridgeTowerForImageAndTextRetrieval`].
+
 ```python
 >>> from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
 >>> import requests

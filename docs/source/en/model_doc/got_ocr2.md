@@ -252,6 +252,7 @@ Here is an example of how to process sheet music:
 >>> with open("output.svg", "w") as f:
 >>>     f.write(svg)
 ```
+
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/sheet_music.svg"
 alt="drawing" width="600"/>
 

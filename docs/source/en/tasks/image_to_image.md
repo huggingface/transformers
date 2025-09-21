@@ -53,9 +53,11 @@ image = Image.open(requests.get(url, stream=True).raw)
 
 print(image.size)
 ```
+
 ```bash
 # (532, 432)
 ```
+
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat.jpg" alt="Photo of a cat"/>
 </div>
@@ -66,6 +68,7 @@ We can now do inference with the pipeline. We will get an upscaled version of th
 upscaled = pipe(image)
 print(upscaled.size)
 ```
+
 ```bash
 # (1072, 880)
 ```
@@ -96,6 +99,7 @@ import torch
 with torch.no_grad():
   outputs = model(pixel_values)
 ```
+
 Output is an object of type `ImageSuperResolutionOutput` that looks like below ðŸ‘‡
 
 ```
@@ -108,6 +112,7 @@ Output is an object of type `ImageSuperResolutionOutput` that looks like below ð
           [0.5927, 0.5914, 0.5922,  ..., 0.0664, 0.0694, 0.0718]]]],
        device='cuda:0'), hidden_states=None, attentions=None)
 ```
+
 We need to get the `reconstruction` and post-process it for visualization. Let's see how it looks like.
 
 ```python
@@ -128,6 +133,7 @@ output = np.moveaxis(output, source=0, destination=-1)
 output = (output * 255.0).round().astype(np.uint8)
 Image.fromarray(output)
 ```
+
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat_upscaled.png" alt="Upscaled photo of a cat"/>
 </div>

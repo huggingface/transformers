@@ -113,6 +113,7 @@ DETR can be naturally extended to perform panoptic segmentation (which unifies s
 There are three other ways to instantiate a DETR model (depending on what you prefer):
 
 - Option 1: Instantiate DETR with pre-trained weights for entire model
+
 ```python
 from transformers import DetrForObjectDetection
 
@@ -120,6 +121,7 @@ model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
 ```
 
 - Option 2: Instantiate DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
+
 ```python
 from transformers import DetrConfig, DetrForObjectDetection
 
@@ -128,6 +130,7 @@ model = DetrForObjectDetection(config)
 ```
 
 - Option 3: Instantiate DETR with randomly initialized weights for backbone + Transformer
+
 ```python
 config = DetrConfig(use_pretrained_backbone=False)
 model = DetrForObjectDetection(config)

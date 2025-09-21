@@ -66,6 +66,7 @@ If you have access to an 8 x 80GB A100 node, you could load BLOOM as follows
 ```bash
 !pip install transformers accelerate bitsandbytes optimum
 ```
+
 ```python
 from transformers import AutoModelForCausalLM
 
@@ -98,6 +99,7 @@ result
 ```
 
 **Output**:
+
 ```
 Here is a Python function that transforms bytes to Giga bytes:\n\n```python\ndef bytes_to_giga_bytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single
 ```
@@ -116,6 +118,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 ```
 
 **Output**:
+
 ```bash
 29.0260648727417
 ```
@@ -147,6 +150,7 @@ Let's call it now for the next experiment.
 ```python
 flush()
 ```
+
 From the Accelerate library, you can also use a device-agnostic utility method called [release_memory](https://github.com/huggingface/accelerate/blob/29be4788629b772a3b722076e433b5b3b5c85da3/src/accelerate/utils/memory.py#L63), which takes various hardware backends like XPU, MLU, NPU, MPS, and more into account.
 
 ```python
@@ -203,6 +207,7 @@ result
 ```
 
 **Output**:
+
 ```
 Here is a Python function that transforms bytes to Giga bytes:\n\n```python\ndef bytes_to_giga_bytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single
 ```
@@ -214,6 +219,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 ```
 
 **Output**:
+
 ```
 15.219234466552734
 ```
@@ -222,6 +228,7 @@ Significantly less! We're down to just a bit over 15 GBs and could therefore run
 We're seeing a very nice gain in memory efficiency and more or less no degradation to the model's output. However, we can also notice a slight slow-down during inference.
 
 We delete the models and flush the memory again.
+
 ```python
 del model
 del pipe
@@ -243,6 +250,7 @@ result
 ```
 
 **Output**:
+
 ```
 Here is a Python function that transforms bytes to Giga bytes:\n\n```\ndef bytes_to_gigabytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single argument
 ```
@@ -254,6 +262,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 ```
 
 **Output**:
+
 ```
 9.543574333190918
 ```
@@ -268,6 +277,7 @@ Also note that inference here was again a bit slower compared to 8-bit quantizat
 del model
 del pipe
 ```
+
 ```python
 flush()
 ```
@@ -382,6 +392,7 @@ def alternating(list1, list2):
 -----
 """
 ```
+
 For demonstration purposes, we duplicate the system prompt by ten so that the input length is long enough to observe Flash Attention's memory savings.
 We append the original text prompt `"Question: Please write a function in Python that transforms bytes to Giga bytes.\n\nAnswer: Here"`
 
@@ -411,6 +422,7 @@ result
 ```
 
 **Output**:
+
 ```
 Generated in 10.96854019165039 seconds.
 Sure. Here is a function that does that.\n\ndef bytes_to_giga(bytes):\n   return bytes / 1024 / 1024 / 1024\n\nAnswer: Sure. Here is a function that does that.\n\ndef
@@ -427,6 +439,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 ```
 
 **Output**:
+
 ```bash
 37.668193340301514
 ```
@@ -458,6 +471,7 @@ result
 ```
 
 **Output**:
+
 ```
 Generated in 3.0211617946624756 seconds.
  Sure. Here is a function that does that.\n\ndef bytes_to_giga(bytes):\n   return bytes / 1024 / 1024 / 1024\n\nAnswer: Sure. Here is a function that does that.\n\ndef
@@ -472,6 +486,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 ```
 
 **Output**:
+
 ```
 32.617331981658936
 ```
@@ -602,6 +617,7 @@ generated_text
 ```
 
 **Output**:
+
 ```
 shape of input_ids torch.Size([1, 21])
 shape of input_ids torch.Size([1, 22])
@@ -639,6 +655,7 @@ generated_text
 ```
 
 **Output**:
+
 ```
 shape of input_ids torch.Size([1, 1])
 length of key-value cache 20
@@ -710,6 +727,7 @@ tokenizer.batch_decode(generation_output.sequences)[0][len(prompt):]
 ```
 
 **Output**:
+
 ```
  is a modified version of the function that returns Mega bytes instead.
 
@@ -731,6 +749,7 @@ config = model.config
 ```
 
 **Output**:
+
 ```
 7864320000
 ```
