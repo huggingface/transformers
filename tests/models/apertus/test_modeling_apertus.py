@@ -107,10 +107,10 @@ class ApertusIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @classmethod
-    def get_model(cls, size="8B", dtype=torch.bfloat16):
+    def get_model(cls, size="8B", type="-Instruct", dtype=torch.bfloat16):
         if cls.model is None:
             cls.model = ApertusForCausalLM.from_pretrained(
-                f"swiss-ai/Apertus-{size}-Instruct-2509",
+                f"swiss-ai/Apertus-{size}{type}-2509",
                 device_map="auto",
                 dtype=dtype,
             )
@@ -118,24 +118,47 @@ class ApertusIntegrationTest(unittest.TestCase):
         return cls.model
 
     @classmethod
-    def get_tokenizer(cls, size="8B"):
+    def get_tokenizer(cls, size="8B", type="-Instruct"):
         if cls.tokenizer is None:
-            cls.tokenizer = AutoTokenizer.from_pretrained(f"swiss-ai/Apertus-{size}-Instruct-2509", device_map="auto")
+            cls.tokenizer = AutoTokenizer.from_pretrained(f"swiss-ai/Apertus-{size}{type}-2509", device_map="auto")
 
         return cls.tokenizer
 
     @slow
     def test_model_8b_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that \nthe laws of physics are the same for all observers in uniform motion relative to one another. \nThis means that if you are moving at a constant speed, the laws of physics will behave the same way as they do when you are standing still. \nThe theory of relativity has two main parts: special relativity"""
+        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same in all inertial reference frames, and 2) the speed of light is constant in all inertial reference frames. The first part is called the principle of relativity, and the second part is called the principle of constancy of the speed of light. The theory of relativity is based"""
         prompt = "Simply put, the theory of relativity states that "
-        model = self.get_model()
-        tokenizer = self.get_tokenizer()
+        model = self.get_model(type="")
+        tokenizer = self.get_tokenizer(type="")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, output_text)
+
+    @slow
+    def test_model_8b_instruct_greedy_generation(self):
+        self.setUpClass()
+
+        EXPECTED_TEXT_COMPLETION = """<s><|system_start|>You are Apertus, a helpful assistant created by the SwissAI initiative.\nKnowledge cutoff: 2024-04\nCurrent date: 2025-09-21<|system_end|><|developer_start|>Deliberation: disabled\nTool Capabilities: disabled<|developer_end|><|user_start|>Give me a brief explanation of gravity in simple terms.<|user_end|><|assistant_start|>Gravity is a force that pulls objects towards each other. The more massive an object is, the stronger its gravitational pull. This is why planets and stars have strong gravitational pulls that keep their moons and other objects in orbit around them.<|assistant_end|>"""
+
+        model = self.get_model()
+        tokenizer = self.get_tokenizer()
+
+        prompt = "Give me a brief explanation of gravity in simple terms."
+        messages = [{"role": "user", "content": prompt}]
+
+        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(
+            model.device
+        )
+
+        # greedy generation outputs
+        outputs = model.generate(inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        output_text = tokenizer.batch_decode(outputs)
+
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, output_text[0])
 
     @slow
     def test_model_8b_logits(self):
