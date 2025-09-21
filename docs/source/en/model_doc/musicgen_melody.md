@@ -15,254 +15,169 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2023-06-08 and added to Hugging Face Transformers on 2024-03-18.*
 
-# MusicGen Melody
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# MusicGen Melody
 
-The MusicGen Melody model was proposed in [Simple and Controllable Music Generation](https://huggingface.co/papers/2306.05284) by Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi and Alexandre Défossez.
+[MusicGen Melody](https://huggingface.co/papers/2306.05284) is a single-stage, auto-regressive Transformer model designed for high-quality music generation, conditioned on both text and audio prompts. Unlike its predecessor, MusicGen Melody uses the audio prompt as a direct melodic guide, allowing for more precise control over the generated music.
 
-MusicGen Melody is a single stage auto-regressive Transformer model capable of generating high-quality music samples conditioned on text descriptions or audio prompts. The text descriptions are passed through a frozen text encoder model to obtain a sequence of hidden-state representations. MusicGen is then trained to predict discrete audio tokens, or *audio codes*, conditioned on these hidden-states. These audio tokens are then decoded using an audio compression model, such as EnCodec, to recover the audio waveform.
+You can find all the original [MusicGen Melody](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen) checkpoints on the Hugging Face Hub.
 
-Through an efficient token interleaving pattern, MusicGen does not require a self-supervised semantic representation of the text/audio prompts, thus eliminating the need to cascade multiple models to predict a set of codebooks (e.g. hierarchically or upsampling). Instead, it is able to generate all the codebooks in a single forward pass.
+> [!TIP]
+> Click on the MusicGen Melody models in the right sidebar for more examples of how to apply the model to various music generation tasks.
 
-The abstract from the paper is the following:
+The example below demonstrates how to generate music conditioned on an audio melody and a text description using the [`AutoModel`] class.
 
-*We tackle the task of conditional music generation. We introduce MusicGen, a single Language Model (LM) that operates over several streams of compressed discrete music representation, i.e., tokens. Unlike prior work, MusicGen is comprised of a single-stage transformer LM together with efficient token interleaving patterns, which eliminates the need for cascading several models, e.g., hierarchically or upsampling. Following this approach, we demonstrate how MusicGen can generate high-quality samples, while being conditioned on textual description or melodic features, allowing better controls over the generated output. We conduct extensive empirical evaluation, considering both automatic and human studies, showing the proposed approach is superior to the evaluated baselines on a standard text-to-music benchmark. Through ablation studies, we shed light over the importance of each of the components comprising MusicGen.*
-
-
-This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the [Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen).
-
-
-## Difference with [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
-
-There are two key differences with MusicGen:
-1. The audio prompt is used here as a conditional signal for the generated audio sample, whereas it's used for audio continuation in [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen).
-2. Conditional text and audio signals are concatenated to the decoder's hidden states instead of being used as a cross-attention signal, as in MusicGen.
-
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
-
-## Generation
-
-MusicGen Melody is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly better results than greedy, thus we encourage sampling mode to be used where possible. Sampling is enabled by default, and can be explicitly specified by setting `do_sample=True` in the call to [`MusicgenMelodyForConditionalGeneration.generate`], or by overriding the model's generation config (see below).
-
-Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen Melody. The mono channel versions generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right), and each set of codebooks is decoded independently through the audio compression model. The audio streams for each channel are combined to give the final stereo output.
-
-
-#### Audio Conditional Generation
-
-The model can generate an audio sample conditioned on a text and an audio prompt through use of the [`MusicgenMelodyProcessor`] to pre-process the inputs.
-
-In the following examples, we load an audio file using the 🤗 Datasets library, which can be pip installed through the command below:
-
-```
-pip install --upgrade pip
-pip install datasets[audio]
-```
-
-The audio file we are about to use is loaded as follows:
-```python
->>> from datasets import load_dataset
-
->>> dataset = load_dataset("sanchit-gandhi/gtzan", split="train", streaming=True)
->>> sample = next(iter(dataset))["audio"]
-```
-
-The audio prompt should ideally be free of the low-frequency signals usually produced by instruments such as drums and bass. The [Demucs](https://github.com/adefossez/demucs/tree/main) model can be used to separate vocals and other signals from the drums and bass components.
-
-If you wish to use Demucs, you first need to follow the installation steps [here](https://github.com/adefossez/demucs/tree/main?tab=readme-ov-file#for-musicians) before using the following snippet:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
+from transformers import pipeline
+
+# This pipeline is for text-to-audio, melody conditioning is best done with the AutoModel approach
+pipe = pipeline("text-to-audio", model="facebook/musicgen-melody")
+audio = pipe("80s pop track with bassy drums and synth")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
+from datasets import load_dataset
+import torch
+
+processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
+model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
+
+# Load audio prompt
+dataset = load_dataset("sanchit-gandhi/gtzan", split="train", streaming=True)
+sample = next(iter(dataset))["audio"]
+# For better results, it's recommended to use a melody-only audio prompt (e.g., using Demucs)
+# Here, we use the raw audio for simplicity
+inputs = processor(
+    audio=sample["array"],
+    sampling_rate=sample["sampling_rate"],
+    text=["80s blues track with groovy saxophone"],
+    padding=True,
+    return_tensors="pt",
+)
+audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes quantization](https://huggingface.co/docs/transformers/main/en/main_classes/quantization) to quantize the weights to 8-bit:
+
+```python
+from transformers import MusicgenMelodyForConditionalGeneration
+import torch
+
+model = MusicgenMelodyForConditionalGeneration.from_pretrained(
+    "facebook/musicgen-melody",
+    load_in_8bit=True,
+    device_map="auto"
+)
+```
+
+## Notes
+
+### Differences with MusicGen
+- The audio prompt serves as a conditional signal for the melody, whereas in the original MusicGen, it's used for audio continuation.
+- Conditional text and audio signals are concatenated to the decoder's hidden states, not used as a cross-attention signal.
+
+### Audio Prompting with Demucs
+For best results, the audio prompt should contain only the melody. Use a source separation model like [Demucs](https://github.com/adefossez/demucs/tree/main) to isolate vocals or other melodic instruments from drums and bass.
+
+```python
+# Example of using Demucs for source separation
 from demucs import pretrained
 from demucs.apply import apply_model
 from demucs.audio import convert_audio
 import torch
 
-
+# Assuming 'wav' is a loaded audio tensor and 'sample_rate' is its sample rate
 wav = torch.tensor(sample["array"]).to(torch.float32)
-
-demucs = pretrained.get_model('htdemucs')
-
-wav = convert_audio(wav[None], sample["sampling_rate"], demucs.samplerate, demucs.audio_channels)
-wav = apply_model(demucs, wav[None])
+demucs_model = pretrained.get_model('htdemucs')
+wav = convert_audio(wav[None], sample_rate, demucs_model.samplerate, demucs_model.audio_channels)
+separated_audio = apply_model(demucs_model, wav[None])
+melody_prompt = separated_audio[0, demucs_model.sources.index('vocals')] # or other source
 ```
 
-You can then use the following snippet to generate music:
+### Other Generation Examples
 
+**Text-only Conditional Generation**
 ```python
->>> from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
+from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
 
->>> processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
+processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
+model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
 
->>> inputs = processor(
-...     audio=wav,
-...     sampling_rate=demucs.samplerate,
-...     text=["80s blues track with groovy saxophone"],
-...     padding=True,
-...     return_tensors="pt",
-... )
->>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
+inputs = processor(
+    text=["80s pop track with bassy drums and synth", "90s rock song with loud guitars and heavy drums"],
+    padding=True,
+    return_tensors="pt",
+)
+audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
 ```
 
-You can also pass the audio signal directly without using Demucs, although the quality of the generation will probably be degraded:
-
+**Unconditional Generation**
 ```python
->>> from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
+from transformers import MusicgenMelodyForConditionalGeneration, MusicgenMelodyProcessor
 
->>> processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
-
->>> inputs = processor(
-...     audio=sample["array"],
-...     sampling_rate=sample["sampling_rate"],
-...     text=["80s blues track with groovy saxophone"],
-...     padding=True,
-...     return_tensors="pt",
-... )
->>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
+model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
+processor = MusicgenMelodyProcessor.from_pretrained("facebook/musicgen-melody")
+unconditional_inputs = processor.get_unconditional_inputs(num_samples=1)
+audio_values = model.generate(**unconditional_inputs, do_sample=True, max_new_tokens=256)
 ```
 
-The audio outputs are a three-dimensional Torch tensor of shape `(batch_size, num_channels, sequence_length)`. To listen to the generated audio samples, you can either play them in an ipynb notebook:
-
+**Generation Configuration**
+You can inspect and update the model's generation configuration.
 ```python
-from IPython.display import Audio
+from transformers import MusicgenMelodyForConditionalGeneration
 
-sampling_rate = model.config.audio_encoder.sampling_rate
-Audio(audio_values[0].numpy(), rate=sampling_rate)
+model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
+# Inspect config
+print(model.generation_config)
+# Update config
+model.generation_config.guidance_scale = 4.0
+model.generation_config.max_length = 256
 ```
 
-Or save them as a `.wav` file using a third-party library, e.g. `soundfile`:
-
-```python
->>> import soundfile as sf
-
->>> sampling_rate = model.config.audio_encoder.sampling_rate
->>> sf.write("musicgen_out.wav", audio_values[0].T.numpy(), sampling_rate)
-```
-
-
-### Text-only Conditional Generation
-
-The same [`MusicgenMelodyProcessor`] can be used to pre-process a text-only prompt. 
-
-```python
->>> from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
-
->>> processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
-
->>> inputs = processor(
-...     text=["80s pop track with bassy drums and synth", "90s rock song with loud guitars and heavy drums"],
-...     padding=True,
-...     return_tensors="pt",
-... )
->>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
-```
-
-The `guidance_scale` is used in classifier free guidance (CFG), setting the weighting between the conditional logits (which are predicted from the text prompts) and the unconditional logits (which are predicted from an unconditional or 'null' prompt). Higher guidance scale encourages the model to generate samples that are more closely linked to the input prompt, usually at the expense of poorer audio quality. CFG is enabled by setting `guidance_scale > 1`. For best results, use `guidance_scale=3` (default).
-
-
-You can also generate in batch:
-
-```python
->>> from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
->>> from datasets import load_dataset
-
->>> processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
-
->>> # take the first quarter of the audio sample
->>> sample_1 = sample["array"][: len(sample["array"]) // 4]
-
->>> # take the first half of the audio sample
->>> sample_2 = sample["array"][: len(sample["array"]) // 2]
-
->>> inputs = processor(
-...     audio=[sample_1, sample_2],
-...     sampling_rate=sample["sampling_rate"],
-...     text=["80s blues track with groovy saxophone", "90s rock song with loud guitars and heavy drums"],
-...     padding=True,
-...     return_tensors="pt",
-... )
->>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
-```
-
-### Unconditional Generation
-
-The inputs for unconditional (or 'null') generation can be obtained through the method [`MusicgenMelodyProcessor.get_unconditional_inputs`]:
-
-```python
->>> from transformers import MusicgenMelodyForConditionalGeneration, MusicgenMelodyProcessor
-
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
->>> unconditional_inputs = MusicgenMelodyProcessor.from_pretrained("facebook/musicgen-melody").get_unconditional_inputs(num_samples=1)
-
->>> audio_values = model.generate(**unconditional_inputs, do_sample=True, max_new_tokens=256)
-```
-
-### Generation Configuration
-
-The default parameters that control the generation process, such as sampling, guidance scale and number of generated tokens, can be found in the model's generation config, and updated as desired:
-
-```python
->>> from transformers import MusicgenMelodyForConditionalGeneration
-
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
-
->>> # inspect the default generation config
->>> model.generation_config
-
->>> # increase the guidance scale to 4.0
->>> model.generation_config.guidance_scale = 4.0
-
->>> # decrease the max length to 256 tokens
->>> model.generation_config.max_length = 256
-```
-
-Note that any arguments passed to the generate method will **supersede** those in the generation config, so setting `do_sample=False` in the call to generate will supersede the setting of `model.generation_config.do_sample` in the generation config.
+### Other Information
+- **Checkpoint Conversion**: Convert original checkpoints using the script at `src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py`.
+- **`head_mask`**: The `head_mask` argument is only effective with `attn_implementation="eager"`.
+- **Sampling**: For best results, use sampling (`do_sample=True`).
 
 ## Model Structure
 
-The MusicGen model can be de-composed into three distinct stages:
-1. Text encoder: maps the text inputs to a sequence of hidden-state representations. The pre-trained MusicGen models use a frozen text encoder from either T5 or Flan-T5.
-2. MusicGen Melody decoder: a language model (LM) that auto-regressively generates audio tokens (or codes) conditional on the encoder hidden-state representations
-3. Audio decoder: used to recover the audio waveform from the audio tokens predicted by the decoder.
+The model consists of three parts:
+1.  **Text encoder**: A frozen T5 or Flan-T5 model that creates hidden-state representations from text.
+2.  **MusicGen Melody decoder**: An auto-regressive language model that generates audio tokens based on the text and audio prompts.
+3.  **Audio decoder**: An EnCodec model that converts audio tokens back into a waveform.
 
-Thus, the MusicGen model can either be used as a standalone decoder model, corresponding to the class [`MusicgenMelodyForCausalLM`], or as a composite model that includes the text encoder and audio encoder, corresponding to the class [`MusicgenMelodyForConditionalGeneration`]. If only the decoder needs to be loaded from the pre-trained checkpoint, it can be loaded by first specifying the correct config, or be accessed through the `.decoder` attribute of the composite model:
+You can work with the standalone decoder [`MusicgenMelodyForCausalLM`] or the full [`MusicgenMelodyForConditionalGeneration`] model.
 
 ```python
->>> from transformers import AutoConfig, MusicgenMelodyForCausalLM, MusicgenMelodyForConditionalGeneration
+from transformers import AutoConfig, MusicgenMelodyForCausalLM, MusicgenMelodyForConditionalGeneration
 
->>> # Option 1: get decoder config and pass to `.from_pretrained`
->>> decoder_config = AutoConfig.from_pretrained("facebook/musicgen-melody").decoder
->>> decoder = MusicgenMelodyForCausalLM.from_pretrained("facebook/musicgen-melody", **decoder_config.to_dict())
+# Option 1: Load the decoder directly
+decoder_config = AutoConfig.from_pretrained("facebook/musicgen-melody").decoder
+decoder = MusicgenMelodyForCausalLM.from_pretrained("facebook/musicgen-melody", **decoder_config.to_dict())
 
->>> # Option 2: load the entire composite model, but only return the decoder
->>> decoder = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody").decoder
+# Option 2: Access the decoder from the composite model
+model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
+decoder = model.decoder
 ```
-
-Since the text encoder and audio encoder models are frozen during training, the MusicGen decoder [`MusicgenMelodyForCausalLM`] can be trained standalone on a dataset of encoder hidden-states and audio codes. For inference, the trained decoder can be combined with the frozen text encoder and audio encoder to recover the composite [`MusicgenMelodyForConditionalGeneration`] model.
-
-## Checkpoint Conversion
-
-- After downloading the original checkpoints from [here](https://github.com/facebookresearch/audiocraft/blob/main/docs/MUSICGEN.md#importing--exporting-models), you can convert them using the **conversion script** available at `src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py` with the following command:
-
-```bash
-python src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py \
-    --checkpoint="facebook/musicgen-melody" --pytorch_dump_folder /output/path 
-```
-
-Tips:
-* MusicGen is trained on the 32kHz checkpoint of Encodec. You should ensure you use a compatible version of the Encodec model.
-* Sampling mode tends to deliver better results than greedy - you can toggle sampling with the variable `do_sample` in the call to [`MusicgenMelodyForConditionalGeneration.generate`]
-
 
 ## MusicgenMelodyDecoderConfig
 
