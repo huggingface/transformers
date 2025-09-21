@@ -61,7 +61,7 @@ class VJEPA2ModelTester:
         patch_size=16,
         num_channels=3,
         hidden_size=32,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         num_frames=2,
         mlp_ratio=1,
