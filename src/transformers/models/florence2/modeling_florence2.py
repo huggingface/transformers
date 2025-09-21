@@ -22,6 +22,9 @@ import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
+import torch.nn as nn
+import torch.nn.functional as F
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -41,8 +44,6 @@ from .configuration_florence2 import Florence2Config, Florence2VisionConfig
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -52,11 +53,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input

@@ -80,7 +80,7 @@ checkpoint: 检查点
 </h4>
 
 <h3 align="center">
-    <p>为 Jax、PyTorch 和 TensorFlow 打造的先进的自然语言处理</p>
+    <p>为 Jax、PyTorch 和 TensorFlow 打造的先进的自然语言处理函数库</p>
 </h3>
 
 <h3 align="center">
