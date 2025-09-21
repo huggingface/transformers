@@ -242,7 +242,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("longt5", "LongT5Config"),
         ("luke", "LukeConfig"),
         ("lw_detr", "LwDetrConfig"),
-        ("lw_detr_vit", "LwDetrVitConfig"),
+        ("lw_detr_vit", "LwDetrViTConfig"),
         ("lxmert", "LxmertConfig"),
         ("m2m_100", "M2M100Config"),
         ("mamba", "MambaConfig"),
