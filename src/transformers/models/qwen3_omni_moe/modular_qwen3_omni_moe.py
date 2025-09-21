@@ -49,7 +49,6 @@ from ...video_utils import VideoInput, make_batched_videos
 from ..mimi.modeling_mimi import MimiLayerScale
 from ..qwen2_5_omni.configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
-    Qwen2_5OmniConfig,
     Qwen2_5OmniThinkerConfig,
 )
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
@@ -217,6 +216,54 @@ class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
 
 
 class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Qwen3OmniMoeThinker`]. It is used to instantiate a
+    Qwen3-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the thinker component of the Qwen3-Omni
+    architecture.
+
+    e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        audio_config (`dict`, *optional*):
+            The config dictionary of the audio backbone.
+        vision_config (`dict`, *optional*):
+            The config dictionary of the vision backbone.
+        text_config (`dict`, *optional*):
+            The config dictionary of the text backbone.
+        audio_token_id (`int`, *optional*, defaults to 151646):
+            The audio token id to encode the audio prompt.
+        image_token_id (`int`, *optional*, defaults to 151655):
+            The image token id to encode the image prompt.
+        video_token_id (`int`, *optional*, defaults to 151656):
+            The video token id to encode the video prompt.
+        position_id_per_seconds (`int`, *optional*, defaults to 25):
+            The increment of position id per second.
+        audio_start_token_id (`int`, *optional*, defaults to 151647):
+            The audio start token id to encode the audio prompt.
+        user_token_id (`int`, *optional*, defaults to 872):
+            The user token id to encode the user token.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+    Example:
+
+    ```python
+    >>> from transformers import Qwen3OmniMoeThinkerModel, Qwen3OmniMoeThinkerConfig
+
+    >>> # Initializing a default Qwen3OmniMoeThinkerConfig
+    >>> configuration = Qwen3OmniMoeThinkerConfig()
+
+    >>> # Initializing a model (with random weights) from the default configuration
+    >>> model = Qwen3OmniMoeThinkerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     def __init__(
         self,
         audio_config=None,
@@ -625,7 +672,44 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
-class Qwen3OmniMoeConfig(Qwen2_5OmniConfig, PretrainedConfig):
+class Qwen3OmniMoeConfig(PretrainedConfig):
+    """
+    This is the configuration class to store the configuration of a [`Qwen3OmniMoeForConditionalGeneration`]. It is used to instantiate a Qwen3Omni
+    model according to the specified sub-models configurations, defining the model architecture.
+
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
+        talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
+        code2wav_config (`dict`, *optional*): Configuration of the underlying code2wav sub-model.
+        enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and code2wav module.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     Qwen3OmniMoeThinkerConfig,
+    ...     Qwen3OmniMoeTalkerConfig,
+    ...     Qwen3OmniMoeCode2WavConfig,
+    ...     Qwen3OmniMoeForConditionalGeneration,
+    ...     Qwen3OmniMoeConfig,
+    ... )
+
+    >>> # Initializing a Qwen3OmniMoe style configuration
+    >>> configuration = Qwen3OmniMoeConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = Qwen3OmniMoeForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "qwen3_omni_moe"
     sub_configs = {
         "thinker_config": Qwen3OmniMoeThinkerConfig,
@@ -649,7 +733,7 @@ class Qwen3OmniMoeConfig(Qwen2_5OmniConfig, PretrainedConfig):
         assistant_token_id=77091,
         **kwargs,
     ):
-        PretrainedConfig.__init__(**kwargs)
+        super().__init__(**kwargs)
         if thinker_config is None:
             thinker_config = {}
             logger.info("thinker_config is None. Initializing thinker model with default values")
@@ -1514,7 +1598,7 @@ class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3ForCausa
         generation_steps=None,
         **kwargs,
     ):
-        """
+        r"""
         Args:
             generation_steps (`int`):
                 generation step of code predictor, 0..num_code_groups-1
@@ -1703,7 +1787,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         talker_input_ids=None,
         **kwargs,
     ):
-        """
+        r"""
         Args:
             use_audio_in_video (`bool`, *optional*):
                 If set to `True`, use the audio in video.
