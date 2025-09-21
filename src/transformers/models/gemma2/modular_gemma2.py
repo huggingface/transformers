@@ -36,7 +36,9 @@ from ..gemma.modeling_gemma import (
     GemmaForTokenClassification,
     GemmaMLP,
     GemmaModel,
+    GemmaPreTrainedModel,
     GemmaRMSNorm,
+    GemmaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -212,6 +214,10 @@ class Gemma2MLP(GemmaMLP):
         self.act_fn = ACT2FN[config.hidden_activation]
 
 
+class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
+    pass
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -361,6 +367,10 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
             outputs += (self_attn_weights,)
 
         return outputs
+
+
+class Gemma2PreTrainedModel(GemmaPreTrainedModel):
+    pass
 
 
 class Gemma2Model(GemmaModel):

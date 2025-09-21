@@ -597,7 +597,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
     @slow
     @require_torch
     def test_pipeline(self):
-        pipeline = TranslationPipeline(self.model, self.tokenizer, framework="pt", device=torch_device)
+        pipeline = TranslationPipeline(self.model, self.tokenizer, device=torch_device)
         output = pipeline(self.src_text)
         self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
 

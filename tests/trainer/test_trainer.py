@@ -1270,6 +1270,18 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(torch.allclose(trainer.model.b, b))
             self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
 
+    @require_torch_fp16
+    @require_torch_accelerator
+    def test_mixed_fp16(self):
+        # very basic test
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, fp16=True, logging_steps=1, output_dir=tmp_dir)
+            trainer.train()
+            self.check_trained_model(trainer.model, atol=ATOL, rtol=RTOL)
+            log_0 = trainer.state.log_history[:-1][0]
+            # check that the grads were properly clipped due to the grad scaler. Otherwise, we get huge values
+            self.assertEqual(log_0["grad_norm"] < 100, True)
+
     @require_torch_bf16
     @require_torch_accelerator
     def test_mixed_bf16(self):
@@ -1285,8 +1297,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 trainer = get_regression_trainer(
                     learning_rate=0.1, bf16=True, half_precision_backend="apex", output_dir=tmp_dir
                 )
-
-        # will add more specific tests once there are some bugs to fix
 
     @require_torch_gpu
     @require_torch_tf32

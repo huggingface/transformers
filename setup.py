@@ -109,7 +109,6 @@ _deps = [
     "faiss-cpu",
     "fastapi",
     "filelock",
-    "flax>=0.4.1,<=0.7.0",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
@@ -118,13 +117,8 @@ _deps = [
     "huggingface-hub>=0.34.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
-    "jax>=0.4.1,<=0.4.13",
-    "jaxlib>=0.4.1,<=0.4.13",
     "jinja2>=3.1.0",
     "kenlm",
-    # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
-    "keras>2.9,<2.16",
-    "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
     "kernels>=0.6.1,<=0.9",
     "librosa",
     "natten>=0.14.6,<0.15.0",
@@ -170,19 +164,13 @@ _deps = [
     "sagemaker>=2.31.0",
     "schedulefree>=1.2.6",
     "scikit-learn",
-    "scipy<1.13.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
+    "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
     "tensorboard",
-    # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
-    "tensorflow-cpu>2.9,<2.16",
-    "tensorflow>2.9,<2.16",
-    "tensorflow-text<2.16",
-    "tensorflow-probability<0.24",
-    "tf2onnx",
     "timeout-decorator",
     "tiktoken",
     "timm<=1.0.19,!=1.0.18",
@@ -273,32 +261,19 @@ extras = {}
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
-extras["tf-cpu"] = deps_list(
-    "keras",
-    "tensorflow-cpu",
-    "onnxconverter-common",
-    "tf2onnx",
-    "tensorflow-text",
-    "keras-nlp",
-    "tensorflow-probability",
-)
-
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
 extras["hf_xet"] = deps_list("hf_xet")
 
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
-    extras["flax"] = []  # jax is not supported on windows
 else:
     extras["retrieval"] = deps_list("faiss-cpu", "datasets")
-    extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax", "scipy")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
-extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
+extras["onnx"] = deps_list("onnxconverter-common") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
@@ -320,8 +295,6 @@ extras["audio"] = deps_list(
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
-extras["tf-speech"] = extras["audio"]
-extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
@@ -372,9 +345,7 @@ extras["ruff"] = deps_list("ruff")
 extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "pandas")
 
 extras["all"] = (
-    extras["tf"]
-    + extras["torch"]
-    + extras["flax"]
+    extras["torch"]
     + extras["sentencepiece"]
     + extras["tokenizers"]
     + extras["torch-speech"]
@@ -409,18 +380,7 @@ extras["dev-torch"] = (
     + extras["onnxruntime"]
     + extras["num2words"]
 )
-extras["dev-tensorflow"] = (
-    extras["testing"]
-    + extras["tf"]
-    + extras["sentencepiece"]
-    + extras["tokenizers"]
-    + extras["vision"]
-    + extras["quality"]
-    + extras["sklearn"]
-    + extras["modelcreation"]
-    + extras["onnx"]
-    + extras["tf-speech"]
-)
+
 extras["dev"] = (
     extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"] + extras["modelcreation"]
 )
@@ -464,10 +424,10 @@ setup(
     version="4.57.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
-    description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
+    description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    keywords="NLP vision speech deep learning transformer pytorch tensorflow jax BERT GPT-2 Wav2Vec2 ViT",
+    keywords="machine-learning nlp python pytorch transformer llm vlm deep-learning inference training model-hub pretrained-models llama gemma qwen",
     license="Apache 2.0 License",
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
@@ -479,7 +439,6 @@ setup(
     entry_points={
         "console_scripts": [
             "transformers=transformers.commands.transformers_cli:main",
-            "transformers-cli=transformers.commands.transformers_cli:main_cli",
         ]
     },
     python_requires=">=3.9.0",
@@ -503,14 +462,10 @@ setup(
 )
 
 extras["tests_torch"] = deps_list()
-extras["tests_tf"] = deps_list()
-extras["tests_flax"] = deps_list()
 extras["tests_hub"] = deps_list()
 extras["tests_pipelines_torch"] = deps_list()
-extras["tests_pipelines_tf"] = deps_list()
 extras["tests_onnx"] = deps_list()
 extras["tests_examples_torch"] = deps_list()
-extras["tests_examples_tf"] = deps_list()
 extras["tests_custom_tokenizers"] = deps_list()
 extras["tests_exotic_models"] = deps_list()
 extras["consistency"] = deps_list()
