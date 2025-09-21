@@ -21,6 +21,7 @@ import unittest
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -419,6 +420,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
     @unittest.skip("Skipping but this one is important, should be fixed ASAP")
+    @parameterized.expand([(1, "pt"), (2, "pt")])
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         pass
 

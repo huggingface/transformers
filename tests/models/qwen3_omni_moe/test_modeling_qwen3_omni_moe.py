@@ -452,7 +452,9 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_generate_compile_model_forward_fullgraph(self):
         pass
 
-    @unittest.skip("There seems to be something wrong with the config, that does not play well with this test. TODO fix me")
+    @unittest.skip(
+        "There seems to be something wrong with the config, that does not play well with this test. TODO fix me"
+    )
     def test_save_load(self):
         pass
 
