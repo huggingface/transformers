@@ -6,15 +6,17 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
 
+import numpy as np
+
 from ...configuration_utils import PretrainedConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
-class LwDetrVitConfig(BackboneConfigMixin, PretrainedConfig):
+class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LwDetrVitModel`]. It is used to instantiate an
-    LwDetrVit model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the LwDetrVit
+    This is the configuration class to store the configuration of a [`LwDetrViTModel`]. It is used to instantiate an
+    LwDetrViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the LwDetrViT
     [google/lw_detr_vit-base-patch16-224](https://huggingface.co/google/lw_detr_vit-base-patch16-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -74,19 +76,23 @@ class LwDetrVitConfig(BackboneConfigMixin, PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import LwDetrVitConfig, LwDetrVitModel
+    >>> from transformers import LwDetrViTConfig, LwDetrViTModel
 
-    >>> # Initializing a LwDetrVit configuration
-    >>> configuration = LwDetrVitConfig()
+    >>> # Initializing a LwDetrViT configuration
+    >>> configuration = LwDetrViTConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = LwDetrVitModel(configuration)
+    >>> model = LwDetrViTModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
     model_type = "lw_detr_vit"
+    attribute_map = {
+        "attention_probs_dropout_prob": "dropout_prob",
+        "decoder_self_attention_heads": "num_attention_heads",
+    }
 
     def __init__(
         self,
@@ -98,7 +104,7 @@ class LwDetrVitConfig(BackboneConfigMixin, PretrainedConfig):
         dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-6,
-        image_size=224,
+        image_size=256,
         pretrain_image_size=224,
         patch_size=16,
         num_channels=3,
@@ -145,8 +151,16 @@ class LwDetrVitConfig(BackboneConfigMixin, PretrainedConfig):
         self.use_cae = use_cae
         self.cae_init_values = cae_init_values
         if num_windows % math.sqrt(num_windows) != 0:
-            raise ValueError(f"`num_windows` has to be a perfect square, but got {num_windows}.")
+            raise ValueError(
+                f"`num_windows` has to be a perfect square, where num_windows % math.sqrt(num_windows) != 0, but got {num_windows}."
+            )
+        if image_size / num_windows % math.sqrt(num_windows) != 0:
+            raise ValueError(
+                f"`image_size` has to be divisible by `num_windows`, where image_size / num_windows % math.sqrt(num_windows) != 0,but got {image_size} and {num_windows}."
+            )
         self.num_windows = num_windows
+        self.num_windows_side = int(math.sqrt(num_windows))
+        self.drop_path_rates = [x.item() for x in np.linspace(0, self.drop_path_rate, self.num_hidden_layers)]
 
 
-__all__ = ["LwDetrVitConfig"]
+__all__ = ["LwDetrViTConfig"]

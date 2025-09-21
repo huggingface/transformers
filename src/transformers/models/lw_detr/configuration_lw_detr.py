@@ -10,7 +10,7 @@ from ...utils import (
 )
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
-from .configuration_lw_detr_vit import LwDetrVitConfig
+from .configuration_lw_detr_vit import LwDetrViTConfig
 
 
 logger = logging.get_logger(__name__)
@@ -80,8 +80,13 @@ class LwDetrConfig(PretrainedConfig):
             logger.info(
                 "`backbone_config` and `backbone` are `None`. Initializing the config with the default `LwDetrViT` backbone."
             )
-            backbone_config = LwDetrVitConfig(
-                # TODO: add default config
+            backbone_config = LwDetrViTConfig(
+                image_size=1024,
+                hidden_size=192,
+                num_hidden_layers=10,
+                num_attention_heads=12,
+                window_block_indices=[0, 1, 3, 6, 7, 9],
+                out_indices=[2, 4, 5, 9],
             )
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.pop("model_type")

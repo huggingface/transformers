@@ -1677,7 +1677,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FocalNetBackbone"),
         ("hgnet_v2", "HGNetV2Backbone"),
         ("hiera", "HieraBackbone"),
-        ("lw_detr_vit", "LwDetrVitBackbone"),
+        ("lw_detr_vit", "LwDetrViTBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("pvt_v2", "PvtV2Backbone"),
         ("resnet", "ResNetBackbone"),
