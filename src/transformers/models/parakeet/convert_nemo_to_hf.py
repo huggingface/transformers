@@ -310,7 +310,7 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
     if "parakeet" in model_name:
         if "ctc" in model_name:
             model_info["model_type"] = "parakeet"
-        if "tdt" in model_name:
+        elif "tdt" in model_name:
             model_info["model_type"] = "parakeet_tdt"
     elif "canary" in model_name:
         model_info["model_type"] = "canary"
@@ -385,7 +385,7 @@ def extract_model_info_from_config(config: dict[str, Any]) -> dict[str, Any]:
 
 def create_hf_config_from_nemo(
     model_info: dict[str, Any], state_dict: dict[str, torch.Tensor], vocab_dict: Optional[dict[str, int]] = None
-) -> Union[ParakeetTDTConfig]:  # used to be ParakeetConfig TODO(hainan)
+) -> Union[ParakeetConfig,ParakeetTDTConfig]:
     """Create HuggingFace ParakeetConfig from NeMo config and weights."""
 
     encoder_cfg = model_info.get("encoder_cfg", {})
@@ -454,6 +454,7 @@ def create_hf_config_from_nemo(
         "subsampling_factor": encoder_cfg.get("subsampling_factor", 8),
         "subsampling_conv_channels": encoder_cfg.get("subsampling_conv_channels", 256),
         "use_bias": actual_use_bias,
+        "attention_bias": actual_use_bias,
         "num_mel_bins": preprocessor_cfg.get("features", 128) if preprocessor_cfg else 128,
         "xscaling": encoder_cfg.get("xscaling", False),
         "dropout_emb": encoder_cfg.get("dropout_emb", 0.0),
@@ -475,6 +476,7 @@ def create_hf_config_from_nemo(
     elif model_info["is_tdt_model"]:
         architectures = ["parakeet_tdt"]
         base_model_type = "parakeet_tdt"
+
     else:
         raise ValueError("Unsupported model type. Only CTC and TDT models are supported in this converter.")
 
@@ -529,6 +531,9 @@ def create_hf_config_from_nemo(
         # Get vocab_size from state dict if available
         vocab_size = 1024  # default
 
+        config_params["use_bias"] = False
+        config_params["attention_bias"] = False
+
         # Create `ParakeetEncoderConfig` sub-config with `parakeet_encoder` model_type
         parakeet_encoder_config_params = config_params.copy()
         parakeet_encoder_config_params["model_type"] = "parakeet_encoder"
@@ -563,6 +568,8 @@ def create_hf_config_from_nemo(
             decoder_config=parakeet_decoder_config,
             joint_config=parakeet_joint_config,
         )
+        model_config.encoder_config.use_bias = False
+        model_config.encoder_config.attention_bias = False
 
     # Non CTC models, TODO
     return model_config
@@ -1055,9 +1062,9 @@ def main():
 
         # Verify if requested
         if args.verify:
-            if 'ctc' in args.path_to_nemo_model:
+            if "ctc" in args.path_to_nemo_model:
                 verification_success = verify_conversion(model_path)
-            elif 'tdt' in args.path_to_nemo_model:
+            elif "tdt" in args.path_to_nemo_model:
                 verification_success = verify_conversion_tdt(model_path)
 
             conversion_info["verification_passed"] = verification_success

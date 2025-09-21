@@ -167,7 +167,7 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
 class ParakeetEncoderFeedForward(nn.Module):
     def __init__(self, config: ParakeetEncoderConfig):
         super().__init__()
-        config.use_bias = False
+
         self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
         self.activation = ACT2FN[config.hidden_act]
         self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
@@ -198,12 +198,12 @@ class ParakeetEncoderConvolutionModule(nn.Module):
             kernel_size = module_config["kernel_size"]
             self.activation = ACT2FN[module_config.get("activation", "silu")]
         self.padding = (kernel_size - 1) // 2
-        self.pointwise_conv1 = nn.Conv1d(channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=False)
+        self.pointwise_conv1 = nn.Conv1d(channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=config.use_bias)
         self.depthwise_conv = nn.Conv1d(
-            channels, channels, kernel_size, stride=1, padding=self.padding, groups=channels, bias=False
+            channels, channels, kernel_size, stride=1, padding=self.padding, groups=channels, bias=config.use_bias
         )
         self.norm = nn.BatchNorm1d(channels)
-        self.pointwise_conv2 = nn.Conv1d(channels, channels, kernel_size=1, stride=1, padding=0, bias=False)
+        self.pointwise_conv2 = nn.Conv1d(channels, channels, kernel_size=1, stride=1, padding=0, bias=config.use_bias)
 
     def forward(self, hidden_states, attention_mask=None):
         """
@@ -291,16 +291,16 @@ class ParakeetEncoderAttention(nn.Module):
         self.is_causal = True
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=False # config.attention_bias
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
         self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False # config.attention_bias
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False # config.attention_bias
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=False # config.attention_bias
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         # W_{k,R} projection
         self.relative_k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)

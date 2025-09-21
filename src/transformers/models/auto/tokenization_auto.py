@@ -506,6 +506,14 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "PegasusTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("parakeet_tdt", ("ParakeetCTCTokenizer", None)),
+        (
+            "pegasus",
+            (
+                "PegasusTokenizer" if is_sentencepiece_available() else None,
+                "PegasusTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         (
             "pegasus_x",
             (

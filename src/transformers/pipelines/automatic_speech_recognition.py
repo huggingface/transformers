@@ -211,7 +211,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.decoder = decoder
             self.type = "ctc_with_lm"
         elif model.config.model_type == "parakeet_tdt":
-            self.type = 'tdt'
+            self.type = "tdt"
         elif model.config.model_type == "parakeet":
             self.type = "ctc"
         else:

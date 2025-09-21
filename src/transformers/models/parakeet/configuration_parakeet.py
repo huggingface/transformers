@@ -113,6 +113,7 @@ class ParakeetEncoderConfig(PretrainedConfig):
         max_position_embeddings=5000,
         scale_input=True,
         initializer_range=0.02,
+        use_bias=True,
         **kwargs,
     ):
         super().__init__(
@@ -145,8 +146,8 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.scale_input = scale_input
         self.initializer_range = initializer_range
 
-        self.attention_bias = True  # LlamaAttention compatibility
-        self.use_bias = True
+        self.attention_bias = use_bias
+        self.use_bias = use_bias
 
 
 class ParakeetTDTDecoderConfig(PretrainedConfig):

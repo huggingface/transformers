@@ -289,7 +289,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("owlv2", "Owlv2Model"),
         ("owlvit", "OwlViTModel"),
         ("paligemma", "PaliGemmaModel"),
-        ("parakeet", "ParakeetEncoder"),
+#        ("parakeet", "ParakeetEncoder"),  #TODO(hainan)
         ("patchtsmixer", "PatchTSMixerModel"),
         ("patchtst", "PatchTSTModel"),
         ("pegasus", "PegasusModel"),
