@@ -446,6 +446,7 @@ class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
     >>> print(config.text_config)  # Access text decoder configuration
     >>> print(config.code_predictor_config)  # Access code predictor configuration
     ```"""
+
     sub_configs = {
         "code_predictor_config": Qwen3OmniMoeTalkerCodePredictorConfig,
         "text_config": Qwen3OmniMoeTalkerTextConfig,
@@ -581,6 +582,7 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
     >>> # Accessing configuration
     >>> config = model.config
     ```"""
+
     def __init__(
         self,
         codebook_dim=512,
@@ -1667,7 +1669,16 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         audio_seqlens: Optional[torch.LongTensor] = None,
         second_per_grids: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        return Qwen3OmniMoePreTrainedModelForConditionalGeneration.get_rope_index(self,input_ids,image_grid_thw,video_grid_thw,attention_mask,use_audio_in_video,audio_seqlens,second_per_grids)
+        return Qwen3OmniMoePreTrainedModelForConditionalGeneration.get_rope_index(
+            self,
+            input_ids,
+            image_grid_thw,
+            video_grid_thw,
+            attention_mask,
+            use_audio_in_video,
+            audio_seqlens,
+            second_per_grids,
+        )
 
     def get_llm_pos_ids_for_vision(
         self,
@@ -1678,7 +1689,9 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         grid_hs: list[torch.Tensor],
         grid_ws: list[torch.Tensor],
     ):
-        return Qwen3OmniMoePreTrainedModelForConditionalGeneration.get_llm_pos_ids_for_vision(self,start_idx,vision_idx,spatial_merge_size,t_index,grid_hs,grid_ws)
+        return Qwen3OmniMoePreTrainedModelForConditionalGeneration.get_llm_pos_ids_for_vision(
+            self, start_idx, vision_idx, spatial_merge_size, t_index, grid_hs, grid_ws
+        )
 
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
@@ -1819,7 +1832,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         # Decode stage
         # TODO(raushan, gante): Refactor this part to a utility function
         if cache_position[0] != 0:
-            input_ids=input_ids[:,-1:]
+            input_ids = input_ids[:, -1:]
             generation_step = kwargs.get("generation_step")
             trailing_text_hidden = kwargs.get("trailing_text_hidden")
             tts_pad_embed = kwargs.get("tts_pad_embed")
@@ -1858,7 +1871,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         return inputs
 
 
-
 class Qwen3OmniMoeCausalConvNet(nn.Module):
     def __init__(
         self,
@@ -1893,6 +1905,7 @@ class Qwen3OmniMoeCausalConvNet(nn.Module):
         extra_padding = self._get_extra_padding_for_conv1d(hidden_state)
         hidden_state = F.pad(hidden_state, (self.padding, extra_padding), mode="constant", value=0)
         return self.conv(hidden_state).contiguous()
+
 
 class Qwen3OmniMoeCausalTransConvNet(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1):
@@ -1963,8 +1976,10 @@ class Qwen3OmniMoeCode2WavMlp(Qwen3MLP):
 class Qwen3OmniMoeCode2WavRMSNorm(Qwen3RMSNorm):
     pass
 
+
 class Qwen3OmniMoeCode2WavLayerScale(MimiLayerScale):
     pass
+
 
 class Qwen3OmniMoeCode2WavTransformerLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx):
@@ -2122,7 +2137,7 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig):
         super().__init__(config)
-        self.total_upsample = np.prod(config.upsample_rates+config.upsampling_ratios)
+        self.total_upsample = np.prod(config.upsample_rates + config.upsampling_ratios)
         self.pre_transformer = Qwen3OmniMoeCode2WavTransformerModel._from_config(config)
         self.code_embedding = nn.Embedding(config.codebook_size * config.num_quantizers, config.hidden_size)
         self.register_buffer(
@@ -2165,7 +2180,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
         wav = hidden
         for block in self.decoder:
             wav = block(wav)
-        return wav.clamp(min=-1,max=1)
+        return wav.clamp(min=-1, max=1)
 
     def chunked_decode(self, codes, chunk_size=300, left_context_size=25):
         wavs = []

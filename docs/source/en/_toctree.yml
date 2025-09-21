@@ -1135,8 +1135,6 @@
         title: Pix2Struct
       - local: model_doc/pixtral
         title: Pixtral
-      - local: model_doc/qwen3_omni_moe
-        title: Qwen3-Omni-MoE
       - local: model_doc/qwen2_5_omni
         title: Qwen2.5-Omni
       - local: model_doc/qwen2_5_vl
@@ -1145,6 +1143,8 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
         title: Qwen2VL
+      - local: model_doc/qwen3_omni_moe
+        title: Qwen3-Omni-MoE
       - local: model_doc/qwen3_vl
         title: Qwen3VL
       - local: model_doc/qwen3_vl_moe
