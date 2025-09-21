@@ -427,14 +427,12 @@ def create_hf_config_from_nemo(
 
     # Detect bias usage
     bias_keys = [k for k in state_dict.keys() if "linear_q.bias" in k]
-
     if bias_keys:
         actual_use_bias = True
         logger.info("Detected bias=True from state dict")
 
     # Use config values if available, otherwise use detected values
     config_params = {
-        # encoder parameters
         "vocab_size": 1024,  # Default, will be overridden for CTC models
         "hidden_size": encoder_cfg.get("d_model", actual_hidden_size),
         "num_hidden_layers": encoder_cfg.get("n_layers", actual_layers),
@@ -726,14 +724,10 @@ def create_hf_model(
 
     # Load weights
     model_state_dict = model.state_dict()
-
     updated_state_dict = model_state_dict.copy()
 
     matched_params = 0
     shape_mismatches = 0
-    print("HERE  model_state_dict.keys()")
-    print( model_state_dict.keys())
-    print( hf_state_dict.keys())
     for param_name in model_state_dict.keys():
         if param_name in hf_state_dict:
             if model_state_dict[param_name].shape == hf_state_dict[param_name].shape:
@@ -746,8 +740,6 @@ def create_hf_model(
                     f"NeMo {hf_state_dict[param_name].shape}"
                 )
                 shape_mismatches += 1
-        else:
-            print("FAILING not in hf_model_state", param_name)
 
     model.load_state_dict(updated_state_dict, strict=False)
     if matched_params != len(model_state_dict):
@@ -942,10 +934,8 @@ def verify_conversion(output_dir: str) -> bool:
     """Verify that the conversion was successful by loading the model."""
     logger.info("Verifying conversion...")
 
-    if True:
+    try:
         from transformers import AutoConfig, AutoModelForCTC
-
-        assert False
 
         # Load config to determine model type
         config = AutoConfig.from_pretrained(output_dir)
@@ -977,15 +967,15 @@ def verify_conversion(output_dir: str) -> bool:
         logger.info("✅ Verification PASSED")
         return True
 
-#    except Exception as e:
-#        logger.error(f"❌ Verification FAILED: {e}")
-#        return False
+    except Exception as e:
+        logger.error(f"❌ Verification FAILED: {e}")
+        return False
 
 def verify_conversion_tdt(output_dir: str) -> bool:
     """Verify that the conversion was successful by loading the model."""
     logger.info("Verifying conversion...")
 
-    if True:
+    try:
         from transformers import AutoConfig, AutoModelForTDT
 
         # Load config to determine model type
@@ -1017,9 +1007,9 @@ def verify_conversion_tdt(output_dir: str) -> bool:
 
         logger.info("✅ Verification PASSED")
         return True
-#    except Exception as e:
-#        logger.error(f"❌ Verification FAILED: {e}")
-#        return False
+    except Exception as e:
+        logger.error(f"❌ Verification FAILED: {e}")
+        return False
 
 
 def main():

@@ -199,7 +199,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         **kwargs,
     ):
         # set the model type so we can check we have the right pre- and post-processing parameters
-
         if model.config.model_type == "whisper":
             self.type = "seq2seq_whisper"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():

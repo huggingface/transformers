@@ -454,7 +454,6 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
 class ParakeetEncoderBlock(GradientCheckpointingLayer):
     def __init__(self, config: ParakeetEncoderConfig, layer_idx: Optional[int] = None):
         super().__init__()
-
         self.gradient_checkpointing = False
 
         self.feed_forward1 = ParakeetEncoderFeedForward(config)
@@ -497,7 +496,6 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
         hidden_states = self.norm_out(hidden_states)
 
         return hidden_states
-
 
 
 @auto_docstring
