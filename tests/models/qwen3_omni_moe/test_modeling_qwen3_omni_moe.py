@@ -80,7 +80,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
         initializer_range=0.02,
     ):
         self.parent = parent
-        self.vision_config={
+        self.vision_config = {
             "depth": 2,
             "embed_dim": 32,
             "hidden_act": "quick_gelu",
@@ -95,7 +95,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             "initializer_range": 0.02,
             "deepstack_visual_indexes": [1],
         }
-        self.audio_config={
+        self.audio_config = {
             "model_type": "qwen_omni_thinker_audio_encoder",
             "d_model": 32,
             "encoder_attention_heads": 4,
@@ -108,7 +108,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             "output_dim": 32,
             "n_window_infer": 100,
         }
-        self.text_config={
+        self.text_config = {
             "rope_scaling": {
                 "mrope_section": [1, 1, 2],
                 "rope_type": "default",
@@ -455,7 +455,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     @unittest.skip("Cannot handle 4D attention mask")
     def test_generate_compilation_all_outputs(self):
         pass
-    
+
     @unittest.skip("In a rush to merge, cannot investigate now")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
