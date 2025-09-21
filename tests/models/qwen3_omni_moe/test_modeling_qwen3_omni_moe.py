@@ -67,7 +67,20 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
         num_channels=3,
         image_size=16,
         seq_length=39,
-        vision_config={
+        audio_token_id=1,
+        image_token_id=2,
+        video_token_id=3,
+        position_id_per_seconds=13,
+        seconds_per_chunk=2,
+        audio_start_token_id=4,
+        audio_end_token_id=5,
+        user_token_id=6,
+        vision_start_token_id=7,
+        vision_end_token_id=8,
+        initializer_range=0.02,
+    ):
+        self.parent = parent
+        self.vision_config={
             "depth": 2,
             "embed_dim": 32,
             "hidden_act": "quick_gelu",
@@ -81,8 +94,8 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             "temporal_patch_size": 2,
             "initializer_range": 0.02,
             "deepstack_visual_indexes": [1],
-        },
-        audio_config={
+        }
+        self.audio_config={
             "model_type": "qwen_omni_thinker_audio_encoder",
             "d_model": 32,
             "encoder_attention_heads": 4,
@@ -94,8 +107,8 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             "n_window": 50,
             "output_dim": 32,
             "n_window_infer": 100,
-        },
-        text_config={
+        }
+        self.text_config={
             "rope_scaling": {
                 "mrope_section": [1, 1, 2],
                 "rope_type": "default",
@@ -124,26 +137,10 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             "num_experts_per_tok": 2,
             "num_experts": 8,
             "decoder_sparse_step": 1,
-        },
-        audio_token_index=1,
-        image_token_index=2,
-        video_token_index=3,
-        position_id_per_seconds=13,
-        seconds_per_chunk=2,
-        audio_start_token_id=4,
-        audio_end_token_id=5,
-        user_token_id=6,
-        vision_start_token_id=7,
-        vision_end_token_id=8,
-        initializer_range=0.02,
-    ):
-        self.parent = parent
-        self.audio_config = audio_config
-        self.vision_config = vision_config
-        self.text_config = text_config
-        self.audio_token_index = audio_token_index
-        self.image_token_index = image_token_index
-        self.video_token_index = video_token_index
+        }
+        self.audio_token_id = audio_token_id
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
         self.position_id_per_seconds = position_id_per_seconds
         self.seconds_per_chunk = seconds_per_chunk
         self.audio_start_token_id = audio_start_token_id
@@ -170,9 +167,9 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             audio_config=self.audio_config,
             vision_config=self.vision_config,
             text_config=self.text_config,
-            audio_token_index=self.audio_token_index,
-            image_token_index=self.image_token_index,
-            video_token_index=self.video_token_index,
+            audio_token_id=self.audio_token_id,
+            image_token_id=self.image_token_id,
+            video_token_id=self.video_token_id,
             position_id_per_seconds=self.position_id_per_seconds,
             seconds_per_chunk=self.seconds_per_chunk,
             audio_start_token_id=self.audio_start_token_id,
@@ -211,8 +208,8 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
         # Make sure no other tokens are set to special, to prevetn flakiness
         tokens_to_replace = torch.tensor(
             [
-                config.image_token_index,
-                config.audio_token_index,
+                config.image_token_id,
+                config.audio_token_id,
                 config.audio_start_token_id,
                 config.audio_end_token_id,
                 config.vision_start_token_id,
@@ -227,13 +224,14 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
         # Audio token placeholders should be wrapped in start and end token ids
         audio_feat_length = (((self.feat_seq_length - 1) // 2 + 1 - 1) // 2 + 1 - 1) // 2 + 1
         input_ids[:, 1] = config.audio_start_token_id
-        input_ids[:, 2 : (2 + audio_feat_length)] = config.audio_token_index
+        input_ids[:, 2 : (2 + audio_feat_length)] = config.audio_token_id
         input_ids[:, 2 + audio_feat_length] = config.audio_end_token_id
 
         # Image token placeholders should be wrapped in start and end token ids
         input_ids[:, -4:-1] = torch.tensor(
-            [config.vision_start_token_id, config.image_token_index, config.vision_end_token_id]
+            [config.vision_start_token_id, config.image_token_id, config.vision_end_token_id]
         )
+        import pdb;pdb.set_trace()
         inputs_dict = {
             "input_features": input_features_values,
             "feature_attention_mask": feature_attention_mask,
