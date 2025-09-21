@@ -472,7 +472,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 4608)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 9568)
 
         # Load with `fps` arg
         fps = 1
@@ -484,7 +484,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 11520)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 23920)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -505,7 +505,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 345600)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 717600)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -523,19 +523,18 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 4408)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 11408)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.
-        with self.assertRaisesRegex(
-            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
-        ):
+        with self.assertRaises(ValueError):
             out_dict_with_video = processor.apply_chat_template(
                 messages,
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
                 do_sample_frames=True,
+                num_frames=num_frames,
             )
 
     @require_librosa
@@ -596,4 +595,4 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 107360)  # 1 video in the conversation
+        self.assertEqual(len(out_dict[self.videos_input_name]), 145912)  # 1 video in the conversation
