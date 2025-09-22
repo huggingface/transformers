@@ -9,7 +9,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -24,17 +24,15 @@ from ..dab_detr.modeling_dab_detr import gen_sine_position_embeddings
 from ..deformable_detr.image_processing_deformable_detr import DeformableDetrImageProcessor
 from ..deformable_detr.image_processing_deformable_detr_fast import DeformableDetrImageProcessorFast
 from ..deformable_detr.modeling_deformable_detr import (
-    DeformableDetrDecoderLayer,
     DeformableDetrDecoderOutput,
     DeformableDetrForObjectDetection,
     DeformableDetrLearnedPositionEmbedding,
     DeformableDetrMLPPredictionHead,
     DeformableDetrModel,
     DeformableDetrMultiscaleDeformableAttention,
-    DeformableDetrPreTrainedModel,
     _get_clones,
 )
-from ..llama.modeling_llama import eager_attention_forward
+from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from ..rt_detr.configuration_rt_detr import CONFIG_MAPPING, verify_backbone_config_arguments
 from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
 from .configuration_lw_detr_vit import LwDetrViTConfig
@@ -44,18 +42,73 @@ logger = logging.get_logger(__name__)
 
 
 class LwDetrImageProcessor(DeformableDetrImageProcessor):
+    r"""
+    Constructs a LW DETR image processor.
+
+    Args:
+        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
+            overridden by the `do_resize` parameter in the `preprocess` method.
+        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
+            Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
+            in the `preprocess` method. Available options are:
+                - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                    Do NOT keep the aspect ratio.
+                - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                    the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                    less or equal to `longest_edge`.
+                - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                    aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                    `max_width`.
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+            Resampling filter to use if resizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            `do_rescale` parameter in the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
+            `preprocess` method.
+            Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
+            `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to `True`): Controls whether to normalize the image.
+            Can be overridden by the `do_normalize` parameter in the `preprocess` method.
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+            Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
+            channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+            Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
+            for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_convert_annotations (`bool`, *optional*, defaults to `True`):
+            Controls whether to convert the annotations to the format expected by the DETR model. Converts the
+            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+            If `pad_size` is provided, the image will be padded to the specified dimensions.
+            Otherwise, the image will be padded to the maximum height and width of the batch.
+        pad_size (`dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+            height and width in the batch.
+    """
+
     pass
 
 
 class LwDetrImageProcessorFast(DeformableDetrImageProcessorFast):
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
+    pass
 
 
 @dataclass
 @auto_docstring(
     custom_intro="""
-    # TODO
+    Base class for outputs of the DeformableDetrDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
     """
 )
 class LwDetrDecoderOutput(DeformableDetrDecoderOutput):
@@ -68,10 +121,27 @@ class LwDetrDecoderOutput(DeformableDetrDecoderOutput):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of the LW-DETR model.
+    Base class for outputs of the LWDETR backbone-decoder model.
     """
 )
 class LwDetrModelOutput(ModelOutput):
+    r"""
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    """
+
     init_reference_points: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
@@ -87,6 +157,40 @@ class LwDetrModelOutput(ModelOutput):
     """
 )
 class LwDetrObjectDetectionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+        scale-invariant IoU loss.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+        Classification logits (including no-object) for all queries.
+    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
+        unnormalized bounding boxes.
+    auxiliary_outputs (`list[Dict]`, *optional*):
+        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+        and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
+        `pred_boxes`) for each decoder layer.
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    """
+
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[dict] = None
     logits: Optional[torch.FloatTensor] = None
@@ -101,6 +205,115 @@ class LwDetrObjectDetectionOutput(ModelOutput):
 
 
 class LwDetrConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`LwDetrModel`]. It is used to instantiate
+    a LW-DETR model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the LW-DETR
+    [stevenbucaille/lwdetr_small_60e_coco](https://huggingface.co/stevenbucaille/lwdetr_small_60e_coco) architecture.
+
+    LW-DETR (Lightweight Detection Transformer) is a transformer-based object detection model designed for real-time
+    detection tasks. It replaces traditional CNN-based detectors like YOLO with a more efficient transformer architecture
+    that achieves competitive performance while being computationally lightweight.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+            The configuration of the backbone model. If not provided, will default to `LwDetrViTConfig` with
+            a small ViT architecture optimized for detection tasks.
+        backbone (`str`, *optional*):
+            Name of backbone to use when `backbone_config` is `None`. Only used when `use_timm_backbone` is `True`.
+        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to use pretrained weights for the backbone.
+        use_timm_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`] API.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint.
+        projector_scale_factors (`list[float]`, *optional*, defaults to `[]`):
+            Scale factors for the feature pyramid network. Each scale factor determines the resolution of features
+            at different levels. Supported values are 0.5, 1.0, and 2.0.
+        hidden_expansion (`float`, *optional*, defaults to 0.5):
+            Expansion factor for hidden dimensions in the projector layers.
+        activation_function (`str`, *optional*, defaults to `"silu"`):
+            The non-linear activation function in the projector. Supported values are `"silu"`, `"relu"`, `"gelu"`.
+        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon value for batch normalization layers.
+        d_model (`int`, *optional*, defaults to 256):
+            Dimension of the model layers and the number of expected features in the decoder inputs.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        decoder_ffn_dim (`int`, *optional*, defaults to 2048):
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+        decoder_n_points (`int`, *optional*, defaults to 4):
+            The number of sampled keys in each feature level for each attention head in the decoder.
+        decoder_layers (`int`, *optional*, defaults to 3):
+            Number of decoder layers in the transformer.
+        decoder_self_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the decoder self-attention.
+        decoder_cross_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the decoder cross-attention.
+        decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function in the decoder. Supported values are `"relu"`, `"silu"`, `"gelu"`.
+        num_queries (`int`, *optional*, defaults to 300):
+            Number of object queries, i.e. detection slots. This is the maximal number of objects
+            [`LwDetrModel`] can detect in a single image.
+        attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add bias to the attention layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        position_embedding_type (`str`, *optional*, defaults to `"sine"`):
+            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
+        two_stage (`bool`, *optional*, defaults to `True`):
+            Whether to apply a two-stage detection approach, where region proposals are generated first
+            and then refined by the decoder.
+        group_detr (`int`, *optional*, defaults to 13):
+            Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
+            Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
+            kernels are not supported by PyTorch ONNX export.
+        bbox_reparam (`bool`, *optional*, defaults to `True`):
+            Whether to use bounding box reparameterization for better training stability.
+        class_cost (`float`, *optional*, defaults to 2):
+            Relative weight of the classification error in the Hungarian matching cost.
+        bbox_cost (`float`, *optional*, defaults to 5):
+            Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
+        giou_cost (`float`, *optional*, defaults to 2):
+            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
+        mask_loss_coefficient (`float`, *optional*, defaults to 1):
+            Relative weight of the Focal loss in the panoptic segmentation loss.
+        dice_loss_coefficient (`float`, *optional*, defaults to 1):
+            Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
+        bbox_loss_coefficient (`float`, *optional*, defaults to 5):
+            Relative weight of the L1 bounding box loss in the object detection loss.
+        giou_loss_coefficient (`float`, *optional*, defaults to 2):
+            Relative weight of the generalized IoU loss in the object detection loss.
+        eos_coefficient (`float`, *optional*, defaults to 0.1):
+            Relative classification weight of the 'no-object' class in the object detection loss.
+        focal_alpha (`float`, *optional*, defaults to 0.25):
+            Alpha parameter in the focal loss.
+        auxiliary_loss (`bool`, *optional*, defaults to `True`):
+            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
+
+    Examples:
+
+    ```python
+    >>> from transformers import LwDetrConfig, LwDetrModel
+
+    >>> # Initializing a LW-DETR stevenbucaille/lwdetr_small_60e_coco style configuration
+    >>> configuration = LwDetrConfig()
+
+    >>> # Initializing a model (with random weights) from the stevenbucaille/lwdetr_small_60e_coco style configuration
+    >>> model = LwDetrModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "lw_detr"
     attribute_map = {
         "hidden_size": "d_model",
@@ -115,7 +328,6 @@ class LwDetrConfig(PretrainedConfig):
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,
-        freeze_backbone_batch_norms=True,
         backbone_kwargs=None,
         # projector
         projector_scale_factors: list[float] = [],
@@ -140,10 +352,8 @@ class LwDetrConfig(PretrainedConfig):
         two_stage=True,
         group_detr: int = 13,
         init_std=0.02,
-        init_xavier_std=1.0,
         disable_custom_kernels=True,
         bbox_reparam=True,
-        is_encoder_decoder=False,
         # loss
         class_cost=2,
         bbox_cost=5,
@@ -157,7 +367,7 @@ class LwDetrConfig(PretrainedConfig):
         auxiliary_loss=True,
         **kwargs,
     ):
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__init__(**kwargs)
         self.batch_norm_eps = batch_norm_eps
 
         # backbone
@@ -190,9 +400,7 @@ class LwDetrConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
-        self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
         self.backbone_kwargs = backbone_kwargs
-
         # projector
         self.projector_scale_factors = projector_scale_factors
         for scale in projector_scale_factors:
@@ -202,7 +410,6 @@ class LwDetrConfig(PretrainedConfig):
         self.projector_out_channels = d_model
         self.activation_function = activation_function
         self.hidden_expansion = hidden_expansion
-
         # decoder
         self.d_model = d_model
         self.dropout = dropout
@@ -217,31 +424,25 @@ class LwDetrConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-
+        # model
         self.position_embedding_type = position_embedding_type
         self.two_stage = two_stage
-
-        self.disable_custom_kernels = disable_custom_kernels
-
+        self.init_std = init_std
+        self.bbox_reparam = bbox_reparam
+        self.group_detr = group_detr
         # Loss
         self.auxiliary_loss = auxiliary_loss
-
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
         # Loss coefficients
-        self.mask_loss_coefficient = mask_loss_coefficient
         self.dice_loss_coefficient = dice_loss_coefficient
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
-
-        self.init_std = init_std
-        self.init_xavier_std = init_xavier_std
-        self.bbox_reparam = bbox_reparam
-        self.group_detr = group_detr
+        self.disable_custom_kernels = disable_custom_kernels
 
     @property
     def hidden_size(self) -> int:
@@ -265,8 +466,16 @@ class LwDetrConfig(PretrainedConfig):
 
 
 class LwDetrConvNormLayer(RTDetrConvNormLayer):
-    def __init__(self, config, in_channels, out_channels, kernel_size, stride, **super_kwargs):
-        super().__init__(config, **super_kwargs)
+    def __init__(
+        self,
+        config: LwDetrConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int,
+        activation: Optional[str] = None,
+    ):
+        super().__init__(config, in_channels, out_channels, kernel_size, stride, activation)
         self.conv = nn.Conv2d(
             in_channels,
             out_channels,
@@ -280,10 +489,10 @@ class LwDetrConvNormLayer(RTDetrConvNormLayer):
 class LwDetrRepVggBlock(nn.Module):
     def __init__(self, config: LwDetrConfig, hidden_channels: int):
         super().__init__()
-        self.conv1 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1, activation="silu")
-        self.conv2 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=0, activation="silu")
+        self.conv1 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, activation="silu")
+        self.conv2 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, activation="silu")
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = self.conv1(x)
         y = self.conv2(y)
         return y
@@ -303,19 +512,19 @@ class LwDetrCSPRepLayer(nn.Module):
         self.conv2 = LwDetrConvNormLayer(config, conv2_in_channels, out_channels, 1, 1, activation=activation)
         self.bottlenecks = nn.ModuleList(LwDetrRepVggBlock(config, self.hidden_channels) for _ in range(num_blocks))
 
-    def forward(self, hidden_state):
-        hidden_state = self.conv1(hidden_state)
-        all_hidden_states = list(hidden_state.split(self.hidden_channels, 1))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv1(hidden_states)
+        all_hidden_states = list(hidden_states.split(self.hidden_channels, 1))
         last_hidden_state = all_hidden_states[-1]
 
-        bottleneck_hidden_states = []
+        bottlenecked_hidden_states = []
         for bottleneck in self.bottlenecks:
-            bottleneck_hidden_states.append(bottleneck(last_hidden_state))
+            bottlenecked_hidden_states.append(bottleneck(last_hidden_state))
 
-        all_hidden_states.extend(bottleneck_hidden_states)
-        hidden_state = torch.cat(all_hidden_states, 1)
-        hidden_state = self.conv2(hidden_state)
-        return hidden_state
+        all_hidden_states.extend(bottlenecked_hidden_states)
+        hidden_states = torch.cat(all_hidden_states, 1)
+        hidden_states = self.conv2(hidden_states)
+        return hidden_states
 
 
 class LwDetrLayerNorm(ConvNextLayerNorm):
@@ -332,19 +541,15 @@ class LwDetrSamplingLayer(nn.Module):
         layers = []
         if scale == 2.0:
             if channel_size > 512:
-                layers.extend(
-                    [
-                        LwDetrConvNormLayer(config, channel_size, channel_size // 2, 1, 1, activation="relu"),
-                        nn.ConvTranspose2d(channel_size // 2, channel_size // 4, kernel_size=2, stride=2),
-                    ]
-                )
+                layers.append(LwDetrConvNormLayer(config, channel_size, channel_size // 2, 1, 1, activation="relu"))
+                layers.append(nn.ConvTranspose2d(channel_size // 2, channel_size // 4, kernel_size=2, stride=2))
             else:
                 layers.append(nn.ConvTranspose2d(channel_size, channel_size // 2, 2, 2))
         elif scale == 0.5:
             layers.append(LwDetrConvNormLayer(config, channel_size, channel_size, 3, 2, activation="relu"))
         self.layers = nn.ModuleList(layers)
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
             hidden_states = layer(hidden_states)
         return hidden_states
@@ -370,7 +575,7 @@ class LwDetrScaleProjector(nn.Module):
         self.projector_layer = LwDetrCSPRepLayer(config, projector_input_dim, output_dim)
         self.layer_norm = LwDetrLayerNorm(output_dim, data_format="channels_first")
 
-    def forward(self, hidden_states_tuple: tuple[torch.Tensor]):
+    def forward(self, hidden_states_tuple: tuple[torch.Tensor]) -> torch.Tensor:
         sampled_hidden_states = []
         for sampling_layer, hidden_states in zip(self.sampling_layers, hidden_states_tuple):
             hidden_states = sampling_layer(hidden_states)
@@ -396,7 +601,7 @@ class LwDetrMultiScaleProjector(nn.Module):
             ]
         )
 
-    def forward(self, hidden_states: tuple[torch.Tensor]):
+    def forward(self, hidden_states: tuple[torch.Tensor]) -> list[torch.Tensor]:
         output_hidden_states = []
         for scale_layer in self.scale_layers:
             output_hidden_states.append(scale_layer(hidden_states))
@@ -410,7 +615,7 @@ class LwDetrConvEncoder(ConditionalDetrConvEncoder):
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values).feature_maps
         features = self.projector(features)
         out = []
         for feature_map in features:
@@ -421,35 +626,18 @@ class LwDetrConvEncoder(ConditionalDetrConvEncoder):
 
 
 class LwDetrConvModel(ConditionalDetrConvModel):
-    pass
+    def forward(self, pixel_values, pixel_mask):
+        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
+        out = self.conv_encoder(pixel_values, pixel_mask)
+        pos = []
+        for feature_map, mask in out:
+            # position encoding
+            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
+
+        return out, pos
 
 
-class LwDetrMultiheadAttention(nn.Module):
-    def __init__(
-        self,
-        config: LwDetrConfig,
-    ):
-        super().__init__()
-        self.config = config
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-
+class LwDetrAttention(LlamaAttention):
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[torch.Tensor]):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
@@ -527,13 +715,13 @@ class LwDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAtte
         )
 
 
-class LwDetrDecoderLayer(DeformableDetrDecoderLayer):
-    def __init__(self, config: LwDetrConfig):
+class LwDetrDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: LwDetrConfig, layer_idx: int):
         GradientCheckpointingLayer.__init__(self)
         self.embed_dim = config.d_model
 
         # self-attention
-        self.self_attn = LwDetrMultiheadAttention(config)
+        self.self_attn = LwDetrAttention(config, layer_idx=layer_idx)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.activation_dropout = config.activation_dropout
@@ -605,7 +793,10 @@ class LwDetrLearnedPositionEmbedding(DeformableDetrLearnedPositionEmbedding):
     pass
 
 
-class LwDetrPreTrainedModel(DeformableDetrPreTrainedModel):
+class LwDetrPreTrainedModel(PreTrainedModel):
+    config: LwDetrConfig
+    base_model_prefix = "model"
+    main_input_name = "pixel_values"
     _no_split_modules = [
         r"LwDetrConvEncoder",
         r"LwDetrDecoderLayer",
@@ -613,12 +804,11 @@ class LwDetrPreTrainedModel(DeformableDetrPreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
-    # _supports_attention_backend = True
+    _supports_attention_backend = True
     _can_record_outputs = {
-        "attentions": [LwDetrMultiheadAttention, LwDetrMultiscaleDeformableAttention],
+        "attentions": [LwDetrAttention, LwDetrMultiscaleDeformableAttention],
         "hidden_states": [LwDetrDecoderLayer],
     }
-    # TODO Add other features
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -688,34 +878,33 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
     def __init__(self, config: LwDetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([LwDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([LwDetrDecoderLayer(config, i) for i in range(config.decoder_layers)])
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
 
         self.ref_point_head = LwDetrMLPPredictionHead(2 * config.d_model, config.d_model, config.d_model, num_layers=2)
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_reference(self, reference_points, valid_ratios):
-        # [num_queries, batch_size, 4]
+        # batch_size, num_queries, batch_size, 4
         obj_center = reference_points[..., :4]
 
-        refpoints_input = (
-            obj_center[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
-        )  # bs, nq, nlevel, 4
-        query_sine_embed = gen_sine_position_embeddings(
-            refpoints_input[:, :, 0, :], self.config.d_model
-        )  # bs, nq, 256*2
+        # batch_size, num_queries, num_levels, 4
+        reference_points_inputs = obj_center[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+
+        # batch_size, num_queries, d_model * 2
+        query_sine_embed = gen_sine_position_embeddings(reference_points_inputs[:, :, 0, :], self.config.d_model)
+
+        # batch_size, num_queries, d_model
         query_pos = self.ref_point_head(query_sine_embed)
-        return obj_center, refpoints_input, query_pos, query_sine_embed
+        return obj_center, reference_points_inputs, query_pos, query_sine_embed
 
     def forward(
         self,
         inputs_embeds: Optional[torch.Tensor] = None,
         reference_points: Optional[torch.Tensor] = None,
-        query_position_embeddings: Optional[torch.Tensor] = None,
         spatial_shapes: Optional[torch.Tensor] = None,
         spatial_shapes_list: Optional[torch.Tensor] = None,
         level_start_index: Optional[torch.Tensor] = None,
@@ -776,7 +965,7 @@ class LwDetrModel(DeformableDetrModel):
         self.num_queries = config.num_queries
         hidden_dim = config.d_model
         query_dim = 4
-        self.refpoint_embed = nn.Embedding(self.num_queries * self.group_detr, query_dim)
+        self.reference_point_embed = nn.Embedding(self.num_queries * self.group_detr, query_dim)
         self.query_feat = nn.Embedding(self.num_queries * self.group_detr, hidden_dim)
 
         self.decoder = LwDetrDecoder(config)
@@ -847,8 +1036,6 @@ class LwDetrModel(DeformableDetrModel):
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        # TODO careful
-        # output_proposals = torch.log(output_proposals / (1 - output_proposals))  # inverse sigmoid
         output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float("inf"))
         output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
 
@@ -865,22 +1052,9 @@ class LwDetrModel(DeformableDetrModel):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrModelOutput:
         r"""
-        decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
-
         Examples:
 
         ```python
@@ -891,8 +1065,8 @@ class LwDetrModel(DeformableDetrModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
+        >>> model = DeformableDetrModel.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -923,17 +1097,16 @@ class LwDetrModel(DeformableDetrModel):
                 raise ValueError("No attention mask was provided")
 
         if self.training:
-            reference_points = self.refpoint_embed.weight
+            reference_points = self.reference_point_embed.weight
             query_feat = self.query_feat.weight
         else:
             # only use one group in inference
-            reference_points = self.refpoint_embed.weight[: self.num_queries]
+            reference_points = self.reference_point_embed.weight[: self.num_queries]
             query_feat = self.query_feat.weight[: self.num_queries]
 
         # Prepare encoder inputs (by flattening)
         source_flatten = []
         mask_flatten = []
-        lvl_pos_embed_flatten = []
         spatial_shapes_list = []
         for level, (source, mask, pos_embed) in enumerate(zip(sources, masks, position_embeddings_list)):
             batch_size, num_channels, height, width = source.shape
@@ -942,12 +1115,10 @@ class LwDetrModel(DeformableDetrModel):
             source = source.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
             pos_embed = pos_embed.flatten(2).transpose(1, 2)
-            lvl_pos_embed_flatten.append(pos_embed)
             source_flatten.append(source)
             mask_flatten.append(mask)
         source_flatten = torch.cat(source_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
-        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
@@ -1005,7 +1176,6 @@ class LwDetrModel(DeformableDetrModel):
         init_reference_points = reference_points
         decoder_outputs = self.decoder(
             inputs_embeds=target,
-            query_position_embeddings=lvl_pos_embed_flatten,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
@@ -1052,20 +1222,12 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[list[dict]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrObjectDetectionOutput:
         outputs = self.model(
             pixel_values,
             pixel_mask=pixel_mask,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
             **kwargs,
         )
 

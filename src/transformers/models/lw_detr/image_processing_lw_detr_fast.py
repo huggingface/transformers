@@ -281,7 +281,6 @@ class LwDetrImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = LwDetrFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[LwDetrFastImageProcessorKwargs]) -> None:
-        super().__init__(**kwargs)
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -303,6 +302,8 @@ class LwDetrImageProcessorFast(BaseImageProcessorFast):
         do_normalize = kwargs.get("do_normalize")
         if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
+
+        super().__init__(**kwargs)
 
     @classmethod
     def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
