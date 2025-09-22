@@ -1,4 +1,6 @@
-from typing import Callable, Optional, Union
+import math
+from dataclasses import dataclass
+from typing import Any, Callable, Optional
 
 import torch
 import torch.nn.functional as F  # noqa: F401
@@ -9,12 +11,8 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...pytorch_utils import meshgrid
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
 from ..conditional_detr.modeling_conditional_detr import (
     ConditionalDetrConvEncoder,
@@ -29,18 +27,17 @@ from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoderLayer,
     DeformableDetrDecoderOutput,
     DeformableDetrForObjectDetection,
+    DeformableDetrLearnedPositionEmbedding,
     DeformableDetrMLPPredictionHead,
     DeformableDetrModel,
-    DeformableDetrModelOutput,
     DeformableDetrMultiscaleDeformableAttention,
-    DeformableDetrObjectDetectionOutput,
     DeformableDetrPreTrainedModel,
     _get_clones,
 )
 from ..llama.modeling_llama import eager_attention_forward
 from ..rt_detr.configuration_rt_detr import CONFIG_MAPPING, verify_backbone_config_arguments
-from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer, RTDetrRepVggBlock
-from .configuration_lw_detr_vit import LwDetrVitConfig
+from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
+from .configuration_lw_detr_vit import LwDetrViTConfig
 
 
 logger = logging.get_logger(__name__)
@@ -55,12 +52,52 @@ class LwDetrImageProcessorFast(DeformableDetrImageProcessorFast):
         super().__init__(**super_kwargs)
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    # TODO
+    """
+)
 class LwDetrDecoderOutput(DeformableDetrDecoderOutput):
-    pass
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
-class LwDetrModelOutput(DeformableDetrModelOutput):
-    pass
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the LW-DETR model.
+    """
+)
+class LwDetrModelOutput(ModelOutput):
+    init_reference_points: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Output type of [`LwDetrForObjectDetection`].
+    """
+)
+class LwDetrObjectDetectionOutput(ModelOutput):
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[dict] = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
+    auxiliary_outputs: Optional[list[dict]] = None
+    init_reference_points: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Any = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
 
 class LwDetrConfig(PretrainedConfig):
@@ -120,6 +157,7 @@ class LwDetrConfig(PretrainedConfig):
         auxiliary_loss=True,
         **kwargs,
     ):
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         self.batch_norm_eps = batch_norm_eps
 
         # backbone
@@ -127,8 +165,13 @@ class LwDetrConfig(PretrainedConfig):
             logger.info(
                 "`backbone_config` and `backbone` are `None`. Initializing the config with the default `LwDetrViT` backbone."
             )
-            backbone_config = LwDetrVitConfig(
-                # TODO: add default config
+            backbone_config = LwDetrViTConfig(
+                image_size=1024,
+                hidden_size=192,
+                num_hidden_layers=10,
+                num_attention_heads=12,
+                window_block_indices=[0, 1, 3, 6, 7, 9],
+                out_indices=[2, 4, 5, 9],
             )
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.pop("model_type")
@@ -200,12 +243,30 @@ class LwDetrConfig(PretrainedConfig):
         self.bbox_reparam = bbox_reparam
         self.group_detr = group_detr
 
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+    @property
+    def hidden_size(self) -> int:
+        return self.d_model
+
+    @property
+    def num_attention_heads(self) -> int:
+        return self.decoder_self_attention_heads
+
+    @property
+    def num_key_value_heads(self) -> int:
+        return self.decoder_self_attention_heads
+
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
 
 
 class LwDetrConvNormLayer(RTDetrConvNormLayer):
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
+    def __init__(self, config, in_channels, out_channels, kernel_size, stride, **super_kwargs):
+        super().__init__(config, **super_kwargs)
         self.conv = nn.Conv2d(
             in_channels,
             out_channels,
@@ -216,12 +277,9 @@ class LwDetrConvNormLayer(RTDetrConvNormLayer):
         )
 
 
-class LwDetrRepVggBlock(RTDetrRepVggBlock):
+class LwDetrRepVggBlock(nn.Module):
     def __init__(self, config: LwDetrConfig, hidden_channels: int):
-        super().__init__(config)
-        del hidden_channels
-        del self.activation
-        del activation
+        super().__init__()
         self.conv1 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1, activation="silu")
         self.conv2 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=0, activation="silu")
 
@@ -392,7 +450,7 @@ class LwDetrMultiheadAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[torch.Tensor]):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
@@ -442,7 +500,31 @@ class LwDetrMultiheadAttention(nn.Module):
 
 
 class LwDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAttention):
-    pass
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        position_embeddings: Optional[torch.Tensor] = None,
+        reference_points=None,
+        spatial_shapes=None,
+        spatial_shapes_list=None,
+        level_start_index=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        return super().forward(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            position_embeddings=position_embeddings,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
+            level_start_index=level_start_index,
+            **kwargs,
+        )
 
 
 class LwDetrDecoderLayer(DeformableDetrDecoderLayer):
@@ -519,16 +601,77 @@ class LwDetrDecoderLayer(DeformableDetrDecoderLayer):
         return hidden_states
 
 
+class LwDetrLearnedPositionEmbedding(DeformableDetrLearnedPositionEmbedding):
+    pass
+
+
 class LwDetrPreTrainedModel(DeformableDetrPreTrainedModel):
     _no_split_modules = [
         r"LwDetrConvEncoder",
         r"LwDetrDecoderLayer",
     ]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    # _supports_attention_backend = True
     _can_record_outputs = {
         "attentions": [LwDetrMultiheadAttention, LwDetrMultiscaleDeformableAttention],
         "hidden_states": [LwDetrDecoderLayer],
     }
     # TODO Add other features
+
+    def _init_weights(self, module):
+        std = self.config.init_std
+
+        if isinstance(module, LwDetrLearnedPositionEmbedding):
+            nn.init.uniform_(module.row_embeddings.weight)
+            nn.init.uniform_(module.column_embeddings.weight)
+        elif isinstance(module, LwDetrMultiscaleDeformableAttention):
+            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            default_dtype = torch.get_default_dtype()
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
+            )
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = (
+                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+                .view(module.n_heads, 1, 1, 2)
+                .repeat(1, module.n_levels, module.n_points, 1)
+            )
+            for i in range(module.n_points):
+                grid_init[:, :, i, :] *= i + 1
+            with torch.no_grad():
+                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+            nn.init.constant_(module.attention_weights.weight.data, 0.0)
+            nn.init.constant_(module.attention_weights.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.value_proj.weight.data)
+            nn.init.constant_(module.value_proj.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.output_proj.weight.data)
+            nn.init.constant_(module.output_proj.bias.data, 0.0)
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d, nn.ConvTranspose2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        if hasattr(module, "reference_points") and not self.config.two_stage:
+            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
+            nn.init.constant_(module.reference_points.bias.data, 0.0)
+        if hasattr(module, "level_embed"):
+            nn.init.normal_(module.level_embed)
+        if hasattr(module, "refpoint_embed") and module.refpoint_embed is not None:
+            nn.init.constant_(module.refpoint_embed.weight.data, 0)
+        if hasattr(module, "class_embed") and module.class_embed is not None:
+            prior_prob = 0.01
+            bias_value = -math.log((1 - prior_prob) / prior_prob)
+            self.class_embed.bias.data = torch.ones(self.config.num_labels) * bias_value
+        if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
+            nn.init.constant_(module.bbox_embed.layers[-1].weight.data, 0)
+            nn.init.constant_(module.bbox_embed.layers[-1].bias.data, 0)
 
 
 def refine_bboxes(reference_points, deltas, bbox_reparam):
@@ -549,10 +692,6 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
-
-        # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
-        self.bbox_embed = None
-        self.class_embed = None
 
         self.ref_point_head = LwDetrMLPPredictionHead(2 * config.d_model, config.d_model, config.d_model, num_layers=2)
 
@@ -590,7 +729,6 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-            input_shape = inputs_embeds.size()[:-1]
 
         if self.config.bbox_reparam:
             get_reference_points_input = reference_points
@@ -646,8 +784,16 @@ class LwDetrModel(DeformableDetrModel):
         if config.two_stage:
             self.enc_output = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(self.group_detr)])
             self.enc_output_norm = nn.ModuleList([nn.LayerNorm(hidden_dim) for _ in range(self.group_detr)])
-            self.enc_out_bbox_embed = None
-            self.enc_out_class_embed = None
+            # Should normally be None and then instantiated in the ForObjectDetection class
+            self.enc_out_bbox_embed = nn.ModuleList(
+                [
+                    LwDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
+                    for _ in range(self.group_detr)
+                ]
+            )
+            self.enc_out_class_embed = nn.ModuleList(
+                [nn.Linear(config.d_model, config.num_labels) for _ in range(self.group_detr)]
+            )
 
         self.post_init()
 
@@ -712,8 +858,9 @@ class LwDetrModel(DeformableDetrModel):
         object_query = object_query.masked_fill(~output_proposals_valid, float(0))
         return object_query, output_proposals
 
-    @check_model_inputs
     @auto_docstring
+    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -723,7 +870,7 @@ class LwDetrModel(DeformableDetrModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], LwDetrModelOutput]:
+    ) -> LwDetrModelOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.
@@ -874,10 +1021,6 @@ class LwDetrModel(DeformableDetrModel):
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            # TODO encoder_last_hidden_state, encoder_hidden_states, encoder_attentions
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
         )
@@ -887,12 +1030,8 @@ class LwDetrMLPPredictionHead(DeformableDetrMLPPredictionHead):
     pass
 
 
-class LwDetrObjectDetectionOutput(DeformableDetrObjectDetectionOutput):
-    pass
-
-
 class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
-    _tied_weights_keys = [r"bbox_embed.[1-9]*", r"class_embed.[1-9]*"]
+    _tied_weights_keys = None
 
     def __init__(self, config: LwDetrConfig):
         LwDetrPreTrainedModel.__init__(config)
@@ -908,6 +1047,7 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
 
     @can_return_tuple
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -918,7 +1058,7 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[list[dict]] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], LwDetrObjectDetectionOutput]:
+    ) -> LwDetrObjectDetectionOutput:
         outputs = self.model(
             pixel_values,
             pixel_mask=pixel_mask,
@@ -926,6 +1066,7 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
+            **kwargs,
         )
 
         hidden_states = outputs.intermediate_hidden_states
@@ -952,7 +1093,7 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
                     enc_outputs_class_logits_list[group_index]
                 )
                 pred_class.append(group_pred_class)
-            enc_outputs_class_logits = torch.cat(pred_class)
+            enc_outputs_class_logits = torch.cat(pred_class, dim=1)
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
@@ -968,27 +1109,19 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
                 enc_outputs_boxes_logits,
             )
 
-        dict_outputs = LwDetrObjectDetectionOutput(
+        return LwDetrObjectDetectionOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
             last_hidden_state=outputs.last_hidden_state,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_reference_points=outputs.intermediate_reference_points,
             init_reference_points=outputs.init_reference_points,
             enc_outputs_class=enc_outputs_class_logits,
             enc_outputs_coord_logits=enc_outputs_boxes_logits,
         )
-
-        return dict_outputs
 
 
 __all__ = [

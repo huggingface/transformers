@@ -3,13 +3,16 @@ import torch
 import torch.nn as nn
 from accelerate import PartialState
 from accelerate.utils import reduce
-from torch import Tensor
 
 from ..utils import is_accelerate_available, is_scipy_available, is_vision_available
 from .loss_for_object_detection import (
     HungarianMatcher,
-    ImageLoss,
     _set_aux_loss,
+    box_iou,
+    dice_loss,
+    generalized_box_iou,
+    nested_tensor_from_tensor_list,
+    sigmoid_focal_loss,
 )
 
 
@@ -20,97 +23,6 @@ if is_vision_available():
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
-
-######## TODO Find equivalents in transformers
-# TODO Copied from loss_for_object_detection, needs to be verified
-def _upcast(t: Tensor) -> Tensor:
-    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
-    if t.is_floating_point():
-        return t if t.dtype in (torch.float32, torch.float64) else t.float()
-    else:
-        return t if t.dtype in (torch.int32, torch.int64) else t.int()
-
-def box_area(boxes: Tensor) -> Tensor:
-    """
-    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
-
-    Args:
-        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
-            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
-            < x2` and `0 <= y1 < y2`.
-
-    Returns:
-        `torch.FloatTensor`: a tensor containing the area for each box.
-    """
-    boxes = _upcast(boxes)
-    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-
-def box_iou(boxes1, boxes2):
-    area1 = box_area(boxes1)
-    area2 = box_area(boxes2)
-
-    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
-
-    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
-    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
-
-    union = area1[:, None] + area2 - inter
-
-    iou = inter / union
-    return iou, union
-
-# TODO Copied from loss_for_object_detection, needs to be verified
-def generalized_box_iou(boxes1, boxes2):
-    """
-    Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
-
-    Returns:
-        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
-    """
-    # degenerate boxes gives inf / nan results
-    # so do an early check
-    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
-        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
-    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
-        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
-    iou, union = box_iou(boxes1, boxes2)
-
-    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
-    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
-
-    width_height = (bottom_right - top_left).clamp(min=0)  # [N,M,2]
-    area = width_height[:, :, 0] * width_height[:, :, 1]
-
-    return iou - (area - union) / area
-
-
-def masks_to_boxes(masks):
-    """Compute the bounding boxes around the provided masks
-
-    The masks should be in format [N, H, W] where N is the number of masks, (H, W) are the spatial dimensions.
-
-    Returns a [N, 4] tensors, with the boxes in xyxy format
-    """
-    if masks.numel() == 0:
-        return torch.zeros((0, 4), device=masks.device)
-
-    h, w = masks.shape[-2:]
-
-    y = torch.arange(0, h, dtype=torch.float)
-    x = torch.arange(0, w, dtype=torch.float)
-    y, x = torch.meshgrid(y, x)
-
-    x_mask = (masks * x.unsqueeze(0))
-    x_max = x_mask.flatten(1).max(-1)[0]
-    x_min = x_mask.masked_fill(~(masks.bool()), 1e8).flatten(1).min(-1)[0]
-
-    y_mask = (masks * y.unsqueeze(0))
-    y_max = y_mask.flatten(1).max(-1)[0]
-    y_min = y_mask.masked_fill(~(masks.bool()), 1e8).flatten(1).min(-1)[0]
-
-    return torch.stack([x_min, y_min, x_max, y_max], 1)
-########
 
 class LwDetrHungarianMatcher(HungarianMatcher):
     @torch.no_grad()
@@ -166,10 +78,10 @@ class LwDetrHungarianMatcher(HungarianMatcher):
                 ]
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
-# TODO Copied from DeformableDetrImageLoss, needs to be verified
-class LwDetrImageLoss(ImageLoss):
+
+class LwDetrImageLoss(nn.Module):
     def __init__(self, matcher, num_classes, focal_alpha, losses, group_detr):
-        nn.Module.__init__(self)
+        super().__init__()
         self.matcher = matcher
         self.num_classes = num_classes
         self.focal_alpha = focal_alpha
@@ -177,7 +89,6 @@ class LwDetrImageLoss(ImageLoss):
         self.group_detr = group_detr
 
     # removed logging parameter, which was part of the original implementation
-    # TODO Ask question why ?
     def loss_labels(self, outputs, targets, indices, num_boxes):
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
@@ -191,9 +102,7 @@ class LwDetrImageLoss(ImageLoss):
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
         iou_targets = torch.diag(
-            box_iou(center_to_corners_format(src_boxes.detach()), center_to_corners_format(target_boxes))[
-                0
-            ]
+            box_iou(center_to_corners_format(src_boxes.detach()), center_to_corners_format(target_boxes))[0]
         )
         pos_ious = iou_targets.clone().detach()
         prob = source_logits.sigmoid()
@@ -201,7 +110,7 @@ class LwDetrImageLoss(ImageLoss):
         pos_weights = torch.zeros_like(source_logits)
         neg_weights = prob**gamma
 
-        pos_ind = [id for id in idx]
+        pos_ind = list(idx)
         pos_ind.append(target_classes_o)
 
         t = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)
@@ -215,6 +124,107 @@ class LwDetrImageLoss(ImageLoss):
 
         return losses
 
+    # Copied from loss.loss_for_object_detection.ImageLoss.loss_cardinality
+    @torch.no_grad()
+    def loss_cardinality(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
+
+        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
+        """
+        logits = outputs["logits"]
+        device = logits.device
+        target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
+        # Count the number of predictions that are NOT "no-object" (which is the last class)
+        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
+        card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
+        losses = {"cardinality_error": card_err}
+        return losses
+
+    # Copied from loss.loss_for_object_detection.ImageLoss.loss_boxes
+    def loss_boxes(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
+
+        Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
+        are expected in format (center_x, center_y, w, h), normalized by the image size.
+        """
+        if "pred_boxes" not in outputs:
+            raise KeyError("No predicted boxes found in outputs")
+        idx = self._get_source_permutation_idx(indices)
+        source_boxes = outputs["pred_boxes"][idx]
+        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+
+        loss_bbox = nn.functional.l1_loss(source_boxes, target_boxes, reduction="none")
+
+        losses = {}
+        losses["loss_bbox"] = loss_bbox.sum() / num_boxes
+
+        loss_giou = 1 - torch.diag(
+            generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
+        )
+        losses["loss_giou"] = loss_giou.sum() / num_boxes
+        return losses
+
+    # Copied from loss.loss_for_object_detection.ImageLoss.loss_masks
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the losses related to the masks: the focal loss and the dice loss.
+
+        Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
+        """
+        if "pred_masks" not in outputs:
+            raise KeyError("No predicted masks found in outputs")
+
+        source_idx = self._get_source_permutation_idx(indices)
+        target_idx = self._get_target_permutation_idx(indices)
+        source_masks = outputs["pred_masks"]
+        source_masks = source_masks[source_idx]
+        masks = [t["masks"] for t in targets]
+        # TODO use valid to mask invalid areas due to padding in loss
+        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
+        target_masks = target_masks.to(source_masks)
+        target_masks = target_masks[target_idx]
+
+        # upsample predictions to the target size
+        source_masks = nn.functional.interpolate(
+            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        )
+        source_masks = source_masks[:, 0].flatten(1)
+
+        target_masks = target_masks.flatten(1)
+        target_masks = target_masks.view(source_masks.shape)
+        losses = {
+            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
+            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
+        }
+        return losses
+
+    # Copied from loss.loss_for_object_detection.ImageLoss._get_source_permutation_idx
+    def _get_source_permutation_idx(self, indices):
+        # permute predictions following indices
+        batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
+        source_idx = torch.cat([source for (source, _) in indices])
+        return batch_idx, source_idx
+
+    # Copied from loss.loss_for_object_detection.ImageLoss._get_target_permutation_idx
+    def _get_target_permutation_idx(self, indices):
+        # permute targets following indices
+        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
+        target_idx = torch.cat([target for (_, target) in indices])
+        return batch_idx, target_idx
+
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "labels": self.loss_labels,
+            "cardinality": self.loss_cardinality,
+            "boxes": self.loss_boxes,
+            "masks": self.loss_masks,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
+
     def forward(self, outputs, targets):
         """
         This performs the loss computation.
@@ -227,7 +237,9 @@ class LwDetrImageLoss(ImageLoss):
                 losses applied, see each loss' doc.
         """
         group_detr = self.group_detr if self.training else 1
-        outputs_without_aux_and_enc = {k: v for k, v in outputs.items() if k != "enc_outputs" and k != "auxiliary_outputs"}
+        outputs_without_aux_and_enc = {
+            k: v for k, v in outputs.items() if k != "enc_outputs" and k != "auxiliary_outputs"
+        }
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux_and_enc, targets, group_detr)
@@ -265,14 +277,23 @@ class LwDetrImageLoss(ImageLoss):
             indices = self.matcher(enc_outputs, targets, group_detr=group_detr)
             for loss in self.losses:
                 l_dict = self.get_loss(loss, enc_outputs, targets, indices, num_boxes)
-                l_dict = {k + '_enc': v for k, v in l_dict.items()}
+                l_dict = {k + "_enc": v for k, v in l_dict.items()}
                 losses.update(l_dict)
 
         return losses
 
 
 def LwDetrForObjectDetectionLoss(
-    logits, labels, device, pred_boxes, config, outputs_class=None, outputs_coord=None, enc_outputs_class=None, enc_outputs_coord=None, **kwargs
+    logits,
+    labels,
+    device,
+    pred_boxes,
+    config,
+    outputs_class=None,
+    outputs_coord=None,
+    enc_outputs_class=None,
+    enc_outputs_coord=None,
+    **kwargs,
 ):
     # First: create the matcher
     matcher = LwDetrHungarianMatcher(
@@ -310,7 +331,7 @@ def LwDetrForObjectDetectionLoss(
             aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)
     if config.two_stage:
-        enc_weight_dict = {k + '_enc': v for k, v in weight_dict.items()}
+        enc_weight_dict = {k + "_enc": v for k, v in weight_dict.items()}
         weight_dict.update(enc_weight_dict)
     loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
     return loss, loss_dict, auxiliary_outputs

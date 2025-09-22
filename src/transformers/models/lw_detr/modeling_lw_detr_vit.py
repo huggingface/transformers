@@ -6,102 +6,153 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import collections.abc
 import math
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.backbone_utils import BackboneMixin
-from .configuration_lw_detr_vit import LwDetrVitConfig
+from ...utils.generic import check_model_inputs
+from .configuration_lw_detr_vit import LwDetrViTConfig
 
 
-class LwDetrVitAttention(nn.Module):
-    """Multi-head Attention block with relative position embeddings."""
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
 
-    def __init__(self, config: LwDetrVitConfig, input_size=None):
+    # Normalize the attention scores to probabilities.
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    # Mask heads if we want to
+    if attention_mask is not None:
+        attn_weights = attn_weights * attention_mask
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class LwDetrViTSelfAttention(nn.Module):
+    def __init__(self, config: LwDetrViTConfig):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
+            )
+
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        if config.use_cae:
+            self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
+        else:
+            self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+
+    def forward(
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+
+        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
+        )
+
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.reshape(new_context_layer_shape)
+
+        return context_layer, attention_probs
+
+
+class LwDetrViTAttention(nn.Module):
+    def __init__(self, config: LwDetrViTConfig):
         """
         Args:
-            config (`LwDetrVitConfig`):
+            config (`LwDetrViTConfig`):
                 Model configuration.
-            input_size (`tuple[int]`, *optional*):
-                Input resolution, only required in case relative position embeddings are added.
         """
         super().__init__()
+        self.attention = LwDetrViTSelfAttention(config)
+        self.output = nn.Linear(config.hidden_size, config.hidden_size)
+        self.pruned_heads = set()
 
-        dim = config.hidden_size
-        num_heads = config.num_attention_heads
+    def prune_heads(self, heads: set[int]):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
+        )
 
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = head_dim**-0.5
+        # Prune linear layers
+        self.attention.query = prune_linear_layer(self.attention.query, index)
+        self.attention.key = prune_linear_layer(self.attention.key, index)
+        self.attention.value = prune_linear_layer(self.attention.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
 
-        self.proj = nn.Linear(dim, dim)
+        # Update hyper params and store pruned heads
+        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
+        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
 
-        self.use_relative_position_embeddings = config.use_relative_position_embeddings
-        if self.use_relative_position_embeddings:
-            # initialize relative positional embeddings
-            self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
-            self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
-
-        self.use_cae = config.use_cae
-        if self.use_cae:
-            self.qkv = nn.Linear(dim, dim * 3, bias=False)
-            self.q_bias = nn.Parameter(torch.zeros(dim))
-            self.v_bias = nn.Parameter(torch.zeros(dim))
-        else:
-            self.qkv = nn.Linear(dim, dim * 3, bias=config.qkv_bias)
-
-    def forward(self, hidden_state, output_attentions=False, mask=None):
-        batch_size, N, _ = hidden_state.shape  # N = H * W
-
-        if self.use_cae:
-            k_bias = torch.zeros_like(self.v_bias, requires_grad=False)
-            qkv_bias = torch.cat((self.q_bias, k_bias, self.v_bias))
-            qkv = F.linear(hidden_state, self.qkv.weight, qkv_bias)
-        else:
-            qkv = self.qkv(hidden_state)
-
-        qkv = qkv.reshape(batch_size, N, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
-        queries, keys, values = qkv.unbind(0)
-
-        attention_scores = (queries * self.scale) @ keys.transpose(-2, -1)
-        if mask is not None:
-            attention_scores.masked_fill_(
-                mask.reshape(batch_size, 1, 1, N).expand_as(attention_scores), torch.finfo(attention_scores.dtype).min
-            )
-        attention_probs = attention_scores.softmax(dim=-1)
-
-        hidden_state = attention_probs @ values
-        hidden_state = hidden_state.permute(0, 2, 1, 3)
-        hidden_state = hidden_state.reshape(batch_size, N, -1)
-        hidden_state = self.proj(hidden_state)
-
-        if output_attentions:
-            attention_probs = attention_probs.reshape(
-                batch_size, self.num_heads, attention_probs.shape[-2], attention_probs.shape[-1]
-            )
-            outputs = (hidden_state, attention_probs)
-        else:
-            outputs = (hidden_state,)
-
-        return outputs
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, head_mask, **kwargs)
+        output = self.output(self_attn_output)
+        return output
 
 
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -113,7 +164,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
-class LwDetrVitDropPath(nn.Module):
+class LwDetrViTDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -127,7 +178,7 @@ class LwDetrVitDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class LwDetrVitMlp(nn.Module):
+class LwDetrViTMlp(nn.Module):
     def __init__(self, config, in_features: int, hidden_features: int) -> None:
         super().__init__()
         self.fc1 = nn.Linear(in_features, hidden_features)
@@ -145,163 +196,95 @@ class LwDetrVitMlp(nn.Module):
         return x
 
 
-class LwDetrVitLayer(GradientCheckpointingLayer):
-    """This corresponds to the Block class in the original implementation."""
-
+class LwDetrViTLayer(GradientCheckpointingLayer):
     def __init__(
         self,
-        config: LwDetrVitConfig,
-        drop_path_rate: float = 0,
-        window: bool = False,
+        config: LwDetrViTConfig,
+        layer_idx,
     ) -> None:
         super().__init__()
 
         dim = config.hidden_size
+        self.attention = LwDetrViTAttention(config)
+        self.intermediate = LwDetrViTMlp(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
+        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.attention = LwDetrVitAttention(config)
-
-        self.drop_path = LwDetrVitDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
-        self.norm2 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.mlp = LwDetrVitMlp(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
-
-        self.window = window
-        self.num_windows = config.num_windows
         self.use_cae = config.use_cae
-
         if self.use_cae:
-            init_values = config.cae_init_values
-            self.gamma_1 = nn.Parameter(init_values * torch.ones((dim)), requires_grad=True)
-            self.gamma_2 = nn.Parameter(init_values * torch.ones((dim)), requires_grad=True)
+            self.gamma_1 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
+            self.gamma_2 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
+
+        drop_path_rate = config.drop_path_rates[layer_idx]
+        self.drop_path = LwDetrViTDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+
+        self.window = layer_idx in config.window_block_indices
+        self.num_windows = config.num_windows
+        self.num_windows_side = int(math.sqrt(self.num_windows))
+        self.use_cae = config.use_cae
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         batch_size, seq_len, channels = hidden_states.shape
-
-        shortcut = hidden_states
-
-        hidden_states = self.norm1(hidden_states)
+        hidden_states_norm = self.layernorm_before(hidden_states)
 
         if not self.window:
-            hidden_states = hidden_states.reshape(batch_size // self.num_windows, self.num_windows * seq_len, channels)
+            hidden_states_norm = hidden_states_norm.reshape(
+                batch_size // self.num_windows, self.num_windows * seq_len, channels
+            )
             if head_mask is not None:
                 head_mask = head_mask.reshape(batch_size // self.num_windows, self.num_windows * seq_len)
 
-        self_attention_outputs = self.attention(
-            hidden_states,
-            output_attentions=output_attentions,
-        )
-        hidden_states = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        attention_output = self.attention(hidden_states_norm, head_mask, **kwargs)
 
         if self.use_cae:
-            hidden_states = hidden_states * self.gamma_1
+            attention_output = attention_output * self.gamma_1
 
         if not self.window:
-            hidden_states = hidden_states.reshape(batch_size, seq_len, channels)
+            attention_output = attention_output.reshape(batch_size, seq_len, channels)
             if head_mask is not None:
                 head_mask = head_mask.reshape(batch_size, seq_len)
 
         # first residual connection
-        hidden_states = shortcut + self.drop_path(hidden_states)
+        hidden_states = hidden_states + self.drop_path(attention_output)
 
-        shortcut = hidden_states
-
-        hidden_states = self.norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        layer_output = self.layernorm_after(hidden_states)
+        layer_output = self.intermediate(layer_output)
 
         if self.use_cae:
-            hidden_states = hidden_states * self.gamma_2
+            layer_output = layer_output * self.gamma_2
 
-        hidden_states = shortcut + self.drop_path(hidden_states)
+        hidden_states = hidden_states + self.drop_path(layer_output)
 
-        outputs = (hidden_states,) + outputs
-
-        return outputs
+        return hidden_states
 
 
-class LwDetrVitEncoder(nn.Module):
-    def __init__(self, config: LwDetrVitConfig) -> None:
+class LwDetrViTEncoder(nn.Module):
+    def __init__(self, config: LwDetrViTConfig) -> None:
         super().__init__()
         self.config = config
-        depth = config.num_hidden_layers
-
-        # stochastic depth decay rule
-        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth, device="cpu")]
-
-        layers = []
-        for i in range(depth):
-            layers.append(
-                LwDetrVitLayer(
-                    config,
-                    drop_path_rate=drop_path_rate[i],
-                    window=i in config.window_block_indices,
-                )
-            )
-
-        self.layer = nn.ModuleList(layers)
+        self.layer = nn.ModuleList([LwDetrViTLayer(config, i) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        batch_size, channels, height, width = hidden_states.shape
-        # (batch_size, channels, height, width) -> (batch_size, height, width, channels)
-        hidden_states = hidden_states.permute(0, 2, 3, 1)
-        assert (height % 4 == 0) and (width % 4 == 0)  # TODO: remove this
-        num_windows_side = int(math.sqrt(self.config.num_windows))
-        window_height = height // num_windows_side
-        window_width = width // num_windows_side
-
-        # (batch_size, height, width, channels) -> (batch_size*16, window_height*window_width, channels)
-        windowed_hidden_states = (
-            hidden_states.reshape(batch_size, 4, window_height, 4, window_width, channels)
-            .permute(0, 1, 3, 2, 4, 5)
-            .reshape(batch_size * 16, window_height * window_width, channels)
-        )
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        list_hidden_states = []
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = layer_module(windowed_hidden_states, layer_head_mask, output_attentions)
-
-            windowed_hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-            if output_hidden_states:
-                hidden_states = (
-                    windowed_hidden_states.reshape(
-                        batch_size, num_windows_side, num_windows_side, window_height, window_width, channels
-                    )
-                    .permute(0, 5, 1, 3, 2, 4)
-                    .reshape(batch_size, channels, height, width)
-                )
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=windowed_hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+            hidden_states = layer_module(hidden_states, layer_head_mask, **kwargs)
+            list_hidden_states.append(hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=tuple(list_hidden_states))
 
 
-class LwDetrVitEmbeddings(nn.Module):
+class LwDetrViTEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) to be consumed by a Transformer.
@@ -389,88 +372,21 @@ class LwDetrVitEmbeddings(nn.Module):
         return embeddings
 
 
-class LwDetrVitLayerNorm(nn.Module):
-    """
-    A LayerNorm variant, popularized by Transformers, that performs point-wise mean and variance normalization over the
-    channel dimension for inputs that have shape (batch_size, channels, height, width).
-    https://github.com/facebookresearch/ConvNeXt/blob/d1fa8f6fef0a165b27399986cc2bdacc92777e40/models/convnext.py#L119
-    """
-
-    def __init__(self, normalized_shape, eps=1e-6):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
-        self.normalized_shape = (normalized_shape,)
-
-    def forward(self, x):
-        u = x.mean(1, keepdim=True)
-        s = (x - u).pow(2).mean(1, keepdim=True)
-        x = (x - u) / torch.sqrt(s + self.eps)
-        x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
-
-
-class LwDetrVitResBottleneckBlock(nn.Module):
-    """
-    The standard bottleneck residual block without the last activation layer. It contains 3 conv layers with kernels
-    1x1, 3x3, 1x1.
-    """
-
-    def __init__(self, config, in_channels, out_channels, bottleneck_channels):
-        """
-        Args:
-            config (`LwDetrVitConfig`):
-                Model configuration.
-            in_channels (`int`):
-                Number of input channels.
-            out_channels (`int`):
-                Number of output channels.
-            bottleneck_channels (`int`):
-                Number of output channels for the 3x3 "bottleneck" conv layers.
-        """
-        super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, bottleneck_channels, 1, bias=False)
-        self.norm1 = LwDetrVitLayerNorm(bottleneck_channels)
-        self.act1 = ACT2FN[config.hidden_act]
-
-        self.conv2 = nn.Conv2d(bottleneck_channels, bottleneck_channels, 3, padding=1, bias=False)
-        self.norm2 = LwDetrVitLayerNorm(bottleneck_channels)
-        self.act2 = ACT2FN[config.hidden_act]
-
-        self.conv3 = nn.Conv2d(bottleneck_channels, out_channels, 1, bias=False)
-        self.norm3 = LwDetrVitLayerNorm(out_channels)
-
-    def forward(self, x):
-        out = x
-        for layer in self.children():
-            out = layer(out)
-
-        out = x + out
-        return out
-
-
-def caffe2_msra_fill(module: nn.Module) -> None:
-    """
-    Initialize `module.weight` using the "MSRAFill" implemented in Caffe2. Also initializes `module.bias` to 0.
-
-    Source: https://detectron2.readthedocs.io/en/latest/_modules/fvcore/nn/weight_init.html.
-
-    Args:
-        module (torch.nn.Module): module to initialize.
-    """
-    nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-    if module.bias is not None:
-        nn.init.constant_(module.bias, 0)
-
-
 @auto_docstring
-class LwDetrVitPreTrainedModel(PreTrainedModel):
-    config: LwDetrVitConfig
+class LwDetrViTPreTrainedModel(PreTrainedModel):
+    config: LwDetrViTConfig
     base_model_prefix = "lw_detr_vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = ["LwDetrViTEmbeddings", "LwDetrViTLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": ["LwDetrViTLayer", "LwDetrViTEncoder"],
+        "attentions": LwDetrViTSelfAttention,
+    }
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -486,73 +402,51 @@ class LwDetrVitPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-        elif isinstance(module, LwDetrVitEmbeddings):
+        elif isinstance(module, LwDetrViTEmbeddings):
             module.position_embeddings.data = nn.init.trunc_normal_(
                 module.position_embeddings.data.to(torch.float32),
                 mean=0.0,
                 std=self.config.initializer_range,
             ).to(module.position_embeddings.dtype)
-
-        elif isinstance(module, LwDetrVitAttention) and self.config.use_relative_position_embeddings:
-            module.rel_pos_h.data = nn.init.trunc_normal_(
-                module.rel_pos_h.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            )
-            module.rel_pos_w.data = nn.init.trunc_normal_(
-                module.rel_pos_w.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            )
-
-        elif isinstance(module, LwDetrVitResBottleneckBlock):
-            for layer in [module.conv1, module.conv2, module.conv3]:
-                caffe2_msra_fill(layer)
-            for layer in [module.norm1, module.norm2]:
-                layer.weight.data.fill_(1.0)
-                layer.bias.data.zero_()
-            # zero init last norm layer.
-            module.norm3.weight.data.zero_()
-            module.norm3.bias.data.zero_()
+        elif isinstance(module, LwDetrViTLayer):
+            if module.use_cae:
+                nn.init.constant_(module.gamma_1, self.config.cae_init_values)
+                nn.init.constant_(module.gamma_2, self.config.cae_init_values)
 
 
 @auto_docstring(
     custom_intro="""
-    LwDetrVit backbone, to be used with frameworks like Mask R-CNN.
+    LwDetrViT backbone, to be used with frameworks like Mask R-CNN.
     """
 )
-class LwDetrVitBackbone(LwDetrVitPreTrainedModel, BackboneMixin):
+class LwDetrViTBackbone(LwDetrViTPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
-        self.embeddings = LwDetrVitEmbeddings(config)
-        self.encoder = LwDetrVitEncoder(config)
+        self.embeddings = LwDetrViTEmbeddings(config)
+        self.encoder = LwDetrViTEncoder(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
 
         # initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> LwDetrVitEmbeddings:
+    def get_input_embeddings(self) -> LwDetrViTEmbeddings:
         return self.embeddings.projection
 
     @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> BackboneOutput:
+    @can_return_tuple
+    @check_model_inputs
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
         Examples:
 
         ```python
-        >>> from transformers import LwDetrVitConfig, LwDetrVitBackbone
+        >>> from transformers import LwDetrViTConfig, LwDetrViTBackbone
         >>> import torch
 
-        >>> config = LwDetrVitConfig()
-        >>> model = LwDetrVitBackbone(config)
+        >>> config = LwDetrViTConfig()
+        >>> model = LwDetrViTBackbone(config)
 
         >>> pixel_values = torch.randn(1, 3, 224, 224)
 
@@ -563,40 +457,49 @@ class LwDetrVitBackbone(LwDetrVitPreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 768, 14, 14]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        embedding_output = self.embeddings(pixel_values, **kwargs)
+
+        batch_size, channels, height, width = embedding_output.shape
+        # (batch_size, channels, height, width) -> (batch_size, height, width, channels)
+        hidden_states = embedding_output.permute(0, 2, 3, 1)
+
+        window_height = height // self.config.num_windows_side
+        window_width = width // self.config.num_windows_side
+        # (batch_size, height, width, channels) -> (batch_size*16, window_height*window_width, channels)
+        hidden_states = (
+            hidden_states.reshape(
+                batch_size,
+                self.config.num_windows_side,
+                window_height,
+                self.config.num_windows_side,
+                window_width,
+                channels,
+            )
+            .permute(0, 1, 3, 2, 4, 5)
+            .reshape(batch_size * 16, window_height * window_width, channels)
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        embedding_output = self.embeddings(pixel_values)
-
-        outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=True,
-            output_attentions=output_attentions,
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        encoder_outputs = self.encoder(hidden_states, **kwargs)
+        hidden_states = encoder_outputs.hidden_states
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
+                hidden_state = (
+                    hidden_state.reshape(
+                        batch_size,
+                        self.config.num_windows_side,
+                        self.config.num_windows_side,
+                        window_height,
+                        window_width,
+                        channels,
+                    )
+                    .permute(0, 5, 1, 3, 2, 4)
+                    .reshape(batch_size, channels, height, width)
+                )
                 feature_maps += (hidden_state,)
 
-        if not return_dict:
-            if output_hidden_states:
-                output = (feature_maps,) + outputs[1:]
-            else:
-                output = (feature_maps,) + outputs[2:]
-            return output
-
-        return BackboneOutput(
-            feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
-        )
+        return BackboneOutput(feature_maps=feature_maps)
 
 
-__all__ = ["LwDetrVitPreTrainedModel", "LwDetrVitBackbone"]
+__all__ = ["LwDetrViTPreTrainedModel", "LwDetrViTBackbone"]
