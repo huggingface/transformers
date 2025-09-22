@@ -246,8 +246,9 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         # fmt: on
         torch.testing.assert_close(inputs["input_ids"], EXPECTED_INPUT_IDS)
 
-        EXPECTED_DECODED_TEXT = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nAudio 1: <|audio_bos|><|AUDIO|><|audio_eos|>\nWhat's that sound?<|im_end|>\n<|im_start|>assistant\nIt's a bird chirping.<|im_end|>"
-
+        # fmt: off
+        EXPECTED_DECODED_TEXT = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nAudio 1: <|audio_bos|>" + "<|AUDIO|>" * 101 + "<|audio_eos|>\nWhat's that sound?<|im_end|>\n<|im_start|>assistant\nIt is the sound of glass breaking.<|im_end|>"
+        # fmt: on
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=False),
             EXPECTED_DECODED_TEXT,
