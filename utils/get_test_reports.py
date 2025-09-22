@@ -107,6 +107,9 @@ def handle_suite(
     if only_in is not None:
         subdirs = [s for s in subdirs if s.name in only_in]
     if subdirs and total_processes > 1:
+        # This interleaves the subdirs / files. For instance for subdirs = [A, B, C, D, E] and 2 processes:
+        # - script launcehd with `--processes 0 2` will run A, C, E
+        # - script launcehd with `--processes 1 2` will run B, D
         subdirs = subdirs[process_id::total_processes]
 
     # If the subdir list is not empty, go through each
@@ -171,6 +174,7 @@ if __name__ == "__main__":
     parser.add_argument("--suite", type=str, default="models", help="Test suit to run")
     parser.add_argument("--cpu-tests", action="store_true", help="Also runs non-device tests")
     parser.add_argument("--run-slow", action="store_true", help="Run slow tests instead of skipping them")
+    parser.add_argument("--collect-outputs", action="store_true", help="Collect outputs of the tests")
 
     # Fine-grain control over the tests to run
     parser.add_argument("--resume-at", type=str, default=None, help="Resume at a specific subdir / file in the suite")
@@ -186,7 +190,8 @@ if __name__ == "__main__":
         "--processes",
         type=int,
         nargs="+",
-        help="Inform each CI process as to the work to do: format as `process_id total_processes` ",
+        help="Inform each CI process as to the work to do: format as `process_id total_processes`. "
+             "In order to run with multiple (eg. 3) processes, you need to run the script multiple times (eg. 3 times)."
     )
     parser.add_argument("--dry-run", action="store_true", help="Only print commands without running them")
     parser.add_argument("--tmp-cache", type=str, help="Change HUGGINGFACE_HUB_CACHE to a tmp dir for each test")
@@ -217,6 +222,12 @@ if __name__ == "__main__":
     if not test_root.exists():
         print(f"Root test folder not found: {test_root}")
         exit(1)
+
+    # Handle collection of outputs
+    if args.collect_outputs:
+        os.environ["PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS"] = "yes"
+        reports_dir = test_root.parent / "reports"
+        os.environ["_PATCHED_TESTING_METHODS_OUTPUT_DIR"] = str(reports_dir)
 
     # Infer machine type if not provided
     if args.machine_type == "":
