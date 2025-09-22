@@ -737,8 +737,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
             return torch.Generator().manual_seed(seed)
         else:
-            import numpy as np
-
             return np.random.default_rng(seed)
 
     def create_rng(self):
