@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 백본 (Backbone) [[backbones]] 
+# 백본 (Backbone) [[backbone]] 
 
 백본(backbone)은 객체 탐지나 이미지 분류와 같은 상위 수준의 컴퓨터 비전 작업을 위해 특성(feature) 추출에 사용되는 모델을 말합니다. Transformers 라이브러리는 사전 학습된 모델 가중치로부터 Transformers 백본을 초기화할 수 있는 [`AutoBackbone`] 클래스를 제공하며, 다음 두 가지 유틸리티 클래스도 포함합니다:
 
