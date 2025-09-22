@@ -15,12 +15,16 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LwDetrViTModel`]. It is used to instantiate an
-    LwDetrViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the LwDetrViT
-    [google/lw_detr_vit-base-patch16-224](https://huggingface.co/google/lw_detr_vit-base-patch16-224) architecture.
+    LW-DETR ViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the LW-DETR ViT
+    [stevenbucaille/lwdetr_small_60e_coco](https://huggingface.co/stevenbucaille/lwdetr_small_60e_coco) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    LW-DETR ViT is the Vision Transformer backbone used in the LW-DETR model for real-time object detection. It features
+    interleaved window and global attention mechanisms to reduce computational complexity while maintaining high performance.
+    The model uses a window-major feature map organization for efficient attention computation.
+
+    Configuration objects inherit from [`VitDetConfig`] and can be used to control the model outputs. Read the
+    documentation from [`VitDetConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -40,7 +44,7 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 256):
             The size (resolution) of each image.
         pretrain_image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image during pretraining.
@@ -54,14 +58,8 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
             Stochastic depth rate.
         window_block_indices (`list[int]`, *optional*, defaults to `[]`):
             List of indices of blocks that should have window attention instead of regular global self-attention.
-        residual_block_indices (`list[int]`, *optional*, defaults to `[]`):
-            List of indices of blocks that should have an extra residual block after the MLP.
         use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to add absolute position embeddings to the patch embeddings.
-        use_relative_position_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to add relative position embeddings to the attention maps.
-        window_size (`int`, *optional*, defaults to 0):
-            The size of the attention window.
         out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
@@ -72,13 +70,21 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
+        use_cae (`bool`, *optional*, defaults to `True`):
+            Whether to use Cross-Attention Enhancement (CAE) mechanism. When enabled, the key projection in attention
+            layers uses a different bias configuration for improved performance.
+        cae_init_values (`float`, *optional*, defaults to 0.1):
+            Initialization value for CAE parameters when `use_cae` is enabled.
+        num_windows (`int`, *optional*, defaults to 16):
+            Number of windows for window-based attention. Must be a perfect square and the image size must be
+            divisible by the square root of this value. This enables efficient window-major feature map organization.
 
     Example:
 
     ```python
     >>> from transformers import LwDetrViTConfig, LwDetrViTModel
 
-    >>> # Initializing a LwDetrViT configuration
+    >>> # Initializing a LW-DETR ViT configuration
     >>> configuration = LwDetrViTConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
@@ -111,10 +117,7 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
         qkv_bias=True,
         drop_path_rate=0.0,
         window_block_indices=[],
-        residual_block_indices=[],
         use_absolute_position_embeddings=True,
-        use_relative_position_embeddings=False,
-        window_size=0,
         out_features=None,
         out_indices=None,
         use_cae: bool = True,
@@ -140,8 +143,6 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.window_block_indices = window_block_indices
         self.use_absolute_position_embeddings = use_absolute_position_embeddings
-        self.use_relative_position_embeddings = use_relative_position_embeddings
-        self.window_size = window_size
 
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(

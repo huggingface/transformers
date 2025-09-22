@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -7,10 +7,11 @@ from torch import nn
 
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
-from ..vit.modeling_vit import ViTAttention, ViTEncoder, ViTSelfAttention
+from ..vit.modeling_vit import ViTAttention, ViTEncoder, ViTSelfAttention, eager_attention_forward
 from ..vitdet.configuration_vitdet import VitDetConfig
 from ..vitdet.modeling_vitdet import (
     VitDetBackbone,
@@ -25,6 +26,87 @@ logger = logging.get_logger(__name__)
 
 
 class LwDetrViTConfig(VitDetConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`LwDetrViTModel`]. It is used to instantiate an
+    LW-DETR ViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the LW-DETR ViT
+    [stevenbucaille/lwdetr_small_60e_coco](https://huggingface.co/stevenbucaille/lwdetr_small_60e_coco) architecture.
+
+    LW-DETR ViT is the Vision Transformer backbone used in the LW-DETR model for real-time object detection. It features
+    interleaved window and global attention mechanisms to reduce computational complexity while maintaining high performance.
+    The model uses a window-major feature map organization for efficient attention computation.
+
+    Configuration objects inherit from [`VitDetConfig`] and can be used to control the model outputs. Read the
+    documentation from [`VitDetConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        mlp_ratio (`int`, *optional*, defaults to 4):
+            Ratio of mlp hidden dim to embedding dim.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        image_size (`int`, *optional*, defaults to 256):
+            The size (resolution) of each image.
+        pretrain_image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image during pretraining.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            Stochastic depth rate.
+        window_block_indices (`list[int]`, *optional*, defaults to `[]`):
+            List of indices of blocks that should have window attention instead of regular global self-attention.
+        use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to add absolute position embeddings to the patch embeddings.
+        out_features (`list[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`list[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        use_cae (`bool`, *optional*, defaults to `True`):
+            Whether to use Cross-Attention Enhancement (CAE) mechanism. When enabled, the key projection in attention
+            layers uses a different bias configuration for improved performance.
+        cae_init_values (`float`, *optional*, defaults to 0.1):
+            Initialization value for CAE parameters when `use_cae` is enabled.
+        num_windows (`int`, *optional*, defaults to 16):
+            Number of windows for window-based attention. Must be a perfect square and the image size must be
+            divisible by the square root of this value. This enables efficient window-major feature map organization.
+
+    Example:
+
+    ```python
+    >>> from transformers import LwDetrViTConfig, LwDetrViTModel
+
+    >>> # Initializing a LW-DETR ViT configuration
+    >>> configuration = LwDetrViTConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = LwDetrViTModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "lw_detr_vit"
     attribute_map = {
         "attention_probs_dropout_prob": "dropout_prob",
@@ -33,14 +115,53 @@ class LwDetrViTConfig(VitDetConfig):
 
     def __init__(
         self,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        mlp_ratio=4,
+        hidden_act="gelu",
+        dropout_prob=0.0,
+        initializer_range=0.02,
+        layer_norm_eps=1e-6,
         image_size=256,
+        pretrain_image_size=224,
+        patch_size=16,
+        num_channels=3,
+        qkv_bias=True,
+        drop_path_rate=0.0,
+        window_block_indices=[],
+        use_absolute_position_embeddings=True,
+        out_features=None,
+        out_indices=None,
         use_cae: bool = True,
         cae_init_values: float = 0.1,
         num_windows=16,
-        **super_kwargs,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
+        super().__init__(
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            mlp_ratio=mlp_ratio,
+            hidden_act=hidden_act,
+            dropout_prob=dropout_prob,
+            initializer_range=initializer_range,
+            layer_norm_eps=layer_norm_eps,
+            image_size=image_size,
+            pretrain_image_size=pretrain_image_size,
+            patch_size=patch_size,
+            num_channels=num_channels,
+            qkv_bias=qkv_bias,
+            drop_path_rate=drop_path_rate,
+            window_block_indices=window_block_indices,
+            use_absolute_position_embeddings=use_absolute_position_embeddings,
+            out_features=out_features,
+            out_indices=out_indices,
+            **kwargs,
+        )
         del self.residual_block_indices
+        del self.use_relative_position_embeddings
+        del self.window_size
 
         self.use_cae = use_cae
         self.cae_init_values = cae_init_values
@@ -65,6 +186,40 @@ class LwDetrViTSelfAttention(ViTSelfAttention):
             self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
         else:
             self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+
+        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
+        )
+
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.reshape(new_context_layer_shape)
+
+        return context_layer, attention_probs
 
 
 class LwDetrViTAttention(ViTAttention):
@@ -176,6 +331,7 @@ class LwDetrViTEncoder(ViTEncoder):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         list_hidden_states = []
+        list_hidden_states.append(hidden_states)
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             hidden_states = layer_module(hidden_states, layer_head_mask, **kwargs)
@@ -229,8 +385,8 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
 
 
 class LwDetrViTBackbone(VitDetBackbone):
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     @check_model_inputs
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
@@ -252,7 +408,7 @@ class LwDetrViTBackbone(VitDetBackbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 14, 14]
         ```"""
-        embedding_output = self.embeddings(pixel_values, **kwargs)
+        embedding_output = self.embeddings(pixel_values)
 
         batch_size, channels, height, width = embedding_output.shape
         # (batch_size, channels, height, width) -> (batch_size, height, width, channels)
@@ -294,7 +450,12 @@ class LwDetrViTBackbone(VitDetBackbone):
                 )
                 feature_maps += (hidden_state,)
 
-        return BackboneOutput(feature_maps=feature_maps)
+        output_hidden_states = self.config.output_hidden_states or kwargs.get("output_hidden_states", False)
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=encoder_outputs.hidden_states if output_hidden_states else None,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 __all__ = ["LwDetrViTConfig", "LwDetrViTPreTrainedModel", "LwDetrViTBackbone"]
