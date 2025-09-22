@@ -35,3 +35,10 @@ RUN python3 -m pip uninstall -y kernels
 
 # On ROCm, torchcodec is required to decode audio files and 0.4 or 0.6 fails
 RUN python3 -m pip install --no-cache-dir "torchcodec==0.5"
+
+# Install flash attention from source
+RUN git clone https://github.com/ROCm/flash-attention/ -b tridao && \
+    cd flash-attention && \
+    GPU_ARCHS="gfx942" python setup.py install
+
+RUN python3 -m pip install --no-cache-dir einops
