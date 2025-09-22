@@ -1004,7 +1004,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         hyp = []
         last_label = self.blank_token_id
 
-        last_label = torch.LongTensor([[last_label]]) #.to(self.decoder.device)
+        last_label = torch.LongTensor([[last_label]])
         g, hidden_prime = self.decoder(last_label, None)
 
         while t < T:
@@ -1023,7 +1023,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 if token != self.blank_token_id:
                     hyp.append(token)
                     last_label = token
-                    last_label = torch.LongTensor([[last_label]]) #.to(self.decoder.device)
+                    last_label = torch.LongTensor([[last_label]])
                     g, hidden_prime = self.decoder(last_label, hidden_prime)
 
                 if duration == 0:
