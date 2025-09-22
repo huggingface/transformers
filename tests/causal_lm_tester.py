@@ -69,13 +69,13 @@ class CausalLMModelTester:
                 )
 
         # Others are optional, but must be set to a valid model class
-        tester_class_attribute_names = [
+        tester_class_attribute_names = (
             "base_model_class",
             "causal_lm_class",
             "question_answering_class",
             "sequence_classification_class",
             "token_classification_class",
-        ]
+        )
         for model_attribute_name in tester_class_attribute_names:
             model_class = getattr(cls, model_attribute_name)
             if model_class is not None and "PreTrainedModel" not in str(model_class.__mro__):
@@ -103,13 +103,13 @@ class CausalLMModelTester:
         # any of the common classes.
         return [
             model_class
-            for model_class in [
+            for model_class in (
                 self.base_model_class,
                 self.causal_lm_class,
                 self.question_answering_class,
                 self.sequence_classification_class,
                 self.token_classification_class,
-            ]
+            )
             if model_class is not None
         ]
 
