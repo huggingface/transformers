@@ -43,7 +43,6 @@ if is_torch_available():
 
 class JetMoeModelTester(CausalLMModelTester):
     config_class = JetMoeConfig
-    forced_config_args = ["pad_token_id"]
     if is_torch_available():
         base_model_class = JetMoeModel
         causal_lm_class = JetMoeForCausalLM

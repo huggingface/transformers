@@ -35,7 +35,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
@@ -77,10 +76,6 @@ class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Exaone4ModelTester
     model_split_percents = [0.5, 0.6]
-
-    def setUp(self):
-        self.model_tester = Exaone4ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Exaone4Config, hidden_size=37)
 
 
 @require_torch

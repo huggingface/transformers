@@ -29,7 +29,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
@@ -77,10 +76,6 @@ class NemotronModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = NemotronForCausalLM if is_torch_available() else None
-
-    def setUp(self):
-        self.model_tester = NemotronModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NemotronConfig, hidden_size=37)
 
     @unittest.skip("Eager and SDPA do not produce the same outputs, thus this test fails")
     def test_model_outputs_equivalence(self, **kwargs):

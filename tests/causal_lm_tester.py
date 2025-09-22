@@ -44,9 +44,9 @@ if is_torch_available():
 
 class CausalLMModelTester:
     _required_attributes = ("base_model_class", "config_class", "causal_lm_class")
-    forced_config_args = [
-        "pad_token_id"
-    ]  # Arguments that should be passed to the config class even if not in its signature
+    # Arguments that should be passed to the config class even if not in its signature
+    forced_config_args = ["pad_token_id"]
+
     config_class = None
     base_model_class = None
     causal_lm_class = None
