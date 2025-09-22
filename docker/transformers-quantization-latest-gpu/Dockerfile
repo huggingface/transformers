@@ -65,7 +65,7 @@ RUN python3 -m pip install --no-cache-dir compressed-tensors
 RUN python3 -m pip install --no-cache-dir amd-quark
 
 # Add AutoRound for quantization testing
-RUN python3 -m pip install --no-cache-dir "auto-round>=0.5.0"
+RUN python3 -m pip install --no-cache-dir auto-round
 
 # Add torchao for quantization testing
 RUN python3 -m pip install --no-cache-dir torchao
