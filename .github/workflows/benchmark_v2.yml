@@ -71,6 +71,7 @@ jobs:
           --commit-id '${{ inputs.commit_sha || github.sha }}' \
           --run-id '${{ inputs.run_id }}' \
           --upload-to-hub '${{ inputs.benchmark_repo_id}}' \
+          --token '${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}' \
           --log-level INFO
         env:
           HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
