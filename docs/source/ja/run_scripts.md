@@ -111,23 +111,6 @@ python examples/pytorch/summarization/run_summarization.py \
 ```
 
 </pt>
-<tf>
-この例のスクリプトは、🤗 [Datasets](https://huggingface.co/docs/datasets/) ライブラリからデータセットをダウンロードして前処理します。その後、スクリプトは要約をサポートするアーキテクチャ上で Keras を使用してデータセットをファインチューニングします。以下の例では、[T5-small](https://huggingface.co/google-t5/t5-small) を [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) データセットでファインチューニングする方法を示しています。T5 モデルは、そのトレーニング方法に起因して追加の `source_prefix` 引数が必要です。このプロンプトは、T5 にこれが要約タスクであることを知らせます。
-
-
-```bash
-python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
 </frameworkcontent>
 
 ## Distributed training and mixed precision
@@ -180,23 +163,6 @@ python xla_spawn.py --num_cores 8 \
     --predict_with_generate
 ```
 </pt>
-<tf>
-もちろん、Tensor Processing Units（TPUs）は性能を高速化するために特別に設計されています。TensorFlowスクリプトは、TPUsでトレーニングするために[`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy)を利用します。TPUを使用するには、TPUリソースの名前を`tpu`引数に渡します。
-
-```bash
-python run_summarization.py  \
-    --tpu name_of_tpu_resource \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
 </frameworkcontent>
 
 ## Run a script with 🤗 Accelerate

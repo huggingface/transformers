@@ -215,25 +215,6 @@ del paquete `transformers.onnx` al directorio deseado:
 python -m transformers.onnx --model=local-pt-checkpoint onnx/
 ```
 </pt>
-<tf>
-```python
->>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-
->>> # Load tokenizer and TensorFlow weights from the Hub
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
->>> # Save to disk
->>> tokenizer.save_pretrained("local-tf-checkpoint")
->>> tf_model.save_pretrained("local-tf-checkpoint")
-```
-
-Una vez que se guarda el checkpoint, podemos exportarlo a ONNX usando el argumento `--model` 
-del paquete `transformers.onnx` al directorio deseado:
-
-```bash
-python -m transformers.onnx --model=local-tf-checkpoint onnx/
-```
-</tf>
 </frameworkcontent>
 
 ### Seleccionar características para diferentes topologías de un modelo

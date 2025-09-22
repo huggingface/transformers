@@ -94,30 +94,6 @@ TensorFlowからPyTorchにチェックポイントを変換するには、`from_
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 </pt>
-<tf>
-
-指定して、PyTorchからTensorFlowにチェックポイントを変換するには `from_pt=True` を使用します：
-
-```python
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
-```
-
-新しいTensorFlowモデルとその新しいチェックポイントを保存できます：
-
-```python
->>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
-```
-</tf>
-<tf>
-<jax>
-Flaxでモデルが利用可能な場合、PyTorchからFlaxへのチェックポイントの変換も行うことができます：
-
-```py
->>> flax_model = FlaxDistilBertForSequenceClassification.from_pretrained(
-...     "path/to/awesome-name-you-picked", from_pt=True
-... )
-```
-</jax>
 </frameworkcontent>
 
 ## Push a model during traning
@@ -165,28 +141,6 @@ Pass your training arguments as usual to [`Trainer`]:
 ```
 
 </pt>
-<tf>
-
-[`PushToHubCallback`]を使用してモデルをHubに共有します。[`PushToHubCallback`]関数には、次のものを追加します：
-
-- モデルの出力ディレクトリ。
-- トークナイザ。
-- `hub_model_id`、つまりHubのユーザー名とモデル名。
-
-```python
->>> from transformers import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="./your_model_save_path", tokenizer=tokenizer, hub_model_id="your-username/my-awesome-model"
-... )
-```
-
-🤗 Transformersは[`fit`](https://keras.io/api/models/model_training_apis/)にコールバックを追加し、トレーニング済みモデルをHubにプッシュします：
-
-```py
->>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
-```
-</tf>
 </frameworkcontent>
 
 ## `push_to_hub` 関数を使用する

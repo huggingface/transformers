@@ -90,30 +90,6 @@ Specifica `from_tf=True` per convertire un checkpoint da TensorFlow a PyTorch:
 >>> pt_model.save_pretrained("path/verso/il-nome-magnifico-che-hai-scelto")
 ```
 </pt>
-<tf>
-Specifica `from_pt=True` per convertire un checkpoint da PyTorch a TensorFlow:
-
-```py
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained(
-...     "path/verso/il-nome-magnifico-che-hai-scelto", from_pt=True
-... )
-```
-
-Poi puoi salvare il tuo nuovo modello in TensorFlow con il suo nuovo checkpoint:
-
-```py
->>> tf_model.save_pretrained("path/verso/il-nome-magnifico-che-hai-scelto")
-```
-</tf>
-<jax>
-Se un modello è disponibile in Flax, puoi anche convertire un checkpoint da PyTorch a Flax:
-
-```py
->>> flax_model = FlaxDistilBertForSequenceClassification.from_pretrained(
-...     "path/verso/il-nome-magnifico-che-hai-scelto", from_pt=True
-... )
-```
-</jax>
 </frameworkcontent>
 
 ## Condividi un modello durante il training
@@ -146,29 +122,6 @@ Dopo aver effettuato il fine-tuning del tuo modello, chiama [`~transformers.Trai
 >>> trainer.push_to_hub()
 ```
 </pt>
-<tf>
-Condividi un modello nell'Hub con [`PushToHubCallback`]. Nella funzione [`PushToHubCallback`], aggiungi:
-
-- Una directory di output per il tuo modello.
-- Un tokenizer.
-- L'`hub_model_id`, che è il tuo username sull'Hub e il nome del modello.
-
-```py
->>> from transformers import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="./il_path_dove_salvare_il_tuo_modello",
-...     tokenizer=tokenizer,
-...     hub_model_id="il-tuo-username/il-mio-bellissimo-modello",
-... )
-```
-
-Aggiungi il callback a [`fit`](https://keras.io/api/models/model_training_apis/), e 🤗 Transformers caricherà il modello allenato nell'Hub:
-
-```py
->>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
-```
-</tf>
 </frameworkcontent>
 
 ## Utilizzare la funzione `push_to_hub`

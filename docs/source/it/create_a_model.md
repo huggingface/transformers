@@ -136,32 +136,6 @@ Quando carichi pesi pre-allenati, la configurazione del modello predefinito è a
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </pt>
-<tf>
-Carica gli attributi di configurazione personalizzati nel modello:
-
-```py
->>> from transformers import TFDistilBertModel
-
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
->>> tf_model = TFDistilBertModel(my_config)
-```
-
-
-Questo crea modelli con valori casuali invece di pesi pre-allenati. Non sarai in grado di usare questo modello per niente di utile finché non lo alleni. L'allenamento è un processo costoso e che richiede tempo . Generalmente è meglio usare un modello pre-allenato per ottenere risultati migliori velocemente, utilizzando solo una frazione delle risorse neccesarie per l'allenamento.
-
-Crea un modello pre-allenoto con [`~TFPreTrainedModel.from_pretrained`]:
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Quando carichi pesi pre-allenati, la configurazione del modello predefinito è automaticamente caricato se il modello è fornito da 🤗 Transformers. Tuttavia, puoi ancora sostituire gli attributi - alcuni o tutti - di configurazione del modello predefinito con i tuoi se lo desideri:
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
-```
-
-</tf>
 </frameworkcontent>
 
 ### Model head
@@ -186,23 +160,6 @@ Riutilizza facilmente questo checkpoint per un'altra attività passando ad un mo
 >>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </pt>
-<tf>
-Per esempio, [`TFDistilBertForSequenceClassification`] è un modello DistilBERT base con classificazione di sequenza head. La classificazione di sequenza head è uno strato lineare sopra gli output raggruppati.
-
-```py
->>> from transformers import TFDistilBertForSequenceClassification
-
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Riutilizza facilmente questo checkpoint per un altra attività passando ad un modello head diverso. Per un attività di risposta alle domande, utilizzerai il model head [`TFDistilBertForQuestionAnswering`]. Il head di risposta alle domande è simile alla sequenza di classificazione head tranne per il fatto che è uno strato lineare sopra l'output degli stati nascosti (hidden states in inglese)
-
-```py
->>> from transformers import TFDistilBertForQuestionAnswering
-
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-```
-</tf>
 </frameworkcontent>
 
 ## Tokenizer
