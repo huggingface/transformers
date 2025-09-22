@@ -27,12 +27,11 @@ Behaviors:
 - Returns a `BatchFeature` containing text tokenization and audio features.
 """
 
-from __future__ import annotations
-
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
@@ -40,6 +39,8 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+MAX_AUDIO_LEN = 10 * 60  # 10 minutes
 
 
 class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -49,9 +50,11 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
         },
         "audio_kwargs": {
-            # Placeholder token used in text for audio expansion.
-            "sound_token": "<sound>",
+            "sound_token": "<sound>",  # Placeholder token used in text for audio expansion.
+            "return_attention_mask": True,
+            "padding": "max_length",
         },
+        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
@@ -80,15 +83,24 @@ class AudioFlamingo3Processor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, list[TextInput]],
-        audio: Union[np.ndarray, list[np.ndarray]],
+        audio: Optional[AudioInput] = None,
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> BatchFeature:
-        # Capture desired tensor type for BatchFeature (so `.to(device)` works later)
-        tensor_type = kwargs.pop("tensor_type", None)
+        # Merge defaults with user kwargs (and tokenizer init defaults)
+        call_kwargs = self._merge_kwargs(
+            AudioFlamingo3ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,  # TODO keep?
+            **kwargs,
+        )
 
-        # -----------------------
-        # Normalize & validate IO
-        # -----------------------
+        text_kwargs = call_kwargs["text_kwargs"]
+        audio_kwargs = call_kwargs["audio_kwargs"]
+        common_kwargs = call_kwargs["common_kwargs"]
+        return_tensors = common_kwargs.pop("return_tensors", None)
+        if return_tensors != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
+        # Handle text
         if isinstance(text, str):
             texts: list[str] = [text]
         elif isinstance(text, list) and all(isinstance(t, str) for t in text):
@@ -96,136 +108,88 @@ class AudioFlamingo3Processor(ProcessorMixin):
         else:
             raise ValueError("`text` must be a str or list[str].")
 
-        if isinstance(audio, np.ndarray):
-            audios: list[np.ndarray] = [audio]
-        elif isinstance(audio, list) and all(isinstance(a, np.ndarray) for a in audio):
-            audios = audio
-        else:
-            raise ValueError("`audio` must be a np.ndarray or list[np.ndarray].")
+        # Handle audio
+        audio_inputs = {}
+        if audio is not None:
+            audios = make_list_of_audio(audio)
+            if len(texts) != len(audios):
+                raise ValueError(f"Got {len(texts)} texts but {len(audios)} audios; they must match 1:1.")
+            sound_token: str = audio_kwargs.pop("sound_token")
 
-        if len(texts) != len(audios):
-            raise ValueError(f"Got {len(texts)} texts but {len(audios)} audios; they must match 1:1.")
+            # Determine number of chunks per sample, and flatten
+            if not hasattr(self.feature_extractor, "chunk_length") or not hasattr(
+                self.feature_extractor, "sampling_rate"
+            ):
+                raise AttributeError("Feature extractor must expose `chunk_length` (sec) and `sampling_rate` (Hz).")
 
-        # Merge defaults with user kwargs (and tokenizer init defaults)
-        call_kwargs = self._merge_kwargs(
-            AudioFlamingo3ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        sound_token: str = call_kwargs["audio_kwargs"].pop("sound_token")
+            max_seconds = float(getattr(self.feature_extractor, "chunk_length"))
+            sampling_rate = int(getattr(self.feature_extractor, "sampling_rate"))
+            window_size = int(max_seconds * sampling_rate)
+            max_windows = int(MAX_AUDIO_LEN // max_seconds)
 
-        # -----------------------
-        # Window planning per sample
-        # -----------------------
-        if not hasattr(self.feature_extractor, "chunk_length") or not hasattr(self.feature_extractor, "sampling_rate"):
-            raise AttributeError("Feature extractor must expose `chunk_length` (sec) and `sampling_rate` (Hz).")
+            per_sample_windows: list[int] = []
+            flat_chunks: list[np.ndarray] = []
 
-        max_seconds = float(getattr(self.feature_extractor, "chunk_length"))
-        sampling_rate = int(getattr(self.feature_extractor, "sampling_rate"))
-        window_size = int(max_seconds * sampling_rate)
+            for wav in audios:
+                total = int(wav.shape[0])
+                n_win = max(1, (total + window_size - 1) // window_size)
+                if n_win > max_windows:
+                    logger.warning(
+                        f"Audio duration ({total / sampling_rate:.1f}s) exceeds {MAX_AUDIO_LEN}s; truncating to first {MAX_AUDIO_LEN}s."
+                    )
+                    n_win = max_windows
+                per_sample_windows.append(n_win)
 
-        CAP_WINDOWS = 20  # 10 minutes, since chunk_length=30s
-
-        per_sample_windows: list[int] = []
-        flat_chunks: list[np.ndarray] = []
-
-        for wav in audios:
-            total = int(wav.shape[0])
-            n_win = max(1, (total + window_size - 1) // window_size)
-            if n_win > CAP_WINDOWS:
-                logger.warning(
-                    f"Audio duration ({total / sampling_rate:.1f}s) exceeds 600s; truncating to first 10 minutes."
-                )
-                n_win = CAP_WINDOWS
-            per_sample_windows.append(n_win)
-
-            T_cap = min(total, n_win * window_size)
-            for i in range(n_win):
-                s = i * window_size
-                e = min((i + 1) * window_size, T_cap)
-                flat_chunks.append(wav[s:e])
-
-        # -----------------------
-        # Feature extraction (audio)
-        # -----------------------
-        # Ensure fixed shape with attention mask; avoid key collision with text mask.
-        call_kwargs["audio_kwargs"]["return_attention_mask"] = True
-        call_kwargs["audio_kwargs"]["padding"] = "max_length"
-
-        audio_inputs = self.feature_extractor(
-            flat_chunks,
-            sampling_rate=sampling_rate,
-            **call_kwargs["audio_kwargs"],
-        )
-        audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
-
-        # -----------------------
-        # Post-pool frame counts per window (match encoder schedule)
-        # -----------------------
-        # feature_attention_mask: (num_windows, T_mel_pad)
-        # Conv stack:    L1 = (L_mel - 1)//2 + 1
-        # AvgPool(2,2):  K  = (L1 - 2)//2 + 1
-        feat_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
-        frames_per_window: list[int] = []
-        for L_mel in feat_lengths:
-            L1 = (int(L_mel) - 1) // 2 + 1
-            K = (L1 - 2) // 2 + 1
-            frames_per_window.append(max(1, K))
-
-        # -----------------------
-        # Expand text per sample
-        # -----------------------
-        expanded_texts: list[str] = []
-        w_ptr = 0
-        for idx, t in enumerate(texts):
-            n_win = per_sample_windows[idx]
-            Ks = frames_per_window[w_ptr : w_ptr + n_win]
-            w_ptr += n_win
-
-            sample = t
-            n_placeholders = sample.count(sound_token)
-
-            if n_placeholders and n_placeholders != n_win:
-                raise ValueError(
-                    f"Sample {idx}: found {n_placeholders} '{sound_token}' placeholders, "
-                    f"but audio was split into {n_win} window(s)."
-                )
-
-            if n_placeholders == 0:
-                # No placeholders: prepend all expanded tokens
-                prefix = "".join(sound_token * k for k in Ks)
-                sample = prefix + sample
-            else:
-                # Replace each placeholder in order with k repeated tokens
-                for k in Ks:
-                    sample = sample.replace(sound_token, sound_token * k, 1)
-
-            expanded_texts.append(sample)
-
-        # -----------------------
-        # Tokenize with chat template (single user turn + generation prompt)
-        # -----------------------
-        prompts = [
-            self.tokenizer.apply_chat_template(
-                [{"role": "user", "content": txt}],
-                add_generation_prompt=True,
-                tokenize=False,
+                T_cap = min(total, n_win * window_size)
+                for i in range(n_win):
+                    start = i * window_size
+                    end = min((i + 1) * window_size, T_cap)
+                    flat_chunks.append(wav[start:end])
+            # feature extraction
+            audio_inputs = self.feature_extractor(
+                flat_chunks,
+                sampling_rate=sampling_rate,
+                **audio_kwargs,
             )
-            for txt in expanded_texts
-        ]
-        text_inputs = self.tokenizer(prompts, **call_kwargs["text_kwargs"])
+            audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
-        # -----------------------
-        # Pack and return
-        # -----------------------
-        text_inputs.update(audio_inputs)
-        return BatchFeature(data=text_inputs, tensor_type=tensor_type)
+            # -----------------------
+            # Post-pool frame counts per window (match encoder schedule)
+            # -----------------------
+            # feature_attention_mask: (num_windows, T_mel_pad)
+            # Conv stack:    L1 = (L_mel - 1)//2 + 1
+            # AvgPool(2,2):  K  = (L1 - 2)//2 + 1
+            feat_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
+            frames_per_window: list[int] = []
+            for L_mel in feat_lengths:
+                L1 = (int(L_mel) - 1) // 2 + 1
+                K = (L1 - 2) // 2 + 1
+                frames_per_window.append(max(1, K))
 
-    @property
-    def model_input_names(self) -> list[str]:
-        tok_names = self.tokenizer.model_input_names
-        fea_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tok_names + fea_names + ["feature_attention_mask"]))
+            # Expand text per sample
+            expanded_texts: list[str] = []
+            w_ptr = 0
+            for idx, t in enumerate(texts):
+                n_win = per_sample_windows[idx]
+                Ks = frames_per_window[w_ptr : w_ptr + n_win]
+                w_ptr += n_win
+
+                sample = t
+                n_placeholders = sample.count(sound_token)
+
+                if n_placeholders != 1:
+                    raise ValueError(
+                        f"Sample {idx}: expected exactly 1 '{sound_token}' in the (already templated) text. "
+                        "Place it where audio should appear; the processor will expand it."
+                    )
+                sample = sample.replace(sound_token, sound_token * sum(Ks), 1)
+
+                expanded_texts.append(sample)
+
+        # tokenize
+        text_inputs = self.tokenizer(expanded_texts, **text_kwargs)
+
+        return BatchFeature(data={**text_inputs, **audio_inputs}, tensor_type=return_tensors)
 
 
 __all__ = ["AudioFlamingo3Processor"]
