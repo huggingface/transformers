@@ -99,8 +99,8 @@ class CausalLMModelTester:
 
     @property
     def all_model_classes(self):
-        # Models that set `all_model_classes` in their `XXXModelTest` class must have a class that doesn't fit any of
-        # the common classes.
+        # Models that set `all_model_classes` in their `XXXModelTest` class must have a new class that doesn't fit
+        # any of the common classes.
         return [
             model_class
             for model_class in [

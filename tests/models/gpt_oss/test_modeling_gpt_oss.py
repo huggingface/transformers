@@ -61,28 +61,12 @@ class GptOssModelTester(CausalLMModelTester):
         config_class = GptOssConfig
         base_model_class = GptOssModel
         causal_lm_class = GptOssForCausalLM
-        sequence_class = GptOssForSequenceClassification
-        token_class = GptOssForTokenClassification
-
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GptOssModel,
-            "text-classification": GptOssForSequenceClassification,
-            "text-generation": GptOssForCausalLM,
-            "token-classification": GptOssForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
+        sequence_classification_class = GptOssForSequenceClassification
+        token_classification_class = GptOssForTokenClassification
 
 
 @require_torch
 class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (GptOssModel, GptOssForCausalLM, GptOssForSequenceClassification, GptOssForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": GptOssModel,
@@ -94,8 +78,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester

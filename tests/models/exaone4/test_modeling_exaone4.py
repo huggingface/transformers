@@ -55,24 +55,13 @@ class Exaone4ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Exaone4Model
         causal_lm_class = Exaone4ForCausalLM
-        sequence_class = Exaone4ForSequenceClassification
-        token_class = Exaone4ForTokenClassification
+        sequence_classification_class = Exaone4ForSequenceClassification
         question_answering_class = Exaone4ForQuestionAnswering
+        token_classification_class = Exaone4ForTokenClassification
 
 
 @require_torch
 class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Exaone4Model,
-            Exaone4ForCausalLM,
-            Exaone4ForSequenceClassification,
-            Exaone4ForQuestionAnswering,
-            Exaone4ForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Exaone4Model,
@@ -85,8 +74,6 @@ class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Exaone4ModelTester
     model_split_percents = [0.5, 0.6]

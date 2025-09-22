@@ -58,28 +58,12 @@ class Gemma2ModelTester(CausalLMModelTester):
         config_class = Gemma2Config
         base_model_class = Gemma2Model
         causal_lm_class = Gemma2ForCausalLM
-        sequence_class = Gemma2ForSequenceClassification
-        token_class = Gemma2ForTokenClassification
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Gemma2Model,
-            "text-classification": Gemma2ForSequenceClassification,
-            "token-classification": Gemma2ForTokenClassification,
-            "text-generation": Gemma2ForCausalLM,
-            "zero-shot": Gemma2ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
+        sequence_classification_class = Gemma2ForSequenceClassification
+        token_classification_class = Gemma2ForTokenClassification
 
 
 @require_torch
 class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (Gemma2Model, Gemma2ForCausalLM, Gemma2ForSequenceClassification, Gemma2ForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Gemma2Model,
@@ -92,8 +76,6 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = Gemma2ModelTester
