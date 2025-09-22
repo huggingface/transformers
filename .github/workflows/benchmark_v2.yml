@@ -70,7 +70,7 @@ jobs:
           python3 run_benchmarks.py \
           --commit-id '${{ inputs.commit_sha || github.sha }}' \
           --run-id '${{ inputs.run_id }}' \
-          --upload-to-hub '${{ inputs.benchmark_repo_id}}' \
+          --push-to-hub '${{ inputs.benchmark_repo_id}}' \
           --token '${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}' \
           --log-level INFO
         env:
