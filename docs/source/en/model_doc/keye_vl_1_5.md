@@ -1,4 +1,4 @@
-<!--Copyright 2025 The Kuai Keye Team and The HuggingFace Inc. team. All rights reserved.
+<!--Copyright 2025 The Kwai Keye Team and The HuggingFace Inc. team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -59,16 +59,6 @@ export KEYE_VL_UTILS_PARALLEL_NUM=64
 If you need to disable this fused operator, you can set the environment variable `ENABLE_FUSION_PROCESSOR_OP=0`. This option is enabled by default (`1`).
 
 However, the overall pipeline of this performance-optimized version is tightly coupled with the processing logic of `keye-vl-1.5`. If you intend to implement custom processor operations, it is advisable to avoid using this optimized version.
-
-
-# Keye-VL-Preview
-[Keye-VL-Preview](https://huggingface.co/papers/2507.01949) is an 8-billion-parameter multimodal foundation model, excels in short-video understanding while maintaining robust general-purpose vision-language abilities through a comprehensive pre- and post-training process, including reinforcement learning and alignment.
-
-The abstract from the paper is the following:
-
-*While Multimodal Large Language Models (MLLMs) demonstrate remarkable capabilities on static images, they often fall short in comprehending dynamic, information-dense short-form videos, a dominant medium in today’s digital landscape. To bridge this gap, we introduce Kwai Keye-VL, an 8-billion-parameter multimodal foundation model engineered for leading-edge performance in short-video understanding while maintaining robust general-purpose vision-language abilities. The development of Keye-VL rests on two core pillars: a massive, high-quality dataset exceeding 600 billion tokens with a strong emphasis on video, and an innovative training recipe. This recipe features a four-stage pre-training process for solid vision-language alignment, followed by a meticulous two-phase post-training process. The first post-training stage enhances foundational capabilities like instruction following, while the second phase focuses on stimulating advanced reasoning. In this second phase, a key innovation is our five-mode “cold-start” data mixture, which includes “thinking”, “non-thinking”, “auto-think”, “think with image”, and high-quality video data. This mixture teaches the model to decide when and how to reason. Subsequent reinforcement learning (RL) and alignment steps further enhance these reasoning capabilities and correct abnormal model behaviors, such as repetitive outputs. To validate our approach, we conduct extensive evaluations, showing that Keye-VL achieves state-of-the-art results on public video benchmarks and remains highly competitive on general image-based tasks (Figure 1). Furthermore, we develop and release the KC-MMBench, a new benchmark tailored for real-world short-video scenarios, where Keye-VL shows a significant advantage. Comprehensive human evaluations also confirm that our model provides a superior user experience compared to other leading models of a similar scale. This paper details the architecture, data construction strategy, and training methodology of Keye-VL, offering valuable insights for building the next generation of MLLMs for the video era.*
-
-You can find the original Keye-VL-Preview checkpoint under the [Keye-VL-Preview](https://huggingface.co/Kwai-Keye/Keye-VL-8B-Preview).
 
 The example below demonstrates how to generate text based on an image with the [`AutoModel`] class.
 
