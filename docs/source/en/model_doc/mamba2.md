@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 You can find all the original Mamba 2 checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization, but the examples shown below use [mistralai/Mamba-Codestral-7B-v0.1](https://huggingface.co/mistralai/Mamba-Codestral-7B-v0.1) because a Hugging Face implementation isn't supported yet for the original checkpoints.
 
-A similar Mamba2-based architecture is [Bamba](./bamba).
+Other Mamba 2-based architectures include [Bamba](./bamba), [FalconH1](./falcon_h1), and [Zamba2](./zamba2).
 
 > [!TIP]
 > This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
