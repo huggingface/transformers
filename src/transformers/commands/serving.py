@@ -141,7 +141,7 @@ if serve_dependencies_available:
 
         file: bytes  # Overwritten -- pydantic isn't happy with `typing.IO[bytes]`, present in the original type
         generation_config: str
-        stream: Optional[bool] = False
+        stream: bool = False
 
     # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have built-in validation.
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
@@ -600,7 +600,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def build_chat_completion_chunk(
         self,
-        request_id: Optional[str] = "",
+        request_id: str = "",
         content: Optional[int] = None,
         model: Optional[str] = None,
         role: Optional[str] = None,
