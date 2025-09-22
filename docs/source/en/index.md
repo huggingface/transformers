@@ -42,7 +42,7 @@ Here is an interactive timeline to explore the different model architectures sup
 	frameborder="0"
 	width="125%"
 	height="1200"
-	style="transform: scale(0.8); transform-origin: top left; max-width: 125%;"
+	style="transform: scale(0.8); transform-origin: top left; max-width: calc(100%/0.8); height: 1150px; margin-bottom: calc(-0.2*1150px);"
 ></iframe>
 
 
