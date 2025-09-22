@@ -102,8 +102,6 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 ## AutoModel
 
-<frameworkcontent>
-<pt>
 最後に、`AutoModelFor`クラスは特定のタスクに対して事前学習済みモデルをロードできます（使用可能なタスクの完全な一覧については[こちら](model_doc/auto)を参照）。
 たとえば、[`AutoModelForSequenceClassification.from_pretrained`]を使用してシーケンス分類用のモデルをロードできます：
 
@@ -135,5 +133,3 @@ TensorFlowおよびFlaxのチェックポイントには影響がなく、`from_
 一般的に、事前学習済みモデルのインスタンスをロードするために`AutoTokenizer`クラスと`AutoModelFor`クラスの使用をお勧めします。
 これにより、常に正しいアーキテクチャをロードできます。
 次の[tutorial](preprocessing)では、新しくロードしたトークナイザ、画像プロセッサ、特徴量抽出器、およびプロセッサを使用して、ファインチューニング用にデータセットを前処理する方法を学びます。
-</pt>
-</frameworkcontent>

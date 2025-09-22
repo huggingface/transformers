@@ -116,8 +116,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 يقوم `DataCollatorForMultipleChoice` بتجميع جميع مدخلات النموذج، ويطبق الحشو، ثم يعيد تجميع النتائج في شكلها الأصلي:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from dataclasses import dataclass
@@ -158,8 +156,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ...         batch["labels"] = torch.tensor(labels, dtype=torch.int64)
 ...         return batch
 ```
-</pt>
-</frameworkcontent>
 
 ## التقييم (Evaluate)
 
@@ -186,8 +182,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -241,8 +235,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -263,8 +255,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> candidate2 = "The law applies to baguettes."
 ```
 
-<frameworkcontent>
-<pt>
 قم بتحليل كل مطالبة وزوج إجابة مرشح وأعد تنسورات PyTorch. يجب عليك أيضًا إنشاء بعض `العلامات`:
 
 ```py
@@ -292,5 +282,3 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> predicted_class
 0
 ```
-</pt>
-</frameworkcontent>

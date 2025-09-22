@@ -108,8 +108,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint)
 ```
 
-<frameworkcontent>
-<pt>
 이미지에 몇 가지 이미지 변환을 적용하여 과적합에 대해 모델을 더 견고하게 만듭니다. 여기서 Torchvision의 [`transforms`](https://pytorch.org/vision/stable/transforms.html) 모듈을 사용하지만, 원하는 이미지 라이브러리를 사용할 수도 있습니다.
 
 이미지의 임의 부분을 크롭하고 크기를 조정한 다음, 이미지 평균과 표준 편차로 정규화하세요:
@@ -148,8 +146,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 >>> data_collator = DefaultDataCollator()
 ```
-</pt>
-</frameworkcontent>
 
 
 ## 평가[[evaluate]]
@@ -180,8 +176,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]를 사용하여 모델을 미세 조정하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
@@ -243,8 +237,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 
 <Tip>
@@ -284,8 +276,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 원한다면, `pipeline`의 결과를 수동으로 복제할 수도 있습니다:
 
-<frameworkcontent>
-<pt>
 이미지를 전처리하기 위해 이미지 프로세서를 가져오고 `input`을 PyTorch 텐서로 반환합니다:
 
 ```py
@@ -313,5 +303,3 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 >>> model.config.id2label[predicted_label]
 'beignets'
 ```
-</pt>
-</frameworkcontent>

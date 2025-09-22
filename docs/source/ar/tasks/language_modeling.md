@@ -182,8 +182,6 @@ pip install transformers datasets evaluate
 
 الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorForLanguageModeling`]. من الأفضل أن تقوم بـ *الحشو الديناميكي* للجمل إلى الطول الأطول في الدفعة أثناء التجميع، بدلاً من حشو كامل المجموعة من البيانات إلى الطول الأقصى.
 
-<frameworkcontent>
-<pt>
 استخدم رمز نهاية التسلسل كرمز للحشو، وحدد `mlm_probability` لحجب الرموز بشكل عشوائي عند كل تكرار للبيانات:
 
 ```py
@@ -193,13 +191,9 @@ pip install transformers datasets evaluate
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 ```
 
-</pt>
-</frameworkcontent>
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -257,8 +251,6 @@ Perplexity: 49.61
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -288,8 +280,6 @@ Perplexity: 49.61
 [{'generated_text': "Somatic hypermutation allows the immune system to be able to effectively reverse the damage caused by an infection.\n\n\nThe damage caused by an infection is caused by the immune system's ability to perform its own self-correcting tasks."}]
 ```
 
-<frameworkcontent>
-<pt>
 قسم النص وإرجع `input_ids` كتنسورات PyTorch:
 
 ```py
@@ -315,5 +305,3 @@ Perplexity: 49.61
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ["Somatic hypermutation allows the immune system to react to drugs with the ability to adapt to a different environmental situation. In other words, a system of 'hypermutation' can help the immune system to adapt to a different environmental situation or in some cases even a single life. In contrast, researchers at the University of Massachusetts-Boston have found that 'hypermutation' is much stronger in mice than in humans but can be found in humans, and that it's not completely unknown to the immune system. A study on how the immune system"]
 ```
-</pt>
-</frameworkcontent>

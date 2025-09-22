@@ -116,8 +116,6 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 すべてのモデルは [`PreTrainedModel`] をベースクラスとし、入力埋め込みのリサイズやセルフアテンションヘッドのプルーニングなど、共通のメソッドがいくつかあります。
 さらに、すべてのモデルは [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html)、[`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)、または [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) のいずれかのサブクラスでもあります。つまり、モデルはそれぞれのフレームワークの使用法と互換性があります。
 
-<frameworkcontent>
-<pt>
 モデルにカスタム構成属性をロードします：
 
 ```py
@@ -144,16 +142,12 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
-</pt>
-</frameworkcontent>
 
 
 ### Model heads
 
 この時点で、ベースのDistilBERTモデルがあり、これは隠れた状態を出力します。隠れた状態はモデルのヘッドへの入力として渡され、最終的な出力を生成します。🤗 Transformersは、モデルがそのタスクをサポートしている限り、各タスクに対応する異なるモデルヘッドを提供します（つまり、DistilBERTを翻訳のようなシーケンス対シーケンスタスクに使用することはできません）。
 
-<frameworkcontent>
-<pt>
 たとえば、[`DistilBertForSequenceClassification`]は、シーケンス分類ヘッドを持つベースのDistilBERTモデルです。シーケンス分類ヘッドは、プールされた出力の上にある線形層です。
 
 ```py
@@ -172,8 +166,6 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 >>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-</pt>
-</frameworkcontent>
 
 ## Tokenizer
 

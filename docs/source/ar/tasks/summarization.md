@@ -118,16 +118,12 @@ pip install transformers datasets evaluate rouge_score
 
 الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorForSeq2Seq`].  الأكثر كفاءة *الحشو الديناميكي* للجمل إلى أطول طول في دفعة أثناء عملية التجميع، بدلاً من حشو مجموعة البيانات بأكملها إلى الحد الأقصى للطول.
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-</frameworkcontent>
 
 ## التقييم (Evaluate)
 
@@ -162,8 +158,6 @@ pip install transformers datasets evaluate rouge_score
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -218,8 +212,6 @@ pip install transformers datasets evaluate rouge_score
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -250,8 +242,6 @@ pip install transformers datasets evaluate rouge_score
 
 يمكنك أيضًا تكرار نتائج `pipeline` يدويًا إذا أردت:
 
-<frameworkcontent>
-<pt>
 قسم النص وإرجع `input_ids` كتنسورات PyTorch:
 
 ```py
@@ -276,5 +266,3 @@ pip install transformers datasets evaluate rouge_score
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
 ```
-</pt>
-</frameworkcontent>

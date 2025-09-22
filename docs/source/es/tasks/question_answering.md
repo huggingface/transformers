@@ -138,20 +138,14 @@ Quita las columnas que no necesites:
 
 Usa el [`DefaultDataCollator`] para crear un lote de ejemplos. A diferencia de los otros collators de datos en 🤗 Transformers, el `DefaultDataCollator` no aplica ningún procesamiento adicional (como el rellenado).
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator()
 ```
-</pt>
-</frameworkcontent>
 
 ## Entrenamiento
 
-<frameworkcontent>
-<pt>
 Carga el modelo DistilBERT con [`AutoModelForQuestionAnswering`]:
 
 ```py
@@ -194,8 +188,6 @@ En este punto, solo quedan tres pasos:
 
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 

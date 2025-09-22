@@ -71,8 +71,6 @@ rendered properly in your Markdown viewer.
 
 여기서부터는 사용하려는 프레임워크에 해당하는 섹션을 따라야 합니다. 오른쪽 사이드바의 링크를 사용하여 원하는 프레임워크로 이동할 수 있으며, 특정 프레임워크의 모든 콘텐츠를 숨기려면 해당 프레임워크 블록의 오른쪽 상단에 있는 버튼을 사용하면 됩니다!
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 ## 파이토치 Trainer로 훈련하기[[train-with-pytorch-trainer]]
@@ -156,15 +154,11 @@ rendered properly in your Markdown viewer.
 ```py
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
 ## 기본 파이토치로 훈련하기[[train-in-native-pytorch]]
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`]는 훈련 루프를 처리하며 한 줄의 코드로 모델을 미세 조정할 수 있습니다. 직접 훈련 루프를 작성하는 것을 선호하는 사용자의 경우, 기본 PyTorch에서 🤗 Transformers 모델을 미세 조정할 수도 있습니다.
@@ -305,8 +299,6 @@ torch.cuda.empty_cache()
 
 >>> metric.compute()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 
