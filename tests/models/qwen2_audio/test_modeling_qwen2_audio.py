@@ -211,9 +211,6 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_single(self):
-        # waiting fix
-        assert False
-
         # Let' s make sure we test the preprocessing to replace what is used
         model = Qwen2AudioForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16
@@ -234,7 +231,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         formatted_prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
 
-        inputs = self.processor(text=formatted_prompt, audios=[raw_audio], return_tensors="pt", padding=True).to(
+        inputs = self.processor(text=formatted_prompt, audio=[raw_audio], return_tensors="pt", padding=True).to(
             torch_device
         )
 
@@ -258,9 +255,6 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        # waiting fix
-        assert False
-
         # Let' s make sure we test the preprocessing to replace what is used
         model = Qwen2AudioForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16
@@ -323,7 +317,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                                 )[0]
                             )
 
-        inputs = self.processor(text=text, audios=audios, return_tensors="pt", padding=True).to(torch_device)
+        inputs = self.processor(text=text, audio=audios, return_tensors="pt", padding=True).to(torch_device)
 
         torch.manual_seed(42)
         output = model.generate(**inputs, max_new_tokens=32)
@@ -339,9 +333,6 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_multiurn(self):
-        # waiting fix
-        assert False
-
         # Let' s make sure we test the preprocessing to replace what is used
         model = Qwen2AudioForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16
@@ -386,7 +377,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                             )[0]
                         )
 
-        inputs = self.processor(text=formatted_prompt, audios=audios, return_tensors="pt", padding=True).to(
+        inputs = self.processor(text=formatted_prompt, audio=audios, return_tensors="pt", padding=True).to(
             torch_device
         )
 
