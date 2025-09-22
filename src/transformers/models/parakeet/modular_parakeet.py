@@ -36,40 +36,44 @@ from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
     """Relative positional encoding for Parakeet."""
 
-    def __init__(self, config: ParakeetEncoderConfig):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: ParakeetEncoderConfig, device=None):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.max_position_embeddings = config.max_position_embeddings
-
-        # Pre-allocate PE buffer
-        dtype = torch.float32
-        max_length = self.max_position_embeddings
-        positions = torch.arange(max_length - 1, -max_length, -1, dtype=dtype).unsqueeze(1)
-        self.pe = torch.zeros(positions.size(0), self.hidden_size, dtype=dtype, device=positions.device)
-        div_term = torch.exp(
-            torch.arange(0, self.hidden_size, 2, dtype=dtype, device=positions.device)
-            * -(math.log(10000.0) / self.hidden_size)
+        base = 10000.0
+        inv_freq = 1.0 / (
+            base
+            ** (
+                torch.arange(0, config.hidden_size, 2, dtype=torch.int64).to(device=device, dtype=torch.float)
+                / config.hidden_size
+            )
         )
-        self.pe[:, 0::2] = torch.sin(positions * div_term)
-        self.pe[:, 1::2] = torch.cos(positions * div_term)
 
-        # add batch dimension
-        self.pe = self.pe.unsqueeze(0)  # (1, T, D)
-        self.center_pos = self.pe.shape[1] // 2 + 1
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
+    @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[1]
-        if seq_length > self.max_position_embeddings:
-            raise ValueError(
-                f"Sequence length {seq_length} exceeds max_position_embeddings {self.max_position_embeddings}"
-            )
+        position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
+        )
+        position_ids_expanded = position_ids[None, None, :].float()
 
-        # dynamic slicing fine since self.pe is preallocated to maximum size
-        start_pos = self.center_pos - seq_length
-        end_pos = self.center_pos + seq_length - 1
-        position_embeddings = self.pe[:, start_pos:end_pos].to(device=hidden_states.device, dtype=hidden_states.dtype)
+        device_type = (
+            hidden_states.device.type
+            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
+            else "cpu"
+        )
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            sin = freqs.sin()
+            cos = freqs.cos()
+            # interleave sin and cos
+            pos_embed = torch.stack([sin, cos], dim=-1)
+            pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
 
-        return position_embeddings
+        return pos_embed.to(dtype=hidden_states.dtype)
 
 
 class ParakeetEncoderFeedForward(nn.Module):
@@ -154,7 +158,7 @@ class ParakeetEncoderAttention(LlamaAttention):
         )
 
         relative_key_states = self.relative_k_proj(position_embeddings)
-        relative_key_states = relative_key_states.view(1, -1, self.config.num_attention_heads, self.head_dim)
+        relative_key_states = relative_key_states.view(batch_size, -1, self.config.num_attention_heads, self.head_dim)
 
         # terms (b) and (d)
         matrix_bd = query_states_with_bias_v @ relative_key_states.permute(0, 2, 3, 1)
@@ -163,6 +167,7 @@ class ParakeetEncoderAttention(LlamaAttention):
         matrix_bd = matrix_bd * self.scaling
 
         if attention_mask is not None:
+            # here we use -10000.0 rather than `torch.finfo.dtype.min` to match the original implementation
             matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), -10000.0)
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd

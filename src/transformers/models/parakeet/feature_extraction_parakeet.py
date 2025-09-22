@@ -93,9 +93,10 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         #     norm="slaney",
         #     mel_scale="slaney",
         # )
-        self.mel_filters = librosa.filters.mel(
+        mel_filters = librosa.filters.mel(
             sr=sampling_rate, n_fft=n_fft, n_mels=feature_size, fmin=0.0, fmax=sampling_rate / 2, norm="slaney"
         )
+        self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
 
     def _torch_extract_fbank_features(self, waveform, device="cpu"):
         # spectrogram
@@ -116,11 +117,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         magnitudes = magnitudes.pow(2)
 
         # log mel spectrogram
-        mel_filters = (
-            torch.from_numpy(self.mel_filters).to(device, torch.float32)
-            if isinstance(self.mel_filters, np.ndarray)
-            else self.mel_filters
-        )
+        mel_filters = self.mel_filters.to(device)
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 
