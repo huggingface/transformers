@@ -267,10 +267,10 @@ class ParakeetEncoderAttention(nn.Module):
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
             self,
-            query_states_with_bias_u,
-            key_states,
-            value_states,
-            matrix_bd,
+            query=query_states_with_bias_u,
+            key=key_states,
+            value=value_states,
+            attention_mask=matrix_bd,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
@@ -422,6 +422,9 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     _supports_flat_attention_mask = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
+    # TODO: @eustlb, add support when flash attention supports custom attention bias
+    _supports_flash_attn = False
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True

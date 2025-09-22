@@ -173,10 +173,10 @@ class ParakeetEncoderAttention(LlamaAttention):
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
             self,
-            query_states_with_bias_u,
-            key_states,
-            value_states,
-            matrix_bd,
+            query=query_states_with_bias_u,
+            key=key_states,
+            value=value_states,
+            attention_mask=matrix_bd,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
@@ -296,7 +296,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.feed_forward1(self.norm_feed_forward1(hidden_states))
-        hidden_states = residual + 0.5 * hidden_states # the conformer architecture uses a factor of 0.5
+        hidden_states = residual + 0.5 * hidden_states  # the conformer architecture uses a factor of 0.5
 
         normalized_hidden_states = self.norm_self_att(hidden_states)
         attn_output, _ = self.self_attn(
@@ -311,7 +311,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
         hidden_states = hidden_states + conv_output
 
         ff2_output = self.feed_forward2(self.norm_feed_forward2(hidden_states))
-        hidden_states = hidden_states + 0.5 * ff2_output # the conformer architecture uses a factor of 0.5
+        hidden_states = hidden_states + 0.5 * ff2_output  # the conformer architecture uses a factor of 0.5
 
         hidden_states = self.norm_out(hidden_states)
 
@@ -328,6 +328,9 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     _supports_flat_attention_mask = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
+    # TODO: @eustlb, add support when flash attention supports custom attention bias
+    _supports_flash_attn = False
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
