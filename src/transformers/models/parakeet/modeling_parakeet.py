@@ -973,14 +973,11 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
 class ParakeetForTDT(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__(config)
-
-        print("HERE config", config)
-
         assert isinstance(config, ParakeetTDTConfig)
-
         self.encoder = ParakeetEncoder(config.encoder_config)
         self.decoder = ParakeetTDTDecoder(config.decoder_config)
         self.joint = ParakeetTDTJoint(config.joint_config)
+        self.blank_token_id = config.blank_token_id
 
         self.post_init()
 
@@ -989,58 +986,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutput:
-        encoder_outputs = self.encoder(
-            input_features=input_features,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-
-        encoder_outputs = self.encoder(
-            input_features=input_features,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-
-        loss = None
-        if labels is not None:
-            # retrieve loss input_lengths from attention_mask
-            attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_features, dtype=torch.long)
-            )
-            input_lengths = self._get_subsampling_output_length(attention_mask.sum(-1)).to(torch.long)
-
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    input_lengths,
-                    target_lengths,
-                    blank=self.config.blank_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
-
-        return None
-
-    def generate(
-        self,
-        input_features: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[ParakeetGenerateOutput, torch.LongTensor]:
-        kwargs["return_dict"] = True
+    ):
 
         encoder_outputs = self.encoder(
             input_features=input_features,
@@ -1055,9 +1002,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         T = encoder_output.shape[1]
         t = 0
         hyp = []
-        last_label = 1024 # should be blank
+        last_label = self.blank_token_id
 
-#                if isinstance(last_label, int):
         last_label = torch.LongTensor([[last_label]]) #.to(self.decoder.device)
         g, hidden_prime = self.decoder(last_label, None)
 
@@ -1066,15 +1012,15 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             enc = encoder_output[0,t,:]
             while symbols_added < 2:
                 logits = self.joint(enc, g)
-                token_logits = logits[:1025].softmax(-1)
-                duration_logits = logits[1025:].softmax(-1)
+                token_logits = logits[:self.blank_token_id + 1].softmax(-1)
+                duration_logits = logits[self.blank_token_id + 1:].softmax(-1)
 
                 v, token = token_logits.max(-1)
                 v_duration, duration = duration_logits.max(-1)
                 token = token.item()
                 duration = duration.item()
 
-                if token != 1024:
+                if token != self.blank_token_id:
                     hyp.append(token)
                     last_label = token
                     last_label = torch.LongTensor([[last_label]]) #.to(self.decoder.device)

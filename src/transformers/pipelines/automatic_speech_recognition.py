@@ -559,7 +559,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             inputs = {
                 self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
             }
-            outputs = self.model.generate(**inputs)
+            outputs = self.model(**inputs)
             out = {"tokens": torch.LongTensor(outputs).view([1, -1])}
 
 
