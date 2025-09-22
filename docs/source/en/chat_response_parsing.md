@@ -93,7 +93,7 @@ And that's all you need to start using response parsing! `parse_response` should
 When the tokenizer does not support response parsing, `parse_response` will throw an error. We hope to add support
 to more tokenizers over time.
 
-## Understanding a simple response schema
+## Developers: Understanding a simple response schema
 
 Under the hood, `parse_response` uses a **JSON schema** to parse the model output. A JSON schema represents
 the structure of the output message dict. The schema is augmented with additional fields that indicate how the 
@@ -121,10 +121,76 @@ to do is set `tokenizer.response_schema` to a valid schema dict, and `tokenizer.
 chat templates, this schema will be saved with the processor, so once you set it, you can use `save_pretrained()` or `push_to_hub()` to
 save and share the schema. 
 
-## A more complex schema
+## Developers: Complex schemas
 
-(todo walk through the cohere schema here)
+Now, let's look at a more complex schema, which includes tool calls, to gain more of an understanding of the parser
+internals. For this, we'll use the `GPT-OSS` schema. GPT-OSS emits both tool calls and thinking blocks, and it uses
+an unusual format where model responses are tagged with one of three "channels": `commentary` for things like
+tool calls, `analysis` for chain of thought blocks, and `final` for messages intended to be sent to the user. 
+A full message where the model calls a tool named `get_current_weather` might look like this, with some extra linebreaks added for clarity:
 
-## Schema reference
+```
+<|channel|>analysis<|message|>
+The user asks: "What is the weather like in SF?" So we need to get the current weather in San Francisco, CA. 
+We need to call get_current_weather function. So we should call get_current_weather with location "San Francisco, CA".
+<|end|>
+<|start|>assistant<|channel|>commentary 
+to=functions.get_current_weather <|constrain|>json<|message|>
+{
+  "location": "San Francisco, CA"
+}
+<|call|>
+```
+
+Parsing proceeds recursively; the output of a regex (or other parser) at one level becomes the input to the nodes below it.
+In other words, don't feel like you have to parse the entire output in one enormous regex! Instead, start with the schema,
+and then add regexes to extract the relevant chunks as you go. Here's a schema that will parse it, with some
+explanatory comments:
+
+```python
+{
+    "type": "object",
+    "properties": {
+        "role": {"const": "assistant"},
+        # "content" and "thinking" are both similar to the previous example, and just extract a single string
+        # However, rather than using a single regex with named groups to extract both, we use a regex in each subkey.
+        # When an object node has no parser/regex, the entire input string is passed to all of its children, so 
+        # parsing can either be done with named groups at the object level, or with separate regexes at the property level.
+        "content": {"type": "string", "x-regex": r"<\|channel\|>final<\|message\|>(.*?)(?:<\|end\|>|$)"},
+        "thinking": {"type": "string", "x-regex": r"<\|channel\|>analysis<\|message\|>(.*?)<\|end\|>"},
+        "tool_calls": {
+            # "x-regex-iterator" uses re.findall to find multiple possible manages, and returns them as an
+            # array/list. You don't need to worry about array handling, though - each item in the array will be
+            # parsed by the `items` schema, so just write the schema for a single item.
+            "x-regex-iterator": r"<\|channel\|>commentary (to=functions\..*?<\|message\|>.*?)(?:<\|call\|>|$)",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    # A const property is a fixed value, and the input has no effect on it.
+                    "type": {"const": "function"},
+                    # Here, we wrap the entire tool call dict in a `{"function": ...}` block. The input string is passed through to it unchanged.
+                    "function": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "x-regex": r"^to=functions\.(\w+)"},
+                            "arguments": {
+                                "type": "object",
+                                "x-regex": "<\|message\|>(.*)",
+                                # The "x-parser" field indicates that the extracted string should be parsed as JSON.
+                                # The output is then passed to the schema nodes below and recursive parsing continues.
+                                "x-parser": "json",
+                                "additionalProperties": {"type": "any"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+```
+
+## Developers: Schema reference
 
 (not done yet)
