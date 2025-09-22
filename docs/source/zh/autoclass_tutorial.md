@@ -127,23 +127,4 @@ TensorFlow和Flax的checkpoints不受影响，并且可以在PyTorch架构中使
 一般来说，我们建议使用`AutoTokenizer`类和`AutoModelFor`类来加载预训练的模型实例。这样可以确保每次加载正确的架构。在下一个[教程](preprocessing)中，学习如何使用新加载的`tokenizer`, `image processor`, `feature extractor`和`processor`对数据集进行预处理以进行微调。
 
 </pt>
-<tf>
-最后，`TFAutoModelFor`类允许您加载给定任务的预训练模型（请参阅[这里](model_doc/auto)获取可用任务的完整列表）。例如，使用[`TFAutoModelForSequenceClassification.from_pretrained`]加载用于序列分类的模型：
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-轻松地重复使用相同的checkpoint来为不同任务加载模型架构：
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-一般来说，我们推荐使用`AutoTokenizer`类和`TFAutoModelFor`类来加载模型的预训练实例。这样可以确保每次加载正确的架构。在下一个[教程](preprocessing)中，学习如何使用新加载的`tokenizer`, `image processor`, `feature extractor`和`processor`对数据集进行预处理以进行微调。
-
-</tf>
 </frameworkcontent>

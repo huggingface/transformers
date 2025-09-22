@@ -176,14 +176,6 @@ pip install transformers datasets evaluate
 >>> data_collator = DefaultDataCollator()
 ```
 </pt>
-<tf>
- 
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-```
-</tf>
 </frameworkcontent>
 
 ## التدريب (Train)
@@ -241,80 +233,6 @@ pip install transformers datasets evaluate
 >>> trainer.push_to_hub()
 ```
 </pt>
-<tf>
- 
-<Tip>
-
-إذا لم تكن معتادًا على ضبط نموذج باستخدام Keras، فألق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-لضبط نموذج في TensorFlow، ابدأ بإعداد دالة مُحسِّن، وجدول معدل التعلم، وبعض المعاملات الفائقة للتدريب:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_epochs = 2
->>> total_train_steps = (len(tokenized_squad["train"]) // batch_size) * num_epochs
->>> optimizer, schedule = create_optimizer(
-...     init_lr=2e-5,
-...     num_warmup_steps=0,
-...     num_train_steps=total_train_steps,
-... )
-```
-
-ثم يمكنك تحميل DistilBERT باستخدام [`TFAutoModelForQuestionAnswering`]:
-
-```py
->>> from transformers import TFAutoModelForQuestionAnswering
-
->>> model = TFAutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-حوّل مجموعات البيانات الخاصة بك إلى تنسيق `tf.data.Dataset` باستخدام [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_squad["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_squad["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-قم بتكوين النموذج للتدريب باستخدام [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-آخر شيء يجب إعداده قبل بدء التدريب هو توفير طريقة لدفع نموذجك إلى Hub. يمكن القيام بذلك عن طريق تحديد مكان دفع نموذجك ومعالجك المعجمي في [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> callback = PushToHubCallback(
-...     output_dir="my_awesome_qa_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-أخيرًا، أنت جاهز لبدء تدريب نموذجك! اتصل بـ [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع مجموعات بيانات التدريب والتحقق من الصحة، وعدد العهود، ومعاودة الاتصال الخاصة بك لضبط النموذج:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=[callback])
-```
-بمجرد اكتمال التدريب، يتم تحميل نموذجك تلقائيًا إلى Hub حتى يتمكن الجميع من استخدامه!
-</tf>
 </frameworkcontent>
 
 
@@ -395,38 +313,4 @@ pip install transformers datasets evaluate
 '176 billion parameters and can generate text in 46 languages natural languages and 13'
 ```
 </pt>
-<tf>
-قم بتحليل النص المعجمي وأعد موترات TensorFlow:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_qa_model")
->>> inputs = tokenizer(question, context, return_tensors="tf")
-```
-
-مرر مدخلاتك إلى النموذج وأعد `logits`:
-
-```py
->>> from transformers import TFAutoModelForQuestionAnswering
-
->>> model = TFAutoModelForQuestionAnswering.from_pretrained("my_awesome_qa_model")
->>> outputs = model(**inputs)
-```
-
-احصل على أعلى احتمال من مخرجات النموذج لموضعي البداية والنهاية:
-
-```py
->>> answer_start_index = int(tf.math.argmax(outputs.start_logits, axis=-1)[0])
->>> answer_end_index = int(tf.math.argmax(outputs.end_logits, axis=-1)[0])
-```
-
-استخلاص الإجابة من الرموز المتوقعة:
-
-```py
->>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
->>> tokenizer.decode(predict_answer_tokens)
-'176 billion parameters and can generate text in 46 languages natural languages and 13'
-```
-</tf>
 </frameworkcontent>
