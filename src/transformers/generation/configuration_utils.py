@@ -1291,11 +1291,11 @@ class WatermarkingConfig(BaseWatermarkingConfig):
 
     def __init__(
         self,
-        greenlist_ratio: Optional[float] = 0.25,
-        bias: Optional[float] = 2.0,
-        hashing_key: Optional[int] = 15485863,
-        seeding_scheme: Optional[str] = "lefthash",
-        context_width: Optional[int] = 1,
+        greenlist_ratio: float = 0.25,
+        bias: float = 2.0,
+        hashing_key: int = 15485863,
+        seeding_scheme: str = "lefthash",
+        context_width: int = 1,
     ):
         self.greenlist_ratio = greenlist_ratio
         self.bias = bias
