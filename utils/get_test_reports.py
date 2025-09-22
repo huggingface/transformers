@@ -191,7 +191,7 @@ if __name__ == "__main__":
         type=int,
         nargs="+",
         help="Inform each CI process as to the work to do: format as `process_id total_processes`. "
-             "In order to run with multiple (eg. 3) processes, you need to run the script multiple times (eg. 3 times)."
+        "In order to run with multiple (eg. 3) processes, you need to run the script multiple times (eg. 3 times).",
     )
     parser.add_argument("--dry-run", action="store_true", help="Only print commands without running them")
     parser.add_argument("--tmp-cache", type=str, help="Change HUGGINGFACE_HUB_CACHE to a tmp dir for each test")
