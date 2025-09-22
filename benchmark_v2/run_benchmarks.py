@@ -239,9 +239,6 @@ def upload_results_to_hf_dataset(
     logger.info(f"Uploading benchmark results to dataset '{dataset_name}' at path '{repo_path}'")
 
     try:
-        # Get the authentication token (prioritize passed token, then env vars)
-        auth_token = token or os.getenv("HF_TOKEN")
-
         # Upload all files in the output directory
         from pathlib import Path
 
@@ -260,7 +257,7 @@ def upload_results_to_hf_dataset(
                     path_in_repo=path_in_repo,
                     repo_id=dataset_name,
                     repo_type="dataset",
-                    token=auth_token,
+                    token=token,
                     commit_message=f"Upload benchmark results for run {run_id}",
                 )
 
