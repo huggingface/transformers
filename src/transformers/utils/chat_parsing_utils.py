@@ -12,13 +12,7 @@ else:
     jmespath = None
 
 
-def _parse_re_match(node_match, require_groups: list[str] | None = None):
-    if require_groups:
-        if not node_match.groupdict():
-            raise ValueError(f"Regex has no named groups, but require_groups was set to {require_groups}")
-        for group in require_groups:
-            if group not in node_match.groupdict():
-                raise ValueError(f"Regex missing required group {group}!\nGroups: {node_match.groupdict().keys()}\n")
+def _parse_re_match(node_match):
     # If the regex has named groups, return a dict of those groups
     if node_match.groupdict():
         return {key: val for key, val in node_match.groupdict().items() if val is not None}
@@ -94,7 +88,13 @@ def recursive_parse(
         # Note that this can be applied after a standard node-regex search
         output_content = {}
         for node_match in re.finditer(node_regex_to_dict, node_content, flags=re.DOTALL):
-            match_groups = _parse_re_match(node_match, require_groups=["key", "value"])
+            match_groups = _parse_re_match(node_match)
+            if not isinstance(match_groups, dict) or "key" not in match_groups or "value" not in match_groups:
+                raise ValueError(
+                    f"Regex for x-regex-to-dict must have named groups 'key' and 'value'.\n"
+                    f"Match groups: {match_groups}\n"
+                    f"Schema: {node_schema}"
+                )
             output_content[match_groups["key"]] = match_groups["value"]
         node_content = output_content
         if not node_content:
