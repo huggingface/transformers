@@ -228,7 +228,6 @@ class Zamba2Attention(ZambaAttention):
         if config.use_mem_rope:
             self.rotary_emb = Zamba2RotaryEmbedding(config=config)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -257,16 +256,7 @@ class Zamba2Attention(ZambaAttention):
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         if self.config.use_mem_rope:
-            if position_embeddings is None:
-                cos, sin = self.rotary_emb(hidden_states, position_ids)
-            else:
-                logger.warning_once(
-                    "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
-                    "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
-                    "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
-                    "removed in v4.60.0. Make sure to pass `position_ids` instead."
-                )
-                cos, sin = position_embeddings
+            cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -284,7 +274,6 @@ class Zamba2Attention(ZambaAttention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            position_ids=position_ids,
             **kwargs,
         )
 
@@ -773,7 +762,6 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
         self.self_attn = Zamba2Attention(config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id)
         self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -784,7 +772,6 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
         past_key_values: Optional[Zamba2HybridDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         position_embeddings: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -816,7 +803,6 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             position_embeddings=position_embeddings,
-            position_ids=position_ids,
             **kwargs,
         )
 
@@ -846,7 +832,6 @@ class Zamba2HybridLayer(ZambaHybridLayer):
         del self.shared_transf
         self.shared_transformer = shared_transformer
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,

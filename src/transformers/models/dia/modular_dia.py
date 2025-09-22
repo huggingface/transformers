@@ -36,7 +36,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaRMSNorm,
@@ -333,7 +332,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         self.pre_mlp_norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.mlp = DiaMLP(config)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -360,7 +358,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             # on inplace operations to be carried (e.g. compile)
             self_attn_cache,
             cache_position=cache_position,
-            position_ids=position_ids,
             **kwargs,
         )
         hidden_states = residual + self_attn_output

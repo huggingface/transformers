@@ -403,21 +403,35 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
 class Glm4vTextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Glm4vConfig, device=None, layer_type=None):
+    def __init__(self, config: Glm4vConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
-        self.rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        self.rope_type = self.rope_scaling_dict["rope_type"]
-        self.rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(config, device, layer_type=layer_type)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
         self.config = config
+
+        layer_types = getattr(config, "layer_types", [None])
+        self.rope_type = {}
+        inv_freq, attention_scaling = {}, {}
+        for layer_type in layer_types:
+            curr_rope_type = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if curr_rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+            self.rope_type[layer_type] = curr_rope_type
+            inv_freq[layer_type] = curr_inv_freq
+            attention_scaling[layer_type] = curr_attention_scaling
+
+        if len(layer_types) == 1:
+            self.rope_type = self.rope_type[layer_types[0]]
+            self.attention_scaling = attention_scaling[layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[layer_types[0]]
+        else:
+            for layer_type in layer_types:
+                self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -589,16 +603,7 @@ class Glm4vTextAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
-        if position_embeddings is None:
-            cos, sin = self.rotary_emb(hidden_states, position_ids)
-        else:
-            logger.warning_once(
-                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
-                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
-                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
-                "removed in v4.60.0. Make sure to pass `position_ids` instead."
-            )
-            cos, sin = position_embeddings
+        cos, sin = position_embeddings
         query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
             query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
         )
@@ -619,7 +624,6 @@ class Glm4vTextAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            position_ids=position_ids,
             **kwargs,
         )
 

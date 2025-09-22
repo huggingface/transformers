@@ -50,7 +50,6 @@ class PhiAttention(LlamaAttention):
                 config.hidden_size // config.num_attention_heads, eps=config.layer_norm_eps, elementwise_affine=True
             )
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -73,16 +72,7 @@ class PhiAttention(LlamaAttention):
             query_states = self.q_layernorm(query_states)
             key_states = self.k_layernorm(key_states)
 
-        if position_embeddings is None:
-            cos, sin = self.rotary_emb(hidden_states, position_ids)
-        else:
-            logger.warning_once(
-                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
-                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
-                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
-                "removed in v4.60.0. Make sure to pass `position_ids` instead."
-            )
-            cos, sin = position_embeddings
+        cos, sin = position_embeddings
         # Partial rotary embedding
         query_rot, query_pass = (
             query_states[..., : self.rotary_ndims],
@@ -136,7 +126,6 @@ class PhiDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,

@@ -477,9 +477,7 @@ class MiniMaxRotaryEmbedding(MixtralRotaryEmbedding):
 
 
 class MiniMaxAttention(MixtralAttention):
-    def __init__(self, config: MiniMaxConfig, layer_idx: int):
-        super().__init__()
-        self.rotary_emb = MiniMaxRotaryEmbedding(config=config, layer_type=config.layer_types[layer_idx])
+    pass
 
 
 class MiniMaxSparseMoeBlock(MixtralSparseMoeBlock):
@@ -504,7 +502,6 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
             self.attn_alpha_factor = config.full_attn_alpha_factor
             self.attn_beta_factor = config.full_attn_beta_factor
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -514,7 +511,6 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -632,9 +628,13 @@ class MiniMaxModel(MixtralModel):
                 # lightning attention uses original attention_mask, and uses it only for the first step
                 input_attention_mask = attention_mask
 
+            position_embeddings = self.rotary_emb(
+                hidden_states, position_ids=position_ids, layer_type=decoder_layer.layer_type
+            )
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=input_attention_mask,
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,

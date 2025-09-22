@@ -425,17 +425,14 @@ class XcodecModel(XcodecPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[torch.Tensor, XcodecEncoderOutput]:
-        """
-        Encodes the input audio waveform into discrete audio codes.
-
-        Args:
-            input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
-                Float values of the input audio waveform.
-            bandwidth (`float`, *optional*):
-                The target bandwidth in (kbps) supports only values in `config.target_bandwidths`.
-                Defaults to the highest available bandwidth `4.0` kbps.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`].
+        r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
+            Float values of the input audio waveform.
+        bandwidth (`float`, *optional*):
+            The target bandwidth in (kbps) supports only values in `config.target_bandwidths`.
+            Defaults to the highest available bandwidth `4.0` kbps.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`].
 
         Returns:
             `torch.LongTensor` of shape `(batch_size, num_quantizers, codes_length)` containing the discrete encoded audio codes.
@@ -481,17 +478,11 @@ class XcodecModel(XcodecPreTrainedModel):
     def decode(
         self, audio_codes: torch.Tensor, return_dict: Optional[bool] = None, **kwargs
     ) -> Union[torch.Tensor, XcodecDecoderOutput]:
-        """
-        Decode the given discrete codes into an output audio waveform.
-
-        The produced audio waveform is longer than the audio input, so it's automatically trimmed to match the original input.
-
-        Args:
-            audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`):
-                Discrete code indices computed using `model.encode`.
-
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`]
+        r"""
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`):
+            Discrete code indices computed using `model.encode`.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`]
 
         Returns:
             Decoded audio values of shape `(batch_size, channels, num_samples)` obtained using the decoder part of Xcodec.
@@ -525,17 +516,17 @@ class XcodecModel(XcodecPreTrainedModel):
         **kwargs,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], XcodecOutput]:
         r"""
-        Encodes and quantizes the input audio into discrete codes, then decodes those codes back into an audio waveform.
-        Args:
-            input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
-                The raw float values of the input audio waveform.
-            audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`:
-                Discrete code indices computed using `model.encode`.
-            bandwidth (`float`, *optional*):
-                Target bandwidth in kbps. Must be one of `config.target_bandwidths`.
-                Defaults to the highest available bandwidth.
-            return_dict (`bool`, *optional*):
-                Whether to return a [`XcodecOutput`] instead of a plain tuple.
+        input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
+            The raw float values of the input audio waveform.
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`:
+            Discrete code indices computed using `model.encode`.
+        bandwidth (`float`, *optional*):
+            Target bandwidth in kbps. Must be one of `config.target_bandwidths`.
+            Defaults to the highest available bandwidth.
+        bandwidth (<fill_type>):
+            <fill_docstring>
+        return_dict (`bool`, *optional*):
+            Whether to return a [`XcodecOutput`] instead of a plain tuple.
 
         Returns:
             `XcodecOutput` or tuple `(audio_codes, audio_values)`:

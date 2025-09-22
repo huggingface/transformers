@@ -311,7 +311,6 @@ class MoonshineAttention(GlmAttention):
         else:
             self.head_dim_padding = 0
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -321,7 +320,6 @@ class MoonshineAttention(GlmAttention):
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         key_value_states: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len = hidden_states.shape[:-1]
@@ -362,15 +360,7 @@ class MoonshineAttention(GlmAttention):
                 )
 
         if not is_cross_attention:
-            if position_embeddings is None:
-                cos, sin = self.rotary_emb(hidden_states, position_ids)
-            else:
-                logger.warning_once(
-                    "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
-                    "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
-                    "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
-                    "removed in v4.60.0. Make sure to pass `position_ids` instead."
-                )
+            cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
             if past_key_values is not None:
@@ -399,7 +389,6 @@ class MoonshineAttention(GlmAttention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             is_causal=is_causal,
-            position_ids=position_ids,
             **kwargs,
         )
 
@@ -453,7 +442,6 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,

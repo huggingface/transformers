@@ -31,7 +31,6 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
 
@@ -395,7 +394,6 @@ class EfficientLoFTRAttention(nn.Module):
         )
         self.rotary_emb = EfficientLoFTRRotaryEmbedding(config=config)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -477,7 +475,6 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         self.attention = EfficientLoFTRAttention(config, layer_idx, is_cross_attention=is_cross_attention)
         self.mlp = EfficientLoFTRMLP(config)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -527,7 +524,6 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         self.self_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
         self.cross_attention = EfficientLoFTRAggregatedAttention(config, layer_idx, is_cross_attention=True)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -563,7 +559,6 @@ class EfficientLoFTRLocalFeatureTransformer(nn.Module):
             ]
         )
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,

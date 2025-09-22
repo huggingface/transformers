@@ -426,7 +426,6 @@ class DeepseekV2Attention(nn.Module):
         self.scaling = self.qk_head_dim ** (-0.5)
         self.rotary_emb = DeepseekV2RotaryEmbedding(config=config)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,

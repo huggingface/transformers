@@ -281,9 +281,7 @@ class Gemma2Attention(GemmaAttention):
         self.is_causal = True
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
-        self.rotary_emb = Gemma2RotaryEmbedding(config=config, layer_type=layer_type)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -292,7 +290,6 @@ class Gemma2Attention(GemmaAttention):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -302,17 +299,7 @@ class Gemma2Attention(GemmaAttention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if position_embeddings is None:
-            cos, sin = self.rotary_emb(hidden_states, position_ids)
-        else:
-            logger.warning_once(
-                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
-                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
-                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
-                "removed in v4.60.0. Make sure to pass `position_ids` instead."
-            )
-            cos, sin = position_embeddings
-
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -334,7 +321,6 @@ class Gemma2Attention(GemmaAttention):
             scaling=self.scaling,
             sliding_window=self.sliding_window,
             softcap=self.attn_logit_softcapping,
-            position_ids=position_ids,
             **kwargs,
         )
 
@@ -357,7 +343,6 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -410,6 +395,7 @@ class Gemma2Model(GemmaModel):
         self.layers = nn.ModuleList(
             [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.rotary_emb = Gemma2RotaryEmbedding(config)
 
     def forward(
         self,
@@ -488,9 +474,13 @@ class Gemma2Model(GemmaModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
+            position_embeddings = self.rotary_emb(
+                hidden_states, position_ids=position_ids, layer_type=decoder_layer.attention_type
+            )
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,

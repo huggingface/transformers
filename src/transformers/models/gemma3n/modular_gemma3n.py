@@ -1719,7 +1719,6 @@ class Gemma3nTextAttention(Gemma3Attention):
         del self.attn_logit_softcapping
         del self.scaling
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -1728,22 +1727,12 @@ class Gemma3nTextAttention(Gemma3Attention):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.config.head_dim)
 
-        if position_embeddings is None:
-            cos, sin = self.rotary_emb(hidden_states, position_ids)
-        else:
-            logger.warning_once(
-                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
-                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
-                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
-                "removed in v4.60.0. Make sure to pass `position_ids` instead."
-            )
-            cos, sin = position_embeddings
+        cos, sin = position_embeddings
 
         query_states = self.q_proj(hidden_states).view(hidden_shape)
         query_states = self.q_norm(query_states)
@@ -1821,14 +1810,15 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("position_embeddings_global", version="4.60.0")
-    @deprecate_kwarg("position_embeddings_local", version="4.60.0")
+    @deprecate_kwarg("position_embeddings_global", version="4.60.0", new_name="position_embeddings")
+    @deprecate_kwarg("position_embeddings_local", version="4.60.0", new_name="position_embeddings")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings_global: torch.Tensor = None,
         position_embeddings_local: torch.Tensor = None,
+        position_embeddings: torch.Tensor = None,
         per_layer_input: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1844,10 +1834,18 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
         active_prediction_normed = self.input_layernorm(active_prediction)
         laurel_output = self.laurel(active_prediction_normed)
 
+        # apply global RoPE to non-sliding layer only
+        if position_embeddings is None:
+            if self.self_attn.is_sliding:
+                position_embeddings = position_embeddings_local
+            else:
+                position_embeddings = position_embeddings_global
+
         attn, self_attn_weights = self.self_attn(
             hidden_states=active_prediction_normed,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
@@ -2076,6 +2074,9 @@ class Gemma3nTextModel(Gemma3TextModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
+            position_embeddings = self.rotary_emb(
+                hidden_states, position_ids=position_ids, layer_type=decoder_layer.attention_type
+            )
             causal_mask = causal_mask_mapping[decoder_layer.attention_type]
             per_layer_input = per_layer_inputs[:, :, decoder_layer.layer_idx, :]
 
@@ -2085,6 +2086,7 @@ class Gemma3nTextModel(Gemma3TextModel):
                 None,
                 per_layer_input,
                 attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,

@@ -71,7 +71,7 @@ def dynamic_rope_update(rope_forward):
         The decorated forward pass.
     """
 
-    def longrope_frequency_update(self, position_ids, device):
+    def longrope_frequency_update(self, position_ids, device, layer_type=None):
         """Longrope uses long factor if sequence is larger than original pretraining length, short otherwise."""
         seq_len = torch.max(position_ids) + 1
         if hasattr(self.config, "original_max_position_embeddings"):
@@ -79,18 +79,31 @@ def dynamic_rope_update(rope_forward):
         else:
             original_max_position_embeddings = self.config.max_position_embeddings
         if seq_len > original_max_position_embeddings:
-            if not hasattr(self, "long_inv_freq"):
-                self.long_inv_freq, _ = self.rope_init_fn(
-                    self.config, device, seq_len=original_max_position_embeddings + 1
+            if not hasattr(self, f"{layer_type}_long_inv_freq"):
+                rope_type = self.rope_type if hasattr(self, "rope_type") else self.rope_types[layer_type]
+                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+                long_inv_freq, _ = rope_init_fn(
+                    self.config,
+                    device,
+                    seq_len=original_max_position_embeddings + 1,
+                    layer_type=layer_type,
                 )
-            self.register_buffer("inv_freq", self.long_inv_freq, persistent=False)
+            inv_freq_name = f"{layer_type}_inv_freq" if layer_type is not None else "inv_freq"
+            self.register_buffer(inv_freq_name, long_inv_freq, persistent=False)
+            setattr(self, f"{layer_type}_long_inv_freq", long_inv_freq)
         else:
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            if layer_type is not None:
+                original_inv_freq = getattr(f"{layer_type}_original_inv_freq").to(device)
+            else:
+                original_inv_freq = self.original_inv_freq.to(device)
+            prefix = f"{layer_type}_" if layer_type else ""
+            inv_freq_name, original_freq_name = f"{prefix}inv_freq", f"{prefix}original_inv_freq"
+            self.register_buffer(inv_freq_name, original_inv_freq, persistent=False)
+            setattr(self, original_freq_name, original_inv_freq)
 
-    def dynamic_frequency_update(self, position_ids, device):
+    def dynamic_frequency_update(self, position_ids, device, layer_type=None):
         """
         dynamic RoPE layers should recompute `inv_freq` in the following situations:
         1 - growing beyond the cached sequence length (allow scaling)
@@ -98,24 +111,40 @@ def dynamic_rope_update(rope_forward):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            rope_type = self.rope_type if hasattr(self, "rope_type") else self.rope_types[layer_type]
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+            inv_freq, self.attention_scaling = rope_init_fn(
+                self.config,
+                device,
+                seq_len=seq_len,
+                layer_type=layer_type,
+            )
+            # TODO joao: may break with compilation
+            inv_freq_name = f"{layer_type}_inv_freq" if layer_type is not None else "inv_freq"
+            self.register_buffer(inv_freq_name, inv_freq, persistent=False)
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            if layer_type is not None:
+                original_inv_freq = getattr(f"{layer_type}_original_inv_freq").to(device)
+            else:
+                original_inv_freq = self.original_inv_freq.to(device)
+            prefix = f"{layer_type}_" if layer_type else ""
+            inv_freq_name, original_freq_name = f"{prefix}inv_freq", f"{prefix}original_inv_freq"
+            self.register_buffer(inv_freq_name, original_inv_freq, persistent=False)
+            setattr(self, original_freq_name, original_inv_freq)
             self.max_seq_len_cached = self.original_max_seq_len
 
     @wraps(rope_forward)
-    def wrapper(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            dynamic_frequency_update(self, position_ids, device=x.device)
-        elif self.rope_type == "longrope":
-            longrope_frequency_update(self, position_ids, device=x.device)
-        return rope_forward(self, x, position_ids)
+    def wrapper(self, x, position_ids, layer_type=None):
+        rope_type = self.rope_type if hasattr(self, "rope_type") else self.rope_types[layer_type]
+        if "dynamic" in rope_type:
+            dynamic_frequency_update(self, position_ids, device=x.device, layer_type=layer_type)
+        elif rope_type == "longrope":
+            longrope_frequency_update(self, position_ids, device=x.device, layer_type=layer_type)
+        return rope_forward(self, x, position_ids, layer_type=layer_type)
 
     return wrapper
 
@@ -691,6 +720,42 @@ def rope_config_validation(config: PretrainedConfig, ignore_keys: Optional[set] 
             logger.warning(
                 f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
             )
+
+
+def compute_rope_parameters(
+    config: Optional[PretrainedConfig] = None,
+    device: Optional["torch.device"] = None,
+    rope_config_key: Optional[str] = "global",
+) -> tuple["torch.Tensor", float]:
+    """
+    Extracts requested RoPE type from the config (e.g. "dynamic") and computes inverse frequencies.
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        rope_config_key (`str`, *optional*, defaults to `"global"`):
+            RoPE type key
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
+    rope_scaling_dicts = extract_rope_scaling_dict_from_config(config)
+
+    if hasattr(config, "layer_types"):
+        rope_inv_freqs = {}
+        rope_types = {}
+        for rope_key in rope_scaling_dicts:
+            rope_scaling_dict = rope_scaling_dicts[rope_key]
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_scaling_dict["rope_type"]]
+            inv_freq, attention_scaling = rope_init_fn(config, rope_scaling_dict=rope_scaling_dict, device=device)
+            rope_inv_freqs[rope_key] = (inv_freq, attention_scaling)
+            rope_types[rope_key] = rope_scaling_dict["rope_type"]
+        return rope_inv_freqs, rope_types
+    else:
+        rope_init_fn = ROPE_INIT_FUNCTIONS[rope_scaling_dicts["rope_type"]]
+        inv_freq, attention_scaling = rope_init_fn(config, rope_scaling_dict=rope_scaling_dicts, device=device)
+        return inv_freq, attention_scaling
 
 
 class RopeParameters(TypedDict):
