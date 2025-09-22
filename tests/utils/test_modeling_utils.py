@@ -88,6 +88,7 @@ from transformers.utils import (
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_kernels_available,
     is_torch_npu_available,
 )
 
@@ -2737,6 +2738,9 @@ class TestAttentionImplementation(unittest.TestCase):
                 reason="FlashAttention2 is supported on Ascend NPU without using package `flash-attn`, ignore this test case."
             )
 
+        if is_kernels_available():
+            self.skipTest(reason="Please uninstall `kernels` package to run `test_not_available_flash`")
+
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
@@ -2752,6 +2756,9 @@ class TestAttentionImplementation(unittest.TestCase):
                 reason="FlashAttention2 is supported on Ascend NPU without using package `flash-attn`, ignore this test case."
             )
 
+        if is_kernels_available():
+            self.skipTest(reason="Please uninstall `kernels` package to run `test_not_available_flash_with_config`")
+
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTBigCodeModel")
 
         with self.assertRaises(ImportError) as cm:
@@ -2762,6 +2769,36 @@ class TestAttentionImplementation(unittest.TestCase):
             )
 
         self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+
+    def test_kernels_fallback(self):
+        if not is_kernels_available():
+            self.skipTest(reason="Please install `kernels` package to run `test_kernels_fallback`")
+
+        if is_flash_attn_2_available():
+            self.skipTest(reason="Please uninstall flash-attn package to run test_kernels_fallback")
+
+        if is_torch_npu_available():
+            self.skipTest(
+                reason="FlashAttention2 is supported on Ascend NPU without using package `flash-attn`, ignore this test case."
+            )
+
+        logger = logging.get_logger("transformers.modeling_utils")
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl:
+                _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` library instead!" in cl.out)
+
+    def test_not_available_kernels(self):
+        if is_kernels_available():
+            self.skipTest(reason="Please uninstall `kernels` package to run `test_not_available_kernels`")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn")
+
+        self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
 
 
 @require_torch
