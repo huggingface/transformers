@@ -145,33 +145,6 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </pt>
-<tf>
-モデルにカスタム設定属性をロードしてください：
-
-```py
->>> from transformers import TFDistilBertModel
-
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
->>> tf_model = TFDistilBertModel(my_config)
-```
-
-これにより、事前学習済みの重みではなくランダムな値を持つモデルが作成されます。
-このモデルを有用な目的にはまだ使用することはできません。トレーニングはコストがかかり、時間がかかるプロセスです。
-一般的には、トレーニングに必要なリソースの一部しか使用せずに、より速く優れた結果を得るために事前学習済みモデルを使用することが良いでしょう。
-
-[`~TFPreTrainedModel.from_pretrained`]を使用して事前学習済みモデルを作成します：
-
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-事前学習済みの重みをロードする際、モデルが🤗 Transformersによって提供されている場合、デフォルトのモデル構成が自動的にロードされます。ただし、必要であればデフォルトのモデル構成属性の一部またはすべてを独自のもので置き換えることもできます：
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
-```
-</tf>
 </frameworkcontent>
 
 
@@ -200,26 +173,6 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 ```
 
 </pt>
-<tf>
-例えば、[`TFDistilBertForSequenceClassification`]は、シーケンス分類ヘッドを持つベースのDistilBERTモデルです。シーケンス分類ヘッドは、プールされた出力の上にある線形層です。
-
-```py
->>> from transformers import TFDistilBertForSequenceClassification
-
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-別のタスクにこのチェックポイントを簡単に再利用することができ、異なるモデルヘッドに切り替えるだけです。
-質問応答タスクの場合、[`TFDistilBertForQuestionAnswering`]モデルヘッドを使用します。
-質問応答ヘッドはシーケンス分類ヘッドと似ていますが、隠れ状態の出力の上に線形層があるだけです。
-
-
-```py
->>> from transformers import TFDistilBertForQuestionAnswering
-
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-```
-</tf>
 </frameworkcontent>
 
 ## Tokenizer

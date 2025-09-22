@@ -38,10 +38,6 @@ DEPRECATION_WARNING = (
 
 
 class TextDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     def __init__(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -111,10 +107,6 @@ class TextDataset(Dataset):
 
 
 class LineByLineTextDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
         warnings.warn(
             DEPRECATION_WARNING.format(
@@ -144,10 +136,6 @@ class LineByLineTextDataset(Dataset):
 
 
 class LineByLineWithRefDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, ref_path: str):
         warnings.warn(
             DEPRECATION_WARNING.format(
@@ -344,10 +332,6 @@ class LineByLineWithSOPTextDataset(Dataset):
 
 
 class TextDatasetForNextSentencePrediction(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     def __init__(
         self,
         tokenizer: PreTrainedTokenizer,

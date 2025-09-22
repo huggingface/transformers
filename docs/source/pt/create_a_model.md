@@ -136,30 +136,6 @@ Quando você carregar os pesos pré-treinados, a configuração padrão do model
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </pt>
-<tf>
-Carregar os seus próprios atributos padrões de contiguração no modelo:
-
-```py
->>> from transformers import TFDistilBertModel
-
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
->>> tf_model = TFDistilBertModel(my_config)
-```
-
-Isso cria um modelo com valores aleatórios ao invés de pré-treinar os pesos. Você não irá conseguir usar usar esse modelo para nada útil ainda, até você treinar ele. Treino é um processo caro e demorado. Geralmente é melhor utilizar um modelo pré-treinado para obter melhores resultados mais rápido, enquanto usa apenas uma fração dos recursos necessários para treinar.
-
-Criar um modelo pré-treinado com [`~TFPreTrainedModel.from_pretrained`]:
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Quando você carregar os pesos pré-treinados, a configuração padrão do modelo é automaticamente carregada se o modelo é provido pelo 🤗 Transformers. No entanto, você ainda consegue mudar - alguns ou todos - os atributos padrões de configuração do modelo com os seus próprio atributos, se você preferir: 
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
-```
-</tf>
 </frameworkcontent>
 
 ### Heads do modelo
@@ -184,23 +160,6 @@ Reutilize facilmente esse ponto de parada para outra tarefe mudando para uma hea
 >>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </pt>
-<tf>
-Por exemplo, [`TFDistilBertForSequenceClassification`] é um modelo DistilBERT base com uma head de classificação de sequência. A head de calssificação de sequência é uma camada linear no topo das saídas agrupadas.
-
-```py
->>> from transformers import TFDistilBertForSequenceClassification
-
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Reutilize facilmente esse ponto de parada para outra tarefe mudando para uma head de modelo diferente. Para uma tarefe de responder questões, você usaria a head do modelo [`TFDistilBertForQuestionAnswering`]. A head de responder questões é similar com a de classificação de sequências exceto o fato de que ela é uma camada no topo dos estados das saídas ocultas.
-
-```py
->>> from transformers import TFDistilBertForQuestionAnswering
-
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-```
-</tf>
 </frameworkcontent>
 
 ## Tokenizer

@@ -104,22 +104,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 </pt>
-<tf>
-El script de ejemplo descarga y preprocesa un conjunto de datos de la biblioteca 🤗 [Datasets](https://huggingface.co/docs/datasets/). Luego, el script ajusta un conjunto de datos utilizando Keras en una arquitectura que soporta la tarea de resumir. El siguiente ejemplo muestra cómo ajustar un [T5-small](https://huggingface.co/google-t5/t5-small) en el conjunto de datos [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). El modelo T5 requiere un argumento adicional `source_prefix` debido a cómo fue entrenado. Este aviso le permite a T5 saber que se trata de una tarea de resumir.
-
-```bash
-python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
 </frameworkcontent>
 
 ## Entrenamiento distribuido y de precisión mixta
@@ -170,23 +154,6 @@ python xla_spawn.py --num_cores 8 \
     --predict_with_generate
 ```
 </pt>
-<tf>
-Las Unidades de Procesamiento de Tensor (TPUs) están diseñadas específicamente para acelerar el rendimiento. TensorFlow utiliza [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) para entrenar en TPUs. Para usar una TPU, pasa el nombre del recurso de la TPU al argumento `tpu`
-
-```bash
-python run_summarization.py  \
-    --tpu name_of_tpu_resource \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
 </frameworkcontent>
 
 ## Ejecutar un script con 🤗 Accelerate
