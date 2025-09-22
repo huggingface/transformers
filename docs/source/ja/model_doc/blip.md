@@ -66,8 +66,6 @@ BLIP は、次のようなさまざまなマルチモーダル タスクを実�
 [[autodoc]] BlipImageProcessorFast
     - preprocess
 
-<frameworkcontent>
-<pt>
 
 ## BlipModel
 
@@ -101,5 +99,3 @@ BLIP は、次のようなさまざまなマルチモーダル タスクを実�
 [[autodoc]] BlipForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>

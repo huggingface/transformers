@@ -96,8 +96,6 @@ rendered properly in your Markdown viewer.
 
 ## AutoModel
 
-<frameworkcontent>
-<pt>
 
 最后，`AutoModelFor`类让你可以加载给定任务的预训练模型（参见[这里](model_doc/auto)获取可用任务的完整列表）。例如，使用[`AutoModelForSequenceClassification.from_pretrained`]加载用于序列分类的模型：
 
@@ -126,5 +124,3 @@ TensorFlow和Flax的checkpoints不受影响，并且可以在PyTorch架构中使
 
 一般来说，我们建议使用`AutoTokenizer`类和`AutoModelFor`类来加载预训练的模型实例。这样可以确保每次加载正确的架构。在下一个[教程](preprocessing)中，学习如何使用新加载的`tokenizer`, `image processor`, `feature extractor`和`processor`对数据集进行预处理以进行微调。
 
-</pt>
-</frameworkcontent>

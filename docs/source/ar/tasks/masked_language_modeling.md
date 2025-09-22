@@ -176,8 +176,6 @@ pip install transformers datasets evaluate
 
 الآن، قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorForLanguageModeling`]. من الأكثر كفاءة أن تقوم بـ *الحشو الديناميكي* ليصل طولها إلى أطول جملة في الدفعة أثناء التجميع، بدلاً من حشو مجموعة البيانات بأكملها إلى الطول الأقصى.
 
-<frameworkcontent>
-<pt>
 
 استخدم رمز نهاية التسلسل كرمز الحشو وحدد `mlm_probability` لحجب الرموز عشوائياً كل مرة تكرر فيها البيانات:
 
@@ -187,13 +185,9 @@ pip install transformers datasets evaluate
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
 ```
-</pt>
-</frameworkcontent>
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -253,8 +247,6 @@ Perplexity: 8.76
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -295,8 +287,6 @@ Perplexity: 8.76
   'sequence': 'The Milky Way is a small galaxy.'}]
 ```
 
-<frameworkcontent>
-<pt>
 قم بتجزئة النص وإرجاع `input_ids` كمتجهات PyTorch. ستحتاج أيضًا إلى تحديد موضع رمز `<mask>`:
 
 ```py
@@ -328,5 +318,3 @@ The Milky Way is a spiral galaxy.
 The Milky Way is a massive galaxy.
 The Milky Way is a small galaxy.
 ```
-</pt>
-</frameworkcontent>
