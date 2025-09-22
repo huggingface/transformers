@@ -104,7 +104,7 @@ torchrun \
     ...
 ```
 
-PyTorch supports TPUs, hardware designed to accelerate performance, through the [PyTorch/XLA](https://github.com/pytorch/xla/blob/master/README.md) package. Launch the `xla_spawn.py` script and use `num _cores` to set the number of TPU cores to train with.
+PyTorch supports TPUs, hardware designed to accelerate performance, through the [PyTorch/XLA](https://github.com/pytorch/xla/blob/master/README.md) package. Launch the `xla_spawn.py` script and use `num_cores` to set the number of TPU cores to train with.
 
 ```bash
 python xla_spawn.py --num_cores 8 pytorch/summarization/run_summarization.py \
