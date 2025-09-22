@@ -1228,6 +1228,10 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
         )
         self.rotary_emb = Qwen3OmniMoeThinkerTextRotaryEmbedding(config)
 
+    def _deepstack_process(self, hidden_states, visual_pos_masks, visual_embeds):
+        visual_pos_masks = visual_pos_masks[..., 0]
+        return super()._deepstack_process(hidden_states, visual_pos_masks, visual_embeds)
+
 
 @dataclass
 class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
@@ -1408,7 +1412,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             use_cache=use_cache,
             output_router_logits=output_router_logits,
             cache_position=cache_position,
-            deepstack_visual_embeds_multiscale=visual_embeds_multiscale,
+            deepstack_visual_embeds=visual_embeds_multiscale,
             visual_pos_masks=visual_pos_masks,
             **kwargs,
         )
