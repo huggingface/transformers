@@ -35,6 +35,7 @@ from .audio_utils import AudioInput, load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available
+from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
 from .utils.type_validators import (
     device_validator,
@@ -1738,6 +1739,13 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 return out["input_ids"]
         return prompt
+
+    def parse_response(self, response: str, schema: Optional[Union[list, dict]] = None):
+        if schema is None:
+            if getattr(self, "response_schema", None) is None:
+                raise AttributeError("This processor does not have a `response_schema` for parsing chat responses!")
+            schema = self.response_schema
+        return recursive_parse(response, schema)
 
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
