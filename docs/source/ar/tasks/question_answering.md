@@ -167,21 +167,15 @@ pip install transformers datasets evaluate
 
 الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DefaultDataCollator`]. بخلاف مجمّعات البيانات الأخرى في 🤗 Transformers، لا يطبق [`DefaultDataCollator`] أي معالجة مسبقة إضافية مثل الحشو.
 
-<frameworkcontent>
-<pt>
  
 ```py
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator()
 ```
-</pt>
-</frameworkcontent>
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -232,8 +226,6 @@ pip install transformers datasets evaluate
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 
 <Tip>
@@ -275,8 +267,6 @@ pip install transformers datasets evaluate
 
 يمكنك أيضًا تكرار نتائج `pipeline` يدويًا إذا أردت:
 
-<frameworkcontent>
-<pt>
  
  قسّم النص وأرجع تنسورات PyTorch:
 
@@ -312,5 +302,3 @@ pip install transformers datasets evaluate
 >>> tokenizer.decode(predict_answer_tokens)
 '176 billion parameters and can generate text in 46 languages natural languages and 13'
 ```
-</pt>
-</frameworkcontent>

@@ -175,8 +175,6 @@ pip install transformers datasets evaluate
 
 그런 다음 [`DataCollatorForLanguageModeling`]을 사용하여 예제의 배치를 만듭니다. 데이터 세트 전체를 최대 길이로 패딩하는 것보다, 취합 단계에서 각 배치의 최대 길이로 문장을 *동적으로 패딩*하는 것이 더 효율적입니다.
 
-<frameworkcontent>
-<pt>
 패딩 토큰으로 종결 토큰을 사용하고 `mlm=False`로 설정하세요. 이렇게 하면 입력을 오른쪽으로 한 칸씩 시프트한 값을 레이블로 사용합니다:
 
 ```py
@@ -186,14 +184,10 @@ pip install transformers datasets evaluate
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 ```
 
-</pt>
-</frameworkcontent>
 
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]를 사용하여 모델을 미세 조정하는 방법을 잘 모르신다면 [기본 튜토리얼](../training#train-with-pytorch-trainer)을 확인해보세요!
@@ -249,8 +243,6 @@ Perplexity: 49.61
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -278,8 +270,6 @@ Perplexity: 49.61
 [{'generated_text': "Somatic hypermutation allows the immune system to be able to effectively reverse the damage caused by an infection.\n\n\nThe damage caused by an infection is caused by the immune system's ability to perform its own self-correcting tasks."}]
 ```
 
-<frameworkcontent>
-<pt>
 텍스트를 토큰화하고 `input_ids`를 PyTorch 텐서로 반환하세요:
 
 ```py
@@ -304,5 +294,3 @@ Perplexity: 49.61
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ["Somatic hypermutation allows the immune system to react to drugs with the ability to adapt to a different environmental situation. In other words, a system of 'hypermutation' can help the immune system to adapt to a different environmental situation or in some cases even a single life. In contrast, researchers at the University of Massachusetts-Boston have found that 'hypermutation' is much stronger in mice than in humans but can be found in humans, and that it's not completely unknown to the immune system. A study on how the immune system"]
 ```
-</pt>
-</frameworkcontent>

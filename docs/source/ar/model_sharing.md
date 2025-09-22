@@ -65,21 +65,15 @@ pip install huggingface_hub
 
 تحويل نقطة التحقق لإطار عمل آخر أمر سهل. تأكد من تثبيت PyTorch و TensorFlow (راجع [هنا](installation) لتعليمات التثبيت)، ثم ابحث عن النموذج الملائم لمهمتك في الإطار الآخر.
 
-<frameworkcontent>
-<pt>
 حدد `from_tf=True` لتحويل نقطة تحقق من TensorFlow إلى PyTorch:
 
 ```py
 >>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
-</pt>
-</frameworkcontent>
 
 ## دفع نموذج أثناء التدريب
 
-<frameworkcontent>
-<pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
 مشاركة نموذجك على Hub مر بسيط للغاية كل ما عليك هو إضافة معلمة أو استدعاء رد إضافي. كما تذكر من درس [التدريب الدقيق](training)، فإن فئة [`TrainingArguments`] هي المكان الذي تحدد فيه المعلمات الفائقة وخيارات التدريب الإضافية. تشمل إحدى خيارات التدريب هذه القدرة على دفع النموذج مباشرة إلى المنصة Hub. قم بتعيين `push_to_hub=True` في [`TrainingArguments`]:
@@ -105,8 +99,6 @@ pip install huggingface_hub
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 ## استخدام دالة `push_to_hub`
 

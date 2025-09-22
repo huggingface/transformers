@@ -155,16 +155,12 @@ pip install transformers datasets evaluate seqeval
 
 次に、[`DataCollat​​orWithPadding`] を使用してサンプルのバッチを作成します。データセット全体を最大長までパディングするのではなく、照合中にバッチ内の最長の長さまで文を *動的にパディング* する方が効率的です。
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 ```
-</pt>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -244,8 +240,6 @@ pip install transformers datasets evaluate seqeval
 ... }
 ```
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
@@ -300,8 +294,6 @@ pip install transformers datasets evaluate seqeval
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -363,8 +355,6 @@ pip install transformers datasets evaluate seqeval
 
 必要に応じて、`pipeline`の結果を手動で複製することもできます。
 
-<frameworkcontent>
-<pt>
 テキストをトークン化して PyTorch テンソルを返します。
 
 ```py
@@ -409,5 +399,3 @@ pip install transformers datasets evaluate seqeval
  'O']
 ```
 
-</pt>
-</frameworkcontent>

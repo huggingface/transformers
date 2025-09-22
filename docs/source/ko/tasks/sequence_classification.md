@@ -97,15 +97,11 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 이제 [`DataCollatorWithPadding`]를 사용하여 예제 배치를 만들어봅시다. 데이터셋 전체를 최대 길이로 패딩하는 대신, *동적 패딩*을 사용하여 배치에서 가장 긴 길이에 맞게 문장을 패딩하는 것이 효율적입니다.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorWithPadding
 
 >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 ```
-</pt>
-</frameworkcontent>
 
 ## 평가하기[[evaluate]]
 
@@ -140,8 +136,6 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
 ```
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]를 사용하여 모델을 파인 튜닝하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)의 기본 튜토리얼을 확인하세요!
@@ -202,8 +196,6 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -233,8 +225,6 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 원한다면, `pipeline`의 결과를 수동으로 복제할 수도 있습니다.
 
-<frameworkcontent>
-<pt>
 텍스트를 토큰화하고 PyTorch 텐서를 반환합니다.
 
 ```py
@@ -261,5 +251,3 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> model.config.id2label[predicted_class_id]
 'POSITIVE'
 ```
-</pt>
-</frameworkcontent>

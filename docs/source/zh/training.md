@@ -71,8 +71,6 @@ rendered properly in your Markdown viewer.
 此时，您应该根据您训练所用的框架来选择对应的教程章节。您可以使用右侧的链接跳转到您想要的章节 - 如果您想隐藏某个框架对应的所有教程内容，只需使用右上角的按钮！
 
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 ## 使用 PyTorch Trainer 进行训练
@@ -152,15 +150,11 @@ rendered properly in your Markdown viewer.
 ```py
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
 ## 在原生 PyTorch 中训练
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`] 负责训练循环，允许您在一行代码中微调模型。对于喜欢编写自己训练循环的用户，您也可以在原生 PyTorch 中微调 🤗 Transformers 模型。
@@ -303,8 +297,6 @@ torch.cuda.empty_cache()
 
 >>> metric.compute()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 

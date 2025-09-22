@@ -66,14 +66,10 @@ Nel seguente esempio, utilizzerai la [`pipeline`] per l'analisi del sentimento.
 
 Installa le seguenti dipendenze se non lo hai già fatto:
 
-<frameworkcontent>
-<pt>
 
 ```bash
 pip install torch
 ```
-</pt>
-</frameworkcontent>
 
 Importa [`pipeline`] e specifica il compito che vuoi completare:
 
@@ -152,8 +148,6 @@ La [`pipeline`] può ospitare qualsiasi modello del [Model Hub](https://huggingf
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-<frameworkcontent>
-<pt>
 Usa [`AutoModelForSequenceClassification`] e [`AutoTokenizer`] per caricare il modello pre-allenato e il suo tokenizer associato (maggiori informazioni su una `AutoClass` in seguito):
 
 ```py
@@ -162,8 +156,6 @@ Usa [`AutoModelForSequenceClassification`] e [`AutoTokenizer`] per caricare il m
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
-</pt>
-</frameworkcontent>
 
 Poi puoi specificare il modello e il tokenizer nella [`pipeline`], e applicare il `classifier` sul tuo testo obiettivo:
 
@@ -215,8 +207,6 @@ Il tokenizer restituirà un dizionario contenente:
 
 Come con la [`pipeline`], il tokenizer accetterà una lista di input. In più, il tokenizer può anche completare (pad, in inglese) e troncare il testo in modo da restituire un lotto (batch, in inglese) di lunghezza uniforme:
 
-<frameworkcontent>
-<pt>
 ```py
 >>> pt_batch = tokenizer(
 ...     ["Siamo molto felici di mostrarti la libreria 🤗 Transformers.", "Speriamo te non la odierai."],
@@ -226,15 +216,11 @@ Come con la [`pipeline`], il tokenizer accetterà una lista di input. In più, i
 ...     return_tensors="pt",
 ... )
 ```
-</pt>
-</frameworkcontent>
 
 Leggi il tutorial sul [preprocessing](./preprocessing) per maggiori dettagli sulla tokenizzazione.
 
 ### AutoModel
 
-<frameworkcontent>
-<pt>
 🤗 Transformers fornisce un metodo semplice e unificato per caricare istanze pre-allenate. Questo significa che puoi caricare un [`AutoModel`] come caricheresti un [`AutoTokenizer`]. L'unica differenza è selezionare l'[`AutoModel`] corretto per il compito di interesse. Dato che stai facendo classificazione di testi, o sequenze, carica [`AutoModelForSequenceClassification`]:
 
 ```py
@@ -266,8 +252,6 @@ Il modello produrrà le attivazioni finali nell'attributo `logits`. Applica la f
 tensor([[0.0041, 0.0037, 0.0203, 0.2005, 0.7713],
         [0.3766, 0.3292, 0.1832, 0.0558, 0.0552]], grad_fn=<SoftmaxBackward0>)
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -287,8 +271,6 @@ Gli output del modello si comportano anche come una tupla o un dizionario (ad es
 
 ### Salva un modello
 
-<frameworkcontent>
-<pt>
 Una volta completato il fine-tuning del tuo modello, puoi salvarlo con il suo tokenizer utilizzando [`PreTrainedModel.save_pretrained`]:
 
 ```py
@@ -302,13 +284,9 @@ Quando desideri utilizzare il tuo modello nuovamente, puoi ri-caricarlo con [`Pr
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
-</pt>
-</frameworkcontent>
 
 Una caratteristica particolarmente interessante di 🤗 Transformers è la sua abilità di salvare un modello e ri-caricarlo sia come modello di PyTorch che di TensorFlow. I parametri `from_pt` o `from_tf` possono convertire un modello da un framework all'altro:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import AutoModel
@@ -316,5 +294,3 @@ Una caratteristica particolarmente interessante di 🤗 Transformers è la sua a
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
-</pt>
-</frameworkcontent>

@@ -114,15 +114,11 @@ pip install transformers datasets evaluate sacrebleu
 
 이제 [`DataCollatorForSeq2Seq`]를 사용하여 예제 배치를 생성합니다. 데이터세트의 최대 길이로 전부를 padding하는 대신, 데이터 정렬 중 각 배치의 최대 길이로 문장을 *동적으로 padding*하는 것이 더 효율적입니다.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-</frameworkcontent>
 
 ## 평가[[evalulate]]
 
@@ -171,8 +167,6 @@ pip install transformers datasets evaluate sacrebleu
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]로 모델을 파인튜닝하는 방법에 익숙하지 않다면 [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 살펴보시기 바랍니다!
@@ -226,8 +220,6 @@ pip install transformers datasets evaluate sacrebleu
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -260,8 +252,6 @@ pip install transformers datasets evaluate sacrebleu
 
 원한다면 `pipeline`의 결과를 직접 복제할 수도 있습니다:
 
-<frameworkcontent>
-<pt>
 텍스트를 토큰화하고 `input_ids`를 PyTorch 텐서로 반환하세요:
 
 ```py
@@ -286,5 +276,3 @@ pip install transformers datasets evaluate sacrebleu
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'Les lignées partagent des ressources avec des bactéries enfixant l'azote.'
 ```
-</pt>
-</frameworkcontent>

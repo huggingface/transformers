@@ -165,20 +165,14 @@ pip install transformers datasets evaluate
 
 이제 [`DefaultDataCollator`]를 이용해 예시 배치를 생성합니다. 🤗 Transformers의 다른 데이터 콜레이터(data collator)와 달리, [`DefaultDataCollator`]는 패딩과 같은 추가 전처리를 적용하지 않습니다:
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator()
 ```
-</pt>
-</frameworkcontent>
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]를 이용해 모델을 미세 조정하는 것에 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기초 튜토리얼을 살펴보세요!
@@ -228,8 +222,6 @@ pip install transformers datasets evaluate
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -269,8 +261,6 @@ pip install transformers datasets evaluate
 
 원한다면 `pipeline`의 결과를 직접 복제할 수도 있습니다:
 
-<frameworkcontent>
-<pt>
 텍스트를 토큰화해서 PyTorch 텐서를 반환합니다:
 
 ```py
@@ -304,5 +294,3 @@ pip install transformers datasets evaluate
 >>> tokenizer.decode(predict_answer_tokens)
 '176 billion parameters and can generate text in 46 languages natural languages and 13'
 ```
-</pt>
-</frameworkcontent>

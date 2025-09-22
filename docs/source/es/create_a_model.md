@@ -111,8 +111,6 @@ También puedes guardar los archivos de configuración como un diccionario; o in
 
 El siguiente paso será crear un [modelo](main_classes/models). El modelo, al que a veces también nos referimos como arquitectura, es el encargado de definir cada capa y qué operaciones se realizan. Los atributos como `num_hidden_layers` de la configuración se usan para definir la arquitectura. Todos los modelos comparten una clase base, [`PreTrainedModel`], y algunos métodos comunes que se pueden usar para redimensionar los _embeddings_ o para recortar cabezas de auto-atención (también llamadas _self-attention heads_). Además, todos los modelos son subclases de [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) o [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html), lo que significa que son compatibles con su respectivo framework. 
 
-<frameworkcontent>
-<pt>
 
 Carga los atributos de tu configuración personalizada en el modelo de la siguiente forma:
 
@@ -136,16 +134,12 @@ Cuando cargues tus pesos del preentrenamiento, el modelo por defecto se carga au
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
-</pt>
-</frameworkcontent>
 
 ### Cabezas de modelo 
 
 En este punto del tutorial, tenemos un modelo DistilBERT base que devuelve los *hidden states* o estados ocultos. Los *hidden states* se pasan como parámetros de entrada a la cabeza del modelo para producir la salida. 🤗 Transformers ofrece una cabeza de modelo diferente para cada tarea, siempre y cuando el modelo sea compatible para la tarea (por ejemplo, no puedes usar DistilBERT para una tarea secuencia a secuencia como la traducción).
 
 
-<frameworkcontent>
-<pt>
 
 Por ejemplo,  [`DistilBertForSequenceClassification`] es un modelo DistilBERT base con una cabeza de clasificación de secuencias. La cabeza de clasificación de secuencias es una capa superior que precede a la recolección de las salidas.
 
@@ -163,8 +157,6 @@ Puedes reutilizar este punto de guardado o *checkpoint* para otra tarea fácilme
 
 >>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
-</pt>
-</frameworkcontent>
 
 ## Tokenizer
 
