@@ -126,14 +126,14 @@ if BicubicVideoProcessor is not None:
 
 
 def eager_attention_forward(
-    module: nn.Module,
-    query: torch.FloatTensor,
-    key: torch.FloatTensor,
-    value: torch.FloatTensor,
-    attention_mask: Optional[torch.FloatTensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
+        module: nn.Module,
+        query: torch.FloatTensor,
+        key: torch.FloatTensor,
+        value: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor],
+        scaling: float,
+        dropout: float = 0.0,
+        **kwargs,
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
     if attention_mask is not None:
@@ -149,7 +149,7 @@ def eager_attention_forward(
 
 
 def make_batched_images(
-    images: Union[List[List[ImageInput]], List[ImageInput], ImageInput]
+        images: Union[List[List[ImageInput]], List[ImageInput], ImageInput]
 ) -> List[List[ImageInput]]:
     """
     Accepts images in list or nested list format, and makes a list of images for preprocessing.
@@ -174,7 +174,7 @@ def make_batched_images(
 
 
 class KeyeVL1_5VideosProcessorKwargs(VideosKwargs, total=False):
-    
+
     fps: Optional[Union[List[float], float]]
     """
     the fps of the video.
@@ -216,8 +216,8 @@ class KeyeVL1_5ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 def select_slow_fast_frames(
-    frames: torch.FloatTensor, 
-    frame_types: torch.LongTensor
+        frames: torch.FloatTensor,
+        frame_types: torch.LongTensor
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
     """
     Selects frames from a tensor based on a mask list.
@@ -261,8 +261,8 @@ def split_thw(thw: torch.LongTensor) -> torch.LongTensor:
 
 
 def merge_thw(
-    thw: Union[torch.LongTensor, List[torch.LongTensor]], 
-    num_frames: Optional[List[int]] = None,
+        thw: Union[torch.LongTensor, List[torch.LongTensor]],
+        num_frames: Optional[List[int]] = None,
 ) -> torch.LongTensor:
     """
     Merge same grid_thw in t dimension, if num_frames is provided, may split adjacent identical values.
@@ -306,14 +306,14 @@ def merge_thw(
         [
             merge_thw(part)
             for part in thw.split(num_frames, dim=0)
-        ], 
+        ],
         dim=0
     )
 
 
 def repeat_kv(
-    hidden_states: torch.FloatTensor, 
-    n_rep: int
+        hidden_states: torch.FloatTensor,
+        n_rep: int
 ) -> torch.FloatTensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -385,21 +385,21 @@ class KeyeVL1_5VisionConfig(SiglipVisionConfig):
     base_config_key = "vision_config"
 
     def __init__(
-        self,
-        hidden_size: int = 768,
-        intermediate_size: int = 3072,
-        num_hidden_layers: int = 12,
-        num_attention_heads: int = 12,
-        num_channels: int = 3,
-        image_size: int = 224,
-        patch_size: int = 14,
-        hidden_act: Union[str, Callable] = "gelu_pytorch_tanh",
-        layer_norm_eps: float = 1e-6,
-        attention_dropout: float = 0.0,
-        spatial_merge_size: int = 2,
-        tokens_per_second: int = 2,
-        initializer_range: float = 0.02,
-        **kwargs,
+            self,
+            hidden_size: int = 768,
+            intermediate_size: int = 3072,
+            num_hidden_layers: int = 12,
+            num_attention_heads: int = 12,
+            num_channels: int = 3,
+            image_size: int = 224,
+            patch_size: int = 14,
+            hidden_act: Union[str, Callable] = "gelu_pytorch_tanh",
+            layer_norm_eps: float = 1e-6,
+            attention_dropout: float = 0.0,
+            spatial_merge_size: int = 2,
+            tokens_per_second: int = 2,
+            initializer_range: float = 0.02,
+            **kwargs,
     ):
         super().__init__(
             hidden_size=hidden_size,
@@ -532,29 +532,29 @@ class KeyeVL1_5TextConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
-        self,
-        vocab_size: int = 152064,
-        hidden_size: int = 8192,
-        intermediate_size: int = 29568,
-        num_hidden_layers: int = 80,
-        num_attention_heads: int = 64,
-        num_key_value_heads: int = 8,
-        hidden_act: Union[str, Callable] = "silu",
-        max_position_embeddings: int = 32768,
-        initializer_range: float = 0.02,
-        rms_norm_eps: float = 1e-05,
-        use_cache: bool = True,
-        tie_word_embeddings: bool = False,
-        rope_theta: float = 1000000.0,
-        use_sliding_window: bool = False,
-        sliding_window: int = 4096,
-        layer_types: Optional[List[str]] = None,
-        attention_dropout: float = 0.0,
-        rope_scaling: Optional[Dict[str, Any]] = None,
-        image_token_id: int = None,
-        video_token_id: int = None,
-        attention_bias: bool = False,
-        **kwargs,
+            self,
+            vocab_size: int = 152064,
+            hidden_size: int = 8192,
+            intermediate_size: int = 29568,
+            num_hidden_layers: int = 80,
+            num_attention_heads: int = 64,
+            num_key_value_heads: int = 8,
+            hidden_act: Union[str, Callable] = "silu",
+            max_position_embeddings: int = 32768,
+            initializer_range: float = 0.02,
+            rms_norm_eps: float = 1e-05,
+            use_cache: bool = True,
+            tie_word_embeddings: bool = False,
+            rope_theta: float = 1000000.0,
+            use_sliding_window: bool = False,
+            sliding_window: int = 4096,
+            layer_types: Optional[List[str]] = None,
+            attention_dropout: float = 0.0,
+            rope_scaling: Optional[Dict[str, Any]] = None,
+            image_token_id: int = None,
+            video_token_id: int = None,
+            attention_bias: bool = False,
+            **kwargs,
     ):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
         self.vocab_size = vocab_size
@@ -636,12 +636,12 @@ class KeyeVL1_5Config(PretrainedConfig):
     sub_configs = {"vision_config": KeyeVL1_5VisionConfig, "text_config": KeyeVL1_5TextConfig}
 
     def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=151655,
-        video_token_id=151656,
-        **kwargs,
+            self,
+            text_config=None,
+            vision_config=None,
+            image_token_id=151655,
+            video_token_id=151656,
+            **kwargs,
     ):
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
@@ -698,21 +698,21 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
     def __init__(
-        self,
-        do_resize: bool = True,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = True,
-        min_pixels: int = 56 * 56,
-        max_pixels: int = 28 * 28 * 1280,
-        patch_size: int = 14,
-        temporal_patch_size: int = 1,
-        merge_size: int = 2,
-        **kwargs,
+            self,
+            do_resize: bool = True,
+            resample: PILImageResampling = PILImageResampling.BILINEAR,
+            do_rescale: bool = True,
+            rescale_factor: Union[int, float] = 1 / 255,
+            do_normalize: bool = True,
+            image_mean: Optional[Union[float, List[float]]] = None,
+            image_std: Optional[Union[float, List[float]]] = None,
+            do_convert_rgb: bool = True,
+            min_pixels: int = 56 * 56,
+            max_pixels: int = 28 * 28 * 1280,
+            patch_size: int = 14,
+            temporal_patch_size: int = 1,
+            merge_size: int = 2,
+            **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.do_resize = do_resize
@@ -732,19 +732,19 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         assert self.temporal_patch_size == 1, "temporal_patch_size != 1 is not supported yet."
 
     def _preprocess(
-        self,
-        images: Union[ImageInput, VideoInput],
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+            self,
+            images: Union[ImageInput, VideoInput],
+            do_resize: Optional[bool] = None,
+            size: Optional[Dict[str, int]] = None,
+            resample: Optional[PILImageResampling] = None,
+            do_rescale: Optional[bool] = None,
+            rescale_factor: Optional[float] = None,
+            do_normalize: Optional[bool] = None,
+            image_mean: Optional[Union[float, List[float]]] = None,
+            image_std: Optional[Union[float, List[float]]] = None,
+            do_convert_rgb: Optional[bool] = None,
+            data_format: ChannelDimension = ChannelDimension.FIRST,
+            input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Tuple[torch.FloatTensor, Tuple[int, int, int]]:
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
@@ -855,21 +855,21 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         return flatten_patches, (grid_t, grid_h, grid_w)
 
     def preprocess(
-        self,
-        images: Optional[ImageInput] = None,
-        videos: Optional[VideoInput] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+            self,
+            images: Optional[ImageInput] = None,
+            videos: Optional[VideoInput] = None,
+            do_resize: Optional[bool] = None,
+            size: Optional[Dict[str, int]] = None,
+            resample: Optional[PILImageResampling] = None,
+            do_rescale: Optional[bool] = None,
+            rescale_factor: Optional[float] = None,
+            do_normalize: Optional[bool] = None,
+            image_mean: Optional[Union[float, List[float]]] = None,
+            image_std: Optional[Union[float, List[float]]] = None,
+            do_convert_rgb: Optional[bool] = None,
+            return_tensors: Optional[Union[str, TensorType]] = None,
+            data_format: ChannelDimension = ChannelDimension.FIRST,
+            input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """
         Args:
@@ -1043,11 +1043,11 @@ class KeyeVL1_5Processor(ProcessorMixin):
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
-        self,
-        image_processor: Optional[KeyeVL1_5ImageProcessor] = None, 
-        tokenizer: Optional[Qwen2TokenizerFast] = None, 
-        chat_template: Optional[str] = None, 
-        **kwargs,
+            self,
+            image_processor: Optional[KeyeVL1_5ImageProcessor] = None,
+            tokenizer: Optional[Qwen2TokenizerFast] = None,
+            chat_template: Optional[str] = None,
+            **kwargs,
     ):
         self.image_token = getattr(tokenizer, "image_token", "<|image_pad|>")
         self.video_token = getattr(tokenizer, "video_token", "<|video_pad|>")
@@ -1070,15 +1070,15 @@ class KeyeVL1_5Processor(ProcessorMixin):
         self.factor = self.merge_size * self.patch_size
 
         self.enable_fusion_op = bool(int(os.environ.get("ENABLE_FUSION_PROCESSOR_OP", 1))) and \
-            (bicubic is not None)
+                                (bicubic is not None)
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
-        self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        images: Optional[ImageInput] = None,
-        videos: Optional[VideoInput] = None,
-        **kwargs: Unpack[KeyeVL1_5ProcessorKwargs],
+            self,
+            text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+            images: Optional[ImageInput] = None,
+            videos: Optional[VideoInput] = None,
+            **kwargs: Unpack[KeyeVL1_5ProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -1208,12 +1208,12 @@ class KeyeVL1_5Processor(ProcessorMixin):
                     fast_height = batch_fast_height[index] or 0
 
                     slow_inputs = bicubic.interp(
-                        frames, 
-                        nframes, 
-                        slow_indices, 
-                        ori_height, 
-                        ori_width, 
-                        resized_height, 
+                        frames,
+                        nframes,
+                        slow_indices,
+                        ori_height,
+                        ori_width,
+                        resized_height,
                         resized_width,
                         patch=self.patch_size,
                         factor=self.factor,
@@ -1227,12 +1227,12 @@ class KeyeVL1_5Processor(ProcessorMixin):
 
                     if has_fast_frames:
                         fast_inputs = bicubic.interp(
-                            frames, 
-                            nframes, 
-                            fast_indices, 
-                            ori_height, 
-                            ori_width, 
-                            fast_height, 
+                            frames,
+                            nframes,
+                            fast_indices,
+                            ori_height,
+                            ori_width,
+                            fast_height,
                             fast_width,
                             patch=self.patch_size,
                             factor=self.factor,
@@ -1256,10 +1256,10 @@ class KeyeVL1_5Processor(ProcessorMixin):
             if has_fast_frames:
                 fast_pixel_values_videos_list = [
                     video["pixel_values_videos"] for video in batch_fast_frames \
-                        if video is not None]
+                    if video is not None]
                 fast_video_grid_thw_list = [
                     video["video_grid_thw"] for video in batch_fast_frames \
-                        if video is not None]
+                    if video is not None]
 
                 fast_pixel_values_videos = \
                     torch.concat(fast_pixel_values_videos_list, dim=0)
@@ -1278,7 +1278,7 @@ class KeyeVL1_5Processor(ProcessorMixin):
             for i in range(len(text)):
                 while self.image_token in text[i]:
                     image_place_holder_tempale = "<|placeholder|>" * (
-                        image_grid_thw[index].prod() // self.image_processor.merge_size ** 2)
+                            image_grid_thw[index].prod() // self.image_processor.merge_size ** 2)
                     text[i] = text[i].replace(
                         self.image_token,
                         image_place_holder_tempale,
@@ -1313,7 +1313,7 @@ class KeyeVL1_5Processor(ProcessorMixin):
                         if batch_frame_types[index][j] == 0:
                             num_patches = int(slow_video_grid_thw[slow_index].prod())
                             video_place_holder_tempale += "<|placeholder|>" * (
-                                num_patches // self.image_processor.merge_size ** 2)
+                                    num_patches // self.image_processor.merge_size ** 2)
                             pixel_values_videos.append(
                                 slow_pixel_values_videos[slow_pixels_index:slow_pixels_index + num_patches])
                             slow_pixels_index = slow_pixels_index + num_patches
@@ -1322,10 +1322,10 @@ class KeyeVL1_5Processor(ProcessorMixin):
 
                         # Current frame is fast frame
                         elif batch_frame_types[index][j] == 1:
-                            num_patches = int(fast_video_grid_thw[fast_index].prod()) 
+                            num_patches = int(fast_video_grid_thw[fast_index].prod())
                             video_place_holder_tempale += self.fast_start + "<|placeholder|>" * (
-                                num_patches // self.image_processor.merge_size ** 2) + \
-                                self.fast_end
+                                    num_patches // self.image_processor.merge_size ** 2) + \
+                                                          self.fast_end
                             pixel_values_videos.append(
                                 fast_pixel_values_videos[fast_pixels_index:fast_pixels_index + num_patches])
                             fast_pixels_index = fast_pixels_index + num_patches
@@ -1362,11 +1362,11 @@ class KeyeVL1_5Processor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     def post_process_image_text_to_text(
-        self, 
-        generated_outputs: Union[torch.LongTensor, NDArray[np.long]],
-        skip_special_tokens: bool = True, 
-        clean_up_tokenization_spaces: bool = False, 
-        **kwargs
+            self,
+            generated_outputs: Union[torch.LongTensor, NDArray[np.long]],
+            skip_special_tokens: bool = True,
+            clean_up_tokenization_spaces: bool = False,
+            **kwargs
     ) -> List[str]:
         """
         Post-process the output of the model to decode the text.
@@ -1452,10 +1452,10 @@ class KeyeVL1_5VisionEmbeddings(nn.Module):
         return patch_pos_embed
 
     def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        position_ids: Optional[torch.LongTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
+            self,
+            pixel_values: torch.FloatTensor,
+            position_ids: Optional[torch.LongTensor] = None,
+            image_grid_thw: Optional[torch.LongTensor] = None,
     ) -> torch.FloatTensor:
         """
         Args:
@@ -1507,10 +1507,10 @@ class KeyeVL1_5VisionEmbeddings(nn.Module):
 
 
 def apply_rotary_pos_emb_flashatt(
-    q: torch.FloatTensor, 
-    k: torch.FloatTensor, 
-    cos: torch.FloatTensor, 
-    sin: torch.FloatTensor
+        q: torch.FloatTensor,
+        k: torch.FloatTensor,
+        cos: torch.FloatTensor,
+        sin: torch.FloatTensor
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
     cos = cos.chunk(2, dim=-1)[0].contiguous()
     sin = sin.chunk(2, dim=-1)[0].contiguous()
@@ -1543,13 +1543,13 @@ class KeyeVL1_5VisionAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: bool = False,
-        cu_seqlens: Optional[torch.IntTensor] = None,
-        rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
-        **kwargs,
+            self,
+            hidden_states: torch.FloatTensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            output_attentions: bool = False,
+            cu_seqlens: Optional[torch.IntTensor] = None,
+            rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
+            **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -1558,12 +1558,12 @@ class KeyeVL1_5VisionAttention(nn.Module):
             raise ValueError(
                 f"cu_seqlens must be not None when _attn_implementation is setting to `flash_attention_2`."
             )
-        
+
         if attention_mask is not None:
             raise ValueError(
                 f"Attention_mask is not None for vision model is not supported yet."
             )
-        
+
         batch_size, seq_length, embed_dim = hidden_states.shape
 
         queries = self.q_proj(hidden_states).view(batch_size, seq_length, self.num_heads, self.head_dim)
@@ -1626,7 +1626,7 @@ class KeyeVL1_5VisionAttention(nn.Module):
             attn_output = attn_output.reshape(batch_size, seq_length, embed_dim)
 
         attn_output = self.out_proj(attn_output)
-        
+
         return attn_output, None
 
 
@@ -1644,12 +1644,12 @@ class KeyeVL1_5VisionBlock(GradientCheckpointingLayer):
         self.mlp = KeyeVL1_5VisionMLP(config)
 
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: torch.FloatTensor,
-        output_attentions: bool = False,
-        cu_seqlens: Optional[torch.IntTensor] = None,
-        rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
+            self,
+            hidden_states: torch.FloatTensor,
+            attention_mask: torch.FloatTensor,
+            output_attentions: bool = False,
+            cu_seqlens: Optional[torch.IntTensor] = None,
+            rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
@@ -1696,12 +1696,12 @@ class KeyeVL1_5VisionEncoderLayer(nn.Module):
         self.mlp = KeyeVL1_5VisionMLP(config)
 
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: torch.FloatTensor,
-        output_attentions: bool = False,
-        cu_seqlens: Optional[torch.IntTensor] = None,
-        rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
+            self,
+            hidden_states: torch.FloatTensor,
+            attention_mask: torch.FloatTensor,
+            output_attentions: bool = False,
+            cu_seqlens: Optional[torch.IntTensor] = None,
+            rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -1758,15 +1758,15 @@ class KeyeVL1_5VisionEncoder(nn.Module):
         self.gradient_checkpointing = False
 
     def forward(
-        self,
-        inputs_embeds: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cu_seqlens: Optional[torch.IntTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        height_position_ids: Optional[torch.LongTensor] = None,
-        width_position_ids: Optional[torch.LongTensor] = None,
+            self,
+            inputs_embeds: torch.FloatTensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            cu_seqlens: Optional[torch.IntTensor] = None,
+            image_grid_thw: Optional[torch.LongTensor] = None,
+            height_position_ids: Optional[torch.LongTensor] = None,
+            width_position_ids: Optional[torch.LongTensor] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -1883,16 +1883,16 @@ class KeyeVL1_5VisionTransformer(nn.Module):
     @add_start_docstrings_to_model_forward(KEYE_VL_1_5_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVL1_5VisionConfig)
     def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        height_position_ids: Optional[torch.LongTensor] = None,
-        width_position_ids: Optional[torch.LongTensor] = None,
-        cu_seqlens: Optional[torch.IntTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
+            self,
+            pixel_values: torch.FloatTensor,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            height_position_ids: Optional[torch.LongTensor] = None,
+            width_position_ids: Optional[torch.LongTensor] = None,
+            cu_seqlens: Optional[torch.IntTensor] = None,
+            image_grid_thw: Optional[torch.LongTensor] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -2031,15 +2031,15 @@ class KeyeVL1_5VisionModel(KeyeVL1_5PreTrainedModel):
     @add_start_docstrings_to_model_forward(KEYE_VL_1_5_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVL1_5VisionConfig)
     def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        cu_seqlens: Optional[torch.IntTensor] = None,
-        height_position_ids: Optional[torch.LongTensor] = None,
-        width_position_ids: Optional[torch.LongTensor] = None,
+            self,
+            pixel_values: torch.FloatTensor,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            image_grid_thw: Optional[torch.LongTensor] = None,
+            cu_seqlens: Optional[torch.IntTensor] = None,
+            height_position_ids: Optional[torch.LongTensor] = None,
+            width_position_ids: Optional[torch.LongTensor] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -2059,11 +2059,11 @@ class KeyeVL1_5VisionModel(KeyeVL1_5PreTrainedModel):
 
 
 class KeyeVL1_5VisionRotaryEmbedding(nn.Module):
-    
+
     def __init__(
-        self, 
-        dim: int, 
-        theta: float = 10000.0
+            self,
+            dim: int,
+            theta: float = 10000.0
     ) -> None:
         super().__init__()
         self.dim = dim
@@ -2075,8 +2075,8 @@ class KeyeVL1_5VisionRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(
-        self, 
-        seqlen: int
+            self,
+            seqlen: int
     ) -> torch.FloatTensor:
         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(seq, self.inv_freq)
@@ -2101,7 +2101,7 @@ class KeyeVL1_5RotaryEmbedding(nn.Module):
     def __init__(self, config: KeyeVL1_5TextConfig, device=None) -> None:
         super().__init__()
         self.rope_kwargs = dict()
-            
+
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
@@ -2208,16 +2208,16 @@ class KeyeVL1_5Attention(nn.Module):
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
+            self,
+            hidden_states: torch.FloatTensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Cache] = None,
+            output_attentions: bool = False,
+            use_cache: bool = False,
+            cache_position: Optional[torch.LongTensor] = None,
+            position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
+            **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -2294,18 +2294,18 @@ class KeyeVL1_5FlashAttention2(KeyeVL1_5Attention):
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
-        cu_seqlens: Optional[torch.IntTensor] = None,
-        sliding_window = -1,
-        **kwargs,
+            self,
+            hidden_states: torch.FloatTensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Cache] = None,
+            output_attentions: bool = False,
+            use_cache: bool = False,
+            cache_position: Optional[torch.LongTensor] = None,
+            position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
+            cu_seqlens: Optional[torch.IntTensor] = None,
+            sliding_window = -1,
+            **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         bsz, q_len, _ = hidden_states.size()
         q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
@@ -2361,10 +2361,10 @@ class KeyeVL1_5FlashAttention2(KeyeVL1_5Attention):
         values = values.transpose(1, 2)
 
         if (
-            sliding_window == -1
-            and self.config.use_sliding_window
-            and getattr(self.config, "sliding_window", None) is not None
-            and self.layer_idx >= self.config.max_window_layers
+                sliding_window == -1
+                and self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
         ):
             sliding_window = self.config.sliding_window
         else:
@@ -2419,16 +2419,16 @@ class KeyeVL1_5SdpaAttention(KeyeVL1_5Attention):
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
-        **kwargs,
+            self,
+            hidden_states: torch.FloatTensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Cache] = None,
+            output_attentions: bool = False,
+            use_cache: bool = False,
+            cache_position: Optional[torch.LongTensor] = None,
+            position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
+            **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -2531,16 +2531,16 @@ class KeyeVL1_5DecoderLayer(Qwen2_5_VLDecoderLayer):
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
+            self,
+            hidden_states: torch.FloatTensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Cache] = None,
+            output_attentions: bool = False,
+            use_cache: bool = False,
+            cache_position: Optional[torch.LongTensor] = None,
+            position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
+            **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -2601,18 +2601,18 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
         self.embed_tokens = value
 
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs
+            self,
+            input_ids: torch.LongTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Cache] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            cache_position: Optional[torch.LongTensor] = None,
+            **kwargs
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2721,12 +2721,12 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
         )
 
     def _update_causal_mask(
-        self,
-        attention_mask: torch.FloatTensor,
-        input_tensor: torch.FloatTensor,
-        cache_position: torch.LongTensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
+            self,
+            attention_mask: torch.FloatTensor,
+            input_tensor: torch.FloatTensor,
+            cache_position: torch.LongTensor,
+            past_key_values: Cache,
+            output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
@@ -2750,16 +2750,16 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         if (
-            self.config._attn_implementation == "sdpa"
-            and not (using_static_cache or using_sliding_window_cache)
-            and not output_attentions
+                self.config._attn_implementation == "sdpa"
+                and not (using_static_cache or using_sliding_window_cache)
+                and not output_attentions
         ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                sliding_window=self.config.sliding_window,
-                is_training=self.training,
+                    attention_mask,
+                    inputs_embeds=input_tensor,
+                    past_key_values_length=past_seen_tokens,
+                    sliding_window=self.config.sliding_window,
+                    is_training=self.training,
             ):
                 return None
 
@@ -2791,10 +2791,10 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
         )
 
         if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
-            and not output_attentions
+                self.config._attn_implementation == "sdpa"
+                and attention_mask is not None
+                and attention_mask.device.type in ["cuda", "xpu"]
+                and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -2805,15 +2805,15 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
 
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.FloatTensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.LongTensor,
-        batch_size: int,
-        config: KeyeVL1_5Config,
-        past_key_values: Cache,
-        device: torch.device = None,
+            attention_mask: torch.FloatTensor,
+            sequence_length: int,
+            target_length: int,
+            dtype: torch.dtype,
+            cache_position: torch.LongTensor,
+            batch_size: int,
+            config: KeyeVL1_5Config,
+            past_key_values: Cache,
+            device: torch.device = None,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -2854,7 +2854,7 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
                     sliding_attend_mask = torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - config.sliding_window
+                            cache_position.reshape(-1, 1) - config.sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
@@ -2890,11 +2890,10 @@ class KeyeVL1_5Projector(nn.Module):
         self.linear_2 = nn.Linear(self.hidden_size, self.text_config.hidden_size, bias=True)
 
     def forward(
-        self, 
-        image_features: List[torch.FloatTensor], 
-        image_grid_thw: torch.LongTensor,
+            self,
+            image_features: List[torch.FloatTensor],
+            image_grid_thw: torch.LongTensor,
     ) -> torch.FloatTensor:
-        m1, m2 = self.merge_kernel_size
         h_kernel, w_kernel = self.merge_kernel_size
         processed_features = list()
         for image_feature, (temporal, height, width) in zip(image_features, image_grid_thw.tolist()):
@@ -2933,12 +2932,12 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel, Qwen2_5_VLModel):
         self.post_init()
 
     def get_rope_index(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        **kwargs,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            image_grid_thw: Optional[torch.LongTensor] = None,
+            video_grid_thw: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            **kwargs,
     ) -> Tuple[torch.LongTensor, torch.LongTensor]:
         """
         Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
@@ -2995,7 +2994,7 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel, Qwen2_5_VLModel):
         image_token_id = self.config.image_token_id
         video_token_id = self.config.video_token_id
         vision_start_token_id = self.config.vision_start_token_id
-        
+
         mrope_position_deltas = list()
         if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
             device = input_ids.device
@@ -3027,12 +3026,12 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel, Qwen2_5_VLModel):
                 llm_image_grid = torch.div(image_grid_thw, spatial_merge_size, rounding_mode="floor")
                 llm_image_grid[:, 0] = image_grid_thw[:, 0]
                 llm_image_grid = llm_image_grid.tolist()
-            
+
             if video_grid_thw is not None:
                 llm_video_grid = torch.div(video_grid_thw, spatial_merge_size, rounding_mode="floor")
                 llm_video_grid[:, 0] = video_grid_thw[:, 0]
                 llm_video_grid = llm_video_grid.tolist()
-            
+
             def _get_text_pos_ids(mask, beg, fsh, pos_ids_list):
                 text_length = mask[beg: fsh].sum().long().item()
                 start_pos = pos_ids_list[-1].max() + 1 if pos_ids_list else 0
@@ -3045,7 +3044,7 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel, Qwen2_5_VLModel):
             for i, inp_ids in enumerate(input_ids):
                 vision_token_indices = (batch_is_vision_token[i] == True).nonzero().flatten().tolist()
                 attn_mask = attention_mask[i]
-                
+
                 start = 0
                 indices_iter = 0
                 pos_ids = list()
@@ -3082,7 +3081,7 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel, Qwen2_5_VLModel):
 
                     indices_iter += t * h * w
                     start = end + t * h * w
-                
+
                 if start < length:
                     pos_ids.append(_get_text_pos_ids(attn_mask, start, length, pos_ids))
 
@@ -3114,9 +3113,9 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel, Qwen2_5_VLModel):
             return position_ids, mrope_position_deltas
 
     def get_video_features(
-        self, 
-        pixel_values_videos: torch.FloatTensor, 
-        video_grid_thw: Optional[torch.LongTensor] = None
+            self,
+            pixel_values_videos: torch.FloatTensor,
+            video_grid_thw: Optional[torch.LongTensor] = None
     ) -> torch.FloatTensor:
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
@@ -3157,11 +3156,11 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel, Qwen2_5_VLModel):
 
         video_embeds = vision_outputs.last_hidden_state
         return video_embeds
-    
+
     def get_image_features(
-        self, 
-        pixel_values: torch.FloatTensor, 
-        image_grid_thw: torch.LongTensor
+            self,
+            pixel_values: torch.FloatTensor,
+            image_grid_thw: torch.LongTensor
     ) -> torch.FloatTensor:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
@@ -3205,24 +3204,24 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel, Qwen2_5_VLModel):
 
     @auto_docstring
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        rope_deltas: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        num_frames: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+            self,
+            input_ids: torch.LongTensor = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Cache] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            pixel_values: Optional[torch.FloatTensor] = None,
+            pixel_values_videos: Optional[torch.FloatTensor] = None,
+            image_grid_thw: Optional[torch.LongTensor] = None,
+            video_grid_thw: Optional[torch.LongTensor] = None,
+            rope_deltas: Optional[torch.LongTensor] = None,
+            cache_position: Optional[torch.LongTensor] = None,
+            num_frames: Optional[torch.LongTensor] = None,
+            **kwargs: Unpack[TransformersKwargs],
     ) -> Union[Tuple, KeyeVL1_5ModelOutputWithPast]:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
@@ -3352,11 +3351,11 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel, Qwen2_5_VLModel):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
-        # calculate RoPE index once per generation in the pre-fill stage only
+            # calculate RoPE index once per generation in the pre-fill stage only
             if (
-                (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-                or (past_key_values is None or past_key_values.get_seq_length() == 0)
+                    (cache_position is not None and cache_position[0] == 0)
+                    or self.rope_deltas is None
+                    or (past_key_values is None or past_key_values.get_seq_length() == 0)
             ):
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
@@ -3417,25 +3416,25 @@ class KeyeVL1_5ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, Gene
     @can_return_tuple
     @replace_return_docstrings(output_type=KeyeVL1_5CausalLMOutputWithPast, config_class="KeyeVL1_5Config")
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        rope_deltas: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        num_frames: Optional[torch.LongTensor] = None,
-        **kwargs,
+            self,
+            input_ids: torch.LongTensor = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Cache] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            pixel_values: Optional[torch.FloatTensor] = None,
+            pixel_values_videos: Optional[torch.FloatTensor] = None,
+            image_grid_thw: Optional[torch.LongTensor] = None,
+            video_grid_thw: Optional[torch.LongTensor] = None,
+            rope_deltas: Optional[torch.LongTensor] = None,
+            cache_position: Optional[torch.LongTensor] = None,
+            num_frames: Optional[torch.LongTensor] = None,
+            **kwargs,
     ) -> Union[Tuple, KeyeVL1_5CausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -3469,8 +3468,8 @@ class KeyeVL1_5ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, Gene
                     ],
                 },
             ]
-        >>> # Since we support the slow-fast architecture and keye-vl-utils has additional return parameters, 
-        >>> # we did not adopt the combined form of: 
+        >>> # Since we support the slow-fast architecture and keye-vl-utils has additional return parameters,
+        >>> # we did not adopt the combined form of:
         >>> # inputs = processor.apply_chat_template( messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt" )
 
         >>> text = processor.apply_chat_template(
@@ -3538,19 +3537,19 @@ class KeyeVL1_5ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, Gene
         )
 
     def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.LongTensor,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: torch.FloatTensor = None,
-        inputs_embeds: torch.FloatTensor = None,
-        cache_position: torch.LongTensor = None,
-        position_ids: torch.LongTensor = None,
-        use_cache: bool = True,
-        pixel_values: torch.FloatTensor = None,
-        pixel_values_videos: torch.FloatTensor = None,
-        image_grid_thw: torch.LongTensor = None,
-        video_grid_thw: torch.LongTensor = None,
-        **kwargs,
+            self,
+            input_ids: torch.LongTensor,
+            past_key_values: Optional[Cache] = None,
+            attention_mask: torch.FloatTensor = None,
+            inputs_embeds: torch.FloatTensor = None,
+            cache_position: torch.LongTensor = None,
+            position_ids: torch.LongTensor = None,
+            use_cache: bool = True,
+            pixel_values: torch.FloatTensor = None,
+            pixel_values_videos: torch.FloatTensor = None,
+            image_grid_thw: torch.LongTensor = None,
+            video_grid_thw: torch.LongTensor = None,
+            **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
@@ -3579,9 +3578,9 @@ class KeyeVL1_5ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, Gene
         return model_inputs
 
     def _get_image_nums_and_video_nums(
-        self,
-        input_ids: Optional[torch.LongTensor],
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+            self,
+            input_ids: Optional[torch.LongTensor],
+            inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> Tuple[torch.LongTensor, torch.LongTensor]:
         """
         Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
@@ -3599,16 +3598,16 @@ class KeyeVL1_5ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, Gene
         vision_start_token_id = self.config.vision_start_token_id
         if inputs_embeds is not None:
             vision_start_mask = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.tensor(vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
+                    inputs_embeds
+                    == self.get_input_embeddings()(
+                torch.tensor(vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
             )[..., 0]
             image_mask = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
+                    inputs_embeds
+                    == self.get_input_embeddings()(
+                torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
             )[..., 0]
         else:
             vision_start_mask = input_ids == vision_start_token_id
@@ -3617,18 +3616,18 @@ class KeyeVL1_5ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, Gene
         vision_first_mask = torch.roll(vision_start_mask, shifts=1, dims=1)
         image_nums = torch.sum(vision_first_mask & image_mask, dim=1)
         # Because our video data does not immediately follow a `vision_start_token_id`
-        # with a `video_token`, there are `frame_token` and `timestamps-infomation` in 
-        # between. So we determine that it is of the video type by checking that what 
+        # with a `video_token`, there are `frame_token` and `timestamps-infomation` in
+        # between. So we determine that it is of the video type by checking that what
         # follows the `vision_start_token_id `` is not an image_token.
         video_nums = torch.sum(vision_first_mask & ~image_mask, dim=1)
         return image_nums, video_nums
 
     def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: Optional[torch.LongTensor] = None,
-        **model_kwargs,
+            self,
+            expand_size: int = 1,
+            is_encoder_decoder: bool = False,
+            input_ids: Optional[torch.LongTensor] = None,
+            **model_kwargs,
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
         # Overwritten -- Support for expanding tensors without a batch size dimension
         # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw
@@ -3692,10 +3691,10 @@ class KeyeVL1_5ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, Gene
         def _expand_dict_for_generation(dict_to_expand: Dict[str, Any]) -> Dict[str, Any]:
             for key in dict_to_expand:
                 if (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
-                    and isinstance(dict_to_expand[key], torch.Tensor)
-                    and key not in visual_keys
+                        key != "cache_position"
+                        and dict_to_expand[key] is not None
+                        and isinstance(dict_to_expand[key], torch.Tensor)
+                        and key not in visual_keys
                 ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand

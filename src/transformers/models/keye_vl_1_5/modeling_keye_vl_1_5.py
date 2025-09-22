@@ -1759,7 +1759,6 @@ class KeyeVL1_5Projector(nn.Module):
         image_features: list[torch.FloatTensor],
         image_grid_thw: torch.LongTensor,
     ) -> torch.FloatTensor:
-        m1, m2 = self.merge_kernel_size
         h_kernel, w_kernel = self.merge_kernel_size
         processed_features = list()
         for image_feature, (temporal, height, width) in zip(image_features, image_grid_thw.tolist()):
