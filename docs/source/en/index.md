@@ -37,50 +37,12 @@ Explore the [Hub](https://huggingface.com/) today to find a model and use Transf
 
 Here is an interactive timeline to explore the different model architectures supported by Transformers ([check it out directly on HF Spaces](https://huggingface.co/spaces/yonigozlan/Transformers-Timeline))
 
-### web component
-
-<script
-	type="module"
-	src="https://gradio.s3-us-west-2.amazonaws.com/5.46.0/gradio.js"
-></script>
-
-<gradio-app src="https://yonigozlan-transformers-timeline.hf.space"></gradio-app>
-
-### iframe
-scale 0.5
-<iframe
-	src="https://yonigozlan-transformers-timeline.hf.space"
-	frameborder="0"
-	width="200%"
-	height="1000"
-	style="transform: scale(0.5); transform-origin: top left;"
-></iframe>
-
-scale 0.4
-<iframe
-	src="https://yonigozlan-transformers-timeline.hf.space"
-	frameborder="0"
-	width="250%"
-	height="1250"
-	style="transform: scale(0.4); transform-origin: top left;"
-></iframe>
-
-scale 0.6
-<iframe
-	src="https://yonigozlan-transformers-timeline.hf.space"
-	frameborder="0"
-	width="167%"
-	height="833"
-	style="transform: scale(0.6); transform-origin: top left;"
-></iframe>
-
-scale 0.8
 <iframe
 	src="https://yonigozlan-transformers-timeline.hf.space"
 	frameborder="0"
 	width="125%"
-	height="625"
-	style="transform: scale(0.8); transform-origin: top left;"
+	height="1200"
+	style="transform: scale(0.8); transform-origin: top left; max-width: 125%;"
 ></iframe>
 
 
