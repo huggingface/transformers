@@ -103,7 +103,10 @@ class SeedOssIntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            "ByteDance-Seed/Seed-OSS-36B-Base", torch_dtype=torch.bfloat16, attn_implementation="eager", device_map="auto"
+            "ByteDance-Seed/Seed-OSS-36B-Base",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager",
+            device_map="auto",
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -122,9 +125,8 @@ class SeedOssIntegrationTest(unittest.TestCase):
             "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto"
-        )
+        # default attention is `sdpa` (and this model repo. doesn't specify explicitly) --> we get `sdpa` here
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True, return_token_type_ids=False).to(
