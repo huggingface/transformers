@@ -83,14 +83,9 @@ class MixtralExperts(nn.ModuleList):
         for _ in range(self.num_experts):
             self.append(MixtralMLP(config))
 
-    def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        top_k_weights = top_k_weights.to(hidden_states.dtype)
-        return top_k_index, top_k_weights
 
-    def forward(self, hidden_states: torch.Tensor, router_logits: torch.Tensor) -> torch.Tensor:
+
+    def forward(self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor) -> torch.Tensor:
         """
         Args:
             hidden_states: (batch_size * sequence_length, hidden_dim)
@@ -100,7 +95,6 @@ class MixtralExperts(nn.ModuleList):
             (batch_size * sequence_length, hidden_dim)
         """
         final_hidden_states = torch.zeros_like(hidden_states)
-        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
         expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
@@ -120,13 +114,21 @@ class MixtralSparseMoeBlock(nn.Module):
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = MixtralExperts(config)
 
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
+        return top_k_index, top_k_weights
+    
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         router_logits = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states, router_logits)
+        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, router_logits
 
