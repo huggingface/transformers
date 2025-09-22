@@ -118,6 +118,8 @@ from .utils.import_utils import (
     is_sagemaker_mp_enabled,
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
@@ -1274,6 +1276,25 @@ def _get_dtype(
                 if hasattr(config, "dtype") and config.dtype is not None:
                     dtype = config.dtype
                     logger.info(f"Will use dtype={dtype} as defined in model's config object")
+                    
+                    # If config dtype is bfloat16, check device compatibility and fallback if needed
+                    if dtype == torch.bfloat16:
+                        current_device = torch.tensor([]).device
+                        device_type = current_device.type if current_device.type != "cpu" else "cuda" if torch.cuda.is_available() else "cpu"
+                        
+                        if device_type != "cpu" and not is_torch_bf16_available_on_device(device_type):
+                            if is_torch_fp16_available_on_device(device_type):
+                                logger.info(f"Device '{device_type}' does not support bfloat16. Falling back to float16.")
+                                dtype = torch.float16
+                            else:
+                                logger.info(f"Device '{device_type}' does not support bfloat16 or float16. Falling back to float32.")
+                                dtype = torch.float32
+                            
+                            # Update config with the corrected dtype
+                            config.dtype = dtype
+                            for sub_config_key in config.sub_configs:
+                                sub_config = getattr(config, sub_config_key)
+                                sub_config.dtype = dtype
                 else:
                     if is_sharded and "dtype" in sharded_metadata:
                         dtype = sharded_metadata["dtype"]
@@ -1286,8 +1307,27 @@ def _get_dtype(
                         dtype = get_state_dict_dtype(state_dict)
                     logger.info(
                         "Since the `dtype` attribute can't be found in model's config object, "
-                        "will use dtype={dtype} as derived from model's weights"
+                        f"will use dtype={dtype} as derived from model's weights"
                     )
+                    
+                    # If auto-detected dtype is bfloat16, check device compatibility and fallback if needed
+                    if dtype == torch.bfloat16:
+                        current_device = torch.tensor([]).device
+                        device_type = current_device.type if current_device.type != "cpu" else "cuda" if torch.cuda.is_available() else "cpu"
+                        
+                        if device_type != "cpu" and not is_torch_bf16_available_on_device(device_type):
+                            if is_torch_fp16_available_on_device(device_type):
+                                logger.info(f"Device '{device_type}' does not support bfloat16. Falling back to float16.")
+                                dtype = torch.float16
+                            else:
+                                logger.info(f"Device '{device_type}' does not support bfloat16 or float16. Falling back to float32.")
+                                dtype = torch.float32
+                            
+                            # Update config with the corrected dtype
+                            config.dtype = dtype
+                            for sub_config_key in config.sub_configs:
+                                sub_config = getattr(config, sub_config_key)
+                                sub_config.dtype = dtype
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
                 config.dtype = dtype
@@ -4961,6 +5001,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         config, dtype, dtype_orig = _get_dtype(
             cls, dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only
         )
+
+
 
         config.name_or_path = pretrained_model_name_or_path
         model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
