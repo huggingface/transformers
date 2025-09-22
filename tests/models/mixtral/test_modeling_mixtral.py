@@ -54,18 +54,7 @@ class MixtralModelTester(CausalLMModelTester):
 
 
 @require_torch
-class MistralModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MixtralModel,
-            MixtralForCausalLM,
-            MixtralForSequenceClassification,
-            MixtralForTokenClassification,
-            MixtralForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
+class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": MixtralModel,
@@ -78,8 +67,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = MixtralModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
