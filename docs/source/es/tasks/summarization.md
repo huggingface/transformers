@@ -104,13 +104,6 @@ Usa [`DataCollatorForSeq2Seq`] para crear un lote de ejemplos. Esto también *re
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model)
 ```
 </pt>
-<tf>
-```py
->>> from transformers import DataCollatorForSeq2Seq
-
->>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, return_tensors="tf")
-```
-</tf>
 </frameworkcontent>
 
 ## Entrenamiento
@@ -162,59 +155,6 @@ En este punto, solo faltan tres pasos:
 >>> trainer.train()
 ```
 </pt>
-<tf>
-Para hacer fine-tuning de un modelo en TensorFlow, comienza por convertir tus datasets al formato `tf.data.Dataset` con [`~datasets.Dataset.to_tf_dataset`]. Especifica los inputs y etiquetas en `columns`, el tamaño de lote, el data collator, y si es necesario mezclar el dataset:
-
-```py
->>> tf_train_set = tokenized_billsum["train"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "labels"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = tokenized_billsum["test"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "labels"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-<Tip>
-
-Para familiarizarte con el fine-tuning con Keras, ¡mira el tutorial básico [aquí](training#finetune-with-keras)!
-
-</Tip>
-
-Crea la función optimizadora, establece la tasa de aprendizaje y algunos hiperparámetros de entrenamiento:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-Carga T5 con [`TFAutoModelForSeq2SeqLM`]:
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
-```
-
-Configura el modelo para entrenamiento con [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
-
-```py
->>> model.compile(optimizer=optimizer)
-```
-
-Llama a [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) para realizar el fine-tuning del modelo:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3)
-```
-</tf>
 </frameworkcontent>
 
 <Tip>

@@ -88,28 +88,6 @@ pip install huggingface_hub
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 </pt>
-<tf>
-체크포인트를 PyTorch에서 TensorFlow로 변환하려면 `from_pt=True`를 지정하세요:
-
-```py
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
-```
-
-그런 다음 새로운 체크포인트와 함께 새로운 TensorFlow 모델을 저장할 수 있습니다:
-
-```py
->>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
-```
-</tf>
-<jax>
-Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트를 변환할 수도 있습니다:
-
-```py
->>> flax_model = FlaxDistilBertForSequenceClassification.from_pretrained(
-...     "path/to/awesome-name-you-picked", from_pt=True
-... )
-```
-</jax>
 </frameworkcontent>
 
 ## 훈련 중 모델 푸시하기[[push-a-model-during-training]]
@@ -142,27 +120,6 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 >>> trainer.push_to_hub()
 ```
 </pt>
-<tf>
-[`PushToHubCallback`]을 사용하여 모델을 허브에 공유하려면, [`PushToHubCallback`]에 다음 인수를 정의하세요:
-
-- 출력된 모델의 파일 경로
-- 토크나이저
-- `{Hub 사용자 이름}/{모델 이름}` 형식의 `hub_model_id`
-
-```py
->>> from transformers import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="./your_model_save_path", tokenizer=tokenizer, hub_model_id="your-username/my-awesome-model"
-... )
-```
-
-[`fit`](https://keras.io/api/models/model_training_apis/)에 콜백을 추가하면, 🤗 Transformers가 훈련된 모델을 허브로 푸시합니다:
-
-```py
->>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
-```
-</tf>
 </frameworkcontent>
 
 ## `push_to_hub` 함수 사용하기[[use-the-pushtohub-function]]

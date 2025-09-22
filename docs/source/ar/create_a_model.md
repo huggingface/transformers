@@ -106,30 +106,6 @@ DistilBertConfig {
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased"، config=my_config)
 ```
 </pt>
-<tf>
-قم بتحميل خصائص التكوين المُخصصة الخاصة بك في النموذج:
-
-```py
->>> from transformers import TFDistilBertModel
-
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
->>> tf_model = TFDistilBertModel(my_config)
-```
-
-هذا ينشئ نموذجًا بقيم عشوائية بدلاً من الأوزان المُدربة مسبقًا. لن يكون هذا النموذج مفيدًا حتى يتم تدريبه. تُعد عملية التدريب مكلفة وتستغرق وقتًا طويلاً. من الأفضل بشكل عام استخدام نموذج مُدرب مسبقًا للحصول على نتائج أفضل بشكل أسرع، مع استخدام جزء بسيط فقط من الموارد المطلوبة للتدريب.
-
-قم بإنشاء نموذج مُدرب مسبقًا باستخدام [`~TFPreTrainedModel.from_pretrained`]:
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-عندما تقوم بتحميل الأوزان المُدربة مسبقًا،يتم تحميل إعدادات النموذج الافتراضي تلقائيًا إذا كان النموذج من مكتبة 🤗 Transformers. ومع ذلك، يمكنك أيضًا استبدال - بعض أو كل - إعدادات النموذج  الافتراضية بإعداداتك الخاصة:
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased"، config=my_config)
-```
-</tf>
 </frameworkcontent>
 
 ### رؤوس النموذج
@@ -154,23 +130,6 @@ DistilBertConfig {
 >>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </pt>
-<tf>
-على سبيل المثال، [`TFDistilBertForSequenceClassification`] هو نموذج DistilBERT الأساسي برأس تصنيف تسلسل. رأس التصنيف التسلسلي هو طبقة خطية أعلى المخرجات المجمعة.
-
-```py
->>> from transformers import TFDistilBertForSequenceClassification
-
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-أعد استخدام هذا نقطة التحقق لمهمة أخرى عن طريق التبديل إلى رأس نموذج مختلف. لمهمة الإجابة على الأسئلة، ستستخدم رأس النموذج [`TFDistilBertForQuestionAnswering`]. رأس الإجابة على الأسئلة مشابه لرأس التصنيف التسلسلي باستثناء أنه طبقة خطية أعلى حالات الإخراج المخفية.
-
-```py
->>> from transformers import TFDistilBertForQuestionAnswering
-
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-```
-</tf>
 </frameworkcontent>
 
 ## مجزئ النصوص
