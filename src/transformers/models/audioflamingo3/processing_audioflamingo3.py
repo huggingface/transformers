@@ -38,6 +38,7 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
+            "padding_side": "left",
         },
         "audio_kwargs": {
             "sound_token": "<sound>",  # Placeholder token used in text for audio expansion.
@@ -174,18 +175,33 @@ class AudioFlamingo3Processor(ProcessorMixin):
             w_ptr = 0
             for idx, t in enumerate(texts):
                 n_win = per_sample_windows[idx]
-                Ks = frames_per_window[w_ptr : w_ptr + n_win]
+                total_tokens = sum(frames_per_window[w_ptr : w_ptr + n_win])
                 w_ptr += n_win
 
                 sample = t
                 n_placeholders = sample.count(sound_token)
 
-                if n_placeholders != 1:
+                if n_placeholders == 1:
+                    # Single placeholder: expand it with the total number of tokens needed
+                    sample = sample.replace(sound_token, sound_token * total_tokens, 1)
+                elif n_placeholders == 0:
+                    # No placeholders: insert tokens based on text format
+                    prefix = sound_token * total_tokens
+
+                    # Check if it's a chat template format
+                    user_start = "<|im_start|>user\n"
+                    if user_start in sample:
+                        # Chat template: insert after user start
+                        sample = sample.replace(user_start, user_start + prefix, 1)
+                    else:
+                        # Plain text: prepend to the beginning
+                        sample = prefix + sample
+                else:
+                    # Multiple placeholders not supported for simplicity
                     raise ValueError(
-                        f"Sample {idx}: expected exactly 1 '{sound_token}' in the (already templated) text. "
-                        "Place it where audio should appear; the processor will expand it."
+                        f"Sample {idx}: found {n_placeholders} '{sound_token}' placeholders. "
+                        f"Expected exactly 1 or 0 placeholders."
                     )
-                sample = sample.replace(sound_token, sound_token * sum(Ks), 1)
 
                 expanded_texts.append(sample)
 
