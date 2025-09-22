@@ -254,7 +254,11 @@ class ModernBertRotaryEmbedding(nn.Module):
         self.rope_type = {}
         inv_freq, attention_scaling = {}, {}
         for layer_type in layer_types:
-            curr_rope_type = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)["rope_type"]
+            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            if rope_params is None:
+                continue
+
+            curr_rope_type = rope_params["rope_type"]
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if curr_rope_type != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
@@ -270,9 +274,10 @@ class ModernBertRotaryEmbedding(nn.Module):
             self.original_inv_freq = inv_freq[layer_types[0]]
         else:
             for layer_type in layer_types:
-                self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
-                setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
-                setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
+                if layer_type in inv_freq:
+                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -458,9 +463,9 @@ def sdpa_attention_forward(
     sliding_window_mask: torch.Tensor,
     position_ids: Optional[torch.LongTensor],
     local_attention: tuple[int, int],
-    position_embeddings: torch.Tensor,
     bs: int,
     dim: int,
+    position_embeddings: torch.Tensor,
     **_kwargs,
 ) -> tuple[torch.Tensor]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
@@ -562,8 +567,8 @@ class ModernBertAttention(nn.Module):
             local_attention=self.local_attention,
             bs=bs,
             dim=self.all_head_size,
-            output_attentions=output_attentions,
             position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
             **kwargs,
         )
         hidden_states = attn_outputs[0]

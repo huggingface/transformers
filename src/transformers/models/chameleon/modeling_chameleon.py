@@ -80,7 +80,11 @@ class ChameleonRotaryEmbedding(nn.Module):
         self.rope_type = {}
         inv_freq, attention_scaling = {}, {}
         for layer_type in layer_types:
-            curr_rope_type = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)["rope_type"]
+            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            if rope_params is None:
+                continue
+
+            curr_rope_type = rope_params["rope_type"]
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if curr_rope_type != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
@@ -96,9 +100,10 @@ class ChameleonRotaryEmbedding(nn.Module):
             self.original_inv_freq = inv_freq[layer_types[0]]
         else:
             for layer_type in layer_types:
-                self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
-                setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
-                setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
+                if layer_type in inv_freq:
+                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -312,7 +317,6 @@ class ChameleonAttention(nn.Module):
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self.q_norm = ChameleonLayerNorm((self.num_heads, self.head_dim))
         self.k_norm = ChameleonLayerNorm((self.num_key_value_heads, self.head_dim))
-        self.rotary_emb = ChameleonRotaryEmbedding(config=config)
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -324,6 +328,7 @@ class ChameleonAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
@@ -342,7 +347,7 @@ class ChameleonAttention(nn.Module):
         key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -393,6 +398,7 @@ class ChameleonDecoderLayer(GradientCheckpointingLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -427,6 +433,7 @@ class ChameleonDecoderLayer(GradientCheckpointingLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -466,6 +473,7 @@ class ChameleonSwinDecoderLayer(GradientCheckpointingLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -499,6 +507,7 @@ class ChameleonSwinDecoderLayer(GradientCheckpointingLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = self.input_layernorm(hidden_states)
@@ -861,6 +870,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         )
         self.norm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.vqmodel = ChameleonVQVAE._from_config(config.vq_config)
+        self.rotary_emb = ChameleonRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -985,6 +995,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1002,6 +1013,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

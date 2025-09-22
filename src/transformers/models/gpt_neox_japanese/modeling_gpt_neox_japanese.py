@@ -82,7 +82,11 @@ class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
         self.rope_type = {}
         inv_freq, attention_scaling = {}, {}
         for layer_type in layer_types:
-            curr_rope_type = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)["rope_type"]
+            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            if rope_params is None:
+                continue
+
+            curr_rope_type = rope_params["rope_type"]
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if curr_rope_type != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
@@ -98,9 +102,10 @@ class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
             self.original_inv_freq = inv_freq[layer_types[0]]
         else:
             for layer_type in layer_types:
-                self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
-                setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
-                setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
+                if layer_type in inv_freq:
+                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -214,7 +219,6 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
         self.layer_idx = layer_idx
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
-        self.rotary_emb = GPTNeoXJapaneseRotaryEmbedding(config=config)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.norm_factor = math.sqrt(self.head_size)
 
@@ -223,7 +227,6 @@ class GPTNeoXJapaneseAttention(nn.Module):
         # Activate bias if the last layer
         self.use_bias = use_bias
         self.dense_bias = nn.Parameter(torch.zeros(config.hidden_size)) if use_bias else None
-        self.rotary_emb = GPTNeoXJapaneseRotaryEmbedding(config=config)
 
     def forward(
         self,
@@ -455,6 +458,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
             [GPTNeoXJapaneseLayer(config=config, layer_number=i) for i in range(config.num_hidden_layers)]
         )
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.rotary_emb = GPTNeoXJapaneseRotaryEmbedding(config=config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -535,6 +539,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -551,6 +556,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
             )
             hidden_states = outputs[0]
             if output_attentions:

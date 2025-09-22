@@ -61,7 +61,11 @@ class DbrxRotaryEmbedding(nn.Module):
         self.rope_type = {}
         inv_freq, attention_scaling = {}, {}
         for layer_type in layer_types:
-            curr_rope_type = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)["rope_type"]
+            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            if rope_params is None:
+                continue
+
+            curr_rope_type = rope_params["rope_type"]
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if curr_rope_type != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
@@ -77,9 +81,10 @@ class DbrxRotaryEmbedding(nn.Module):
             self.original_inv_freq = inv_freq[layer_types[0]]
         else:
             for layer_type in layer_types:
-                self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
-                setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
-                setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
+                if layer_type in inv_freq:
+                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -299,7 +304,6 @@ class DbrxAttention(nn.Module):
             self.hidden_size, self.hidden_size + 2 * self.num_key_value_heads * self.head_dim, bias=False
         )
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        self.rotary_emb = DbrxRotaryEmbedding(config=config)
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -311,6 +315,7 @@ class DbrxAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs: Any,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         bsz, q_len, _ = hidden_states.size()
@@ -333,7 +338,7 @@ class DbrxAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -397,6 +402,7 @@ class DbrxFlashAttention2(DbrxAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs: Any,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if isinstance(past_key_values, StaticCache):
@@ -429,7 +435,7 @@ class DbrxFlashAttention2(DbrxAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -514,6 +520,7 @@ class DbrxSdpaAttention(DbrxAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -550,7 +557,7 @@ class DbrxSdpaAttention(DbrxAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
         if past_key_values is not None:
@@ -622,6 +629,7 @@ class DbrxNormAttentionNorm(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs: Any,
     ) -> tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         residual_states = hidden_states
@@ -635,6 +643,7 @@ class DbrxNormAttentionNorm(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
 
@@ -814,6 +823,7 @@ class DbrxBlock(GradientCheckpointingLayer):
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs: Any,
     ) -> Union[
         tuple[torch.Tensor],
@@ -850,6 +860,7 @@ class DbrxBlock(GradientCheckpointingLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
 
@@ -920,6 +931,7 @@ class DbrxModel(DbrxPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.blocks = nn.ModuleList([DbrxBlock(config, block_idx) for block_idx in range(config.n_layers)])
         self.norm_f = nn.LayerNorm(config.d_model, bias=False)
+        self.rotary_emb = DbrxRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -993,6 +1005,7 @@ class DbrxModel(DbrxPreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1012,6 +1025,7 @@ class DbrxModel(DbrxPreTrainedModel):
                 output_router_logits=output_router_logits,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
             )
 
             hidden_states = block_outputs[0]

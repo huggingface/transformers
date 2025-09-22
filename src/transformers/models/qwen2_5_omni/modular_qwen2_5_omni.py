@@ -2114,8 +2114,6 @@ class Qwen2_5OmniAttention(Qwen2_5_VLAttention, nn.Module):
         layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
 
-        self.rotary_emb = Qwen2_5OmniRotaryEmbedding(config=config, layer_type=layer_type)
-
 
 class Qwen2MLP(Qwen2_5_VLMLP):
     pass

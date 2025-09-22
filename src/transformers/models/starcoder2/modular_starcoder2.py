@@ -190,6 +190,7 @@ class Starcoder2Model(MistralModel):
         hidden_states = nn.functional.dropout(
             hidden_states, p=self.embedding_dropout, training=self.training
         )  # main diff with Llama
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
@@ -199,6 +200,7 @@ class Starcoder2Model(MistralModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

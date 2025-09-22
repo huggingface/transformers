@@ -127,7 +127,6 @@ class DiaSelfAttention(LlamaAttention, nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.rotary_emb = DiaRotaryEmbedding(config=config)
 
 
 class DiaCrossAttention(nn.Module):

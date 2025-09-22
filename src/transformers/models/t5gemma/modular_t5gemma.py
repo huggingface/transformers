@@ -647,6 +647,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
         self.layers = nn.ModuleList(
             [T5GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
 
         self.post_init()
 
@@ -717,6 +718,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
             }
 
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
@@ -725,7 +727,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
         for layer_module in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer_module(
                 hidden_states,
-                None,
+                position_embeddings,
                 self_attn_mask_mapping[layer_module.attention_type],
                 position_ids,
                 past_key_values,

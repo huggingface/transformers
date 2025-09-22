@@ -678,6 +678,7 @@ class MoonshineDecoder(LlamaModel):
         )
 
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         if encoder_attention_mask is not None:
             mask_len = encoder_hidden_states.shape[-2]
@@ -704,6 +705,7 @@ class MoonshineDecoder(LlamaModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
