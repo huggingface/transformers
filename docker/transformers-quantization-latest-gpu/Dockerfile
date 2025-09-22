@@ -46,16 +46,6 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 # Add PEFT
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/peft@main#egg=peft
 
-# Add aqlm for quantization testing
-RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
-
-# Add vptq for quantization testing
-RUN pip install vptq
-
-# Add spqr for quantization testing
-# Commented for now as No matching distribution found we need to reach out to the authors
-# RUN python3 -m pip install --no-cache-dir spqr_quant[gpu]
-
 # Add hqq for quantization testing
 RUN python3 -m pip install --no-cache-dir hqq
 
@@ -63,24 +53,10 @@ RUN python3 -m pip install --no-cache-dir hqq
 RUN python3 -m pip install --no-cache-dir gguf
 
 # Add autoawq for quantization testing
-# New release v0.2.8
 RUN python3 -m pip install --no-cache-dir autoawq[kernels]
 
 # Add quanto for quantization testing
 RUN python3 -m pip install --no-cache-dir optimum-quanto
-
-# Add eetq for quantization testing
-RUN git clone https://github.com/NetEase-FuXi/EETQ.git && cd EETQ/ && git submodule update --init --recursive && pip install .
-
-# # Add flute-kernel and fast_hadamard_transform for quantization testing
-# # Commented for now as they cause issues with the build
-# # TODO: create a new workflow to test them
-# RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
-# RUN python3 -m pip install --no-cache-dir git+https://github.com/Dao-AILab/fast-hadamard-transform.git
-
-# Add fp-quant for quantization testing
-# Requires py3.11 but our CI runs on 3.9
-# RUN python3 -m pip install --no-cache-dir "fp-quant>=0.1.6"
 
 # Add compressed-tensors for quantization testing
 RUN python3 -m pip install --no-cache-dir compressed-tensors
@@ -90,6 +66,9 @@ RUN python3 -m pip install --no-cache-dir amd-quark
 
 # Add AutoRound for quantization testing
 RUN python3 -m pip install --no-cache-dir "auto-round>=0.5.0"
+
+# Add torchao for quantization testing
+RUN python3 -m pip install --no-cache-dir torchao
 
 # Add transformers in editable mode
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
@@ -103,3 +82,28 @@ RUN python3 -m pip uninstall -y flash-attn
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
+
+# Low usage or incompatible lib, will enable later on
+
+# # Add aqlm for quantization testing
+# RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
+
+# # Add vptq for quantization testing
+# RUN pip install vptq
+
+# Add spqr for quantization testing
+# Commented for now as No matching distribution found we need to reach out to the authors
+# RUN python3 -m pip install --no-cache-dir spqr_quant[gpu]
+
+# # Add eetq for quantization testing
+# RUN git clone https://github.com/NetEase-FuXi/EETQ.git && cd EETQ/ && git submodule update --init --recursive && pip install .
+
+# # Add flute-kernel and fast_hadamard_transform for quantization testing
+# # Commented for now as they cause issues with the build
+# # TODO: create a new workflow to test them
+# RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
+# RUN python3 -m pip install --no-cache-dir git+https://github.com/Dao-AILab/fast-hadamard-transform.git
+
+# Add fp-quant for quantization testing
+# Requires py3.11 but our CI runs on 3.9
+# RUN python3 -m pip install --no-cache-dir "fp-quant>=0.1.6"
