@@ -1722,9 +1722,8 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
             past_key_values=past_key_values,
         )
 
-    def _deepstack_process(
-        self, hidden_states: torch.Tensor, visual_pos_masks: torch.Tensor, visual_embeds: torch.Tensor
-    ):
+    def _deepstack_process(self, hidden_states, visual_pos_masks, visual_embeds):
+        visual_pos_masks = visual_pos_masks[..., 0]
         visual_pos_masks = visual_pos_masks.to(hidden_states.device)
         visual_embeds = visual_embeds.to(hidden_states.device, hidden_states.dtype)
         local_this = hidden_states[visual_pos_masks, :].clone() + visual_embeds
@@ -2151,7 +2150,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             use_cache=use_cache,
             output_router_logits=output_router_logits,
             cache_position=cache_position,
-            deepstack_visual_embeds_multiscale=visual_embeds_multiscale,
+            deepstack_visual_embeds=visual_embeds_multiscale,
             visual_pos_masks=visual_pos_masks,
             **kwargs,
         )
