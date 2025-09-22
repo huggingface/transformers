@@ -112,24 +112,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 </pt>
-<tf>
-예제 스크립트는 🤗 [Datasets](https://huggingface.co/docs/datasets/) 라이브러리에서 데이터 세트를 다운로드하고 전처리합니다.
-그런 다음 스크립트는 요약 기능을 지원하는 아키텍처에서 Keras를 사용하여 데이터 세트를 미세 조정합니다. 
-다음 예는 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 데이터 세트에서 [T5-small](https://huggingface.co/google-t5/t5-small)을 미세 조정합니다.
-T5 모델은 훈련 방식에 따라 추가 `source_prefix` 인수가 필요하며, 이 프롬프트는 요약 작업임을 T5에 알려줍니다.
-```bash
-python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
 </frameworkcontent>
 
 ## 혼합 정밀도(mixed precision)로 분산 훈련하기[[distributed-training-and-mixed-precision]]
@@ -184,25 +166,6 @@ python xla_spawn.py --num_cores 8 \
     --predict_with_generate
 ```
 </pt>
-<tf>
-Tensor Processing Units (TPUs)는 성능을 가속화하기 위해 특별히 설계되었습니다.
-TensorFlow 스크립트는 TPU를 훈련에 사용하기 위해 [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy)를 활용합니다.
-TPU를 사용하려면 TPU 리소스의 이름을 `tpu` 인수에 전달합니다.
-
-```bash
-python run_summarization.py  \
-    --tpu name_of_tpu_resource \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
 </frameworkcontent>
 
 ## 🤗 Accelerate로 스크립트 실행하기[[run-a-script-with-accelerate]]
