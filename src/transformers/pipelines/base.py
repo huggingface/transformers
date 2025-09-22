@@ -64,7 +64,7 @@ if is_tf_available():
 
     from ..models.auto.modeling_tf_auto import TFAutoModel
 
-if is_torch_available():
+if is_torch_available() or TYPE_CHECKING:
     import torch
     from torch.utils.data import DataLoader, Dataset
 

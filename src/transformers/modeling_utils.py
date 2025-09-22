@@ -1721,7 +1721,7 @@ class ModuleUtilsMixin:
     def get_extended_attention_mask(
         self,
         attention_mask: Tensor,
-        input_shape: tuple[int],
+        input_shape: tuple[int, ...],
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ) -> Tensor:

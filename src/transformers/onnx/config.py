@@ -609,7 +609,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         return common_outputs
 
     @property
-    def num_layers(self) -> tuple[int]:
+    def num_layers(self) -> tuple[int, ...]:
         try:
             num_layers = super().num_layers
             num_layers = (num_layers, num_layers)
@@ -625,7 +625,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         return num_layers
 
     @property
-    def num_attention_heads(self) -> tuple[int]:
+    def num_attention_heads(self) -> tuple[int, ...]:
         try:
             num_attention_heads = super().num_attention_heads
             num_attention_heads = (num_attention_heads, num_attention_heads)

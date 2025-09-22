@@ -2458,7 +2458,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         filename_prefix: Optional[str] = None,
         push_to_hub: bool = False,
         **kwargs,
-    ) -> tuple[str]:
+    ) -> tuple[str, ...]:
         """
         Save the full tokenizer state.
 
@@ -2623,10 +2623,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def _save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
-        file_names: tuple[str],
+        file_names: tuple[str, ...],
         legacy_format: Optional[bool] = None,
         filename_prefix: Optional[str] = None,
-    ) -> tuple[str]:
+    ) -> tuple[str, ...]:
         """
         Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
 
@@ -2655,7 +2655,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         return file_names + vocab_files + (added_tokens_file,)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str, ...]:
         """
         Save only the vocabulary of the tokenizer (vocabulary + added tokens).
 
@@ -2669,7 +2669,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 An optional prefix to add to the named of the saved files.
 
         Returns:
-            `Tuple(str)`: Paths to the files saved.
+            `tuple(str)`: Paths to the files saved.
         """
         raise NotImplementedError
 
