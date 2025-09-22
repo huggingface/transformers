@@ -46,22 +46,12 @@ class StableLmModelTester(CausalLMModelTester):
         config_class = StableLmConfig
         base_model_class = StableLmModel
         causal_lm_class = StableLmForCausalLM
-        sequence_class = StableLmForSequenceClassification
-        token_class = StableLmForTokenClassification
+        sequence_classification_class = StableLmForSequenceClassification
+        token_classification_class = StableLmForTokenClassification
 
 
 @require_torch
 class StableLmModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            StableLmModel,
-            StableLmForCausalLM,
-            StableLmForSequenceClassification,
-            StableLmForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": StableLmModel,
@@ -73,8 +63,6 @@ class StableLmModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = StableLmModelTester
 

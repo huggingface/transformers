@@ -48,9 +48,9 @@ class MixtralModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MixtralModel
         causal_lm_class = MixtralForCausalLM
-        sequence_class = MixtralForSequenceClassification
-        token_class = MixtralForTokenClassification
         question_answering_class = MixtralForQuestionAnswering
+        sequence_classification_class = MixtralForSequenceClassification
+        token_classification_class = MixtralForTokenClassification
 
 
 @require_torch

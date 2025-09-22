@@ -48,19 +48,12 @@ class Starcoder2ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Starcoder2Model
         causal_lm_class = Starcoder2ForCausalLM
-        sequence_class = Starcoder2ForSequenceClassification
-        token_class = Starcoder2ForTokenClassification
+        sequence_classification_class = Starcoder2ForSequenceClassification
+        token_classification_class = Starcoder2ForTokenClassification
 
 
 @require_torch
 class Starcoder2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (Starcoder2Model, Starcoder2ForCausalLM, Starcoder2ForSequenceClassification, Starcoder2ForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = Starcoder2ModelTester
     pipeline_model_mapping = (
         {

@@ -50,8 +50,9 @@ class NemotronModelTester(CausalLMModelTester):
         config_class = NemotronConfig
         base_model_class = NemotronModel
         causal_lm_class = NemotronForCausalLM
-        sequence_class = NemotronForSequenceClassification
-        token_class = NemotronForTokenClassification
+        question_answering_class = NemotronForQuestionAnswering
+        sequence_classification_class = NemotronForSequenceClassification
+        token_classification_class = NemotronForTokenClassification
 
 
 @require_torch
@@ -60,17 +61,6 @@ class NemotronModelTest(CausalLMModelTest, unittest.TestCase):
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
-    all_model_classes = (
-        (
-            NemotronModel,
-            NemotronForCausalLM,
-            NemotronForSequenceClassification,
-            NemotronForQuestionAnswering,
-            NemotronForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": NemotronModel,
@@ -83,8 +73,6 @@ class NemotronModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False
 
     # used in `test_torch_compile_for_training`

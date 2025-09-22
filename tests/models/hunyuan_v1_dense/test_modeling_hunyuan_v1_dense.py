@@ -40,22 +40,11 @@ class HunYuanDenseV1ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = HunYuanDenseV1Model
         causal_lm_class = HunYuanDenseV1ForCausalLM
-        sequence_class = HunYuanDenseV1ForSequenceClassification
+        sequence_classification_class = HunYuanDenseV1ForSequenceClassification
 
 
 @require_torch
 class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            HunYuanDenseV1Model,
-            HunYuanDenseV1ForCausalLM,
-            HunYuanDenseV1ForSequenceClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = HunYuanDenseV1ModelTester
     pipeline_model_mapping = (
         {

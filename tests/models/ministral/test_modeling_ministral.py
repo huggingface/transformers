@@ -54,26 +54,13 @@ class MinistralModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MinistralModel
         causal_lm_class = MinistralForCausalLM
-        sequence_class = MinistralForSequenceClassification
-        token_class = MinistralForTokenClassification
         question_answering_class = MinistralForQuestionAnswering
+        sequence_classification_class = MinistralForSequenceClassification
+        token_classification_class = MinistralForTokenClassification
 
 
 @require_torch
 class MinistralModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MinistralModel,
-            MinistralForCausalLM,
-            MinistralForSequenceClassification,
-            MinistralForTokenClassification,
-            MinistralForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = MinistralModelTester
     pipeline_model_mapping = (
         {

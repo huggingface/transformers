@@ -46,9 +46,9 @@ class MiniMaxModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MiniMaxModel
         causal_lm_class = MiniMaxForCausalLM
-        sequence_class = MiniMaxForSequenceClassification
-        token_class = MiniMaxForTokenClassification
         question_answering_class = MiniMaxForQuestionAnswering
+        sequence_classification_class = MiniMaxForSequenceClassification
+        token_classification_class = MiniMaxForTokenClassification
 
     def __init__(self, parent, layer_types=None, block_size=3):
         super().__init__(parent)
@@ -58,17 +58,6 @@ class MiniMaxModelTester(CausalLMModelTester):
 
 @require_torch
 class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MiniMaxModel,
-            MiniMaxForCausalLM,
-            MiniMaxForSequenceClassification,
-            MiniMaxForTokenClassification,
-            MiniMaxForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": MiniMaxModel,
@@ -80,9 +69,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = MiniMaxModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146

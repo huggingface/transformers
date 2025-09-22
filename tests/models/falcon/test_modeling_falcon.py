@@ -48,8 +48,8 @@ class FalconModelTester(CausalLMModelTester):
         config_class = FalconConfig
         base_model_class = FalconModel
         causal_lm_class = FalconForCausalLM
-        sequence_classification_class = FalconForSequenceClassification
         question_answering_class = FalconForQuestionAnswering
+        sequence_classification_class = FalconForSequenceClassification
         token_classification_class = FalconForTokenClassification
 
     def __init__(self, parent, new_decoder_architecture=True):

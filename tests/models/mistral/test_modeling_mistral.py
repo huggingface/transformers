@@ -56,24 +56,13 @@ class MistralModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MistralModel
         causal_lm_class = MistralForCausalLM
-        sequence_class = MistralForSequenceClassification
-        token_class = MistralForTokenClassification
         question_answering_class = MistralForQuestionAnswering
+        sequence_classification_class = MistralForSequenceClassification
+        token_classification_class = MistralForTokenClassification
 
 
 @require_torch
 class MistralModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MistralModel,
-            MistralForCausalLM,
-            MistralForSequenceClassification,
-            MistralForTokenClassification,
-            MistralForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": MistralModel,
@@ -85,8 +74,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = MistralModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146

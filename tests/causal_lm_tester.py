@@ -50,9 +50,9 @@ class CausalLMModelTester:
     config_class = None
     base_model_class = None
     causal_lm_class = None
+    question_answering_class = None
     sequence_classification_class = None
     token_classification_class = None
-    question_answering_class = None
 
     @classmethod
     def _verify_model_attributes(cls):
@@ -72,9 +72,9 @@ class CausalLMModelTester:
         tester_class_attribute_names = [
             "base_model_class",
             "causal_lm_class",
+            "question_answering_class",
             "sequence_classification_class",
             "token_classification_class",
-            "question_answering_class",
         ]
         for model_attribute_name in tester_class_attribute_names:
             model_class = getattr(cls, model_attribute_name)
@@ -92,9 +92,9 @@ class CausalLMModelTester:
                 and "PreTrainedModel" in str(instance_attribute.__mro__)
             ):
                 raise ValueError(
-                    f"You have inherited from `CausalLMModelTester` but set the `{instance_attribute_name}` "
-                    f"attribute to a model class. (It's set to `{instance_attribute}`). "
-                    f"Only the following attributes can hold model classes: {tester_class_attribute_names}."
+                    f"You have inherited from `CausalLMModelTester` but set an unexpected attribute to a model class "
+                    f"(`{instance_attribute_name}` is set to `{instance_attribute}`). "
+                    f"Only the following attributes can be set to model classes: {tester_class_attribute_names}."
                 )
 
     @property
@@ -106,9 +106,9 @@ class CausalLMModelTester:
             for model_class in [
                 self.base_model_class,
                 self.causal_lm_class,
+                self.question_answering_class,
                 self.sequence_classification_class,
                 self.token_classification_class,
-                self.question_answering_class,
             ]
             if model_class is not None
         ]

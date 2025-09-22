@@ -49,24 +49,13 @@ class Qwen3MoeModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3MoeModel
         causal_lm_class = Qwen3MoeForCausalLM
-        sequence_class = Qwen3MoeForSequenceClassification
-        token_class = Qwen3MoeForTokenClassification
         question_answering_class = Qwen3MoeForQuestionAnswering
+        sequence_classification_class = Qwen3MoeForSequenceClassification
+        token_classification_class = Qwen3MoeForTokenClassification
 
 
 @require_torch
 class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Qwen3MoeModel,
-            Qwen3MoeForCausalLM,
-            Qwen3MoeForSequenceClassification,
-            Qwen3MoeForTokenClassification,
-            Qwen3MoeForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Qwen3MoeModel,
@@ -79,8 +68,6 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = Qwen3MoeModelTester
 

@@ -50,9 +50,9 @@ class Qwen3NextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3NextModel
         causal_lm_class = Qwen3NextForCausalLM
-        sequence_class = Qwen3NextForSequenceClassification
-        token_class = Qwen3NextForTokenClassification
         question_answering_class = Qwen3NextForQuestionAnswering
+        sequence_classification_class = Qwen3NextForSequenceClassification
+        token_classification_class = Qwen3NextForTokenClassification
 
     def __init__(self, parent):
         super().__init__(parent=parent)
@@ -66,17 +66,6 @@ class Qwen3NextModelTester(CausalLMModelTester):
 
 @require_torch
 class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Qwen3NextModel,
-            Qwen3NextForCausalLM,
-            Qwen3NextForSequenceClassification,
-            Qwen3NextForTokenClassification,
-            Qwen3NextForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Qwen3NextModel,
@@ -89,8 +78,6 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = Qwen3NextModelTester
 
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):

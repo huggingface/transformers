@@ -60,11 +60,6 @@ class GemmaModelTester(CausalLMModelTester):
 
 @require_torch
 class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": GemmaModel,

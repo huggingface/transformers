@@ -24,8 +24,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...test_configuration_common import ConfigTester
-from ..gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -39,22 +38,17 @@ if is_torch_available():
     )
 
 
-class HeliumModelTester(GemmaModelTester):
+class HeliumModelTester(CausalLMModelTester):
     if is_torch_available():
+        base_model_class = HeliumModel
+        causal_lm_class = HeliumForCausalLM
         config_class = HeliumConfig
-        model_class = HeliumModel
-        for_causal_lm_class = HeliumForCausalLM
-        for_sequence_class = HeliumForSequenceClassification
-        for_token_class = HeliumForTokenClassification
+        sequence_classification_class = HeliumForSequenceClassification
+        token_classification_class = HeliumForTokenClassification
 
 
 @require_torch
-class HeliumModelTest(GemmaModelTest, unittest.TestCase):
-    all_model_classes = (
-        (HeliumModel, HeliumForCausalLM, HeliumForSequenceClassification, HeliumForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
+class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": HeliumModel,
@@ -66,14 +60,10 @@ class HeliumModelTest(GemmaModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
-    def setUp(self):
-        self.model_tester = HeliumModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=HeliumConfig, hidden_size=37)
+    model_tester_class = HeliumModelTester
 
 
 @slow

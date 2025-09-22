@@ -50,26 +50,13 @@ class Qwen3ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3Model
         causal_lm_class = Qwen3ForCausalLM
-        sequence_class = Qwen3ForSequenceClassification
-        token_class = Qwen3ForTokenClassification
         question_answering_class = Qwen3ForQuestionAnswering
+        sequence_classification_class = Qwen3ForSequenceClassification
+        token_classification_class = Qwen3ForTokenClassification
 
 
 @require_torch
 class Qwen3ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Qwen3Model,
-            Qwen3ForCausalLM,
-            Qwen3ForSequenceClassification,
-            Qwen3ForTokenClassification,
-            Qwen3ForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = Qwen3ModelTester
     pipeline_model_mapping = (
         {

@@ -55,8 +55,8 @@ class Exaone4ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Exaone4Model
         causal_lm_class = Exaone4ForCausalLM
-        sequence_classification_class = Exaone4ForSequenceClassification
         question_answering_class = Exaone4ForQuestionAnswering
+        sequence_classification_class = Exaone4ForSequenceClassification
         token_classification_class = Exaone4ForTokenClassification
 
 

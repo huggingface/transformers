@@ -53,8 +53,8 @@ class LlamaModelTester(CausalLMModelTester):
         config_class = LlamaConfig
         base_model_class = LlamaModel
         causal_lm_class = LlamaForCausalLM
-        sequence_classification_class = LlamaForSequenceClassification
         question_answering_class = LlamaForQuestionAnswering
+        sequence_classification_class = LlamaForSequenceClassification
         token_classification_class = LlamaForTokenClassification
 
 

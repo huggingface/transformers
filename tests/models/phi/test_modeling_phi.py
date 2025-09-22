@@ -43,17 +43,12 @@ class PhiModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = PhiModel
         causal_lm_class = PhiForCausalLM
-        sequence_class = PhiForSequenceClassification
-        token_class = PhiForTokenClassification
+        sequence_classification_class = PhiForSequenceClassification
+        token_classification_class = PhiForTokenClassification
 
 
 @require_torch
 class PhiModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": PhiModel,
@@ -65,8 +60,6 @@ class PhiModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = PhiModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905

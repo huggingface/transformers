@@ -47,7 +47,7 @@ class JetMoeModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = JetMoeModel
         causal_lm_class = JetMoeForCausalLM
-        sequence_class = JetMoeForSequenceClassification
+        sequence_classification_class = JetMoeForSequenceClassification
 
     def __init__(
         self,
@@ -106,11 +106,6 @@ class JetMoeModelTester(CausalLMModelTester):
 
 @require_torch
 class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (JetMoeModel, JetMoeForCausalLM, JetMoeForSequenceClassification) if is_torch_available() else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     test_mismatched_shapes = False
     test_cpu_offload = False
     test_disk_offload_bin = False
