@@ -144,8 +144,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 ## 훈련 하기[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)를 살펴보세요!
@@ -198,8 +196,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 
 <Tip>
@@ -222,8 +218,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> candidate2 = "The law applies to baguettes."
 ```
 
-<frameworkcontent>
-<pt>
 각 프롬프트와 후보 답변 쌍을 토큰화하여 PyTorch 텐서를 반환합니다. 또한 `labels`을 생성해야 합니다:
 
 ```py
@@ -251,5 +245,3 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> predicted_class
 '0'
 ```
-</pt>
-</frameworkcontent>

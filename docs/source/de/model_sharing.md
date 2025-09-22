@@ -79,21 +79,15 @@ Um sicherzustellen, dass Ihr Modell von jemandem verwendet werden kann, der mit 
 
 Die Konvertierung eines Checkpoints für ein anderes Framework ist einfach. Stellen Sie sicher, dass Sie PyTorch und TensorFlow installiert haben (siehe [hier](installation) für Installationsanweisungen), und finden Sie dann das spezifische Modell für Ihre Aufgabe in dem anderen Framework. 
 
-<frameworkcontent>
-<pt>
 Geben Sie `from_tf=True` an, um einen Prüfpunkt von TensorFlow nach PyTorch zu konvertieren:
 
 ```py
 >>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
-</pt>
-</frameworkcontent>
 
 ## Ein Modell während des Trainings hochladen
 
-<frameworkcontent>
-<pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
 Die Weitergabe eines Modells an den Hub ist so einfach wie das Hinzufügen eines zusätzlichen Parameters oder Rückrufs. Erinnern Sie sich an das [Feinabstimmungs-Tutorial](training), in der Klasse [`TrainingArguments`] geben Sie Hyperparameter und zusätzliche Trainingsoptionen an. Eine dieser Trainingsoptionen beinhaltet die Möglichkeit, ein Modell direkt an den Hub zu pushen. Setzen Sie `push_to_hub=True` in Ihrer [`TrainingArguments`]:
@@ -119,8 +113,6 @@ Nach der Feinabstimmung Ihres Modells rufen Sie [`~transformers.Trainer.push_to_
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 ## Verwenden Sie die Funktion `push_to_hub`.
 
