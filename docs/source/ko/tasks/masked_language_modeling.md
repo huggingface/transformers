@@ -179,8 +179,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 이제 [`DataCollatorForLanguageModeling`]을 사용하여 데이터 예제의 배치를 생성합니다. 
 데이터 세트 전체를 최대 길이로 패딩하는 것보다 collation 단계에서 매 배치안에서의 최대 길이로 문장을 *동적으로 패딩*하는 것이 더 효율적입니다.
 
-<frameworkcontent>
-<pt>
 
 시퀀스 끝 토큰을 패딩 토큰으로 사용하고 데이터를 반복할 때마다 토큰을 무작위로 마스킹하도록 `mlm_-probability`를 지정합니다:
 
@@ -190,13 +188,9 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
 ```
-</pt>
-</frameworkcontent>
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)를 살펴보세요!
@@ -252,8 +246,6 @@ Perplexity: 8.76
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -295,8 +287,6 @@ Perplexity: 8.76
   'sequence': 'The Milky Way is a small galaxy.'}]
 ```
 
-<frameworkcontent>
-<pt>
 텍스트를 토큰화하고 `input_ids`를 PyTorch 텐서 형태로 반환합니다.
 또한, `<mask>` 토큰의 위치를 지정해야 합니다:
 ```py
@@ -327,5 +317,3 @@ The Milky Way is a spiral galaxy.
 The Milky Way is a massive galaxy.
 The Milky Way is a small galaxy.
 ```
-</pt>
-</frameworkcontent>

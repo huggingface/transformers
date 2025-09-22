@@ -173,8 +173,6 @@ pip install datasets
 
 将 `return_tensors` 参数设置为 `pt`（对于PyTorch）或 `tf`（对于TensorFlow）：
 
-<frameworkcontent>
-<pt>
 
 
 ```py
@@ -195,8 +193,6 @@ pip install datasets
                            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]])}
 ```
-</pt>
-</frameworkcontent>
 
 ## 音频
 

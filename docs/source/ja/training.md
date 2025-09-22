@@ -77,8 +77,6 @@ rendered properly in your Markdown viewer.
 この時点で、使用したいフレームワークに対応するセクションに従う必要があります。右側のサイドバーのリンクを使用して、ジャンプしたいフレームワークに移動できます。
 そして、特定のフレームワークのすべてのコンテンツを非表示にしたい場合は、そのフレームワークのブロック右上にあるボタンを使用してください！
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 ## Train with Pytorch Trainer
@@ -163,15 +161,11 @@ BERTモデルの事前学習済みのヘッドは破棄され、ランダムに�
 >>> trainer.train()
 ```
 
-</pt>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
 ## Train in native Pytorch
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`]はトレーニングループを処理し、1行のコードでモデルをファインチューニングできるようにします。
@@ -314,8 +308,6 @@ PyTorchから[`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.Ada
 >>> metric.compute()
 ```
 
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 

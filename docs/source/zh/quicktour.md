@@ -28,14 +28,10 @@ rendered properly in your Markdown viewer.
 
 你还需要安装喜欢的机器学习框架：
 
-<frameworkcontent>
-<pt>
 
 ```bash
 pip install torch
 ```
-</pt>
-</frameworkcontent>
 
 ## Pipeline
 
@@ -126,8 +122,6 @@ label: NEGATIVE, with score: 0.5309
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-<frameworkcontent>
-<pt>
 使用 [`AutoModelForSequenceClassification`] 和 [`AutoTokenizer`] 来加载预训练模型和它关联的分词器（更多信息可以参考下一节的 `AutoClass`）：
 
 ```py
@@ -136,8 +130,6 @@ label: NEGATIVE, with score: 0.5309
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
-</pt>
-</frameworkcontent>
 
 在 [`pipeline`] 中指定模型和分词器，现在你就可以在法语文本上使用 `classifier` 了：
 
@@ -187,8 +179,6 @@ label: NEGATIVE, with score: 0.5309
 
 分词器也可以接受列表作为输入，并填充和截断文本，返回具有统一长度的批次：
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> pt_batch = tokenizer(
@@ -199,8 +189,6 @@ label: NEGATIVE, with score: 0.5309
 ...     return_tensors="pt",
 ... )
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -210,8 +198,6 @@ label: NEGATIVE, with score: 0.5309
 
 ### AutoModel
 
-<frameworkcontent>
-<pt>
 🤗 Transformers 提供了一种简单统一的方式来加载预训练的实例. 这表示你可以像加载 [`AutoTokenizer`] 一样加载 [`AutoModel`]。唯一不同的地方是为你的任务选择正确的[`AutoModel`]。对于文本（或序列）分类，你应该加载[`AutoModelForSequenceClassification`]：
 
 ```py
@@ -243,8 +229,6 @@ label: NEGATIVE, with score: 0.5309
 tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -255,8 +239,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 ### 保存模型
 
-<frameworkcontent>
-<pt>
 当你的模型微调完成，你就可以使用 [`PreTrainedModel.save_pretrained`] 把它和它的分词器保存下来：
 
 ```py
@@ -270,13 +252,9 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
-</pt>
-</frameworkcontent>
 
 🤗 Transformers 有一个特别酷的功能，它能够保存一个模型，并且将它加载为 PyTorch 或 TensorFlow 模型。`from_pt` 或 `from_tf` 参数可以将模型从一个框架转换为另一个框架：
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import AutoModel
@@ -284,8 +262,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
-</pt>
-</frameworkcontent>
 
 ## 自定义模型构建
 
@@ -299,8 +275,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
-<frameworkcontent>
-<pt>
 使用 [`AutoModel.from_config`] 根据你的自定义配置创建一个模型：
 
 ```py
@@ -308,8 +282,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 >>> my_model = AutoModel.from_config(my_config)
 ```
-</pt>
-</frameworkcontent>
 
 查阅 [创建一个自定义结构](./create_a_model) 指南获取更多关于构建自定义配置的信息。
 

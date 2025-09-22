@@ -78,20 +78,14 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 Use o [`DataCollatorWithPadding`] para criar um batch de exemplos. Ele também *preencherá dinamicamente* seu texto até o comprimento do elemento mais longo em seu batch, para que os exemplos do batch tenham um comprimento uniforme. Embora seja possível preencher seu texto com a função `tokenizer` definindo `padding=True`, o preenchimento dinâmico utilizando um data collator é mais eficiente.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorWithPadding
 
 >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 ```
-</pt>
-</frameworkcontent>
 
 ## Train
 
-<frameworkcontent>
-<pt>
 Carregue o DistilBERT com [`AutoModelForSequenceClassification`] junto com o número de rótulos esperados:
 
 ```py
@@ -139,8 +133,6 @@ Nesse ponto, restam apenas três passos:
 O [`Trainer`] aplicará o preenchimento dinâmico por padrão quando você definir o argumento `tokenizer` dele. Nesse caso, você não precisa especificar um data collator explicitamente.
 
 </Tip>
-</pt>
-</frameworkcontent>
 
 <Tip>
 

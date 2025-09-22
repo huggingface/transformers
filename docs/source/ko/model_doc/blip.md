@@ -61,8 +61,6 @@ BLIP은 여러 멀티모달 작업을 수행할 수 있는 모델입니다:
 [[autodoc]] BlipImageProcessor
     - preprocess
 
-<frameworkcontent>
-<pt>
 
 ## BlipModel[[transformers.BlipModel]]
 
@@ -98,5 +96,3 @@ BLIP은 여러 멀티모달 작업을 수행할 수 있는 모델입니다:
 [[autodoc]] BlipForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>

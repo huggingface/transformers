@@ -69,8 +69,6 @@ Se vuoi, puoi creare un sottoinsieme più piccolo del dataset per il fine-tuning
 
 ## Addestramento
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 🤗 Transformers mette a disposizione la classe [`Trainer`] ottimizzata per addestrare modelli 🤗 Transformers, rendendo semplice iniziare l'addestramento senza scrivere manualmente il tuo ciclo di addestramento. L'API [`Trainer`] supporta un'ampia gamma di opzioni e funzionalità di addestramento come logging, gradient accumulation e mixed precision.
@@ -148,15 +146,11 @@ Poi metti a punto il modello richiamando [`~transformers.Trainer.train`]:
 ```py
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
 ## Addestramento in PyTorch nativo
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`] si occupa del ciclo di addestramento e ti consente di mettere a punto un modello con una sola riga di codice. Per chi preferisse scrivere un proprio ciclo di addestramento personale, puoi anche fare il fine-tuning di un modello 🤗 Transformers in PyTorch nativo.
@@ -296,8 +290,6 @@ Proprio come è necessario aggiungere una funzione di valutazione del [`Trainer`
 
 >>> metric.compute()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 

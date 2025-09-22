@@ -96,20 +96,14 @@ Usa la función [`~datasets.Dataset.map`] de 🤗 Datasets para aplicar la funci
 
 Usa [`DataCollatorForSeq2Seq`] para crear un lote de ejemplos. Esto también *rellenará dinámicamente* tu texto y etiquetas a la dimensión del elemento más largo del lote para que tengan un largo uniforme. Si bien es posible rellenar tu texto en la función `tokenizer` mediante el argumento `padding=True`, el rellenado dinámico es más eficiente.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model)
 ```
-</pt>
-</frameworkcontent>
 
 ## Entrenamiento
 
-<frameworkcontent>
-<pt>
 Carga T5 con [`AutoModelForSeq2SeqLM`]:
 
 ```py
@@ -154,8 +148,6 @@ En este punto, solo faltan tres pasos:
 
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 

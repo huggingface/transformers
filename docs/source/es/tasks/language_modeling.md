@@ -160,8 +160,6 @@ Aplica la función `group_texts` sobre todo el dataset:
 
 Para modelados de lenguaje causales, usa [`DataCollatorForLanguageModeling`] para crear un lote de ejemplos. Esto también *rellenará dinámicamente* tu texto a la dimensión del elemento más largo del lote para que de esta manera tengan largo uniforme. Si bien es posible rellenar tu texto en la función `tokenizer` mediante el argumento `padding=True`, el rellenado dinámico es más eficiente. 
 
-<frameworkcontent>
-<pt>
 Puedes usar el token de final de secuencia como el token de relleno y asignar `mlm=False`. Esto usará los inputs como etiquetas movidas un elemento hacia la derecha:
 
 ```py
@@ -179,8 +177,6 @@ Para modelados de lenguaje por enmascaramiento usa el mismo [`DataCollatorForLan
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
 ```
-</pt>
-</frameworkcontent>
 
 ## Modelado de lenguaje causal
 
@@ -188,8 +184,6 @@ El modelado de lenguaje causal es frecuentemente utilizado para generación de t
 
 ### Entrenamiento
 
-<frameworkcontent>
-<pt>
 Carga DistilGPT2 con [`AutoModelForCausalLM`]:
 
 ```py
@@ -228,8 +222,6 @@ A este punto, solo faltan tres pasos:
 
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 ## Modelado de lenguaje por enmascaramiento
 
@@ -237,8 +229,6 @@ El modelado de lenguaje por enmascaramiento es también conocido como una tarea 
 
 ### Entrenamiento
 
-<frameworkcontent>
-<pt>
 Carga DistilRoBERTa con [`AutoModelForMaskedlM`]:
 
 ```py
@@ -278,8 +268,6 @@ A este punto, solo faltan tres pasos:
 
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 

@@ -153,8 +153,6 @@ Schließlich möchten Sie, dass der Tokenizer die tatsächlichen Tensoren zurüc
 
 Setzen Sie den Parameter `return_tensors` entweder auf `pt` für PyTorch, oder `tf` für TensorFlow:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> batch_sentences = [
@@ -174,8 +172,6 @@ Setzen Sie den Parameter `return_tensors` entweder auf `pt` für PyTorch, oder `
                            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]])}
 ```
-</pt>
-</frameworkcontent>
 
 ## Audio
 

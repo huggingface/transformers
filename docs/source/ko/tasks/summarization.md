@@ -124,15 +124,11 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 이제 [`DataCollatorForSeq2Seq`]를 사용하여 예제 배치를 만드세요.
 전체 데이터셋을 최대 길이로 패딩하는 것보다 배치마다 가장 긴 문장 길이에 맞춰 *동적 패딩*하는 것이 더 효율적입니다.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-</frameworkcontent>
 
 ## 평가[[evaluate]]
 
@@ -171,8 +167,6 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 
 ## 학습[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 모델을 [`Trainer`]로 파인튜닝 하는 것이 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인해보세요!
@@ -229,8 +223,6 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -263,8 +255,6 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 원한다면 수동으로 다음과 같은 작업을 수행하여 [`pipeline`]의 결과와 동일한 결과를 얻을 수 있습니다:
 
 
-<frameworkcontent>
-<pt>
 텍스트를 토크나이즈하고 `input_ids`를 PyTorch 텐서로 반환합니다:
 
 ```py
@@ -290,5 +280,3 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
 ```
-</pt>
-</frameworkcontent>

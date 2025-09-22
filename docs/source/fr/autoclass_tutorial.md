@@ -136,8 +136,6 @@ Chargez un processeur avec [`AutoProcessor.from_pretrained`]:
 
 ## AutoModel
 
-<frameworkcontent>
-<pt>
 Enfin, les classes `AutoModelFor` vous permettent de charger un modèle pré-entraîné pour une tâche donnée (voir [ici](model_doc/auto) pour une liste complète des tâches disponibles). Par exemple, chargez un modèle pour la classification de séquence avec [`AutoModelForSequenceClassification.from_pretrained`]:
 
 ```py
@@ -163,5 +161,3 @@ Les points de contrôle TensorFlow et Flax ne sont pas concernés, et peuvent ê
 </Tip>
 
 En général, nous recommandons d'utiliser les classes `AutoTokenizer` et `AutoModelFor` pour charger des instances pré-entraînées de tokenizers et modèles respectivement. Cela vous permettra de charger la bonne architecture à chaque fois. Dans le prochain [tutoriel](preprocessing), vous apprenez à utiliser un tokenizer, processeur d'image, extracteur de caractéristiques et processeur pour pré-traiter un jeu de données pour le fine-tuning.
-</pt>
-</frameworkcontent>

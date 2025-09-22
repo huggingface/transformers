@@ -167,8 +167,6 @@ echo "The future of artificial intelligence is" | transformers run --task text-g
 
 [[autodoc]] ModernBertDecoderConfig
 
-<frameworkcontent>
-<pt>
 
 ## ModernBertDecoderModel
 
@@ -185,5 +183,3 @@ echo "The future of artificial intelligence is" | transformers run --task text-g
 [[autodoc]] ModernBertDecoderForSequenceClassification
     - forward
 
-</pt>
-</frameworkcontent>

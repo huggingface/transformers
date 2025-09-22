@@ -136,8 +136,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] models.gpt2.modeling_gpt2.GPT2DoubleHeadsModelOutput
 
-<frameworkcontent>
-<pt>
 
 ## GPT2Model
 
@@ -169,5 +167,3 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 [[autodoc]] GPT2ForTokenClassification
     - forward
 
-</pt>
-</frameworkcontent>

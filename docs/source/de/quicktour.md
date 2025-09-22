@@ -66,14 +66,10 @@ Im folgenden Beispiel werden Sie die [`pipeline`] für die Stimmungsanalyse verw
 
 Installieren Sie die folgenden Abhängigkeiten, falls Sie dies nicht bereits getan haben:
 
-<frameworkcontent>
-<pt>
 
 ```bash
 pip install torch
 ```
-</pt>
-</frameworkcontent>
 
 Importieren sie die [`pipeline`] und spezifizieren sie die Aufgabe, welche sie lösen möchten:
 
@@ -148,8 +144,6 @@ Die [`pipeline`] kann jedes Modell aus dem [Model Hub](https://huggingface.co/mo
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-<frameworkcontent>
-<pt>
 Use the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and its associated tokenizer (more on an `AutoClass` below):
 
 ```py
@@ -158,8 +152,6 @@ Use the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
-</pt>
-</frameworkcontent>
 
 Dann können Sie das Modell und den Tokenizer in der [`pipeline`] angeben und den `Klassifikator` auf Ihren Zieltext anwenden:
 
@@ -210,8 +202,6 @@ Der Tokenizer gibt ein Wörterbuch zurück, das Folgendes enthält:
 
 Genau wie die [`pipeline`] akzeptiert der Tokenizer eine Liste von Eingaben. Darüber hinaus kann der Tokenizer den Text auch auffüllen und kürzen, um einen Stapel mit einheitlicher Länge zurückzugeben:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> pt_batch = tokenizer(
@@ -222,15 +212,11 @@ Genau wie die [`pipeline`] akzeptiert der Tokenizer eine Liste von Eingaben. Dar
 ...     return_tensors="pt",
 ... )
 ```
-</pt>
-</frameworkcontent>
 
 Lesen Sie das Tutorial [preprocessing](./preprocessing) für weitere Details zur Tokenisierung.
 
 ### AutoModel
 
-<frameworkcontent>
-<pt>
 🤗 Transformers bietet eine einfache und einheitliche Möglichkeit, vortrainierte Instanzen zu laden. Das bedeutet, dass Sie ein [`AutoModel`] laden können, wie Sie einen [`AutoTokenizer`] laden würden. Der einzige Unterschied ist die Auswahl des richtigen [`AutoModel`] für die Aufgabe. Da Sie eine Text- oder Sequenzklassifizierung vornehmen, laden Sie [`AutoModelForSequenceClassification`]:
 
 ```py
@@ -262,8 +248,6 @@ Das Modell gibt die endgültigen Aktivierungen in dem Attribut "logits" aus. Wen
 tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -283,8 +267,6 @@ Die Modellausgänge verhalten sich auch wie ein Tupel oder ein Wörterbuch (z.B.
 
 ### Modell speichern
 
-<frameworkcontent>
-<pt>
 Sobald Ihr Modell feinabgestimmt ist, können Sie es mit seinem Tokenizer speichern, indem Sie [`PreTrainedModel.save_pretrained`] verwenden:
 
 ```py
@@ -298,13 +280,9 @@ Wenn Sie bereit sind, das Modell erneut zu verwenden, laden Sie es mit [`PreTrai
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
-</pt>
-</frameworkcontent>
 
 Ein besonders cooles 🤗 Transformers-Feature ist die Möglichkeit, ein Modell zu speichern und es entweder als PyTorch- oder TensorFlow-Modell wieder zu laden. Der Parameter "from_pt" oder "from_tf" kann das Modell von einem Framework in das andere konvertieren:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import AutoModel
@@ -312,8 +290,6 @@ Ein besonders cooles 🤗 Transformers-Feature ist die Möglichkeit, ein Modell 
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
-</pt>
-</frameworkcontent>
 
 ## Custom model builds
 
@@ -327,8 +303,6 @@ Beginnen Sie mit dem Import von [`AutoConfig`] und laden Sie dann das trainierte
 >>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
-<frameworkcontent>
-<pt>
 Create a model from your custom configuration with [`AutoModel.from_config`]:
 
 ```py
@@ -336,8 +310,6 @@ Create a model from your custom configuration with [`AutoModel.from_config`]:
 
 >>> my_model = AutoModel.from_config(my_config)
 ```
-</pt>
-</frameworkcontent>
 
 Weitere Informationen zur Erstellung von benutzerdefinierten Konfigurationen finden Sie in der Anleitung [Erstellen einer benutzerdefinierten Architektur](./create_a_model).
 

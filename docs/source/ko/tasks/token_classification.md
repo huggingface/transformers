@@ -155,15 +155,11 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 이제 [`DataCollatorWithPadding`]를 사용하여 예제 배치를 만들어봅시다. 데이터 세트 전체를 최대 길이로 패딩하는 대신, *동적 패딩*을 사용하여 배치에서 가장 긴 길이에 맞게 문장을 패딩하는 것이 효율적입니다.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 ```
-</pt>
-</frameworkcontent>
 
 ## 평가[[evaluation]]
 
@@ -244,8 +240,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ... }
 ```
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]를 사용하여 모델을 파인 튜닝하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
@@ -300,8 +294,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -362,8 +354,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 원한다면, `pipeline`의 결과를 수동으로 복제할 수도 있습니다:
 
-<frameworkcontent>
-<pt>
 텍스트를 토큰화하고 PyTorch 텐서를 반환합니다:
 
 ```py
@@ -407,5 +397,3 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
  'O',
  'O']
 ```
-</pt>
-</frameworkcontent>

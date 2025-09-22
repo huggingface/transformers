@@ -136,20 +136,14 @@ Use a função [`map`](https://huggingface.co/docs/datasets/process#map) do 🤗
 
 Use o [`DataCollatorForTokenClassification`] para criar um batch de exemplos. Ele também *preencherá dinamicamente* seu texto e rótulos para o comprimento do elemento mais longo em seu batch, para que tenham um comprimento uniforme. Embora seja possível preencher seu texto na função `tokenizer` configurando `padding=True`, o preenchimento dinâmico é mais eficiente.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 ```
-</pt>
-</frameworkcontent>
 
 ## Treinamento
 
-<frameworkcontent>
-<pt>
 Carregue o DistilBERT com o [`AutoModelForTokenClassification`] junto com o número de rótulos esperados:
 
 ```py
@@ -192,8 +186,6 @@ Nesse ponto, restam apenas três passos:
 
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 

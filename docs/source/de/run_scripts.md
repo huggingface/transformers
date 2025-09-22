@@ -85,8 +85,6 @@ pip install -r requirements.txt
 
 ## Ein Skript ausführen
 
-<frameworkcontent>
-<pt>
 Das Beispielskript lädt einen Datensatz aus der 🤗 [Datasets](https://huggingface.co/docs/datasets/) Bibliothek herunter und verarbeitet ihn vor. Dann nimmt das Skript eine Feinabstimmung eines Datensatzes mit dem [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) auf einer Architektur vor, die eine Zusammenfassung unterstützt. Das folgende Beispiel zeigt, wie die Feinabstimmung von [T5-small](https://huggingface.co/google-t5/t5-small) auf dem Datensatz [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) durchgeführt wird. Das T5-Modell benötigt aufgrund der Art und Weise, wie es trainiert wurde, ein zusätzliches Argument `source_prefix`. Mit dieser Eingabeaufforderung weiß T5, dass es sich um eine Zusammenfassungsaufgabe handelt.
 
 ```bash
@@ -103,8 +101,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-</frameworkcontent>
 
 ## Verteiltes Training und gemischte Präzision
 
@@ -134,8 +130,6 @@ TensorFlow-Skripte verwenden eine [`MirroredStrategy`](https://www.tensorflow.or
 
 ## Ein Skript auf einer TPU ausführen
 
-<frameworkcontent>
-<pt>
 Tensor Processing Units (TPUs) sind speziell für die Beschleunigung der Leistung konzipiert. PyTorch unterstützt TPUs mit dem [XLA](https://www.tensorflow.org/xla) Deep Learning Compiler (siehe [hier](https://github.com/pytorch/xla/blob/master/README.md) für weitere Details). Um eine TPU zu verwenden, starten Sie das Skript `xla_spawn.py` und verwenden das Argument `num_cores`, um die Anzahl der TPU-Kerne festzulegen, die Sie verwenden möchten.
 
 ```bash
@@ -153,8 +147,6 @@ python xla_spawn.py --num_cores 8 \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-</frameworkcontent>
 
 ## Führen Sie ein Skript mit 🤗 Accelerate aus.
 

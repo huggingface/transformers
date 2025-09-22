@@ -104,8 +104,6 @@ pip install -q datasets transformers evaluate
 >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, do_reduce_labels=True)
 ```
 
-<frameworkcontent>
-<pt>
 
 이미지 데이터 세트에 데이터 증강을 적용하여 과적합에 대해 모델을 보다 강건하게 만드는 것이 일반적입니다. 이 가이드에서는 [torchvision](https://pytorch.org/vision/stable/index.html)의 [`ColorJitter`](https://pytorch.org/vision/stable/generated/torchvision.transforms.ColorJitter.html)를 사용하여 이미지의 색상 속성을 임의로 변경합니다. 하지만, 자신이 원하는 이미지 라이브러리를 사용할 수도 있습니다.
 
@@ -139,8 +137,6 @@ pip install -q datasets transformers evaluate
 >>> test_ds.set_transform(val_transforms)
 ```
 
-</pt>
-</frameworkcontent>
 
 ## 평가하기[[evaluate]]
 
@@ -154,8 +150,6 @@ pip install -q datasets transformers evaluate
 
 그런 다음 메트릭을 [`~evaluate.EvaluationModule.compute`]하는 함수를 만듭니다. 예측을 먼저 로짓으로 변환한 다음, 레이블의 크기에 맞게 모양을 다시 지정해야 [`~evaluate.EvaluationModule.compute`]를 호출할 수 있습니다:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> import numpy as np
@@ -187,15 +181,11 @@ pip install -q datasets transformers evaluate
 ...         return metrics
 ```
 
-</pt>
-</frameworkcontent>
 
 
 이제 `compute_metrics` 함수를 사용할 준비가 되었습니다. 트레이닝을 설정할 때 이 함수로 돌아가게 됩니다.
 
 ## 학습하기[[train]]
-<frameworkcontent>
-<pt>
 <Tip>
 
 만약 [`Trainer`]를 사용해 모델을 미세 조정하는 것에 익숙하지 않다면, [여기](../training#finetune-with-trainer)에서 기본 튜토리얼을 살펴보세요!
@@ -249,8 +239,6 @@ pip install -q datasets transformers evaluate
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 
 ## 추론하기[[inference]]
@@ -268,8 +256,6 @@ pip install -q datasets transformers evaluate
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-image.png" alt="Image of bedroom"/>
 </div>
 
-<frameworkcontent>
-<pt>
 
 추론을 위해 미세 조정한 모델을 시험해 보는 가장 간단한 방법은 [`pipeline`]에서 사용하는 것입니다. 모델을 사용하여 이미지 분할을 위한 `pipeline`을 인스턴스화하고 이미지를 전달합니다:
 
@@ -333,8 +319,6 @@ pip install -q datasets transformers evaluate
 >>> pred_seg = upsampled_logits.argmax(dim=1)[0]
 ```
 
-</pt>
-</frameworkcontent>
 
 결과를 시각화하려면 [dataset color palette](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51)를 각 클래스를 RGB 값에 매핑하는 `ade_palette()`로 로드합니다. 그런 다음 이미지와 예측된 분할 지도(segmentation map)을 결합하여 구성할 수 있습니다:
 

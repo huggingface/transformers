@@ -173,8 +173,6 @@ pip install transformers datasets evaluate
 
 次に、[`DataCollat​​orForLanguageModeling`] を使用してサンプルのバッチを作成します。データセット全体を最大長までパディングするのではなく、照合中にバッチ内の最長の長さまで文を *動的にパディング* する方が効率的です。
 
-<frameworkcontent>
-<pt>
 
 シーケンス終了トークンをパディング トークンとして使用し、データを反復するたびにランダムにトークンをマスクするために `mlm_probability` を指定します。
 
@@ -184,13 +182,9 @@ pip install transformers datasets evaluate
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
 ```
-</pt>
-</frameworkcontent>
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
@@ -249,8 +243,6 @@ Perplexity: 8.76
 >>> trainer.push_to_hub()
 ```
 
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -291,8 +283,6 @@ Perplexity: 8.76
   'sequence': 'The Milky Way is a small galaxy.'}]
 ```
 
-<frameworkcontent>
-<pt>
 
 テキストをトークン化し、`input_ids`を PyTorch テンソルとして返します。 `<mask>` トークンの位置も指定する必要があります。
 
@@ -326,5 +316,3 @@ The Milky Way is a massive galaxy.
 The Milky Way is a small galaxy.
 ```
 
-</pt>
-</frameworkcontent>

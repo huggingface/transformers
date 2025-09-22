@@ -105,8 +105,6 @@ pip install -q datasets transformers evaluate
 >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, do_reduce_labels=True)
 ```
 
-<frameworkcontent>
-<pt>
 
 モデルを過学習に対してより堅牢にするために、画像データセットにいくつかのデータ拡張を適用するのが一般的です。このガイドでは、[torchvision](https://pytorch.org/vision/stable/index.html) の [`ColorJitter`](https://pytorch.org/vision/stable/generated/torchvision.transforms.ColorJitter.html) 関数を使用します。 ) を使用して画像の色のプロパティをランダムに変更しますが、任意の画像ライブラリを使用することもできます。
 
@@ -140,8 +138,6 @@ pip install -q datasets transformers evaluate
 >>> test_ds.set_transform(val_transforms)
 ```
 
-</pt>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -156,8 +152,6 @@ pip install -q datasets transformers evaluate
 次に、メトリクスを [`~evaluate.EvaluationModule.compute`] する関数を作成します。予測を次のように変換する必要があります
 最初にロジットを作成し、次に [`~evaluate.EvaluationModule.compute`] を呼び出す前にラベルのサイズに一致するように再形成します。
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> import numpy as np
@@ -189,15 +183,11 @@ pip install -q datasets transformers evaluate
 ...         return metrics
 ```
 
-</pt>
-</frameworkcontent>
 
 
 これで`compute_metrics`関数の準備が整いました。トレーニングをセットアップするときにこの関数に戻ります。
 
 ## Train
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#finetune-with-trainer) の基本的なチュートリアルをご覧ください。
@@ -252,8 +242,6 @@ pip install -q datasets transformers evaluate
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 ## Inference
 
@@ -270,8 +258,6 @@ pip install -q datasets transformers evaluate
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-image.png" alt="Image of bedroom"/>
 </div>
 
-<frameworkcontent>
-<pt>
 
 推論用に微調整されたモデルを試す最も簡単な方法は、それを [`pipeline`] で使用することです。モデルを使用して画像セグメンテーション用の `pipeline`をインスタンス化し、それに画像を渡します。
 
@@ -338,8 +324,6 @@ pip install -q datasets transformers evaluate
 >>> pred_seg = upsampled_logits.argmax(dim=1)[0]
 ```
 
-</pt>
-</frameworkcontent>
 
 結果を視覚化するには、[データセット カラー パレット](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) を、それぞれをマップする `ade_palette()` としてロードします。クラスを RGB 値に変換します。次に、画像と予測されたセグメンテーション マップを組み合わせてプロットできます。
 

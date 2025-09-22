@@ -174,8 +174,6 @@ pip install datasets
 
 `return_tensors`パラメータを`pt`（PyTorch用）または`tf`（TensorFlow用）に設定します：
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> batch_sentences = [
@@ -195,8 +193,6 @@ pip install datasets
                            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]])}
 ```
-</pt>
-</frameworkcontent>
 
 ## Audio
 

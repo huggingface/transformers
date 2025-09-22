@@ -90,8 +90,6 @@ pip install -r requirements.txt
 
 ## 스크립트 실행하기[[run-a-script]]
 
-<frameworkcontent>
-<pt>
 예제 스크립트는 🤗 [Datasets](https://huggingface.co/docs/datasets/) 라이브러리에서 데이터 세트를 다운로드하고 전처리합니다.
 그런 다음 스크립트는 요약 기능을 지원하는 아키텍처에서 [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer)를 사용하여 데이터 세트를 미세 조정합니다.
 다음 예는 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 데이터 세트에서 [T5-small](https://huggingface.co/google-t5/t5-small)을 미세 조정합니다.
@@ -111,8 +109,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-</frameworkcontent>
 
 ## 혼합 정밀도(mixed precision)로 분산 훈련하기[[distributed-training-and-mixed-precision]]
 
@@ -144,8 +140,6 @@ TensorFlow 스크립트는 분산 훈련을 위해 [`MirroredStrategy`](https://
 
 ## TPU 위에서 스크립트 실행하기[[run-a-script-on-a-tpu]]
 
-<frameworkcontent>
-<pt>
 Tensor Processing Units (TPUs)는 성능을 가속화하기 위해 특별히 설계되었습니다.
 PyTorch는 [XLA](https://www.tensorflow.org/xla) 딥러닝 컴파일러와 함께 TPU를 지원합니다(자세한 내용은 [여기](https://github.com/pytorch/xla/blob/master/README.md) 참조). 
 TPU를 사용하려면 `xla_spawn.py` 스크립트를 실행하고 `num_cores` 인수를 사용하여 사용하려는 TPU 코어 수를 설정합니다.
@@ -165,8 +159,6 @@ python xla_spawn.py --num_cores 8 \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-</frameworkcontent>
 
 ## 🤗 Accelerate로 스크립트 실행하기[[run-a-script-with-accelerate]]
 

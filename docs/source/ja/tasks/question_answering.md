@@ -43,8 +43,6 @@
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -86,8 +84,6 @@
 
 必要に応じて、`pipeline`の結果を手動で複製することもできます。
 
-<frameworkcontent>
-<pt>
 
 テキストをトークン化して PyTorch テンソルを返します。
 
@@ -124,5 +120,3 @@
 >>> tokenizer.decode(predict_answer_tokens)
 '176 billion parameters and can generate text in 46 languages natural languages and 13'
 ```
-</pt>
-</frameworkcontent>

@@ -73,8 +73,6 @@ An dieser Stelle sollten Sie dem Abschnitt folgen, der dem Rahmen entspricht, de
 in der rechten Seitenleiste können Sie zu dem gewünschten Abschnitt springen - und wenn Sie den gesamten Inhalt eines bestimmten Frameworks ausblenden möchten,
 klicken Sie einfach auf die Schaltfläche oben rechts im Block des jeweiligen Frameworks!
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 ## Trainieren mit PyTorch Trainer
@@ -155,15 +153,11 @@ Anschließend können Sie Ihr Modell durch den Aufruf von [`~transformers.Traine
 ```py
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
 ## Trainieren in nativem PyTorch
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`] kümmert sich um die Trainingsschleife und ermöglicht die Feinabstimmung eines Modells in einer einzigen Codezeile. Für Benutzer, die es vorziehen, ihre eigene Trainingsschleife zu schreiben, können Sie auch eine Feinabstimmung eines 🤗 Transformers-Modells in nativem PyTorch vornehmen.
@@ -305,8 +299,6 @@ Genauso wie Sie eine Bewertungsfunktion zu [`Trainer`] hinzugefügt haben, müss
 
 >>> metric.compute()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 

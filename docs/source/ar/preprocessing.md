@@ -152,8 +152,6 @@ pip install datasets
 
 قم بتعيين معلمة `return_tensors` إلى إما `pt` لـ PyTorch، أو `tf` لـ TensorFlow:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> batch_sentences = [
@@ -173,8 +171,6 @@ pip install datasets
                            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]])}
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 

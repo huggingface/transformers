@@ -12,14 +12,10 @@
 
 ستحتاج أيضًا إلى تثبيت إطار عمل التعلم الآلي المفضل لديك:
 
-<frameworkcontent>
-<pt>
 
 ```bash
 pip install torch
 ```
-</pt>
-</frameworkcontent>
 
 ## خط الأنابيب
 
@@ -116,8 +112,6 @@ label: NEGATIVE, with score: 0.5309
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-<frameworkcontent>
-<pt>
 استخدم [`AutoModelForSequenceClassification`] و [`AutoTokenizer`] لتحميل النموذج المُدرب مسبقًا ومعالجته المرتبط به (مزيد من المعلومات حول `AutoClass` في القسم التالي):
 
 ```py
@@ -126,8 +120,6 @@ label: NEGATIVE, with score: 0.5309
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
-</pt>
-</frameworkcontent>
 
 حدد النموذج والمعالج في [`pipeline`]. الآن يمكنك تطبيق `classifier` على النص الفرنسي:
 
@@ -176,8 +168,6 @@ label: NEGATIVE, with score: 0.5309
 
 يمكن المجزئ أيضًا قبول قائمة من المدخلات، ويقوم بـ "حشو" و"تقصير" النص لإرجاع كدفعة بطول موحد:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> pt_batch = tokenizer(
@@ -188,8 +178,6 @@ label: NEGATIVE, with score: 0.5309
 ...     return_tensors="pt",
 ... )
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -199,8 +187,6 @@ label: NEGATIVE, with score: 0.5309
 
 ### AutoModel
 
-<frameworkcontent>
-<pt>
 تقدم مكتبة 🤗 Transformers طريقة بسيطة وموحدة لتحميل نماذج مدربة مسبقًا. وهذا يعني أنه يمكنك تحميل [`AutoModel`] كما لو كنت تقوم بتحميل [`AutoTokenizer`]. الفرق الوحيد هو اختيار فئة [`AutoModel`] المناسبة للمهمة. بالنسبة لتصنيف النص (أو التسلسل)، يجب عليك تحميل [`AutoModelForSequenceClassification`]:
 
 ```py
@@ -236,8 +222,6 @@ label: NEGATIVE, with score: 0.5309
 tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -247,8 +231,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 ### حفظ النموذج
 
-<frameworkcontent>
-<pt>
 بمجرد ضبط نموذجك، يمكنك حفظه مع برنامج الترميز الخاص به باستخدام [`PreTrainedModel.save_pretrained`]:
 
 ```py
@@ -262,13 +244,9 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
-</pt>
-</frameworkcontent>
 
 من الميزات الرائعة في 🤗 Transformers القدرة على حفظ نموذج وإعادة تحميله كنموذج PyTorch أو TensorFlow. يمكن أن يحول معامل `from_pt` أو `from_tf` النموذج من إطار عمل إلى آخر:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import AutoModel
@@ -276,8 +254,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
-</pt>
-</frameworkcontent>
 
 
 ## إنشاء نماذج مخصصة
@@ -292,8 +268,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
-<frameworkcontent>
-<pt>
 قم بإنشاء نموذج من تكوينك المخصص باستخدام [`AutoModel.from_config`]:
 
 ```py
@@ -301,8 +275,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 >>> my_model = AutoModel.from_config(my_config)
 ```
-</pt>
-</frameworkcontent>
 
 الق نظرة على دليل [إنشاء بنية مخصصة](./create_a_model) لمزيد من المعلومات حول بناء التكوينات المخصصة.
 

@@ -113,16 +113,12 @@ pip install transformers datasets evaluate sacrebleu
 
 الآن أنشئ دفعة من الأمثلة باستخدام [`DataCollatorForSeq2Seq`]. من الأكثر كفاءة *الحشو الديناميكي* للجمل إلى أطول طول في دفعة أثناء التجميع، بدلاً من حشو مجموعة البيانات بأكملها إلى الحد الأقصى للطول.
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-</frameworkcontent>
 
 ## التقييم (Evaluate)
 
@@ -169,8 +165,6 @@ pip install transformers datasets evaluate sacrebleu
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -225,8 +219,6 @@ pip install transformers datasets evaluate sacrebleu
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -260,8 +252,6 @@ pip install transformers datasets evaluate sacrebleu
 
 يمكنك أيضًا تكرار نتائج `pipeline` يدويًا إذا أردت:
 
-<frameworkcontent>
-<pt>
 قم بتحويل النص إلى رموز وإرجاع `input_ids` كموترات PyTorch:
 
 ```py
@@ -286,5 +276,3 @@ pip install transformers datasets evaluate sacrebleu
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'Les lignées partagent des ressources avec des bactéries enfixant l'azote.'
 ```
-</pt>
-</frameworkcontent>

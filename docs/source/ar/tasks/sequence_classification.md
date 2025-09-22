@@ -92,16 +92,12 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorWithPadding`].  الأكثر كفاءة هو استخدام الحشو الديناميكي لجعل الجمل متساوية في الطول داخل كل دفعة، بدلًا من حشو كامل البيانات إلى الحد الأقصى للطول.
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import DataCollatorWithPadding
 
 >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 ```
-</pt>
-</frameworkcontent>
 
 ## التقييم(Evaluate)
 
@@ -135,8 +131,6 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
 ```
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 إذا لم تكن على دراية بضبط نموذج دقيق باستخدام [`Trainer`], فالق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
@@ -197,8 +191,6 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -230,8 +222,6 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 يمكنك أيضًا تكرار نتائج `pipeline` يدويًا إذا أردت:
 
-<frameworkcontent>
-<pt>
 قم يتجزئة النص وإرجاع تنسورات PyTorch:
 
 ```py
@@ -258,5 +248,3 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> model.config.id2label[predicted_class_id]
 'POSITIVE'
 ```
-</pt>
-</frameworkcontent>

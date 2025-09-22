@@ -28,14 +28,10 @@ Avant de commencer, assurez-vous que vous avez installé toutes les bibliothèqu
 
 Vous aurez aussi besoin d'installer votre bibliothèque d'apprentissage profond favorite :
 
-<frameworkcontent>
-<pt>
 
 ```bash
 pip install torch
 ```
-</pt>
-</frameworkcontent>
 
 ## Pipeline
 
@@ -126,8 +122,6 @@ Le [`pipeline`] peut être utilisé avec n'importe quel modèle du [Hub](https:/
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-<frameworkcontent>
-<pt>
 Utilisez [`AutoModelForSequenceClassification`] et [`AutoTokenizer`] pour charger le modèle pré-entraîné et le tokenizer adapté (plus de détails sur une `AutoClass` dans la section suivante) :
 
 ```py
@@ -136,8 +130,6 @@ Utilisez [`AutoModelForSequenceClassification`] et [`AutoTokenizer`] pour charge
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
-</pt>
-</frameworkcontent>
 
 Spécifiez le modèle et le tokenizer dans le [`pipeline`], et utilisez le `classifier` sur le texte en français :
 
@@ -187,8 +179,6 @@ Le tokenizer retourne un dictionnaire contenant :
 
 Un tokenizer peut également accepter une liste de textes, et remplir et tronquer le texte pour retourner un échantillon de longueur uniforme :
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> pt_batch = tokenizer(
@@ -199,8 +189,6 @@ Un tokenizer peut également accepter une liste de textes, et remplir et tronque
 ...     return_tensors="pt",
 ... )
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -210,8 +198,6 @@ Consultez le tutoriel [prétraitement](./preprocessing) pour plus de détails su
 
 ### AutoModel
 
-<frameworkcontent>
-<pt>
 🤗 Transformers fournit un moyen simple et unifié de charger des instances pré-entraînées. Cela signifie que vous pouvez charger un [`AutoModel`] comme vous chargeriez un [`AutoTokenizer`]. La seule différence est de sélectionner l'[`AutoModel`] approprié pour la tâche. Pour une classification de texte (ou de séquence de textes), vous devez charger [`AutoModelForSequenceClassification`] :
 
 ```py
@@ -243,8 +229,6 @@ Le modèle produit les activations finales dans l'attribut `logits`. Appliquez l
 tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -254,8 +238,6 @@ Tous les modèles 🤗 Transformers (PyTorch ou TensorFlow) produisent les tenso
 
 ### Sauvegarder un modèle
 
-<frameworkcontent>
-<pt>
 Une fois que votre modèle est finetuné, vous pouvez le sauvegarder avec son tokenizer en utilisant [`PreTrainedModel.save_pretrained`] :
 
 ```py
@@ -269,13 +251,9 @@ Lorsque vous voulez réutiliser le modèle, rechargez-le avec [`PreTrainedModel.
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
-</pt>
-</frameworkcontent>
 
 Une fonctionnalité particulièrement cool 🤗 Transformers est la possibilité d'enregistrer un modèle et de le recharger en tant que modèle PyTorch ou TensorFlow. Le paramètre `from_pt` ou `from_tf` permet de convertir le modèle d'un framework à l'autre :
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import AutoModel
@@ -283,8 +261,6 @@ Une fonctionnalité particulièrement cool 🤗 Transformers est la possibilité
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
-</pt>
-</frameworkcontent>
 
 ## Constructions de modèles personnalisés
 
@@ -298,8 +274,6 @@ Commencez par importer [`AutoConfig`], puis chargez le modèle pré-entraîné q
 >>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
-<frameworkcontent>
-<pt>
 Créez un modèle personnalisé à partir de votre configuration avec [`AutoModel.from_config`] :
 
 ```py
@@ -307,8 +281,6 @@ Créez un modèle personnalisé à partir de votre configuration avec [`AutoMode
 
 >>> my_model = AutoModel.from_config(my_config)
 ```
-</pt>
-</frameworkcontent>
 
 Consultez le guide [Créer une architecture personnalisée](./create_a_model) pour plus d'informations sur la création de configurations personnalisées.
 

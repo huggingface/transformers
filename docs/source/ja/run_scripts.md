@@ -90,8 +90,6 @@ pip install -r requirements.txt
 
 ## Run a script
 
-<frameworkcontent>
-<pt>
 この例のスクリプトは、🤗 [Datasets](https://huggingface.co/docs/datasets/) ライブラリからデータセットをダウンロードし、前処理を行います。次に、[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) を使用して要約をサポートするアーキテクチャ上でデータセットをファインチューニングします。以下の例では、[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) データセット上で [T5-small](https://huggingface.co/google-t5/t5-small) をファインチューニングする方法が示されています。T5 モデルは、そのトレーニング方法に起因して追加の `source_prefix` 引数が必要です。このプロンプトにより、T5 はこれが要約タスクであることを知ることができます。
 
 
@@ -110,8 +108,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 
-</pt>
-</frameworkcontent>
 
 ## Distributed training and mixed precision
 
@@ -144,8 +140,6 @@ TensorFlowスクリプトは、分散トレーニングに[`MirroredStrategy`](h
 
 ## Run a script on a TPU
 
-<frameworkcontent>
-<pt>
 Tensor Processing Units (TPUs)は、パフォーマンスを加速させるために特別に設計されています。PyTorchは、[XLA](https://www.tensorflow.org/xla)ディープラーニングコンパイラを使用してTPUsをサポートしており、詳細については[こちら](https://github.com/pytorch/xla/blob/master/README.md)をご覧ください。TPUを使用するには、`xla_spawn.py`スクリプトを起動し、`num_cores`引数を使用して使用するTPUコアの数を設定します。
 ```bash
 python xla_spawn.py --num_cores 8 \
@@ -162,8 +156,6 @@ python xla_spawn.py --num_cores 8 \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-</frameworkcontent>
 
 ## Run a script with 🤗 Accelerate
 

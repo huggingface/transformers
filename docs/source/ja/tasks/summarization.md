@@ -119,16 +119,12 @@ pip install transformers datasets evaluate rouge_score
 
 次に、[`DataCollat​​orForSeq2Seq`] を使用してサンプルのバッチを作成します。データセット全体を最大長までパディングするのではなく、照合中にバッチ内の最長の長さまで文を *動的にパディング* する方が効率的です。
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -164,8 +160,6 @@ pip install transformers datasets evaluate rouge_score
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 
@@ -221,8 +215,6 @@ pip install transformers datasets evaluate rouge_score
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -254,8 +246,6 @@ pip install transformers datasets evaluate rouge_score
 
 必要に応じて、`pipeline`」の結果を手動で複製することもできます。
 
-<frameworkcontent>
-<pt>
 Tokenize the text and return the `input_ids` as PyTorch tensors:
 
 ```py
@@ -280,5 +270,3 @@ Tokenize the text and return the `input_ids` as PyTorch tensors:
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
 ```
-</pt>
-</frameworkcontent>

@@ -124,8 +124,6 @@ ViT의 추론 및 커스텀 데이터에 대한 미세 조정과 관련된 데�
 [[autodoc]] ViTImageProcessorFast
     - preprocess
 
-<frameworkcontent>
-<pt>
 
 ## ViTModel [[transformers.ViTModel]]
 
@@ -142,5 +140,3 @@ ViT의 추론 및 커스텀 데이터에 대한 미세 조정과 관련된 데�
 [[autodoc]] ViTForImageClassification
     - forward
 
-</pt>
-</frameworkcontent>

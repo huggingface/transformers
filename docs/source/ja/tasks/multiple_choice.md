@@ -145,8 +145,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
@@ -199,8 +197,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 
 <Tip>
@@ -224,8 +220,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> candidate2 = "The law applies to baguettes."
 ```
 
-<frameworkcontent>
-<pt>
 
 各プロンプトと回答候補のペアをトークン化し、PyTorch テンソルを返します。いくつかの`lables`も作成する必要があります。
 
@@ -254,5 +248,3 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> predicted_class
 '0'
 ```
-</pt>
-</frameworkcontent>

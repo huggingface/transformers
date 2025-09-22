@@ -85,21 +85,15 @@ PyTorchおよびTensorFlowのチェックポイントでモデルを変換して
 PyTorchとTensorFlowがインストールされていることを確認してください（インストール手順については[こちら](installation)を参照）し、
 その後、他のフレームワーク向けに特定のタスク用のモデルを見つけます。
 
-<frameworkcontent>
-<pt>
 TensorFlowからPyTorchにチェックポイントを変換するには、`from_tf=True`を指定します：
 
 ```python
 >>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
-</pt>
-</frameworkcontent>
 
 ## Push a model during traning
 
-<frameworkcontent>
-<pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
 モデルをHubにプッシュすることは、追加のパラメーターまたはコールバックを追加するだけで簡単です。
@@ -140,8 +134,6 @@ Pass your training arguments as usual to [`Trainer`]:
 >>> trainer.push_to_hub()
 ```
 
-</pt>
-</frameworkcontent>
 
 ## `push_to_hub` 関数を使用する
 

@@ -86,8 +86,6 @@ pip install -r requirements.txt
 
 ## Exécuter un script
 
-<frameworkcontent>
-<pt>
 
 Le script d'exemple télécharge et prétraite un jeu de données à partir de la bibliothèque 🤗 [Datasets](https://huggingface.co/docs/datasets/). Ensuite, le script affine un ensemble de données à l'aide de [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) sur une architecture qui prend en charge la tâche de résumé. L'exemple suivant montre comment ajuster le modèle [T5-small](https://huggingface.co/google-t5/t5-small) sur les données [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). Le modèle T5 nécessite un argument supplémentaire `source_prefix` en raison de la façon dont il a été entraîné. Cette invite permet à T5 de savoir qu'il s'agit d'une tâche de résumé.
 
@@ -105,8 +103,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-</frameworkcontent>
 
 ## Entraînement distribué et précision mixte
 
@@ -136,8 +132,6 @@ Les scripts TensorFlow utilisent une Strategie en Miroir [`MirroredStrategy`](ht
 
 ## Exécuter un script sur un TPU 
 
-<frameworkcontent>
-<pt>
 
 Les unités de traitement de tenseurs (UTT) (TPU) sont spécialement conçues pour accélérer les performances. PyTorch prend en charge les TPU avec le compilateur de deep learning [XLA](https://www.tensorflow.org/xla). Pour utiliser un TPU, lancez le script xla_spawn.py et utilisez l'argument num_cores pour définir le nombre de cœurs TPU que vous souhaitez utilise
 
@@ -156,8 +150,6 @@ python xla_spawn.py --num_cores 8 \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-</frameworkcontent>
 
 ## Exécuter un script avec 🤗 Accelerate 
 

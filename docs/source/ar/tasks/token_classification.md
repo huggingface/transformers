@@ -151,15 +151,11 @@ pip install transformers datasets evaluate seqeval
 
 الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorWithPadding`].من الأفضل استخدام *الحشو الديناميكي* للجمل إلى أطول طول في دفعة أثناء التجميع، بدلاً من حشو مجموعة البيانات بالكامل إلى الطول الأقصى.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 ```
-</pt>
-</frameworkcontent>
 
 ## التقييم(Evaluate)
 
@@ -239,8 +235,6 @@ pip install transformers datasets evaluate seqeval
 ... }
 ```
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 إذا لم تكن على دراية بتعديل نموذج باستخدام [`Trainer`], ألق نظرة على الدليل التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
@@ -295,8 +289,6 @@ pip install transformers datasets evaluate seqeval
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -357,8 +349,6 @@ pip install transformers datasets evaluate seqeval
 
 يمكنك أيضًا تكرار نتائج `pipeline` يدويًا إذا أردت:
 
-<frameworkcontent>
-<pt>
 قسّم النص إلى رموز وأرجع المُوتّرات بلغة PyTorch:
 
 ```py
@@ -402,5 +392,3 @@ pip install transformers datasets evaluate seqeval
  'O',
  'O']
 ```
-</pt>
-</frameworkcontent>

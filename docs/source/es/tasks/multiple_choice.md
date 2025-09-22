@@ -102,8 +102,6 @@ El [`DataCollatorForMultipleChoice`] aplanará todas las entradas del modelo, le
 
 ## Entrenamiento
 
-<frameworkcontent>
-<pt>
 Carga el modelo BERT con [`AutoModelForMultipleChoice`]:
 
 ```py
@@ -146,5 +144,3 @@ En este punto, solo quedan tres pasos:
 
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>

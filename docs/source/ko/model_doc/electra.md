@@ -66,8 +66,6 @@ Generators](https://openreview.net/pdf?id=r1xMH1BtvB) 논문에서 제안되었�
 
 [[autodoc]] models.electra.modeling_electra.ElectraForPreTrainingOutput
 
-<frameworkcontent>
-<pt>
 
 ## ElectraModel
 
@@ -109,5 +107,3 @@ Generators](https://openreview.net/pdf?id=r1xMH1BtvB) 논문에서 제안되었�
 [[autodoc]] ElectraForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>

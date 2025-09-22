@@ -195,8 +195,6 @@ Para exportar un modelo que está almacenado localmente, deberás tener los peso
 y tokenizadores del modelo almacenados en un directorio. Por ejemplo, podemos cargar 
 y guardar un checkpoint de la siguiente manera:
 
-<frameworkcontent>
-<pt>
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
@@ -214,8 +212,6 @@ del paquete `transformers.onnx` al directorio deseado:
 ```bash
 python -m transformers.onnx --model=local-pt-checkpoint onnx/
 ```
-</pt>
-</frameworkcontent>
 
 ### Seleccionar características para diferentes topologías de un modelo
 

@@ -185,8 +185,6 @@ Apply the `group_texts` function over the entire dataset:
 次に、[`DataCollat​​orForLanguageModeling`] を使用してサンプルのバッチを作成します。 *動的にパディング*する方が効率的です。
 データセット全体を最大長までパディングするのではなく、照合中にバッチ内の文を最長の長さにします。
 
-<frameworkcontent>
-<pt>
 
 シーケンス終了トークンをパディング トークンとして使用し、`mlm=False` を設定します。これは、入力を 1 要素分右にシフトしたラベルとして使用します。
 
@@ -197,14 +195,10 @@ Apply the `group_texts` function over the entire dataset:
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 ```
 
-</pt>
-</frameworkcontent>
 
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[基本チュートリアル](../training#train-with-pytorch-trainer) を参照してください。
@@ -261,8 +255,6 @@ Perplexity: 49.61
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -293,8 +285,6 @@ Perplexity: 49.61
 [{'generated_text': "Somatic hypermutation allows the immune system to be able to effectively reverse the damage caused by an infection.\n\n\nThe damage caused by an infection is caused by the immune system's ability to perform its own self-correcting tasks."}]
 ```
 
-<frameworkcontent>
-<pt>
 
 
 テキストをトークン化し、「input_ids」を PyTorch テンソルとして返します。
@@ -323,5 +313,3 @@ Perplexity: 49.61
 ["Somatic hypermutation allows the immune system to react to drugs with the ability to adapt to a different environmental situation. In other words, a system of 'hypermutation' can help the immune system to adapt to a different environmental situation or in some cases even a single life. In contrast, researchers at the University of Massachusetts-Boston have found that 'hypermutation' is much stronger in mice than in humans but can be found in humans, and that it's not completely unknown to the immune system. A study on how the immune system"]
 ```
 
-</pt>
-</frameworkcontent>

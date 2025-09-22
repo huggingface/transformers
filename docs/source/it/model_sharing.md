@@ -79,8 +79,6 @@ Per assicurarti che il tuo modello possa essere utilizzato da persone che lavora
 
 Convertire un checkpoint per un altro framework è semplice. Assicurati di avere PyTorch e TensorFlow installati (vedi [qui](installation) per le istruzioni d'installazione), e poi trova il modello specifico per il tuo compito nell'altro framework.
 
-<frameworkcontent>
-<pt>
 Specifica `from_tf=True` per convertire un checkpoint da TensorFlow a PyTorch:
 
 ```py
@@ -89,13 +87,9 @@ Specifica `from_tf=True` per convertire un checkpoint da TensorFlow a PyTorch:
 ... )
 >>> pt_model.save_pretrained("path/verso/il-nome-magnifico-che-hai-scelto")
 ```
-</pt>
-</frameworkcontent>
 
 ## Condividi un modello durante il training
 
-<frameworkcontent>
-<pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
 Condividere un modello nell'Hub è tanto semplice quanto aggiungere un parametro extra o un callback. Ricorda dal [tutorial sul fine-tuning](training), la classe [`TrainingArguments`] è dove specifichi gli iperparametri e le opzioni addizionali per l'allenamento. Una di queste opzioni di training include l'abilità di condividere direttamente un modello nell'Hub. Imposta `push_to_hub=True` in [`TrainingArguments`]:
@@ -121,8 +115,6 @@ Dopo aver effettuato il fine-tuning del tuo modello, chiama [`~transformers.Trai
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 ## Utilizzare la funzione `push_to_hub`
 

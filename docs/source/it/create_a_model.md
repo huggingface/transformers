@@ -111,8 +111,6 @@ Puoi anche salvare il file di configurazione come dizionario oppure come la diff
 
 Il prossimo passo e di creare [modello](main_classes/models). Il modello - vagamente riferito anche come architettura - definisce cosa ogni strato deve fare e quali operazioni stanno succedendo. Attributi come `num_hidden_layers` provenienti dalla configurazione sono usati per definire l'architettura. Ogni modello condivide la classe base [`PreTrainedModel`] e alcuni metodi comuni come il ridimensionamento degli input embeddings e la soppressione delle self-attention heads . Inoltre, tutti i modelli sono la sottoclasse di [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) o [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html). Cio significa che i modelli sono compatibili con l'uso di ciascun di framework.
 
-<frameworkcontent>
-<pt>
 Carica gli attributi della tua configurazione personalizzata nel modello:
 
 ```py
@@ -135,15 +133,11 @@ Quando carichi pesi pre-allenati, la configurazione del modello predefinito è a
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
-</pt>
-</frameworkcontent>
 
 ### Model head
 
 A questo punto, hai un modello DistilBERT base i cui output sono gli *hidden states* (in italiano stati nascosti). Gli stati nascosti sono passati come input a un model head per produrre l'output finale. 🤗 Transformers fornisce un model head diverso per ogni attività fintanto che il modello supporta l'attività  (i.e., non puoi usare DistilBERT per un attività sequence-to-sequence come la traduzione).
 
-<frameworkcontent>
-<pt>
 Per esempio, [`DistilBertForSequenceClassification`] è un modello DistilBERT base con una testa di classificazione per sequenze. La sequenza di classificazione head è uno strato lineare sopra gli output ragruppati.
 
 ```py
@@ -159,8 +153,6 @@ Riutilizza facilmente questo checkpoint per un'altra attività passando ad un mo
 
 >>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
-</pt>
-</frameworkcontent>
 
 ## Tokenizer
 
