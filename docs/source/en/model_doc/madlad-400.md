@@ -49,6 +49,7 @@ One can directly use MADLAD-400 weights without finetuning the model:
 >>> tokenizer = AutoTokenizer.from_pretrained("google/madlad400-3b-mt")
 
 >>> outputs = model.generate(**inputs)
+>>> inputs = tokenizer("<2pt> I love pizza!", return_tensors="pt")
 >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['Eu amo pizza!']
 ```
