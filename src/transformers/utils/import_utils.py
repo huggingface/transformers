@@ -236,9 +236,9 @@ _triton_available, _triton_version = _is_package_available("triton", return_vers
 
 _torch_available, _torch_version = _is_package_available("torch", return_version=True)
 if _torch_available:
-    _torch_available = version.parse(_torch_version) >= version.parse("2.1.0")
+    _torch_available = version.parse(_torch_version) >= version.parse("2.2.0")
     if not _torch_available:
-        logger.warning(f"Disabling PyTorch because PyTorch >= 2.1 is required but found {_torch_version}")
+        logger.warning(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {_torch_version}")
 
 
 _essentia_available = importlib.util.find_spec("essentia") is not None
