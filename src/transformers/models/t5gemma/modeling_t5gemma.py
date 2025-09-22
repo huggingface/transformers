@@ -383,11 +383,13 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
             layer_idx=layer_idx,
         )
         self.pre_self_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_self_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if self.config.use_post_attention_norm:
+            self.post_self_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.mlp = T5GemmaMLP(config)
         self.pre_feedforward_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if self.config.use_post_feedforward_norm:
+            self.post_feedforward_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -409,13 +411,15 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
             past_key_values=None,
             **kwargs,
         )
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
+        if self.config.use_post_attention_norm:
+            hidden_states = self.post_self_attn_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
 
         residual = hidden_states
         hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
+        if self.config.use_post_feedforward_norm:
+            hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
         return hidden_states
 
@@ -455,7 +459,8 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
             cache_position=cache_position,
             **kwargs,
         )
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
+        if self.config.use_post_attention_norm:
+            hidden_states = self.post_self_attn_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
 
         residual = hidden_states
@@ -474,7 +479,8 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         residual = hidden_states
         hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
+        if self.config.use_post_feedforward_norm:
+            hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
         return hidden_states
 

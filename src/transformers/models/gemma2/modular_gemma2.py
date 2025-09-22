@@ -113,6 +113,11 @@ class Gemma2Config(PretrainedConfig):
             scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             scaling factor when applying tanh softcapping on the attention scores.
+        use_post_attention_norm (`bool`, *optional*, defaults to `True`):
+            whether to use a post attention layer normalization layer.
+        use_post_feedforward_norm (`bool`, *optional*, defaults to `True`):
+            whether to use a post feedforward layer normalization layer.
+
 
     ```python
     >>> from transformers import Gemma2Model, Gemma2Config
@@ -167,6 +172,8 @@ class Gemma2Config(PretrainedConfig):
         layer_types=None,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
+        use_post_attention_norm=True,
+        use_post_feedforward_norm=True,
         **kwargs,
     ):
         super().__init__(
@@ -195,6 +202,8 @@ class Gemma2Config(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
+        self.use_post_attention_norm = use_post_attention_norm
+        self.use_post_feedforward_norm = use_post_feedforward_norm
         self.layer_types = layer_types
 
         if self.layer_types is None:
@@ -318,10 +327,12 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma2MLP(config)
         self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if self.config.use_post_attention_norm:
+            self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if self.config.use_post_feedforward_norm:
+            self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -352,13 +363,15 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             **kwargs,
         )
-        hidden_states = self.post_attention_layernorm(hidden_states)
+        if self.config.use_post_attention_norm:
+            hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
+        if self.config.use_post_feedforward_norm:
+            hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
