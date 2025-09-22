@@ -240,7 +240,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # fmt: off
         EXPECTED_INPUT_IDS = torch.tensor(
-            [[151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14755, 220, 16, 25, 220, 151647, 151646, 151648, 198, 3838, 594, 429, 5112, 30, 151645, 198, 151644, 77091, 198]],
+            [[151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14755, 220, 16, 25, 220, 151647, *[151646] * 101 , 151648, 198, 3838, 594, 429, 5112, 30, 151645, 198, 151644, 77091, 198]],
             device=torch_device
         )
         # fmt: on
@@ -323,9 +323,10 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=32)
 
         EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\nI can hear the sound of glass shattering.",
-            'system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe person says, "Hello."',
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\ncough and throat clearing.",
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe original content of this audio is: 'Mister Quiller is the apostle of the middle classes and we are glad to welcome his gospel.'",
         ]
+
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -385,7 +386,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=32, top_k=1)
 
         EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nHow about this one?\nassistant\nThis is the sound of liquid dripping.",
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nHow about this one?\nassistant\nThroat clearing."
         ]
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
