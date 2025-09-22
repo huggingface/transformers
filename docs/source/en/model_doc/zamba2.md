@@ -29,7 +29,7 @@ This model was contributed by [pglo](https://huggingface.co/pglo).
 
 ## Model details
 
-[Zamba2-1.2B](https://www.zyphra.com/post/zamba2-mini), [Zamba2-2.7B](https://www.zyphra.com/post/zamba2-small) and [Zamba2-7B](https://www.zyphra.com/post/zamba2-7b) are hybrid models combining state-space models (Specifically [Mamba2](https://github.com/state-spaces/mamba2)) and transformer, and were trained using next-token prediction. Zamba2 uses shared transformer layers after every 6 mamba blocks. It uses the [Mistral v0.1 tokenizer](https://huggingface.co/mistralai/Mistral-7B-v0.1). We came to this architecture after a series of ablations at small scales. Zamba2-1.2B, Zamba2-2.7B and Zamba2-7B were pre-trained on 2T and 3T tokens, respectively.
+[Zamba2-1.2B](https://www.zyphra.com/post/zamba2-mini), [Zamba2-2.7B](https://www.zyphra.com/post/zamba2-small) and [Zamba2-7B](https://www.zyphra.com/post/zamba2-7b) are hybrid models combining state-space models (Specifically [Mamba2](https://github.com/state-spaces/mamba)) and transformer, and were trained using next-token prediction. Zamba2 uses shared transformer layers after every 6 mamba blocks. It uses the [Mistral v0.1 tokenizer](https://huggingface.co/mistralai/Mistral-7B-v0.1). We came to this architecture after a series of ablations at small scales. Zamba2-1.2B, Zamba2-2.7B and Zamba2-7B were pre-trained on 2T and 3T tokens, respectively.
 
 <img src=https://github.com/user-attachments/assets/c2cff209-b901-483c-87aa-774b82a0769f width=30% height=40% />
 
