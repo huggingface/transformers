@@ -54,23 +54,62 @@ class CausalLMModelTester:
     token_classification_class = None
     question_answering_class = None
 
-    def _verify_model_attributes(self):
-        for required_attribute in self._required_attributes:
-            if getattr(self, required_attribute) is None:
+    @classmethod
+    def _verify_model_attributes(cls):
+        """
+        Verifies that the tester attributes are set correctly. Intentionally nitpicks the tester class attributes, to
+        prevent human errors.
+        """
+        # Some attributes are mandatory in `CausalLMModelTester`
+        for required_attribute in cls._required_attributes:
+            if getattr(cls, required_attribute) is None:
                 raise ValueError(
-                    f"You have inherited from CausalLMModelTester but did not set the {required_attribute} attribute."
+                    f"You have inherited from `CausalLMModelTester` but did not set the `{required_attribute}` "
+                    "attribute."
+                )
+
+        # Others are optional, but must be set to a valid model class
+        tester_class_attribute_names = [
+            "base_model_class",
+            "causal_lm_class",
+            "sequence_classification_class",
+            "token_classification_class",
+            "question_answering_class",
+        ]
+        for model_attribute_name in tester_class_attribute_names:
+            model_class = getattr(cls, model_attribute_name)
+            if model_class is not None and "PreTrainedModel" not in str(model_class.__mro__):
+                raise ValueError(
+                    f"You have inherited from `CausalLMModelTester` but did not set the `{model_attribute_name}` "
+                    f"attribute to a valid model class. (It's set to `{model_class}`)"
+                )
+
+        # There may be typos when setting the model classes
+        for instance_attribute_name, instance_attribute in cls.__dict__.items():
+            if (
+                instance_attribute_name not in tester_class_attribute_names
+                and isinstance(instance_attribute, type)
+                and "PreTrainedModel" in str(instance_attribute.__mro__)
+            ):
+                raise ValueError(
+                    f"You have inherited from `CausalLMModelTester` but set the `{instance_attribute_name}` "
+                    f"attribute to a model class. (It's set to `{instance_attribute}`). "
+                    f"Only the following attributes can hold model classes: {tester_class_attribute_names}."
                 )
 
     @property
     def all_model_classes(self):
+        # Models that set `all_model_classes` in their `XXXModelTest` class must have a new class that doesn't fit
+        # any of the common classes.
         return [
             model_class
-            for model_class in (
+            for model_class in [
                 self.base_model_class,
                 self.causal_lm_class,
                 self.sequence_classification_class,
                 self.token_classification_class,
-            )
+                self.question_answering_class,
+            ]
             if model_class is not None
         ]
 
@@ -210,16 +249,7 @@ class CausalLMModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
+        config, input_ids, _, input_mask, _, _, _ = self.prepare_config_and_inputs()
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
@@ -314,6 +344,27 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.assertEqual(
             result.logits.shape,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
+
+    def test_question_answering_model(self):
+        if self.model_tester.question_answering_class is None:
+            self.skipTest("Model does not support question answering")
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        model = self.model_tester.question_answering_class(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask)
+        self.assertEqual(
+            result.start_logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
+        )
+        self.assertEqual(
+            result.end_logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
         )
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])

@@ -46,23 +46,13 @@ class ArceeModelTester(CausalLMModelTester):
         config_class = ArceeConfig
         base_model_class = ArceeModel
         causal_lm_class = ArceeForCausalLM
-        sequence_class = ArceeForSequenceClassification
-        token_class = ArceeForTokenClassification
+        sequence_classification_class = ArceeForSequenceClassification
+        question_answering_class = ArceeForQuestionAnswering
+        token_classification_class = ArceeForTokenClassification
 
 
 @require_torch
 class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            ArceeModel,
-            ArceeForCausalLM,
-            ArceeForSequenceClassification,
-            ArceeForQuestionAnswering,
-            ArceeForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": ArceeModel,
@@ -75,8 +65,6 @@ class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False
     model_tester_class = ArceeModelTester
 

@@ -47,17 +47,12 @@ class GlmModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = GlmModel
         causal_lm_class = GlmForCausalLM
-        sequence_class = GlmForSequenceClassification
-        token_class = GlmForTokenClassification
+        sequence_classification_class = GlmForSequenceClassification
+        token_classification_class = GlmForTokenClassification
 
 
 @require_torch
 class GlmModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (GlmModel, GlmForCausalLM, GlmForSequenceClassification, GlmForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": GlmModel,
@@ -69,8 +64,6 @@ class GlmModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = GlmModelTester
 
 

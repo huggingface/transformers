@@ -36,7 +36,7 @@ class DeepseekV2ModelTester(CausalLMModelTester):
         config_class = DeepseekV2Config
         base_model_class = DeepseekV2Model
         causal_lm_class = DeepseekV2ForCausalLM
-        sequence_class = DeepseekV2ForSequenceClassification
+        sequence_classification_class = DeepseekV2ForSequenceClassification
 
     def __init__(
         self,
@@ -57,15 +57,6 @@ class DeepseekV2ModelTester(CausalLMModelTester):
 
 @require_torch
 class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            DeepseekV2ForCausalLM,
-            DeepseekV2ForSequenceClassification,
-            DeepseekV2Model,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekV2Model,
@@ -76,8 +67,6 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False
     test_torchscript = False
     test_all_params_have_gradient = False
