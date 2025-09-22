@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The Kuai Keye Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The Kwai Keye Team and The HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its

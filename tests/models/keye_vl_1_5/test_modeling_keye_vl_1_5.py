@@ -1,4 +1,4 @@
-# Copyright 2025 The Keye Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The Kwai Keye Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -73,7 +73,6 @@ class KeyeVL1_5VisionText2TextModelTester:
         num_channels=3,
         ignore_index=-100,
         image_size=28,
-        # start
         bos_token_id=0,
         eos_token_id=1,
         pad_token_id=2,
@@ -86,10 +85,8 @@ class KeyeVL1_5VisionText2TextModelTester:
         vocab_size=99,
         intermediate_size=37,
         max_position_embeddings=512,
-        # end
         max_window_layers=3,
         model_type="KeyeVL1_5",
-        # start
         num_attention_heads=4,
         num_hidden_layers=4,
         num_key_value_heads=2,
@@ -97,7 +94,6 @@ class KeyeVL1_5VisionText2TextModelTester:
         tie_word_embeddings=True,
         sliding_window=4096,
         use_sliding_window=False,
-        # end
         is_training=True,
         vision_config={
             "depth": 2,
@@ -112,33 +108,6 @@ class KeyeVL1_5VisionText2TextModelTester:
             "spatial_merge_size": 2,
             "temporal_patch_size": 1,
         },
-        # text_config={
-        #     "vocab_size": 99,
-        #     "hidden_size": 32,
-        #     "intermediate_size": 37,
-        #     "num_hidden_layers": 4,
-        #     "num_attention_heads": 4,
-        #     "num_key_value_heads": 2,
-        #     "hidden_act": "silu",
-        #     "max_position_embeddings": 512,
-        #     "initializer_range": 0.02,
-        #     "rms_norm_eps": 1e-5,
-        #     "use_cache": True,
-        #     "tie_word_embeddings": True,
-        #     "rope_theta": 10000,
-        #     "use_sliding_window": False,
-        #     "sliding_window": 4096,
-        #     "layer_types": None,
-        #     "attention_dropout": 0.0,
-        #     "rope_scaling": {"type": "mrope", "mrope_section": [2, 1, 1]},
-        #     "image_token_id": 4,
-        #     "video_token_id": 5,
-        #     "attention_bias": False,
-        #     "eos_token_id": 1,
-        #     "bos_token_id": 0,
-        #     "pad_token_id": 2,
-        #     "vision_start_token_id": 3,
-        # },
         rope_scaling={"type": "mrope", "mrope_section": [2, 1, 1]},
         train_batch_size=1,
         num_video_tokens=1,
@@ -223,7 +192,6 @@ class KeyeVL1_5VisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
 
-        # print(input_ids, "ZLNLN", input_ids.shape)
         input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.video_token_id] = self.pad_token_id
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
