@@ -41,7 +41,6 @@ deps = {
     "opencv-python": "opencv-python",
     "optimum-benchmark": "optimum-benchmark>=0.3.0",
     "optuna": "optuna",
-    "optax": "optax>=0.0.8,<=0.1.4",
     "pandas": "pandas<2.3.0",
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized>=0.9",
