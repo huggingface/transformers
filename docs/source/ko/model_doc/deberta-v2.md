@@ -67,8 +67,6 @@ v2의 새로운 점:
     - build_inputs_with_special_tokens
     - create_token_type_ids_from_sequences
 
-<frameworkcontent>
-<pt>
 
 ## DebertaV2Model
 
@@ -105,5 +103,3 @@ v2의 새로운 점:
 [[autodoc]] DebertaV2ForMultipleChoice
     - forward
 
-</pt>
-</frameworkcontent>

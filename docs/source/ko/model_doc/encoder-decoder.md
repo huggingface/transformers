@@ -136,8 +136,6 @@ nearly 800 thousand customers were affected by the shutoffs. the aim is to reduc
 
 [[autodoc]] EncoderDecoderConfig
 
-<frameworkcontent>
-<pt>
 
 ## EncoderDecoderModel
 
@@ -145,5 +143,3 @@ nearly 800 thousand customers were affected by the shutoffs. the aim is to reduc
     - forward
     - from_encoder_decoder_pretrained
 
-</pt>
-</frameworkcontent>

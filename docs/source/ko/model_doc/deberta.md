@@ -82,8 +82,6 @@ DeBERTa를 시작하는 데 도움이 되는 Hugging Face와 community 자료 �
     - build_inputs_with_special_tokens
     - create_token_type_ids_from_sequences
 
-<frameworkcontent>
-<pt>
 
 ## DebertaModel[[transformers.DebertaModel]]
 
@@ -114,6 +112,4 @@ DeBERTa를 시작하는 데 도움이 되는 Hugging Face와 community 자료 �
 [[autodoc]] DebertaForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>
 

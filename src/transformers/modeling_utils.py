@@ -1644,7 +1644,7 @@ class ModuleUtilsMixin:
     def get_extended_attention_mask(
         self,
         attention_mask: Tensor,
-        input_shape: tuple[int],
+        input_shape: tuple[int, ...],
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ) -> Tensor:
@@ -2242,8 +2242,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                         flexible_matched = True
                                         break
                             if not flexible_matched:
-                                import warnings
-
                                 warnings.warn(
                                     f"Layer pattern '{layer_pattern}' does not match any parameters in the model. "
                                     f"This rule may not be applied during tensor parallelization."
@@ -3468,7 +3466,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self,
         old_lm_head: nn.Linear,
         new_num_tokens: Optional[int] = None,
-        transposed: Optional[bool] = False,
+        transposed: bool = False,
         mean_resizing: bool = True,
     ) -> nn.Linear:
         """
@@ -3625,7 +3623,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         old_lm_head_dim,
         old_num_tokens,
         added_num_tokens,
-        transposed=False,
+        transposed: bool = False,
     ):
         if transposed:
             # Transpose to the desired shape for the function.

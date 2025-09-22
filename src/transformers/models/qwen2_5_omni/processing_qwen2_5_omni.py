@@ -31,10 +31,10 @@ from ...video_utils import VideoInput
 
 
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    fps: Optional[list[Union[int, float]]] = None
-    use_audio_in_video: Optional[bool] = None
-    seconds_per_chunk: Optional[float] = None
-    position_id_per_seconds: Optional[int] = None
+    fps: Optional[list[Union[int, float]]]
+    use_audio_in_video: Optional[bool]
+    seconds_per_chunk: Optional[float]
+    position_id_per_seconds: Optional[int]
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
@@ -62,8 +62,10 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
             "seconds_per_chunk": 2.0,
             "position_id_per_seconds": 25,
             "use_audio_in_video": False,
-            "min_pixels": 128 * 28 * 28,
-            "max_pixels": 768 * 28 * 28,
+            "size": {
+                "shortest_edge": 128 * 28 * 28,
+                "longest_edge": 768 * 28 * 28,
+            },
         },
         "audio_kwargs": {
             "sampling_rate": 16000,

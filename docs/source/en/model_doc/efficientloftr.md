@@ -156,8 +156,6 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 - post_process_keypoint_matching
 - visualize_keypoint_matching
 
-<frameworkcontent>
-<pt>
 ## EfficientLoFTRModel
 
 [[autodoc]] EfficientLoFTRModel
@@ -170,5 +168,3 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 
 - forward
 
-</pt>
-</frameworkcontent>

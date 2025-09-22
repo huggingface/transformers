@@ -75,8 +75,6 @@ ConvBERT トレーニングのヒントは BERT のヒントと似ています�
 
 [[autodoc]] ConvBertTokenizerFast
 
-<frameworkcontent>
-<pt>
 
 ## ConvBertModel
 
@@ -108,5 +106,3 @@ ConvBERT トレーニングのヒントは BERT のヒントと似ています�
 [[autodoc]] ConvBertForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>

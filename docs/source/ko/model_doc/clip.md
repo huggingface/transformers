@@ -234,8 +234,6 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 
 [[autodoc]] CLIPProcessor
 
-<frameworkcontent>
-<pt>
 
 ## CLIPModel[[transformers.CLIPModel]]
 
@@ -269,5 +267,3 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 [[autodoc]] CLIPForImageClassification
     - forward
 
-</pt>
-</frameworkcontent>

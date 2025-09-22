@@ -164,22 +164,16 @@ BERT를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-<frameworkcontent>
-<pt>
 
 ## BertTokenizerFast
 
 [[autodoc]] BertTokenizerFast
 
-</pt>
-</frameworkcontent>
 
 ## Bert specific outputs
 
 [[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput
 
-<frameworkcontent>
-<pt>
 
 ## BertModel
 
@@ -226,7 +220,5 @@ BERT를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 [[autodoc]] BertForQuestionAnswering
     - forward
 
-</pt>
-</frameworkcontent>
 
 

@@ -73,8 +73,6 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
-<frameworkcontent>
-<pt>
 
 ## AlbertModel
 
@@ -110,4 +108,3 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 [[autodoc]] AlbertForQuestionAnswering
     - forward
 
-</pt>
