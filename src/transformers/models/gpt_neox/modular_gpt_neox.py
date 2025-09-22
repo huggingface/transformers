@@ -127,7 +127,6 @@ class GPTNeoXAttention(nn.Module):
 
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
-        self.rotary_emb = GPTNeoXRotaryEmbedding(config=config)
 
     def forward(
         self,
@@ -135,7 +134,6 @@ class GPTNeoXAttention(nn.Module):
         attention_mask: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
         layer_past: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -214,7 +212,6 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
             layer_past=layer_past,
             head_mask=head_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -262,6 +259,7 @@ class GPTNeoXModel(LlamaModel, nn.Module):
         self.emb_dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([GPTNeoXLayer(config, i) for i in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.rotary_emb = GPTNeoXRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -344,6 +342,7 @@ class GPTNeoXModel(LlamaModel, nn.Module):
         head_mask = converted_head_mask
 
         hidden_states = self.emb_dropout(inputs_embeds)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -358,6 +357,7 @@ class GPTNeoXModel(LlamaModel, nn.Module):
                 head_mask=head_mask[i],
                 layer_past=past_key_values,
                 use_cache=use_cache,
+                position_embeddings=position_embeddings,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
                 **kwargs,

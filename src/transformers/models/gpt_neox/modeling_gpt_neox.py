@@ -62,7 +62,11 @@ class GPTNeoXRotaryEmbedding(nn.Module):
         self.rope_type = {}
         inv_freq, attention_scaling = {}, {}
         for layer_type in layer_types:
-            curr_rope_type = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)["rope_type"]
+            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            if rope_params is None:
+                continue
+
+            curr_rope_type = rope_params["rope_type"]
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if curr_rope_type != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
@@ -78,9 +82,10 @@ class GPTNeoXRotaryEmbedding(nn.Module):
             self.original_inv_freq = inv_freq[layer_types[0]]
         else:
             for layer_type in layer_types:
-                self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
-                setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
-                setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
+                if layer_type in inv_freq:
+                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -234,7 +239,6 @@ class GPTNeoXAttention(nn.Module):
 
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
-        self.rotary_emb = GPTNeoXRotaryEmbedding(config=config)
 
     def forward(
         self,
@@ -242,7 +246,6 @@ class GPTNeoXAttention(nn.Module):
         attention_mask: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
         layer_past: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -321,7 +324,6 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
             layer_past=layer_past,
             head_mask=head_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -447,6 +449,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         self.emb_dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([GPTNeoXLayer(config, i) for i in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.rotary_emb = GPTNeoXRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -525,6 +528,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         head_mask = converted_head_mask
 
         hidden_states = self.emb_dropout(inputs_embeds)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -539,6 +543,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                 head_mask=head_mask[i],
                 layer_past=past_key_values,
                 use_cache=use_cache,
+                position_embeddings=position_embeddings,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
                 **kwargs,

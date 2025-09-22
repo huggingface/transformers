@@ -286,7 +286,6 @@ class Glm4MoeAttention(CohereAttention, nn.Module):
         if self.use_qk_norm:
             self.q_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.k_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.rotary_emb = Glm4MoeRotaryEmbedding(config=config)
 
 
 class Glm4MoeMLP(DeepseekV3MLP):
