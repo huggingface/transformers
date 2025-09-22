@@ -9,6 +9,7 @@ from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F  # noqa: F401
+from torchvision.io import read_image
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import get_size_dict
@@ -36,20 +37,11 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
 from ...utils.import_utils import requires
 from .image_processing_lw_detr import get_size_with_aspect_ratio
-
-
-if is_torchvision_v2_available():
-    from torchvision.io import read_image
-
-elif is_torchvision_available():
-    from torchvision.io import read_image
-    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -63,23 +55,12 @@ class LwDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         Controls whether to convert the annotations to the format expected by the LW_DETR model. Converts the
         bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
         Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-        If `pad_size` is provided, the image will be padded to the specified dimensions.
-        Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-        height and width in the batch.
     return_segmentation_masks (`bool`, *optional*, defaults to `False`):
         Whether to return segmentation masks.
     """
 
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
     return_segmentation_masks: Optional[bool]
 
 
@@ -617,7 +598,7 @@ class LwDetrImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        pad_size: Optional[dict[str, int]],
+        pad_size: Optional[SizeDict],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
@@ -686,7 +667,7 @@ class LwDetrImageProcessorFast(BaseImageProcessorFast):
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
-                padded_size = (pad_size["height"], pad_size["width"])
+                padded_size = (pad_size.height, pad_size.width)
             else:
                 padded_size = get_max_height_width(images)
 

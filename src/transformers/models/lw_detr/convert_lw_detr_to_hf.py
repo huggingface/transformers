@@ -24,11 +24,6 @@ from typing import Optional
 
 import requests
 import torch
-from tensor_representation import enhanced
-from torch import Tensor
-
-
-Tensor.__repr__ = enhanced
 from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
@@ -389,6 +384,7 @@ def test_models_outputs(model: LwDetrForObjectDetection, image_processor: LwDetr
 
     model.to(device)
     model.eval()
+    model.config._attn_implementation = "eager"
     outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
 
     predicted_logits = outputs.logits.flatten()[:5]
