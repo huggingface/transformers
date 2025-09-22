@@ -100,9 +100,9 @@ the structure of the output message dict. The schema is augmented with additiona
 output message string should be parsed into the expected format. Let's take a look at the schema for a SmolLM response,
 excluding tool calls for now:
 
-```json
+```python
 {
-    "x-regex": "(?:<think>\\n?(?P<thinking>.+?)\\n?</think>)?\\s*(?P<content>.+?)?\\s*(?:<\\|im_end\\|>|$)",
+    "x-regex": "(?:<think>\n?(?P<thinking>.+?)\n?</think>)?\s*(?P<content>.+?)?\s*(?:<\|im_end\|>|$)",
     "type": "object",
     "properties": {
         "role": {"const": "assistant"},
