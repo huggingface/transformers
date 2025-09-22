@@ -203,7 +203,6 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):

@@ -59,7 +59,6 @@ class ModernBertDecoderModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_head_masking = False
     test_pruning = False
     model_tester_class = ModernBertDecoderModelTester
 

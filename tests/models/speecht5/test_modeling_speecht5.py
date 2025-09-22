@@ -64,9 +64,6 @@ def prepare_inputs_dict(
     decoder_input_values=None,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if input_ids is not None:
         encoder_dict = {"input_ids": input_ids}
@@ -78,21 +75,11 @@ def prepare_inputs_dict(
     else:
         decoder_dict = {"decoder_input_values": decoder_input_values}
 
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-
     return {
         **encoder_dict,
         **decoder_dict,
         "attention_mask": attention_mask,
         "decoder_attention_mask": decoder_attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -203,11 +190,7 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 "decoder_input_values",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @unittest.skip(reason="Model has no input_embeds")
@@ -519,11 +502,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_hidden_states_output(self):
@@ -977,11 +956,7 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 "decoder_input_values",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_initialization(self):
@@ -1621,11 +1596,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 "decoder_input_values",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_hidden_states_output(self):
@@ -1855,7 +1826,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_resize_position_embeddings = False
-    test_head_masking = False
     test_mismatched_shapes = False
     test_missing_keys = False
     test_model_parallel = False

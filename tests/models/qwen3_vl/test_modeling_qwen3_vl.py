@@ -183,7 +183,6 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         else ()
     )
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Qwen3VLVisionText2TextModelTester(self)

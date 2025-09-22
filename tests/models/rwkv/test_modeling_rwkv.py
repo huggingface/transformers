@@ -157,7 +157,7 @@ class RwkvModelTester:
         config.vocab_size = 300
         return config
 
-    def create_and_check_rwkv_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_rwkv_model(self, config, input_ids, input_mask, token_type_ids, *args):
         config.output_hidden_states = True
         model = RwkvModel(config=config)
         model.to(torch_device)
@@ -168,7 +168,7 @@ class RwkvModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
-    def create_and_check_causl_lm(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_causl_lm(self, config, input_ids, input_mask, token_type_ids, *args):
         model = RwkvForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -177,7 +177,7 @@ class RwkvModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_state_equivalency(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_state_equivalency(self, config, input_ids, input_mask, token_type_ids, *args):
         model = RwkvModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -201,7 +201,6 @@ class RwkvModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -224,7 +223,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_missing_keys = False
     test_model_parallel = False
     test_pruning = False
-    test_head_masking = False  # Rwkv does not support head masking
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)

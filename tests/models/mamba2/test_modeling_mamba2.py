@@ -247,7 +247,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_missing_keys = False
     test_model_parallel = False
     test_pruning = False
-    test_head_masking = False  # Mamba does not have attention heads
 
     pipeline_model_mapping = (
         {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}

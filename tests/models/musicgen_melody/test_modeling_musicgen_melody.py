@@ -760,8 +760,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            if "head_mask" and "decoder_head_mask" in arg_names:
-                expected_arg_names.extend(["head_mask", "decoder_head_mask"])
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 

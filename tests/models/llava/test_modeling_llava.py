@@ -184,7 +184,6 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         else {}
     )
     test_pruning = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):

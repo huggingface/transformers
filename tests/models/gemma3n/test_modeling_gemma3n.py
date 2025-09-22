@@ -142,7 +142,6 @@ class Gemma3nAudioModelTester:
 class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3nAudioEncoder,) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     is_generative = False
     _is_stateful = True

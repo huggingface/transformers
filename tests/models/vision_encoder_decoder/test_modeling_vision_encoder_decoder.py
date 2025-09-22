@@ -912,7 +912,6 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
             decoder_config,
             decoder_input_ids,
             decoder_attention_mask,
-            decoder_head_mask,
             decoder_token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -930,7 +929,6 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "decoder_head_mask": decoder_head_mask,
             "labels": decoder_input_ids,
         }
 
@@ -1034,7 +1032,6 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
             decoder_config,
             decoder_input_ids,
             decoder_attention_mask,
-            decoder_head_mask,
             decoder_token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -1052,7 +1049,6 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "decoder_head_mask": decoder_head_mask,
             "labels": decoder_input_ids,
         }
 

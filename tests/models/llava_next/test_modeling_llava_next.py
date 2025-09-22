@@ -193,7 +193,6 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     )
     pipeline_model_mapping = {"image-text-to-text": LlavaNextForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):

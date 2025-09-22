@@ -49,9 +49,6 @@ def prepare_inputs_dict(
     decoder_input_ids=None,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if input_ids is not None:
         encoder_dict = {"input_ids": input_ids}

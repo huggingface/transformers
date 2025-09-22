@@ -204,7 +204,6 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     zero_init_hidden_state = True
     test_torch_exportable = True
@@ -444,11 +443,7 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
             if model.config.is_encoder_decoder:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" in arg_names
-                    else []
-                )
+                expected_arg_names.extend(["encoder_outputs"])
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]

@@ -170,7 +170,6 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)
@@ -336,7 +335,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
     test_torchscript = False
 
     def setUp(self):

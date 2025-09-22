@@ -136,13 +136,10 @@ class GPT2ModelTester:
             reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -184,7 +181,6 @@ class GPT2ModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -199,7 +195,6 @@ class GPT2ModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             sequence_labels,
             token_labels,
@@ -208,19 +203,19 @@ class GPT2ModelTester:
             encoder_attention_mask,
         )
 
-    def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt2_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPT2Model(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_gpt2_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt2_model_past(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPT2Model(config=config)
         model.to(torch_device)
         model.eval()
@@ -256,9 +251,7 @@ class GPT2ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_gpt2_model_attention_mask_past(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
-    ):
+    def create_and_check_gpt2_model_attention_mask_past(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPT2Model(config=config)
         model.to(torch_device)
         model.eval()
@@ -298,9 +291,7 @@ class GPT2ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_gpt2_model_past_large_inputs(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
-    ):
+    def create_and_check_gpt2_model_past_large_inputs(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPT2Model(config=config)
         model.to(torch_device)
         model.eval()
@@ -336,7 +327,7 @@ class GPT2ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPT2LMHeadModel(config)
         model.to(torch_device)
         model.eval()
@@ -346,7 +337,7 @@ class GPT2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
+        self, config, input_ids, input_mask, token_type_ids, *args, gradient_checkpointing=False
     ):
         model = GPT2LMHeadModel(config)
         model.to(torch_device)
@@ -359,7 +350,7 @@ class GPT2ModelTester:
         result.loss.backward()
 
     def create_and_check_double_lm_head_model(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, *args
     ):
         model = GPT2DoubleHeadsModel(config)
         model.to(torch_device)
@@ -385,7 +376,7 @@ class GPT2ModelTester:
         self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
     def create_and_check_gpt2_for_question_answering(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = GPT2ForQuestionAnswering(config)
@@ -396,7 +387,7 @@ class GPT2ModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_gpt2_for_sequence_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = GPT2ForSequenceClassification(config)
@@ -406,7 +397,7 @@ class GPT2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_gpt2_for_token_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = GPT2ForTokenClassification(config)
@@ -466,7 +457,6 @@ class GPT2ModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -477,7 +467,6 @@ class GPT2ModelTester:
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict
