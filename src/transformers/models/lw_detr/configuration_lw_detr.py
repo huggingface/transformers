@@ -73,6 +73,7 @@ class LwDetrConfig(PretrainedConfig):
         auxiliary_loss=True,
         **kwargs,
     ):
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         self.batch_norm_eps = batch_norm_eps
 
         # backbone
@@ -158,7 +159,25 @@ class LwDetrConfig(PretrainedConfig):
         self.bbox_reparam = bbox_reparam
         self.group_detr = group_detr
 
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+    @property
+    def hidden_size(self) -> int:
+        return self.d_model
+
+    @property
+    def num_attention_heads(self) -> int:
+        return self.decoder_self_attention_heads
+
+    @property
+    def num_key_value_heads(self) -> int:
+        return self.decoder_self_attention_heads
+
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
 
 
 __all__ = ["LwDetrConfig"]
