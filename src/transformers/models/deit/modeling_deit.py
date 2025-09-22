@@ -231,6 +231,7 @@ class DeiTSelfAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
+            None,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,

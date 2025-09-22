@@ -122,7 +122,6 @@ class RwkvModelTester:
             config,
             input_ids,
             input_mask,
-            None,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
