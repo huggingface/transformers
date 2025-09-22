@@ -62,8 +62,10 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
             "seconds_per_chunk": 2.0,
             "position_id_per_seconds": 25,
             "use_audio_in_video": False,
-            "min_pixels": 128 * 28 * 28,
-            "max_pixels": 768 * 28 * 28,
+            "size": {
+                "shortest_edge": 128 * 28 * 28,
+                "longest_edge": 768 * 28 * 28,
+            },
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
