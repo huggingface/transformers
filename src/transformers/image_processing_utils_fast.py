@@ -131,7 +131,7 @@ def max_across_indices(values: Iterable[Any]) -> list[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int]:
+def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int, ...]:
     """
     Get the maximum height and width across all images in a batch.
     """
