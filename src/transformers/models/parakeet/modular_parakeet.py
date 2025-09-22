@@ -368,6 +368,10 @@ class ParakeetPreTrainedModel(PreTrainedModel):
         return lengths.to(dtype=torch.int)
 
     def _get_output_attention_mask(self, attention_mask: torch.Tensor, target_length: Optional[int] = None):
+        """
+        Convert the input attention mask to its subsampled form. `target_length` sets the desired output length, useful
+        when the attention mask length differs from `sum(-1).max()` (i.e., when the longest sequence in the batch is padded)
+        """
         output_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
         # Use target_length if provided, otherwise use max length in batch
         max_length = target_length if target_length is not None else output_lengths.max()
