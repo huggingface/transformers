@@ -1742,17 +1742,18 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
 class KeyeVL1_5Projector(nn.Module):
     def __init__(self, config: KeyeVL1_5Config):
         super().__init__()
+        spatial_merge_size = config.vision_config.spatial_merge_size
+        hidden_size = self.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
+        
         self.text_config = config.text_config
         self.vision_config = config.vision_config
-        spatial_merge_size = config.vision_config.spatial_merge_size
+        
         self.merge_kernel_size = (spatial_merge_size, spatial_merge_size)
 
-        self.hidden_size = self.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
-
-        self.pre_norm = nn.LayerNorm(self.hidden_size, eps=1e-05)
-        self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
+        self.pre_norm = nn.LayerNorm(hidden_size, eps=1e-05)
+        self.linear_1 = nn.Linear(hidden_size, hidden_size, bias=True)
         self.act = GELUActivation()
-        self.linear_2 = nn.Linear(self.hidden_size, self.text_config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(hidden_size, self.text_config.hidden_size, bias=True)
 
     def forward(
         self,
