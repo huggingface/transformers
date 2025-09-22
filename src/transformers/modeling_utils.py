@@ -797,8 +797,6 @@ def _load_state_dict_into_meta_model(
                 )
         else:
             param = param[...]
-            if casting_dtype is not None:
-                param = param.to(casting_dtype)
             if to_contiguous:
                 param = param.contiguous()
 
@@ -813,8 +811,12 @@ def _load_state_dict_into_meta_model(
 
             if param_device == "disk":
                 if not is_safetensors:
+                    if casting_dtype is not None:
+                        param = param.to(casting_dtype)
                     disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
             elif param_device == "cpu" and cpu_offload_index is not None:
+                if casting_dtype is not None:
+                    param = param.to(casting_dtype)
                 cpu_offload_index = offload_weight(param, param_name, cpu_offload_folder, cpu_offload_index)
             elif (
                 not is_quantized
@@ -832,10 +834,14 @@ def _load_state_dict_into_meta_model(
             ):
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
-
-                _load_parameter_into_model(model, param_name, param.to(param_device))
+                param = param.to(param_device)
+                if casting_dtype is not None:
+                    param = param.to(casting_dtype)
+                _load_parameter_into_model(model, param_name, param)
 
             else:
+                if casting_dtype is not None:
+                    param = param.to(casting_dtype)
                 # TODO naming is stupid it loads it as well
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
