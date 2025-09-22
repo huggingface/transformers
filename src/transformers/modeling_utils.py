@@ -2332,8 +2332,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                         flexible_matched = True
                                         break
                             if not flexible_matched:
-                                import warnings
-
                                 warnings.warn(
                                     f"Layer pattern '{layer_pattern}' does not match any parameters in the model. "
                                     f"This rule may not be applied during tensor parallelization."

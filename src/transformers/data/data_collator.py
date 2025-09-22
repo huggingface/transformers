@@ -889,8 +889,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
             return tf.random.Generator.from_seed(seed)
         else:
-            import numpy as np
-
             return np.random.default_rng(seed)
 
     def create_rng(self):
