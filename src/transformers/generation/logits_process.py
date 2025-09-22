@@ -593,7 +593,7 @@ class TopHLogitsWarper(LogitsProcessor):
 
     Args:
         top_h (`float`):
-            Scaling coefficient for the entropy-based threshold (`tau`). Must be in the range `(0, 1]`.
+            Scaling coefficient for the entropy-based threshold. Must be in the range `(0, 1]`.
         filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
 
@@ -674,7 +674,7 @@ class TopHLogitsWarper(LogitsProcessor):
 
             # grow the kept set until the stopping rule triggers
             sigma = top_probs[0]
-            H = -top_probs[0] * torch.log2(top_probs[0])
+            cumulative_entropy = -top_probs[0] * torch.log2(top_probs[0])
             chosen = []
             ind = 0
             for idx, p in zip(top_idx, top_probs):
@@ -684,9 +684,9 @@ class TopHLogitsWarper(LogitsProcessor):
                     break
                 # update running sums for current prefix
                 sigma = sigma + top_probs[ind]
-                H = H + (-top_probs[ind] * torch.log2(top_probs[ind]))
+                cumulative_entropy = cumulative_entropy + (-top_probs[ind] * torch.log2(top_probs[ind]))
                 # entropy difference term
-                entropy_diff = (H / sigma) + torch.log2(sigma)
+                entropy_diff = (cumulative_entropy / sigma) + torch.log2(sigma)
                 if entropy_diff > (tau / sigma + torch.log2(sigma)):
                     break
 
