@@ -214,11 +214,6 @@ class IdeficsProcessor(ProcessorMixin):
     tokenizer_class = "LlamaTokenizerFast"
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
         self.image_token_id = (
