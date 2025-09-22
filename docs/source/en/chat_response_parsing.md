@@ -129,7 +129,7 @@ an unusual format where model responses are tagged with one of three "channels":
 tool calls, `analysis` for chain of thought blocks, and `final` for messages intended to be sent to the user. 
 A full message where the model calls a tool named `get_current_weather` might look like this, with some extra linebreaks added for clarity:
 
-```
+```text
 <|channel|>analysis<|message|>
 The user asks: "What is the weather like in SF?" So we need to get the current weather in San Francisco, CA. 
 We need to call get_current_weather function. So we should call get_current_weather with location "San Francisco, CA".
