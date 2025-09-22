@@ -15,16 +15,7 @@
 # limitations under the License.
 
 """
-Processor for AudioFlamingo3.
-
-Behaviors:
-- Splits each raw waveform into fixed-length windows using the feature extractor's
-  `chunk_length` (seconds) and `sampling_rate`.
-- For each window, computes the post-pool frame count K (matching the encoder's
-  conv/pool schedule) and expands the audio placeholder token K times.
-- If a sample contains no placeholders, all expanded tokens for that sample are
-  prepended to the text before tokenization.
-- Returns a `BatchFeature` containing text tokenization and audio features.
+Processor class for AudioFlamingo3.
 """
 
 from typing import Optional, Union
@@ -46,7 +37,6 @@ MAX_AUDIO_LEN = 10 * 60  # 10 minutes
 class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            # Tokenizer pads to the longest in the batch by default.
             "padding": True,
         },
         "audio_kwargs": {
@@ -59,23 +49,23 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class AudioFlamingo3Processor(ProcessorMixin):
-    """
-    AudioFlamingo3 processor that wraps a Whisper-style feature extractor and a tokenizer.
+    r"""
+    Constructs an AudioFlamingo3 processor which wraps an AudioFlamingo3 feature extractor and an AudioFlamingo3
+    tokenizer into a single processor.
 
-    Expected placeholder flow per sample:
-      text: "... <sound> ...", audio: raw waveform (1-D np.ndarray)
-      - audio is split into N windows (based on chunk_length & sampling_rate)
-      - for each window i, compute post-pool frames K_i
-      - if the text contains exactly N `<sound>` placeholders, replace each with K_i copies
-        of `<sound>` in order; if the text has no `<sound>`, prepend all expanded tokens.
+    [`AudioFlamingo3Processor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
+    [`Qwen2TokenizerFast`]. See the [`~AudioFlamingo3Processor.__call__`] for more information.
 
-    This ensures a 1:1 alignment between `<sound>` token positions in the text and
-    post-pool audio frames produced by the encoder.
+    Args:
+        feature_extractor ([`WhisperFeatureExtractor`]):
+            The feature extractor is a required input.
+        tokenizer ([`Qwen2TokenizerFast`]):
+            The tokenizer is a required input.
     """
 
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
+    tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -86,10 +76,28 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio: Optional[AudioInput] = None,
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> BatchFeature:
-        # Merge defaults with user kwargs (and tokenizer init defaults)
+        r"""
+        Main method to prepare one or several text sequence(s) and audio waveform(s) for the model. This
+        method expands `<sound>` placeholders in the text based on the post-pool frame counts of the
+        audio windows, then tokenizes the provided strings as-is, and extracts log-mel features
+        with [`WhisperFeatureExtractor`].
+
+        Args:
+            text (`str` or `list[str]`):
+                Input sequence or batch of sequences.
+            audio (`np.ndarray` or `list[np.ndarray]`):
+                Input audio or batch of audios as NumPy arrays. If provided, there must be as many `text` inputs as
+                `audio` inputs.
+
+        Returns:
+            [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
+            audio features (`input_features`, `feature_attention_mask`).
+        """
+
+        # Merge defaults with user kwargs
         call_kwargs = self._merge_kwargs(
             AudioFlamingo3ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,  # TODO keep?
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
@@ -153,12 +161,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             )
             audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
-            # -----------------------
             # Post-pool frame counts per window (match encoder schedule)
-            # -----------------------
-            # feature_attention_mask: (num_windows, T_mel_pad)
-            # Conv stack:    L1 = (L_mel - 1)//2 + 1
-            # AvgPool(2,2):  K  = (L1 - 2)//2 + 1
             feat_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
             frames_per_window: list[int] = []
             for L_mel in feat_lengths:
@@ -186,7 +189,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
                 expanded_texts.append(sample)
 
-        # tokenize
+        # Tokenize
         text_inputs = self.tokenizer(expanded_texts, **text_kwargs)
 
         return BatchFeature(data={**text_inputs, **audio_inputs}, tensor_type=return_tensors)

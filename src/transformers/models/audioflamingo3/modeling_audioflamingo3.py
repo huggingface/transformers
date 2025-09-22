@@ -320,10 +320,10 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module) -> None:
-        # Initialize modules following config.initializer_range; used for fine-tuning/inference scaffolding.
-        std = getattr(self.config, "initializer_range", None)
+        # Initialize modules following config.init_std; used for fine-tuning/inference scaffolding.
+        std = getattr(self.config, "init_std", None)
         if std is None and hasattr(self.config, "audio_config"):
-            std = getattr(self.config.audio_config, "initializer_range", 0.02)
+            std = getattr(self.config.audio_config, "init_std", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -536,42 +536,33 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     def __init__(self, config: AudioFlamingo3Config):
         super().__init__(config)
         # Language model
-        self.llm = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         # Audio encoder (explicitly instantiate our class to guarantee helper availability)
-        self.sound_tower = AudioFlamingo3Encoder(config.audio_config)
+        self.audio_tower = AudioFlamingo3Encoder(config.audio_config)
         # Projection to LM hidden size
-        self.sound_mm_projector = AudioFlamingo3MultiModalProjector(config)
-
-        # Common IDs / limits
-        self.padding_side = config.padding_side
-        self.pad_token_id = config.pad_token_id
-        self.model_max_length = config.model_max_length
-        self.eos_token_id = config.eos_token_id
-        self.bos_token_id = config.bos_token_id
-        self.sound_token_id = config.sound_token_id
+        self.multi_modal_projector = AudioFlamingo3MultiModalProjector(config)
 
         self.post_init()
 
     # --- Embedding plumbing (forward to LM) ---
     def get_input_embeddings(self):
-        return self.llm.get_input_embeddings()
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.llm.set_input_embeddings(value)
+        self.language_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.llm.get_output_embeddings()
+        return self.language_model.get_output_embeddings()
 
     def set_output_embeddings(self, value):
-        self.llm.set_output_embeddings(value)
+        self.language_model.set_output_embeddings(value)
 
     def set_decoder(self, decoder):
-        self.llm.set_decoder(decoder)
+        self.language_model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.llm.get_decoder()
+        return self.language_model.get_decoder()
 
-    # --- Forward ---
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -600,7 +591,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
         # Replace <sound> token slots with audio features (no length change)
         if input_features is not None and input_ids is not None and input_ids.shape[1] != 1:
-            dev = next(self.sound_tower.parameters()).device
+            dev = next(self.audio_tower.parameters()).device
 
             input_features = input_features.to(dev)
             if feature_attention_mask is None:
@@ -609,7 +600,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
             # Compute pre/post lengths (mel -> conv -> pool)
             Lmel = feature_attention_mask.sum(-1)  # (#windows,)
-            pre_lengths, post_lengths = self.sound_tower._get_feat_extract_output_lengths(Lmel)
+            pre_lengths, post_lengths = self.audio_tower._get_feat_extract_output_lengths(Lmel)
             pre_lengths = pre_lengths.to(dtype=torch.long)
             post_lengths = post_lengths.to(dtype=torch.long)
 
@@ -625,48 +616,36 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             enc_mask_bool = pad_bool.view(pre_lengths.shape[0], 1, 1, S_in_max).expand(
                 pre_lengths.shape[0], 1, S_in_max, S_in_max
             )
-            enc_mask = enc_mask_bool.to(dtype=self.sound_tower.conv1.weight.dtype, device=dev)
+            enc_mask = enc_mask_bool.to(dtype=self.audio_tower.conv1.weight.dtype, device=dev)
             enc_mask[enc_mask_bool] = float("-inf")
 
             # Encode audio -> project -> flatten valid frames
-            enc_out = self.sound_tower(input_features, attention_mask=enc_mask)
+            enc_out = self.audio_tower(input_features, attention_mask=enc_mask)
             post = enc_out.last_hidden_state  # (#windows, S_out, C)
-            audio_feats = self.sound_mm_projector(post)  # (#windows, S_out, D)
+            audio_feats = self.multi_modal_projector(post)  # (#windows, S_out, D)
 
             N, S_out_max, D = audio_feats.shape
             valid_mask = torch.arange(S_out_max, device=post_lengths.device)[None, :] < post_lengths[:, None]
             flat_audio = audio_feats[valid_mask]  # (sum(post_lengths), D)
 
-            # Robust per-sample assignment (no masked_scatter interleaving)
-            with torch.no_grad():
-                per_sample_counts = (input_ids == self.sound_token_id).sum(dim=1).tolist()
-                total_tokens = int(sum(per_sample_counts))
-                total_frames = int(flat_audio.shape[0])
-                if total_tokens != total_frames:
-                    raise ValueError(
-                        f"Audio tokens and features mismatch: tokens={total_tokens}, frames={total_frames}. "
-                        "Ensure the processor expands <sound> by the post-pool frame count."
-                    )
+            # --- Scatter into <sound> slots ---
+            # Build a boolean mask over token positions where we should inject audio frames
+            special_ids_mask = input_ids == self.config.audio_token_id  # (B, L)
+            n_audio_tokens = int(special_ids_mask.sum().item())
+            n_audio_frames = int(flat_audio.shape[0])
+            if n_audio_tokens != n_audio_frames:
+                raise ValueError(
+                    f"Audio tokens and features mismatch: tokens={n_audio_tokens}, frames={n_audio_frames}. "
+                    "Ensure the processor expands <sound> by the post-pool frame count."
+                )
 
-                chunks = []
-                off = 0
-                for sz in per_sample_counts:
-                    chunks.append(flat_audio[off : off + sz])
-                    off += sz
-                assert off == total_frames
-
-            bsz = input_ids.size(0)
-            for b in range(bsz):
-                pos_b = (input_ids[b] == self.sound_token_id).nonzero(as_tuple=False).squeeze(-1)  # (T_b,)
-                if pos_b.numel() == 0:
-                    continue
-                feats_b = chunks[b].to(inputs_embeds.device, dtype=inputs_embeds.dtype)  # (T_b, D)
-                if feats_b.size(0) != pos_b.numel():
-                    raise RuntimeError(f"Sample {b}: token/feature mismatch {pos_b.numel()} vs {feats_b.size(0)}")
-                inputs_embeds[b, pos_b, :] = feats_b
+            # Expand mask to embedding dimension and scatter the flattened audio features
+            special_mask = special_ids_mask.unsqueeze(-1).expand(-1, -1, D)  # (B, L, D)
+            src = flat_audio.to(inputs_embeds.device, dtype=inputs_embeds.dtype).reshape(-1)  # (n_audio_tokens * D,)
+            inputs_embeds = inputs_embeds.masked_scatter(special_mask, src)
 
         # Language model forward
-        outputs = self.llm(
+        outputs = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
