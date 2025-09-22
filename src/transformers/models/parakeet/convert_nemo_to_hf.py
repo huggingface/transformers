@@ -531,9 +531,6 @@ def create_hf_config_from_nemo(
         # Get vocab_size from state dict if available
         vocab_size = 1024  # default
 
-        config_params["use_bias"] = False
-        config_params["attention_bias"] = False
-
         # Create `ParakeetEncoderConfig` sub-config with `parakeet_encoder` model_type
         parakeet_encoder_config_params = config_params.copy()
         parakeet_encoder_config_params["model_type"] = "parakeet_encoder"
@@ -570,6 +567,7 @@ def create_hf_config_from_nemo(
         )
         model_config.encoder_config.use_bias = False
         model_config.encoder_config.attention_bias = False
+        model_config.encoder_config.scale_input = False
 
     # Non CTC models, TODO
     return model_config
