@@ -2786,17 +2786,22 @@ class TestAttentionImplementation(unittest.TestCase):
         with LoggingLevel(logging.WARNING):
             with CaptureLogger(logger) as cl:
                 _ = AutoModel.from_pretrained(
-                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
-            )
+                    "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
+                )
 
-        self.assertTrue("You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` library instead!" in cl.out)
+        self.assertTrue(
+            "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` library instead!"
+            in cl.out
+        )
 
     def test_not_available_kernels(self):
         if is_kernels_available():
             self.skipTest(reason="Please uninstall `kernels` package to run `test_not_available_kernels`")
 
         with self.assertRaises(ImportError) as cm:
-            _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn")
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn"
+            )
 
         self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
 
