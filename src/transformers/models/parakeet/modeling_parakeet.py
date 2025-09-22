@@ -718,7 +718,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
 
         # mask out padded tokens
         if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask)
+            attention_mask = self._get_output_attention_mask(attention_mask, target_length=sequences.shape[1])
             sequences[~attention_mask] = self.config.pad_token_id
 
         if return_dict_in_generate:
