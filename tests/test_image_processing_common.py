@@ -637,6 +637,11 @@ class ImageProcessingTestMixin:
         )
 
     def test_new_models_require_fast_image_processor(self):
+        """
+        Test that new models have a fast image processor.
+        For more information on how to implement a fast image processor, see this issue: https://github.com/huggingface/transformers/issues/36978,
+        and ping @yonigozlan for help.
+        """
         if self.fast_image_processing_class is not None:
             return
         if self.image_processing_class is None:
