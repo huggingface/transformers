@@ -89,30 +89,6 @@ pip install huggingface_hub
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 </pt>
-<tf>
-
-指定`from_pt=True`将checkpoint从PyTorch转换为TensorFlow。
-
-```py
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
-```
-
-然后，您可以使用新的checkpoint保存您的新TensorFlow模型：
-
-```py
->>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
-```
-</tf>
-<jax>
-
-如果模型在Flax中可用，您还可以将PyTorch checkpoint转换为Flax：
-
-```py
->>> flax_model = FlaxDistilBertForSequenceClassification.from_pretrained(
-...     "path/to/awesome-name-you-picked", from_pt=True
-... )
-```
-</jax>
 </frameworkcontent>
 
 ## 在训练过程中推送模型
@@ -146,29 +122,6 @@ pip install huggingface_hub
 >>> trainer.push_to_hub()
 ```
 </pt>
-<tf>
-
-使用[`PushToHubCallback`]将模型分享到Hub。在[`PushToHubCallback`]函数中，添加以下内容：
-
-- 一个用于存储模型的输出目录。
-- 一个tokenizer。
-- `hub_model_id`，即您的Hub用户名和模型名称。
-
-
-```py
->>> from transformers import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="./your_model_save_path", tokenizer=tokenizer, hub_model_id="your-username/my-awesome-model"
-... )
-```
-
-将回调函数添加到 [`fit`](https://keras.io/api/models/model_training_apis/)中，然后🤗 Transformers 会将训练好的模型推送到 Hub：
-
-```py
->>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
-```
-</tf>
 </frameworkcontent>
 
 ## 使用`push_to_hub`功能
