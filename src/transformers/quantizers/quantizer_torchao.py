@@ -98,6 +98,8 @@ if is_torchao_available():
         torchao.quantization.Float8DynamicActivationFloat8WeightConfig,
     ]
 
+    TORCHAO_VERSION = version.parse(importlib.metadata.version("torchao"))
+
 
 class TorchAoHfQuantizer(HfQuantizer):
     """
@@ -160,12 +162,13 @@ class TorchAoHfQuantizer(HfQuantizer):
         If the model is safe serializable, we flatten the state dict of tensor subclasses so that it is compatible with
         the safetensors format.
         """
-        if (
-            type(self.quantization_config.quant_type) in SUPPORTED_SAFE_SERIALIZATION_CONFIGS
-            and safe_serialization
-            and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.14.0")
-        ):
-            return flatten_tensor_state_dict(model.state_dict())
+        if type(self.quantization_config.quant_type) in SUPPORTED_SAFE_SERIALIZATION_CONFIGS and safe_serialization:
+            if TORCHAO_VERSION >= version.parse("0.14.0"):
+                return flatten_tensor_state_dict(model.state_dict())
+            else:
+                raise RuntimeError(
+                    f"In order to use safetensors with torchao, please use torchao version >= 0.14.0. Current version: {TORCHAO_VERSION}"
+                )
         else:
             return super().get_state_dict_and_metadata(model)
 
@@ -316,9 +319,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         If the metadata contains torchao tensor subclass information, we reconstruct the tensor subclass state dict
         from the provided state_dict and metadata.
         """
-        if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.14.0") and is_metadata_torchao(
-            metadata
-        ):
+        if TORCHAO_VERSION >= version.parse("0.14.0") and is_metadata_torchao(metadata):
             return unflatten_tensor_state_dict(state_dict, metadata)
         else:
             return super().update_state_dict_with_metadata(state_dict, metadata)
@@ -341,13 +342,14 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     def is_serializable(self, safe_serialization=None) -> bool:
         if safe_serialization:
-            _is_torchao_serializable = (
-                type(self.quantization_config.quant_type) in SUPPORTED_SAFE_SERIALIZATION_CONFIGS
-            )
+            _is_torchao_serializable = type(
+                self.quantization_config.quant_type
+            ) in SUPPORTED_SAFE_SERIALIZATION_CONFIGS and TORCHAO_VERSION >= version.parse("0.14.0")
             if not _is_torchao_serializable:
                 logger.warning(
                     f"torchao quantized model only supports safe serialization for {SUPPORTED_SAFE_SERIALIZATION_CONFIGS}, \
-                    please set `safe_serialization` to False for {type(self.quantization_config.quant_type)}."
+                    and torchao version >= 0.14.0, please set `safe_serialization` to False for \
+                    {type(self.quantization_config.quant_type)} and {TORCHAO_VERSION}."
                 )
             return _is_torchao_serializable
 
