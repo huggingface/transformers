@@ -205,7 +205,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
 
@@ -290,7 +289,6 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
 

@@ -73,7 +73,6 @@ class PersimmonModelTest(CausalLMModelTest, unittest.TestCase):
     )
     model_tester_class = PersimmonModelTester
 
-    test_headmasking = False
     test_pruning = False
 
     @unittest.skip("Persimmon applies key/query norm which doesn't work with packing")

@@ -72,7 +72,6 @@ class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]

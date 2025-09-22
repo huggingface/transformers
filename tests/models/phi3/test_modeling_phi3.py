@@ -112,7 +112,6 @@ class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
     test_pruning = False
     model_tester_class = Phi3ModelTester
 

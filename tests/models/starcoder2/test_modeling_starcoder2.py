@@ -59,7 +59,6 @@ class Starcoder2ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_headmasking = False
     test_pruning = False
     model_tester_class = Starcoder2ModelTester
     pipeline_model_mapping = (

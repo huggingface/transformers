@@ -161,7 +161,6 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     )
     is_encoder_decoder = True
     test_pruning = False
-    test_headmasking = False
     test_resize_embeddings = False
 
     def setUp(self):
@@ -356,7 +355,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
     all_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
@@ -883,7 +881,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = ()
     is_encoder_decoder = True
     test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
@@ -1428,7 +1425,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    test_headmasking = False
     test_resize_embeddings = False
 
     def setUp(self):

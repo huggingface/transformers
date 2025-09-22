@@ -532,7 +532,6 @@ class MoshiTester:
 class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False  # training is not supported yet for Moshi
-    test_headmasking = False
     test_resize_embeddings = False
     test_torchscript = False
 

@@ -85,7 +85,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     model_tester_class = MistralModelTester
 

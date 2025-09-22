@@ -573,7 +573,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # Addition keys that are required for forward. MusicGen isn't encoder-decoder in config so we have to pass decoder ids as additional
     additional_model_inputs = ["decoder_input_ids"]
     test_pruning = False  # training is not supported yet for MusicGen
-    test_headmasking = False
     test_resize_embeddings = False
     # not to test torchscript as the model tester doesn't prepare `input_values` and `padding_mask`
     # (and `torchscript` hates `None` values).

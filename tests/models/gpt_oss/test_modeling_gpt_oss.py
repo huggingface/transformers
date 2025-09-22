@@ -94,7 +94,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]

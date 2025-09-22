@@ -330,6 +330,7 @@ class VJEPA2RopeAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
+            None,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -425,7 +426,6 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         self_attention_outputs = self.attention(
             hidden_states,
             position_mask=position_mask,  # position mask for context/target selection
-            # head mask is applied at F.scaled_dot_product_attention
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]

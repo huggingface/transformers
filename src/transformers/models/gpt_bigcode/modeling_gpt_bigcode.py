@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 # Fused kernels
 # Use separate functions for each case because conditionals prevent kernel fusion.
-# TODO: Could have better fused kernels depending on scaling, dropout and head mask.
+# TODO: Could have better fused kernels depending on scaling and dropout.
 #  Is it doable without writing 32 functions?
 @torch.jit.script
 def upcast_masked_softmax(

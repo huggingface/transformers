@@ -333,7 +333,6 @@ class Gemma3nTextModelTester(GemmaModelTester):
 class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3nTextModel, Gemma3nForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Gemma3nForCausalLM,) if is_torch_available() else ()
-    test_headmasking = False
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
@@ -679,7 +678,6 @@ class Gemma3nVision2TextModelTester:
 class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3nModel, Gemma3nForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma3nForConditionalGeneration,) if is_torch_available() else ()
-    test_headmasking = False
     test_pruning = False
     test_missing_keys = False
     _is_stateful = True

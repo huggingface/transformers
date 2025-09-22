@@ -235,7 +235,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
 

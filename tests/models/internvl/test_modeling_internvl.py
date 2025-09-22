@@ -192,7 +192,6 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
 
     def setUp(self):
