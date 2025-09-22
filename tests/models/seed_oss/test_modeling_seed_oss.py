@@ -90,11 +90,17 @@ class SeedOssIntegrationTest(unittest.TestCase):
     input_text = ["How to make pasta?", "Hi ByteDance-Seed"]
     model_id = "ByteDance-Seed/Seed-OSS-36B-Base"
 
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_36b_eager(self):
-        EXPECTED_TEXTS = ""
+        EXPECTED_TEXTS = [
+            "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
+            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed"
+        ]
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id, torch_dtype=torch.bfloat16, attn_implementation="eager", device_map="auto"
@@ -113,7 +119,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
     def test_model_36b_sdpa(self):
         EXPECTED_TEXTS = [
             "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on my local machine. I have installed all the",
+            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed"
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
