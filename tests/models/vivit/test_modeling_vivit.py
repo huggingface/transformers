@@ -216,7 +216,7 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_values"]
+            expected_arg_names = ["pixel_values", "interpolate_pos_encoding"]
             self.assertListEqual(arg_names[:2], expected_arg_names)
 
     def test_model(self):
