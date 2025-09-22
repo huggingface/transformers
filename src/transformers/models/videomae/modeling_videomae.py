@@ -572,7 +572,7 @@ class VideoMAEDecoder(nn.Module):
     def forward(self, hidden_states: torch.Tensor, return_token_num: int):
         # Apply transformer layers
         for layer_module in self.decoder_layers:
-            hidden_states = layer_module(hidden_states, None)
+            hidden_states = layer_module(hidden_states)
 
         if return_token_num > 0:
             hidden_states = hidden_states[:, -return_token_num:]

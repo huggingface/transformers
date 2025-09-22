@@ -411,7 +411,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            outputs = block(hidden_states, attention_mask[i], output_attentions=output_attentions)
+            outputs = block(hidden_states, attention_mask, output_attentions=output_attentions)
             hidden_states = outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (outputs[1],)

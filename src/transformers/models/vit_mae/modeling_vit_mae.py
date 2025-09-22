@@ -734,7 +734,7 @@ class ViTMAEDecoder(nn.Module):
 
         # Apply Transformer layers (blocks)
         for layer_module in self.decoder_layers:
-            hidden_states = layer_module(hidden_states, None)
+            hidden_states = layer_module(hidden_states)
 
         hidden_states = self.decoder_norm(hidden_states)
 
