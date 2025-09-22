@@ -53,23 +53,13 @@ class LlamaModelTester(CausalLMModelTester):
         config_class = LlamaConfig
         base_model_class = LlamaModel
         causal_lm_class = LlamaForCausalLM
-        sequence_class = LlamaForSequenceClassification
-        token_class = LlamaForTokenClassification
+        sequence_classification_class = LlamaForSequenceClassification
+        token_classification_class = LlamaForTokenClassification
+        question_answering_class = LlamaForQuestionAnswering
 
 
 @require_torch
 class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            LlamaModel,
-            LlamaForCausalLM,
-            LlamaForSequenceClassification,
-            LlamaForQuestionAnswering,
-            LlamaForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": LlamaModel,
@@ -82,8 +72,6 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = LlamaModelTester
 
