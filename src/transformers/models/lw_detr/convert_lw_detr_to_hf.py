@@ -59,7 +59,7 @@ BACKBONE_CONFIGS = {
         "num_hidden_layers": 6,
         "num_attention_heads": 12,
         "window_block_indices": [0, 2, 4],
-        "out_indices": [1, 3, 5],
+        "out_indices": [2, 4, 6],
     },
     "small": {
         "image_size": 1024,
@@ -67,7 +67,7 @@ BACKBONE_CONFIGS = {
         "num_hidden_layers": 10,
         "num_attention_heads": 12,
         "window_block_indices": [0, 1, 3, 6, 7, 9],
-        "out_indices": [2, 4, 5, 9],
+        "out_indices": [3, 5, 6, 10],
     },
     "medium": {
         "image_size": 1024,
@@ -75,7 +75,7 @@ BACKBONE_CONFIGS = {
         "num_hidden_layers": 10,
         "num_attention_heads": 12,
         "window_block_indices": [0, 1, 3, 6, 7, 9],
-        "out_indices": [2, 4, 5, 9],
+        "out_indices": [3, 5, 6, 10],
     },
     "large": {
         "image_size": 1024,
@@ -83,7 +83,7 @@ BACKBONE_CONFIGS = {
         "num_hidden_layers": 10,
         "num_attention_heads": 12,
         "window_block_indices": [0, 1, 3, 6, 7, 9],
-        "out_indices": [2, 4, 5, 9],
+        "out_indices": [3, 5, 6, 10],
     },
     "xlarge": {
         "image_size": 1024,
@@ -91,7 +91,7 @@ BACKBONE_CONFIGS = {
         "num_hidden_layers": 10,
         "num_attention_heads": 12,
         "window_block_indices": [0, 1, 3, 6, 7, 9],
-        "out_indices": [2, 4, 5, 9],
+        "out_indices": [3, 5, 6, 10],
     },
 }
 
@@ -186,6 +186,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer.enc_output_norm.(\d+).(weight|bias)":                 r"enc_output_norm.\1.\2",
     r"transformer.enc_out_class_embed.(\d+).(weight|bias)":             r"enc_out_class_embed.\1.\2",
     r"transformer.enc_out_bbox_embed.(\d+).layers.(\d+).(weight|bias)": r"enc_out_bbox_embed.\1.layers.\2.\3",
+
+    r"refpoint_embed.weight": r"reference_point_embed.weight",
 }
 
 

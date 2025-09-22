@@ -29,6 +29,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_lw_detr import LwDetrConfig
 
@@ -40,7 +41,10 @@ if is_timm_available():
 @dataclass
 @auto_docstring(
     custom_intro="""
-    # TODO
+    Base class for outputs of the DeformableDetrDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
     """
 )
 class LwDetrDecoderOutput(ModelOutput):
@@ -66,10 +70,27 @@ class LwDetrDecoderOutput(ModelOutput):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of the LW-DETR model.
+    Base class for outputs of the LWDETR backbone-decoder model.
     """
 )
 class LwDetrModelOutput(ModelOutput):
+    r"""
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    """
+
     init_reference_points: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
@@ -85,6 +106,40 @@ class LwDetrModelOutput(ModelOutput):
     """
 )
 class LwDetrObjectDetectionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+        scale-invariant IoU loss.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+        Classification logits (including no-object) for all queries.
+    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
+        unnormalized bounding boxes.
+    auxiliary_outputs (`list[Dict]`, *optional*):
+        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+        and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
+        `pred_boxes`) for each decoder layer.
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    """
+
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[dict] = None
     logits: Optional[torch.FloatTensor] = None
@@ -99,7 +154,15 @@ class LwDetrObjectDetectionOutput(ModelOutput):
 
 
 class LwDetrConvNormLayer(nn.Module):
-    def __init__(self, config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None):
+    def __init__(
+        self,
+        config: LwDetrConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int,
+        activation: Optional[str] = None,
+    ):
         super().__init__()
         self.conv = nn.Conv2d(
             in_channels,
@@ -122,10 +185,10 @@ class LwDetrConvNormLayer(nn.Module):
 class LwDetrRepVggBlock(nn.Module):
     def __init__(self, config: LwDetrConfig, hidden_channels: int):
         super().__init__()
-        self.conv1 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1, activation="silu")
-        self.conv2 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=0, activation="silu")
+        self.conv1 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, activation="silu")
+        self.conv2 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, activation="silu")
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = self.conv1(x)
         y = self.conv2(y)
         return y
@@ -145,19 +208,19 @@ class LwDetrCSPRepLayer(nn.Module):
         self.conv2 = LwDetrConvNormLayer(config, conv2_in_channels, out_channels, 1, 1, activation=activation)
         self.bottlenecks = nn.ModuleList(LwDetrRepVggBlock(config, self.hidden_channels) for _ in range(num_blocks))
 
-    def forward(self, hidden_state):
-        hidden_state = self.conv1(hidden_state)
-        all_hidden_states = list(hidden_state.split(self.hidden_channels, 1))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv1(hidden_states)
+        all_hidden_states = list(hidden_states.split(self.hidden_channels, 1))
         last_hidden_state = all_hidden_states[-1]
 
-        bottleneck_hidden_states = []
+        bottlenecked_hidden_states = []
         for bottleneck in self.bottlenecks:
-            bottleneck_hidden_states.append(bottleneck(last_hidden_state))
+            bottlenecked_hidden_states.append(bottleneck(last_hidden_state))
 
-        all_hidden_states.extend(bottleneck_hidden_states)
-        hidden_state = torch.cat(all_hidden_states, 1)
-        hidden_state = self.conv2(hidden_state)
-        return hidden_state
+        all_hidden_states.extend(bottlenecked_hidden_states)
+        hidden_states = torch.cat(all_hidden_states, 1)
+        hidden_states = self.conv2(hidden_states)
+        return hidden_states
 
 
 class LwDetrLayerNorm(nn.LayerNorm):
@@ -196,19 +259,15 @@ class LwDetrSamplingLayer(nn.Module):
         layers = []
         if scale == 2.0:
             if channel_size > 512:
-                layers.extend(
-                    [
-                        LwDetrConvNormLayer(config, channel_size, channel_size // 2, 1, 1, activation="relu"),
-                        nn.ConvTranspose2d(channel_size // 2, channel_size // 4, kernel_size=2, stride=2),
-                    ]
-                )
+                layers.append(LwDetrConvNormLayer(config, channel_size, channel_size // 2, 1, 1, activation="relu"))
+                layers.append(nn.ConvTranspose2d(channel_size // 2, channel_size // 4, kernel_size=2, stride=2))
             else:
                 layers.append(nn.ConvTranspose2d(channel_size, channel_size // 2, 2, 2))
         elif scale == 0.5:
             layers.append(LwDetrConvNormLayer(config, channel_size, channel_size, 3, 2, activation="relu"))
         self.layers = nn.ModuleList(layers)
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
             hidden_states = layer(hidden_states)
         return hidden_states
@@ -234,7 +293,7 @@ class LwDetrScaleProjector(nn.Module):
         self.projector_layer = LwDetrCSPRepLayer(config, projector_input_dim, output_dim)
         self.layer_norm = LwDetrLayerNorm(output_dim, data_format="channels_first")
 
-    def forward(self, hidden_states_tuple: tuple[torch.Tensor]):
+    def forward(self, hidden_states_tuple: tuple[torch.Tensor]) -> torch.Tensor:
         sampled_hidden_states = []
         for sampling_layer, hidden_states in zip(self.sampling_layers, hidden_states_tuple):
             hidden_states = sampling_layer(hidden_states)
@@ -260,7 +319,7 @@ class LwDetrMultiScaleProjector(nn.Module):
             ]
         )
 
-    def forward(self, hidden_states: tuple[torch.Tensor]):
+    def forward(self, hidden_states: tuple[torch.Tensor]) -> list[torch.Tensor]:
         output_hidden_states = []
         for scale_layer in self.scale_layers:
             output_hidden_states.append(scale_layer(hidden_states))
@@ -393,7 +452,7 @@ class LwDetrConvEncoder(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values).feature_maps
         features = self.projector(features)
         out = []
         for feature_map in features:
@@ -462,13 +521,13 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class LwDetrMultiheadAttention(nn.Module):
-    def __init__(
-        self,
-        config: LwDetrConfig,
-    ):
+class LwDetrAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: LwDetrConfig, layer_idx: int):
         super().__init__()
         self.config = config
+        self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
@@ -488,9 +547,7 @@ class LwDetrMultiheadAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[torch.Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -535,6 +592,9 @@ class LwDetrMultiheadAttention(nn.Module):
             attn_output = torch.cat(torch.split(attn_output, batch_size, dim=0), dim=1)
 
         return attn_output, attn_weights
+
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[torch.Tensor]):
+        return tensor if position_embeddings is None else tensor + position_embeddings
 
 
 @use_kernel_forward_from_hub("MultiScaleDeformableAttention")
@@ -703,12 +763,12 @@ class LwDetrMultiscaleDeformableAttention(nn.Module):
 
 
 class LwDetrDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: LwDetrConfig):
-        super().__init__()
+    def __init__(self, config: LwDetrConfig, layer_idx: int):
+        GradientCheckpointingLayer.__init__(self)
         self.embed_dim = config.d_model
 
         # self-attention
-        self.self_attn = LwDetrMultiheadAttention(config)
+        self.self_attn = LwDetrAttention(config, layer_idx=layer_idx)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.activation_dropout = config.activation_dropout
@@ -739,27 +799,6 @@ class LwDetrDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(seq_len, batch, embed_dim)`.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings that are added to the queries and keys in the self-attention layer.
-            reference_points (`torch.FloatTensor`, *optional*):
-                Reference points.
-            spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes.
-            level_start_index (`torch.LongTensor`, *optional*):
-                Level start index.
-            encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
-                values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
         self_attention_output, self_attn_weights = self.self_attn(
             hidden_states, position_embeddings=position_embeddings, **kwargs
         )
@@ -820,12 +859,10 @@ class LwDetrLearnedPositionEmbedding(nn.Module):
         return pos
 
 
-@auto_docstring
 class LwDetrPreTrainedModel(PreTrainedModel):
     config: LwDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
     _no_split_modules = [
         r"LwDetrConvEncoder",
         r"LwDetrDecoderLayer",
@@ -833,9 +870,9 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
-    # _supports_attention_backend = True
+    _supports_attention_backend = True
     _can_record_outputs = {
-        "attentions": [LwDetrMultiheadAttention, LwDetrMultiscaleDeformableAttention],
+        "attentions": [LwDetrAttention, LwDetrMultiscaleDeformableAttention],
         "hidden_states": [LwDetrDecoderLayer],
     }
 
@@ -936,34 +973,33 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
     def __init__(self, config: LwDetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([LwDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([LwDetrDecoderLayer(config, i) for i in range(config.decoder_layers)])
         self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
 
         self.ref_point_head = LwDetrMLPPredictionHead(2 * config.d_model, config.d_model, config.d_model, num_layers=2)
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_reference(self, reference_points, valid_ratios):
-        # [num_queries, batch_size, 4]
+        # batch_size, num_queries, batch_size, 4
         obj_center = reference_points[..., :4]
 
-        refpoints_input = (
-            obj_center[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
-        )  # bs, nq, nlevel, 4
-        query_sine_embed = gen_sine_position_embeddings(
-            refpoints_input[:, :, 0, :], self.config.d_model
-        )  # bs, nq, 256*2
+        # batch_size, num_queries, num_levels, 4
+        reference_points_inputs = obj_center[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+
+        # batch_size, num_queries, d_model * 2
+        query_sine_embed = gen_sine_position_embeddings(reference_points_inputs[:, :, 0, :], self.config.d_model)
+
+        # batch_size, num_queries, d_model
         query_pos = self.ref_point_head(query_sine_embed)
-        return obj_center, refpoints_input, query_pos, query_sine_embed
+        return obj_center, reference_points_inputs, query_pos, query_sine_embed
 
     def forward(
         self,
         inputs_embeds: Optional[torch.Tensor] = None,
         reference_points: Optional[torch.Tensor] = None,
-        query_position_embeddings: Optional[torch.Tensor] = None,
         spatial_shapes: Optional[torch.Tensor] = None,
         spatial_shapes_list: Optional[torch.Tensor] = None,
         level_start_index: Optional[torch.Tensor] = None,
@@ -1090,7 +1126,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
         self.num_queries = config.num_queries
         hidden_dim = config.d_model
         query_dim = 4
-        self.refpoint_embed = nn.Embedding(self.num_queries * self.group_detr, query_dim)
+        self.reference_point_embed = nn.Embedding(self.num_queries * self.group_detr, query_dim)
         self.query_feat = nn.Embedding(self.num_queries * self.group_detr, hidden_dim)
 
         self.decoder = LwDetrDecoder(config)
@@ -1200,8 +1236,6 @@ class LwDetrModel(LwDetrPreTrainedModel):
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        # TODO careful
-        # output_proposals = torch.log(output_proposals / (1 - output_proposals))  # inverse sigmoid
         output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float("inf"))
         output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
 
@@ -1218,22 +1252,9 @@ class LwDetrModel(LwDetrPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrModelOutput:
         r"""
-        decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
-
         Examples:
 
         ```python
@@ -1244,8 +1265,8 @@ class LwDetrModel(LwDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
+        >>> model = DeformableDetrModel.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -1276,17 +1297,16 @@ class LwDetrModel(LwDetrPreTrainedModel):
                 raise ValueError("No attention mask was provided")
 
         if self.training:
-            reference_points = self.refpoint_embed.weight
+            reference_points = self.reference_point_embed.weight
             query_feat = self.query_feat.weight
         else:
             # only use one group in inference
-            reference_points = self.refpoint_embed.weight[: self.num_queries]
+            reference_points = self.reference_point_embed.weight[: self.num_queries]
             query_feat = self.query_feat.weight[: self.num_queries]
 
         # Prepare encoder inputs (by flattening)
         source_flatten = []
         mask_flatten = []
-        lvl_pos_embed_flatten = []
         spatial_shapes_list = []
         for level, (source, mask, pos_embed) in enumerate(zip(sources, masks, position_embeddings_list)):
             batch_size, num_channels, height, width = source.shape
@@ -1295,12 +1315,10 @@ class LwDetrModel(LwDetrPreTrainedModel):
             source = source.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
             pos_embed = pos_embed.flatten(2).transpose(1, 2)
-            lvl_pos_embed_flatten.append(pos_embed)
             source_flatten.append(source)
             mask_flatten.append(mask)
         source_flatten = torch.cat(source_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
-        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
@@ -1358,7 +1376,6 @@ class LwDetrModel(LwDetrPreTrainedModel):
         init_reference_points = reference_points
         decoder_outputs = self.decoder(
             inputs_embeds=target,
-            query_position_embeddings=lvl_pos_embed_flatten,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
@@ -1434,10 +1451,6 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[list[dict]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrObjectDetectionOutput:
@@ -1490,10 +1503,6 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
         outputs = self.model(
             pixel_values,
             pixel_mask=pixel_mask,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
             **kwargs,
         )
 

@@ -78,7 +78,10 @@ class LwDetrViTSelfAttention(nn.Module):
             self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
     def forward(
-        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
@@ -100,6 +103,7 @@ class LwDetrViTSelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -277,6 +281,7 @@ class LwDetrViTEncoder(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         list_hidden_states = []
+        list_hidden_states.append(hidden_states)
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             hidden_states = layer_module(hidden_states, layer_head_mask, **kwargs)
@@ -434,8 +439,8 @@ class LwDetrViTBackbone(LwDetrViTPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self) -> LwDetrViTEmbeddings:
         return self.embeddings.projection
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     @check_model_inputs
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
@@ -457,7 +462,7 @@ class LwDetrViTBackbone(LwDetrViTPreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 768, 14, 14]
         ```"""
-        embedding_output = self.embeddings(pixel_values, **kwargs)
+        embedding_output = self.embeddings(pixel_values)
 
         batch_size, channels, height, width = embedding_output.shape
         # (batch_size, channels, height, width) -> (batch_size, height, width, channels)
@@ -499,7 +504,12 @@ class LwDetrViTBackbone(LwDetrViTPreTrainedModel, BackboneMixin):
                 )
                 feature_maps += (hidden_state,)
 
-        return BackboneOutput(feature_maps=feature_maps)
+        output_hidden_states = self.config.output_hidden_states or kwargs.get("output_hidden_states", False)
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=encoder_outputs.hidden_states if output_hidden_states else None,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 __all__ = ["LwDetrViTPreTrainedModel", "LwDetrViTBackbone"]
