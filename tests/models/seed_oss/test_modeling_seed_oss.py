@@ -99,11 +99,11 @@ class SeedOssIntegrationTest(unittest.TestCase):
     def test_model_36b_eager(self):
         EXPECTED_TEXTS = [
             "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed"
+            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16, attn_implementation="eager", device_map="auto"
+            "ByteDance-Seed/Seed-OSS-36B-Base", torch_dtype=torch.bfloat16, device_map="auto"
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -119,7 +119,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
     def test_model_36b_sdpa(self):
         EXPECTED_TEXTS = [
             "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed"
+            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -140,13 +140,14 @@ class SeedOssIntegrationTest(unittest.TestCase):
     @require_torch_large_gpu
     @pytest.mark.flash_attn_test
     def test_model_36b_flash_attn(self):
-        EXPECTED_TEXTS = ""
+        EXPECTED_TEXTS = [
+            "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
+            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
+        ]
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", device_map="auto"
         )
-        model.to(torch_device)
-
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True, return_token_type_ids=False).to(
             model.model.embed_tokens.weight.device
