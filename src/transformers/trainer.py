@@ -3971,10 +3971,7 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cpu_amp:
-            # TODO Matt: This syntax is deprecated and the preferred version is
-            #      torch.amp.autocast("cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
-            #      but this is unavailable on Torch 2.1 or earlier. We can change this when we stop supporting 2.1.
-            ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            ctx_manager = torch.autocast(device_type="cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
         else:
             ctx_manager = contextlib.nullcontext()
 
