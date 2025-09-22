@@ -18,7 +18,6 @@ from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -271,7 +270,7 @@ def torch_causal_conv1d_update(
 
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     """This function is intended to align with the l2norm implementation in the FLA library."""
-    inv_norm = 1 / torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+    inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
     return x * inv_norm
 
 
@@ -647,7 +646,7 @@ class Qwen3NextDecoderLayer(Qwen3MoeDecoderLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.FloatTensor:
@@ -710,6 +709,9 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
         if isinstance(module, Qwen3NextGatedDeltaNet):
             module.dt_bias.data.fill_(1.0)
             module.A_log.data.uniform_(0, 16).log_()
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        elif isinstance(module, Qwen3NextRMSNorm):
+            module.weight.data.zero_()
 
 
 class Qwen3NextModel(Qwen3NextPreTrainedModel):

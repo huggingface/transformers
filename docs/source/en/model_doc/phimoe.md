@@ -101,8 +101,6 @@ print(output[0]['generated_text'])
 
 [[autodoc]] PhimoeConfig
 
-<frameworkcontent>
-<pt>
 
 ## PhimoeModel
 
@@ -120,5 +118,3 @@ print(output[0]['generated_text'])
 [[autodoc]] PhimoeForSequenceClassification
     - forward
 
-</pt>
-</frameworkcontent>

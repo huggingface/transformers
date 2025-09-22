@@ -345,17 +345,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("Gemma3 does not seem to be compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Gemma3 does not seem to be compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
     @unittest.skip(
         reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation"
     )
@@ -825,8 +814,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
         prompt = "What is the capital of France?"
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        foward_outputs = model(**model_inputs)
-        self.assertIn("DynamicSlidingWindowLayer", str(foward_outputs.past_key_values))
+        forward_outputs = model(**model_inputs)
+        self.assertIn("DynamicSlidingWindowLayer", str(forward_outputs.past_key_values))
 
         generate_outputs = model.generate(
             **model_inputs, max_new_tokens=2, do_sample=False, return_dict_in_generate=True

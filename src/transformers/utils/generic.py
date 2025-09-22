@@ -32,9 +32,7 @@ import numpy as np
 
 from ..utils import logging
 from .import_utils import (
-    is_flax_available,
     is_mlx_available,
-    is_tf_available,
     is_torch_available,
     is_torch_fx_proxy,
     requires,
@@ -76,10 +74,6 @@ def infer_framework_from_repr(x):
     representation = str(type(x))
     if representation.startswith("<class 'torch."):
         return "pt"
-    elif representation.startswith("<class 'tensorflow."):
-        return "tf"
-    elif representation.startswith("<class 'jax"):
-        return "jax"
     elif representation.startswith("<class 'numpy."):
         return "np"
     elif representation.startswith("<class 'mlx."):
@@ -93,8 +87,6 @@ def _get_frameworks_and_test_func(x):
     """
     framework_to_test = {
         "pt": is_torch_tensor,
-        "tf": is_tf_tensor,
-        "jax": is_jax_tensor,
         "np": is_numpy_array,
         "mlx": is_mlx_array,
     }
@@ -109,8 +101,7 @@ def _get_frameworks_and_test_func(x):
 
 def is_tensor(x):
     """
-    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray`, `np.ndarray` or `mlx.array`
-    in the order defined by `infer_framework_from_repr`
+    Tests if `x` is a `torch.Tensor`, `np.ndarray` or `mlx.array` in the order defined by `infer_framework_from_repr`
     """
     # This gives us a smart order to test the frameworks with the corresponding tests.
     framework_to_test_func = _get_frameworks_and_test_func(x)
@@ -121,12 +112,6 @@ def is_tensor(x):
     # Tracers
     if is_torch_fx_proxy(x):
         return True
-
-    if is_flax_available():
-        from jax.core import Tracer
-
-        if isinstance(x, Tracer):
-            return True
 
     return False
 
@@ -186,49 +171,6 @@ def is_torch_dtype(x):
     return False if not is_torch_available() else _is_torch_dtype(x)
 
 
-def _is_tensorflow(x):
-    import tensorflow as tf
-
-    return isinstance(x, tf.Tensor)
-
-
-def is_tf_tensor(x):
-    """
-    Tests if `x` is a tensorflow tensor or not. Safe to call even if tensorflow is not installed.
-    """
-    return False if not is_tf_available() else _is_tensorflow(x)
-
-
-def _is_tf_symbolic_tensor(x):
-    import tensorflow as tf
-
-    # the `is_symbolic_tensor` predicate is only available starting with TF 2.14
-    if hasattr(tf, "is_symbolic_tensor"):
-        return tf.is_symbolic_tensor(x)
-    return isinstance(x, tf.Tensor)
-
-
-def is_tf_symbolic_tensor(x):
-    """
-    Tests if `x` is a tensorflow symbolic tensor or not (ie. not eager). Safe to call even if tensorflow is not
-    installed.
-    """
-    return False if not is_tf_available() else _is_tf_symbolic_tensor(x)
-
-
-def _is_jax(x):
-    import jax.numpy as jnp  # noqa: F811
-
-    return isinstance(x, jnp.ndarray)
-
-
-def is_jax_tensor(x):
-    """
-    Tests if `x` is a Jax tensor or not. Safe to call even if jax is not installed.
-    """
-    return False if not is_flax_available() else _is_jax(x)
-
-
 def _is_mlx(x):
     import mlx.core as mx
 
@@ -244,7 +186,7 @@ def is_mlx_array(x):
 
 def to_py_obj(obj):
     """
-    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
+    Convert a PyTorch tensor, Numpy array or python list to a python list.
     """
     if isinstance(obj, (int, float)):
         return obj
@@ -261,8 +203,6 @@ def to_py_obj(obj):
 
     framework_to_py_obj = {
         "pt": lambda obj: obj.tolist(),
-        "tf": lambda obj: obj.numpy().tolist(),
-        "jax": lambda obj: np.asarray(obj).tolist(),
         "np": lambda obj: obj.tolist(),
     }
 
@@ -281,13 +221,11 @@ def to_py_obj(obj):
 
 def to_numpy(obj):
     """
-    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
+    Convert a PyTorch tensor, Numpy array or python list to a Numpy array.
     """
 
     framework_to_numpy = {
         "pt": lambda obj: obj.detach().cpu().numpy(),
-        "tf": lambda obj: obj.numpy(),
-        "jax": lambda obj: np.asarray(obj),
         "np": lambda obj: obj,
     }
 
@@ -380,6 +318,8 @@ class ModelOutput(OrderedDict):
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:
+                # reset first field to None
+                setattr(self, class_fields[0].name, None)
                 for idx, element in enumerate(iterator):
                     if not isinstance(element, (list, tuple)) or len(element) != 2 or not isinstance(element[0], str):
                         if idx == 0:
@@ -440,7 +380,7 @@ class ModelOutput(OrderedDict):
         args = tuple(getattr(self, field.name) for field in fields(self))
         return callable, args, *remaining
 
-    def to_tuple(self) -> tuple[Any]:
+    def to_tuple(self) -> tuple:
         """
         Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
@@ -498,9 +438,7 @@ class TensorType(ExplicitEnum):
     """
 
     PYTORCH = "pt"
-    TENSORFLOW = "tf"
     NUMPY = "np"
-    JAX = "jax"
     MLX = "mlx"
 
 
@@ -529,13 +467,7 @@ def can_return_loss(model_class):
     Args:
         model_class (`type`): The class of the model.
     """
-    framework = infer_framework(model_class)
-    if framework == "tf":
-        signature = inspect.signature(model_class.call)  # TensorFlow models
-    elif framework == "pt":
-        signature = inspect.signature(model_class.forward)  # PyTorch models
-    else:
-        signature = inspect.signature(model_class.__call__)  # Flax models
+    signature = inspect.signature(model_class.forward)
 
     for p in signature.parameters:
         if p == "return_loss" and signature.parameters[p].default is True:
@@ -552,13 +484,7 @@ def find_labels(model_class):
         model_class (`type`): The class of the model.
     """
     model_name = model_class.__name__
-    framework = infer_framework(model_class)
-    if framework == "tf":
-        signature = inspect.signature(model_class.call)  # TensorFlow models
-    elif framework == "pt":
-        signature = inspect.signature(model_class.forward)  # PyTorch models
-    else:
-        signature = inspect.signature(model_class.__call__)  # Flax models
+    signature = inspect.signature(model_class.forward)
 
     if "QuestionAnswering" in model_name:
         return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
@@ -591,121 +517,62 @@ def working_or_temp_dir(working_dir, use_temp_dir: bool = False):
 
 def transpose(array, axes=None):
     """
-    Framework-agnostic version of `numpy.transpose` that will work on torch/TensorFlow/Jax tensors as well as NumPy
-    arrays.
+    Framework-agnostic version of transpose operation.
     """
     if is_numpy_array(array):
         return np.transpose(array, axes=axes)
     elif is_torch_tensor(array):
         return array.T if axes is None else array.permute(*axes)
-    elif is_tf_tensor(array):
-        import tensorflow as tf
-
-        return tf.transpose(array, perm=axes)
-    elif is_jax_tensor(array):
-        import jax.numpy as jnp
-
-        return jnp.transpose(array, axes=axes)
     else:
         raise ValueError(f"Type not supported for transpose: {type(array)}.")
 
 
 def reshape(array, newshape):
     """
-    Framework-agnostic version of `numpy.reshape` that will work on torch/TensorFlow/Jax tensors as well as NumPy
-    arrays.
+    Framework-agnostic version of reshape operation.
     """
     if is_numpy_array(array):
         return np.reshape(array, newshape)
     elif is_torch_tensor(array):
         return array.reshape(*newshape)
-    elif is_tf_tensor(array):
-        import tensorflow as tf
-
-        return tf.reshape(array, newshape)
-    elif is_jax_tensor(array):
-        import jax.numpy as jnp
-
-        return jnp.reshape(array, newshape)
     else:
         raise ValueError(f"Type not supported for reshape: {type(array)}.")
 
 
 def squeeze(array, axis=None):
     """
-    Framework-agnostic version of `numpy.squeeze` that will work on torch/TensorFlow/Jax tensors as well as NumPy
-    arrays.
+    Framework-agnostic version of squeeze operation.
     """
     if is_numpy_array(array):
         return np.squeeze(array, axis=axis)
     elif is_torch_tensor(array):
         return array.squeeze() if axis is None else array.squeeze(dim=axis)
-    elif is_tf_tensor(array):
-        import tensorflow as tf
-
-        return tf.squeeze(array, axis=axis)
-    elif is_jax_tensor(array):
-        import jax.numpy as jnp
-
-        return jnp.squeeze(array, axis=axis)
     else:
         raise ValueError(f"Type not supported for squeeze: {type(array)}.")
 
 
 def expand_dims(array, axis):
     """
-    Framework-agnostic version of `numpy.expand_dims` that will work on torch/TensorFlow/Jax tensors as well as NumPy
-    arrays.
+    Framework-agnostic version of expand_dims operation.
     """
     if is_numpy_array(array):
         return np.expand_dims(array, axis)
     elif is_torch_tensor(array):
         return array.unsqueeze(dim=axis)
-    elif is_tf_tensor(array):
-        import tensorflow as tf
-
-        return tf.expand_dims(array, axis=axis)
-    elif is_jax_tensor(array):
-        import jax.numpy as jnp
-
-        return jnp.expand_dims(array, axis=axis)
     else:
         raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
 
 
 def tensor_size(array):
     """
-    Framework-agnostic version of `numpy.size` that will work on torch/TensorFlow/Jax tensors as well as NumPy arrays.
+    Framework-agnostic version of size operation.
     """
     if is_numpy_array(array):
         return np.size(array)
     elif is_torch_tensor(array):
         return array.numel()
-    elif is_tf_tensor(array):
-        import tensorflow as tf
-
-        return tf.size(array)
-    elif is_jax_tensor(array):
-        return array.size
     else:
         raise ValueError(f"Type not supported for tensor_size: {type(array)}.")
-
-
-def infer_framework(model_class):
-    """
-    Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant
-    classes are imported or available.
-    """
-    for base_class in inspect.getmro(model_class):
-        module = base_class.__module__
-        name = base_class.__name__
-        if module.startswith("tensorflow") or module.startswith("keras") or name == "TFPreTrainedModel":
-            return "tf"
-        elif module.startswith("torch") or name == "PreTrainedModel":
-            return "pt"
-        elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
-            return "flax"
-    raise TypeError(f"Could not infer framework from class {model_class}.")
 
 
 def torch_int(x):
@@ -985,7 +852,7 @@ def check_model_inputs(func):
         }
 
         # We let cross attentions to be saved separately because some models add `cross-attn` layer
-        # when certain condtions are met. Let's output cross attention if attentions are requested (for BC)
+        # when certain conditions are met. Let's output cross attention if attentions are requested (for BC)
         if "output_attentions" in recordable_keys:
             recordable_keys["output_cross_attentions"] = recordable_keys["output_attentions"]
 

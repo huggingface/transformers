@@ -1270,6 +1270,18 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(torch.allclose(trainer.model.b, b))
             self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
 
+    @require_torch_fp16
+    @require_torch_accelerator
+    def test_mixed_fp16(self):
+        # very basic test
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, fp16=True, logging_steps=1, output_dir=tmp_dir)
+            trainer.train()
+            self.check_trained_model(trainer.model, atol=ATOL, rtol=RTOL)
+            log_0 = trainer.state.log_history[:-1][0]
+            # check that the grads were properly clipped due to the grad scaler. Otherwise, we get huge values
+            self.assertEqual(log_0["grad_norm"] < 100, True)
+
     @require_torch_bf16
     @require_torch_accelerator
     def test_mixed_bf16(self):
@@ -1285,8 +1297,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 trainer = get_regression_trainer(
                     learning_rate=0.1, bf16=True, half_precision_backend="apex", output_dir=tmp_dir
                 )
-
-        # will add more specific tests once there are some bugs to fix
 
     @require_torch_gpu
     @require_torch_tf32
@@ -1895,7 +1905,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_use_liger_kernel_patching(self):
         # Ensure any monkey patching is cleaned up for subsequent tests
         with patch("transformers.models.llama.modeling_llama"):
-            from liger_kernel.transformers import LigerRMSNorm, liger_rotary_pos_emb
+            from liger_kernel.transformers import liger_rotary_pos_emb
 
             from transformers.models.llama import modeling_llama
 
@@ -1904,7 +1914,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Spot check that modeling code and model instance variables are not yet patched
             self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+            self.assertFalse("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
 
             args = TrainingArguments(
                 self.get_auto_remove_tmp_dir(),
@@ -1914,7 +1924,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Spot check that modeling code and model instance variables are patched
             self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+            self.assertTrue("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
 
     @require_liger_kernel
     def test_use_liger_kernel_custom_config_patching(self):
@@ -3231,7 +3241,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model_wrapped_after = trainer.model_wrapped
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
 
-    @require_torch_up_to_2_accelerators
+    @require_torch_non_multi_accelerator
     def test_can_resume_training(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3532,8 +3542,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
         trainer.train()
-        # After `auto_find_batch_size` is ran we should now be at 16*0.9=14
-        self.assertEqual(trainer._train_batch_size, 14)
+        previous_batch_size = trainer._train_batch_size
+        # Depends on the number of gpus so it is easier to just check that the batch_size decreased as expected
+        self.assertEqual(trainer._train_batch_size < 16, True)
 
         # We can then make a new Trainer
         trainer = Trainer(model, args, train_dataset=train_dataset)
@@ -3541,7 +3552,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
         trainer.train(resume_from_checkpoint=True)
         # We should be back to 14 again, picking up based upon the last ran Trainer
-        self.assertEqual(trainer._train_batch_size, 14)
+        self.assertEqual(trainer._train_batch_size, previous_batch_size)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
@@ -5147,11 +5158,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             training_args = TrainingArguments(
-                output_dir=tmpdir,
-                report_to="none",
-                max_steps=5,
-                per_device_train_batch_size=1,
-                remove_unused_columns=False,
+                output_dir=tmpdir, report_to="none", max_steps=5, per_device_train_batch_size=1, use_cpu=True
             )
             trainer = Trainer(
                 model=model,
@@ -5160,6 +5167,115 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 train_dataset=train_dataset,
             )
             trainer.train()
+
+    @require_safetensors
+    def test_resume_from_interrupted_training(self):
+        """
+        Tests resuming training from a checkpoint after a simulated interruption.
+        """
+
+        # --- Helper classes and functions defined locally for this test ---
+        class DummyModel(nn.Module):
+            def __init__(self, input_dim=10, num_labels=2):
+                super().__init__()
+                self.linear = nn.Linear(input_dim, num_labels)
+
+            def forward(self, input_ids=None, attention_mask=None, labels=None):
+                logits = self.linear(input_ids.float())
+                loss = None
+                if labels is not None:
+                    loss_fn = nn.CrossEntropyLoss()
+                    loss = loss_fn(logits, labels)
+                return {"loss": loss, "logits": logits}
+
+        class DummyDictDataset(torch.utils.data.Dataset):
+            def __init__(self, input_ids, attention_mask, labels):
+                self.input_ids = input_ids
+                self.attention_mask = attention_mask
+                self.labels = labels
+
+            def __len__(self):
+                return len(self.input_ids)
+
+            def __getitem__(self, idx):
+                return {
+                    "input_ids": self.input_ids[idx],
+                    "attention_mask": self.attention_mask[idx],
+                    "labels": self.labels[idx],
+                }
+
+        def create_dummy_dataset():
+            """Creates a dummy dataset for this specific test."""
+            num_samples = 13
+            input_dim = 10
+            dummy_input_ids = torch.rand(num_samples, input_dim)
+            dummy_attention_mask = torch.ones(num_samples, input_dim)
+            dummy_labels = torch.randint(0, 2, (num_samples,))
+            return DummyDictDataset(dummy_input_ids, dummy_attention_mask, dummy_labels)
+
+        # 1. Set up a dummy model and dataset
+        model = DummyModel(input_dim=10, num_labels=2)
+        dummy_dataset = create_dummy_dataset()
+
+        # 2. First training phase (simulating an interruption)
+        output_dir_initial = self.get_auto_remove_tmp_dir()
+        training_args_initial = TrainingArguments(
+            output_dir=output_dir_initial,
+            num_train_epochs=1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=3,
+            save_strategy="steps",
+            save_steps=1,  # Save at every step
+            report_to=[],  # Disable wandb/tensorboard and other loggers
+            max_steps=2,  # Stop after step 2 to simulate interruption
+        )
+
+        trainer_initial = Trainer(
+            model=model,
+            args=training_args_initial,
+            train_dataset=dummy_dataset,
+        )
+        trainer_initial.train()
+
+        # 3. Verify that a checkpoint was created before the "interruption"
+        checkpoint_path = os.path.join(output_dir_initial, "checkpoint-2")
+        self.assertTrue(os.path.exists(checkpoint_path), f"Checkpoint not found at {checkpoint_path}")
+
+        # 4. Second training phase (resuming from the checkpoint)
+        output_dir_resumed = self.get_auto_remove_tmp_dir()
+        # Note: total steps for one epoch is ceil(13 / (2*3)) = 3.
+        # We stopped at step 2, so the resumed training should run for 1 more step.
+        training_args_resumed = TrainingArguments(
+            output_dir=output_dir_resumed,
+            num_train_epochs=1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=3,
+            save_strategy="steps",
+            save_steps=1,
+            report_to=[],
+        )
+
+        trainer_resumed = Trainer(
+            model=model,
+            args=training_args_resumed,
+            train_dataset=dummy_dataset,
+        )
+        # Resume from the interrupted checkpoint and finish the remaining training
+        trainer_resumed.train(resume_from_checkpoint=checkpoint_path)
+
+        # 5. Assertions: Check if the training completed and the final model was saved
+        # The training should have completed step 3.
+        # Total steps per epoch = ceil(13 samples / (2 batch_size * 3 grad_accum)) = 3
+        self.assertEqual(trainer_resumed.state.global_step, 3)
+
+        # Check that a checkpoint for the final step exists.
+        final_checkpoint_path = os.path.join(output_dir_resumed, "checkpoint-3")
+        self.assertTrue(os.path.exists(final_checkpoint_path))
+
+        # Check if the model weights file exists in the final checkpoint directory.
+        # Trainer saves non-PreTrainedModel models as `model.safetensors` by default if safetensors is available.
+        final_model_path = os.path.join(final_checkpoint_path, SAFE_WEIGHTS_NAME)
+        self.assertTrue(os.path.exists(final_model_path), "Final model checkpoint was not saved!")
 
 
 @require_torch
@@ -5387,7 +5503,7 @@ class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
@@ -5433,7 +5549,7 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
@@ -5481,7 +5597,7 @@ class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
@@ -5526,7 +5642,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
                 b = config["b"]
             model_config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(model_config)
+            return RegressionPreTrainedModel(model_config).to(torch_device)
 
         def hp_name(params):
             return MyTrialShortNamer.shortname(params)
@@ -5589,7 +5705,7 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
                 b = 0
             config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(config)
+            return RegressionPreTrainedModel(config).to(torch_device)
 
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.assignments)
@@ -6168,7 +6284,7 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
                 b = config["b"]
             model_config = RegressionModelConfig(a=a, b=b, double_output=False)
 
-            return RegressionPreTrainedModel(model_config)
+            return RegressionPreTrainedModel(model_config).to(torch_device)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(

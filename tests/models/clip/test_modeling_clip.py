@@ -754,7 +754,7 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="CLIP uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="CLIP uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 

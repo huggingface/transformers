@@ -18,26 +18,21 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
 import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torch_available,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..bart.modeling_bart import eager_attention_forward
+from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
 from ..beit.modeling_beit import BeitDropPath
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
@@ -46,9 +41,6 @@ from ..llava.processing_llava import LlavaProcessorKwargs
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-
 
 logger = logging.get_logger(__name__)
 
@@ -371,10 +363,8 @@ class Florence2Processor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -1569,7 +1559,6 @@ class Florence2Model(LlavaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1620,7 +1609,6 @@ class Florence2Model(LlavaModel):
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             return_dict=True,
-            **kwargs,
         )
 
         return Florence2Seq2SeqModelOutput(
@@ -1713,6 +1701,15 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.text_config.pad_token_id, self.config.text_config.decoder_start_token_id
+                )
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1731,7 +1728,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            **kwargs,
+            # **kwargs, ## TODO: add back when Bart attention is refactored and takes kwargs
         )
 
         hidden_states = outputs[0]
