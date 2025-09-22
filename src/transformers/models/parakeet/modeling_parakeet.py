@@ -390,7 +390,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.feed_forward1(self.norm_feed_forward1(hidden_states))
-        hidden_states = residual + 0.5 * hidden_states
+        hidden_states = residual + 0.5 * hidden_states  # the conformer architecture uses a factor of 0.5
 
         normalized_hidden_states = self.norm_self_att(hidden_states)
         attn_output, _ = self.self_attn(
@@ -405,7 +405,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
         hidden_states = hidden_states + conv_output
 
         ff2_output = self.feed_forward2(self.norm_feed_forward2(hidden_states))
-        hidden_states = hidden_states + 0.5 * ff2_output
+        hidden_states = hidden_states + 0.5 * ff2_output  # the conformer architecture uses a factor of 0.5
 
         hidden_states = self.norm_out(hidden_states)
 
