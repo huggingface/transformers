@@ -214,6 +214,8 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+        processor.image_processor.size = {"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
+        processor.video_processor.size = {"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
         processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -463,7 +465,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {
                 "type": "video",
                 "url": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
                 ),
             }
         )
@@ -476,7 +478,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 9568)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 7728)
 
         # Load with `fps` arg
         fps = 1
@@ -488,7 +490,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 23920)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 7728)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -509,7 +511,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 717600)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 23184)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -527,7 +529,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 11408)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 7600)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.
