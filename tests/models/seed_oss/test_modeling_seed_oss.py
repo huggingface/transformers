@@ -103,7 +103,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            "ByteDance-Seed/Seed-OSS-36B-Base", torch_dtype=torch.bfloat16, device_map="auto"
+            "ByteDance-Seed/Seed-OSS-36B-Base", torch_dtype=torch.bfloat16, attn_implementation="eager", device_map="auto"
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
