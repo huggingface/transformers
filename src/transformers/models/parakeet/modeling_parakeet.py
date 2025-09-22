@@ -261,8 +261,10 @@ class ParakeetEncoderAttention(nn.Module):
         matrix_bd = matrix_bd * self.scaling
 
         if attention_mask is not None:
-            # here we use -10000.0 rather than `torch.finfo.dtype.min` to match the original implementation
-            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), -10000.0)
+            # here the original codebase uses -10000.0 rather than float("-inf") and then manual masked fill with 0.0s
+            # see: https://github.com/NVIDIA-NeMo/NeMo/blob/8cfedd7203462cb251a914e700e5605444277561/nemo/collections/asr/parts/submodules/multi_head_attention.py#L320-L340
+            # we rather went for a straight-forward approach with float("-inf")
+            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
@@ -275,13 +277,6 @@ class ParakeetEncoderAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-
-        # to match the original implementation
-        # cf https://github.com/NVIDIA/NeMo/blob/620d2ba07835c230b2e1ee25fe1322504ce01d79/nemo/collections/asr/parts/submodules/multi_head_attention.py#L336-L340
-        if attention_mask is not None:
-            all_masked_rows = torch.all(~attention_mask, dim=-1).transpose(1, 2)
-            all_masked_rows = all_masked_rows.unsqueeze_(-1)
-            attn_output = attn_output.masked_fill(all_masked_rows, 0.0)
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
