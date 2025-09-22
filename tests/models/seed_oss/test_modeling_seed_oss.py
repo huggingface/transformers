@@ -104,7 +104,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
             model.model.embed_tokens.weight.device
         )
-        del inputs.token_type_ids
+        del inputs["token_type_ids"]
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -125,7 +125,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
             model.model.embed_tokens.weight.device
         )
-        del inputs.token_type_ids
+        del inputs["token_type_ids"]
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -147,7 +147,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
             model.model.embed_tokens.weight.device
         )
-        del inputs.token_type_ids
+        del inputs["token_type_ids"]
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
