@@ -195,11 +195,6 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
                         raise ValueError("The eager model should not have SDPA attention layers")
 
 
-# TODO: 🚨🚨🚨 Urgent (Rausahn, Cyril, Eric): 🚨🚨🚨
-#   - commit c8524aeb : PR `[cache] make all classes cache compatible finally (#38635)` breaks with `cache_position` issue
-#   - commit 686bb3b0 : PR `Remove all expired deprecation cycles (#39725)` cause `formatted_prompt` and/or `inputs = self.processor` changing and the outputs seems strange (only one audio token?)
-#   - commit 7623aa3e : PR "Fix `Qwen2AudioForConditionalGeneration.forward()` and `test_flash_attn_kernels_inference_equivalence` (#39503)" fix
-#   - But the results become non-sense!
 @require_torch
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
