@@ -14,7 +14,6 @@ jobs:
     with:
       runner: aws-g5-4xlarge-cache-use1-public-80
       commit_sha: ${{ github.sha }}
-      upload_to_hub: true
       run_id: ${{ github.run_id }}
       benchmark_repo_id: hf-internal-testing/transformers-daily-benchmarks
     secrets: inherit

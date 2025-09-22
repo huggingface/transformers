@@ -1819,7 +1819,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
         **kwargs,
-    ) -> tuple[str]:
+    ) -> tuple[str, ...]:
         """
         Save the full tokenizer state.
 

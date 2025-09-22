@@ -85,8 +85,6 @@ pip install -r requirements.txt
 
 ## 运行脚本
 
-<frameworkcontent>
-<pt>
 
 示例脚本从🤗 [Datasets](https://huggingface.co/docs/datasets/)库下载并预处理数据集。然后，脚本通过[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer)使用支持摘要任务的架构对数据集进行微调。以下示例展示了如何在[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail)数据集上微调[T5-small](https://huggingface.co/google-t5/t5-small)。由于T5模型的训练方式，它需要一个额外的`source_prefix`参数。这个提示让T5知道这是一个摘要任务。
 
@@ -104,25 +102,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-<tf>
-
-示例脚本从  🤗 [Datasets](https://huggingface.co/docs/datasets/) 库下载并预处理数据集。然后，脚本使用 Keras 在支持摘要的架构上微调数据集。以下示例展示了如何在 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 数据集上微调 [T5-small](https://huggingface.co/google-t5/t5-small)。T5 模型由于训练方式需要额外的 `source_prefix` 参数。这个提示让 T5 知道这是一个摘要任务。
-
-```bash
-python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
-</frameworkcontent>
 
 ## 分布式训练和混合精度
 
@@ -153,8 +132,6 @@ TensorFlow脚本使用[`MirroredStrategy`](https://www.tensorflow.org/guide/dist
 
 ## 在TPU上运行脚本
 
-<frameworkcontent>
-<pt>
 
 张量处理单元（TPUs）是专门设计用于加速性能的。PyTorch使用[XLA](https://www.tensorflow.org/xla)深度学习编译器支持TPU（更多细节请参见[这里](https://github.com/pytorch/xla/blob/master/README.md)）。要使用TPU，请启动`xla_spawn.py`脚本并使用`num_cores`参数设置要使用的TPU核心数量。
 
@@ -173,26 +150,6 @@ python xla_spawn.py --num_cores 8 \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-<tf>
-
-张量处理单元（TPUs）是专门设计用于加速性能的。TensorFlow脚本使用[`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy)在TPU上进行训练。要使用TPU，请将TPU资源的名称传递给`tpu`参数。
-
-```bash
-python run_summarization.py  \
-    --tpu name_of_tpu_resource \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
-</frameworkcontent>
 
 ## 基于🤗 Accelerate运行脚本
 
