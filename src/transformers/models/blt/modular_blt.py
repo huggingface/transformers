@@ -356,6 +356,9 @@ class BltCrossAttention(MllamaTextCrossAttention):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
+        if "flash" in self.config._attn_implementation:
+            attention_mask = None
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,

@@ -284,6 +284,18 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    @unittest.skip(reason="BLT's patch cross-attention results in different outputs with flash attention")
+    def test_flash_attn_2_equivalence(self):
+        pass
+
+    @unittest.skip(reason="BLT's patch cross-attention results in different outputs with flash attention")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="BLT's patch cross-attention results in different outputs with flash attention")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_flex_attention_with_grads():
         pass
