@@ -1,16 +1,15 @@
-import os
 from functools import partial, reduce
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING, Callable, Optional
 
 import transformers
 
-from .. import PretrainedConfig, is_tf_available, is_torch_available
-from ..utils import TF2_WEIGHTS_NAME, WEIGHTS_NAME, logging
+from .. import PretrainedConfig, is_torch_available
+from ..utils import logging
 from .config import OnnxConfig
 
 
 if TYPE_CHECKING:
-    from transformers import PreTrainedModel, TFPreTrainedModel
+    from transformers import PreTrainedModel
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -33,22 +32,9 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelForVision2Seq,
     )
-if is_tf_available():
-    from transformers.models.auto import (
-        TFAutoModel,
-        TFAutoModelForCausalLM,
-        TFAutoModelForMaskedLM,
-        TFAutoModelForMultipleChoice,
-        TFAutoModelForQuestionAnswering,
-        TFAutoModelForSemanticSegmentation,
-        TFAutoModelForSeq2SeqLM,
-        TFAutoModelForSequenceClassification,
-        TFAutoModelForTokenClassification,
-    )
-if not is_torch_available() and not is_tf_available():
+else:
     logger.warning(
-        "The ONNX export features are only supported for PyTorch or TensorFlow. You will not be able to export models"
-        " without one of these libraries installed."
+        "The ONNX export features is only supported for PyTorch. You will not be able to export models without it installed."
     )
 
 
@@ -84,7 +70,6 @@ def supported_features_mapping(
 
 class FeaturesManager:
     _TASKS_TO_AUTOMODELS = {}
-    _TASKS_TO_TF_AUTOMODELS = {}
     if is_torch_available():
         _TASKS_TO_AUTOMODELS = {
             "default": AutoModel,
@@ -102,18 +87,6 @@ class FeaturesManager:
             "semantic-segmentation": AutoModelForSemanticSegmentation,
             "vision2seq-lm": AutoModelForVision2Seq,
             "speech2seq-lm": AutoModelForSpeechSeq2Seq,
-        }
-    if is_tf_available():
-        _TASKS_TO_TF_AUTOMODELS = {
-            "default": TFAutoModel,
-            "masked-lm": TFAutoModelForMaskedLM,
-            "causal-lm": TFAutoModelForCausalLM,
-            "seq2seq-lm": TFAutoModelForSeq2SeqLM,
-            "sequence-classification": TFAutoModelForSequenceClassification,
-            "token-classification": TFAutoModelForTokenClassification,
-            "multiple-choice": TFAutoModelForMultipleChoice,
-            "question-answering": TFAutoModelForQuestionAnswering,
-            "semantic-segmentation": TFAutoModelForSemanticSegmentation,
         }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
@@ -584,40 +557,19 @@ class FeaturesManager:
         return feature.replace("-with-past", "")
 
     @staticmethod
-    def _validate_framework_choice(framework: str):
-        """
-        Validates if the framework requested for the export is both correct and available, otherwise throws an
-        exception.
-        """
-        if framework not in ["pt", "tf"]:
-            raise ValueError(
-                f"Only two frameworks are supported for ONNX export: pt or tf, but {framework} was provided."
-            )
-        elif framework == "pt" and not is_torch_available():
-            raise RuntimeError("Cannot export model to ONNX using PyTorch because no PyTorch package was found.")
-        elif framework == "tf" and not is_tf_available():
-            raise RuntimeError("Cannot export model to ONNX using TensorFlow because no TensorFlow package was found.")
-
-    @staticmethod
-    def get_model_class_for_feature(feature: str, framework: str = "pt") -> type:
+    def get_model_class_for_feature(feature: str) -> type:
         """
         Attempts to retrieve an AutoModel class from a feature name.
 
         Args:
             feature (`str`):
                 The feature required.
-            framework (`str`, *optional*, defaults to `"pt"`):
-                The framework to use for the export.
 
         Returns:
             The AutoModel class corresponding to the feature.
         """
         task = FeaturesManager.feature_to_task(feature)
-        FeaturesManager._validate_framework_choice(framework)
-        if framework == "pt":
-            task_to_automodel = FeaturesManager._TASKS_TO_AUTOMODELS
-        else:
-            task_to_automodel = FeaturesManager._TASKS_TO_TF_AUTOMODELS
+        task_to_automodel = FeaturesManager._TASKS_TO_AUTOMODELS
         if task not in task_to_automodel:
             raise KeyError(
                 f"Unknown task: {feature}. Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
@@ -626,59 +578,7 @@ class FeaturesManager:
         return task_to_automodel[task]
 
     @staticmethod
-    def determine_framework(model: str, framework: Optional[str] = None) -> str:
-        """
-        Determines the framework to use for the export.
-
-        The priority is in the following order:
-            1. User input via `framework`.
-            2. If local checkpoint is provided, use the same framework as the checkpoint.
-            3. Available framework in environment, with priority given to PyTorch
-
-        Args:
-            model (`str`):
-                The name of the model to export.
-            framework (`str`, *optional*, defaults to `None`):
-                The framework to use for the export. See above for priority if none provided.
-
-        Returns:
-            The framework to use for the export.
-
-        """
-        if framework is not None:
-            return framework
-
-        framework_map = {"pt": "PyTorch", "tf": "TensorFlow"}
-        exporter_map = {"pt": "torch", "tf": "tf2onnx"}
-
-        if os.path.isdir(model):
-            if os.path.isfile(os.path.join(model, WEIGHTS_NAME)):
-                framework = "pt"
-            elif os.path.isfile(os.path.join(model, TF2_WEIGHTS_NAME)):
-                framework = "tf"
-            else:
-                raise FileNotFoundError(
-                    "Cannot determine framework from given checkpoint location."
-                    f" There should be a {WEIGHTS_NAME} for PyTorch"
-                    f" or {TF2_WEIGHTS_NAME} for TensorFlow."
-                )
-            logger.info(f"Local {framework_map[framework]} model found.")
-        else:
-            if is_torch_available():
-                framework = "pt"
-            elif is_tf_available():
-                framework = "tf"
-            else:
-                raise OSError("Neither PyTorch nor TensorFlow found in environment. Cannot export to ONNX.")
-
-        logger.info(f"Framework not requested. Using {exporter_map[framework]} to export to ONNX.")
-
-        return framework
-
-    @staticmethod
-    def get_model_from_feature(
-        feature: str, model: str, framework: Optional[str] = None, cache_dir: Optional[str] = None
-    ) -> Union["PreTrainedModel", "TFPreTrainedModel"]:
+    def get_model_from_feature(feature: str, model: str, cache_dir: Optional[str] = None) -> "PreTrainedModel":
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
 
@@ -687,31 +587,17 @@ class FeaturesManager:
                 The feature required.
             model (`str`):
                 The name of the model to export.
-            framework (`str`, *optional*, defaults to `None`):
-                The framework to use for the export. See `FeaturesManager.determine_framework` for the priority should
-                none be provided.
 
         Returns:
             The instance of the model.
 
         """
-        framework = FeaturesManager.determine_framework(model, framework)
-        model_class = FeaturesManager.get_model_class_for_feature(feature, framework)
-        try:
-            model = model_class.from_pretrained(model, cache_dir=cache_dir)
-        except OSError:
-            if framework == "pt":
-                logger.info("Loading TensorFlow model in PyTorch before exporting to ONNX.")
-                model = model_class.from_pretrained(model, from_tf=True, cache_dir=cache_dir)
-            else:
-                logger.info("Loading PyTorch model in TensorFlow before exporting to ONNX.")
-                model = model_class.from_pretrained(model, from_pt=True, cache_dir=cache_dir)
+        model_class = FeaturesManager.get_model_class_for_feature(feature)
+        model = model_class.from_pretrained(model, cache_dir=cache_dir)
         return model
 
     @staticmethod
-    def check_supported_model_or_raise(
-        model: Union["PreTrainedModel", "TFPreTrainedModel"], feature: str = "default"
-    ) -> tuple[str, Callable]:
+    def check_supported_model_or_raise(model: "PreTrainedModel", feature: str = "default") -> tuple[str, Callable]:
         """
         Check whether or not the model has the requested features.
 

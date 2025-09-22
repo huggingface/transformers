@@ -329,28 +329,6 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
     past_key_values: Optional[Cache] = None
 
 
-# TODO (joao): remove the equivalent classes and typing shortcuts below in v5
-# Equivalent classes (kept for retrocompatibility purposes)
-GreedySearchDecoderOnlyOutput = GenerateDecoderOnlyOutput
-ContrastiveSearchDecoderOnlyOutput = GenerateDecoderOnlyOutput
-SampleDecoderOnlyOutput = GenerateDecoderOnlyOutput
-
-ContrastiveSearchEncoderDecoderOutput = GenerateEncoderDecoderOutput
-GreedySearchEncoderDecoderOutput = GenerateEncoderDecoderOutput
-SampleEncoderDecoderOutput = GenerateEncoderDecoderOutput
-
-BeamSearchDecoderOnlyOutput = GenerateBeamDecoderOnlyOutput
-BeamSampleDecoderOnlyOutput = GenerateBeamDecoderOnlyOutput
-
-BeamSearchEncoderDecoderOutput = GenerateBeamEncoderDecoderOutput
-BeamSampleEncoderDecoderOutput = GenerateBeamEncoderDecoderOutput
-
-GreedySearchOutput = Union[GreedySearchEncoderDecoderOutput, GreedySearchDecoderOnlyOutput]
-SampleOutput = Union[SampleEncoderDecoderOutput, SampleDecoderOnlyOutput]
-BeamSearchOutput = Union[BeamSearchEncoderDecoderOutput, BeamSearchDecoderOnlyOutput]
-BeamSampleOutput = Union[BeamSampleEncoderDecoderOutput, BeamSampleDecoderOnlyOutput]
-ContrastiveSearchOutput = Union[ContrastiveSearchEncoderDecoderOutput, ContrastiveSearchDecoderOnlyOutput]
-
 # Typing shortcuts
 GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]
 GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDecoderOutput]
@@ -1903,6 +1881,7 @@ class GenerationMixin(ContinuousMixin):
                 "minimax",
                 "xlnet",
                 "lfm2",
+                "lfm2-vl",
             ]
         )
 

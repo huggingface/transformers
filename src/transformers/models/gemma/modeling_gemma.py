@@ -322,6 +322,13 @@ class GemmaPreTrainedModel(PreTrainedModel):
         "attentions": GemmaAttention,
     }
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        if "RMSNorm" in module.__class__.__name__:
+            module.weight.data.zero_()
+
 
 @auto_docstring
 class GemmaModel(GemmaPreTrainedModel):

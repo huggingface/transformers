@@ -617,7 +617,7 @@ class ModelTesterMixin:
                 for k, v in inputs_dict.items()
             }
         elif model_class.__name__ in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES):
-            inputs_dict.pop("attention_mask")
+            inputs_dict.pop("attention_mask", None)
         elif model_class.__name__ == MODEL_FOR_PRETRAINING_MAPPING_NAMES["hiera"]:
             config = self.model_tester.get_config()
             mask_spatial_shape = [
@@ -675,6 +675,46 @@ class ModelTesterMixin:
                 ).long()
 
         return inputs_dict
+
+    def test_num_layers_is_small(self):
+        # TODO (if possible): Avoid exceptional cases, especially for `OwlViT`.
+        # ⛔ DO NOT edit this list (unless there is really nothing to tweak in the model tester class and approved by the reviewer) ⛔!
+        exceptional_num_hidden_layers = {
+            # TODO: There might be some way to fix
+            "FunnelModelTest": 5,
+            "FunnelBaseModelTest": 4,
+            "GroupViTVisionModelTest": 12,
+            "OwlViTModelTest": 12,
+            "OwlViTTextModelTest": 12,
+            "OwlViTForObjectDetectionTest": 12,
+            "Owlv2ModelTest": 12,
+            "Owlv2TextModelTest": 12,
+            "Owlv2ForObjectDetectionTest": 12,
+            "Qwen2_5OmniThinkerForConditionalGenerationModelTest": 4,
+            "SamHQModelTest": 12,
+            "Swin2SRModelTest": 3,
+            "XLNetModelTest": 3,
+            "DPTModelTest": 4,  # `test_modeling_dpt_hybrid.py`: not able to get it work after change `num_hidden_layers` and `neck_hidden_sizes`
+            # Nothing we can't do
+            "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
+            "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
+            "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
+        }
+        target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
+
+        if hasattr(self.model_tester, "num_hidden_layers") and isinstance(self.model_tester.num_hidden_layers, int):
+            assert self.model_tester.num_hidden_layers <= target_num_hidden_layers
+
+        if hasattr(self.model_tester, "vision_config") and "num_hidden_layers" in self.model_tester.vision_config:
+            if isinstance(self.model_tester.vision_config, dict):
+                assert self.model_tester.vision_config["num_hidden_layers"] <= target_num_hidden_layers
+            else:
+                assert self.model_tester.vision_config.num_hidden_layers <= target_num_hidden_layers
+        if hasattr(self.model_tester, "text_config") and "num_hidden_layers" in self.model_tester.text_config:
+            if isinstance(self.model_tester.text_config, dict):
+                assert self.model_tester.text_config["num_hidden_layers"] <= target_num_hidden_layers
+            else:
+                assert self.model_tester.text_config.num_hidden_layers <= target_num_hidden_layers
 
     def test_save_load(self):
         def check_save_load(out1, out2):
@@ -1759,6 +1799,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
@@ -1793,6 +1834,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
@@ -1831,6 +1873,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
 
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
@@ -1867,6 +1910,7 @@ class ModelTesterMixin:
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
+            config._attn_implementation = "eager"
 
             heads_to_prune = {1: [1, 2]}
             config.pruned_heads = heads_to_prune
@@ -3400,7 +3444,9 @@ class ModelTesterMixin:
                 f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
             )
 
-    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
         This test is only for inference and runs with `dtype=torch.bfloat16`.
@@ -3478,6 +3524,16 @@ class ModelTesterMixin:
                     if model.config.is_encoder_decoder:
                         second_inputs["decoder_attention_mask"] = dummy_attention_mask
 
+                # Use prepare for class to account for special attributes (e.g. in QnA models)
+                first_inputs = self._prepare_for_class(first_inputs, model_class)
+                first_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in first_inputs.items()
+                }
+                second_inputs = self._prepare_for_class(second_inputs, model_class)
+                second_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in second_inputs.items()
+                }
+
                 model = model_class.from_pretrained(
                     tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
                 )
@@ -3525,14 +3581,14 @@ class ModelTesterMixin:
                 )
 
                 # Check the results
-                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=4e-2, rtol=4e-2)
+                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
                 if padding_side == "left":
-                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=4e-2, rtol=4e-2)
+                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
                     # Check it can run in training mode
                     model.train()
                     _ = model(**second_inputs)
                 else:
-                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=4e-2, rtol=4e-2)
+                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
 
         # In this case, the test should appear as skipped, not successful
         if not _has_run_at_least_one_model:
@@ -4490,7 +4546,7 @@ class ModelTesterMixin:
                 unique_devices, {device}, f"All parameters should be on {device}, but found {unique_devices}."
             )
 
-    def test_can_load_with_meta_device_context_manager(self):
+    def test_cannot_load_with_meta_device_context_manager(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             # Need to deepcopy here as it is modified in-place in save_pretrained (it sets sdpa for default attn, which
@@ -4499,18 +4555,11 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-
                 with torch.device("meta"):
-                    new_model = model_class.from_pretrained(tmpdirname)
-                unique_devices = {param.device for param in new_model.parameters()} | {
-                    buffer.device for buffer in new_model.buffers()
-                }
-
-            self.assertEqual(
-                unique_devices,
-                {torch.device("meta")},
-                f"All parameters should be on meta device, but found {unique_devices}.",
-            )
+                    with self.assertRaisesRegex(
+                        RuntimeError, "You are using `from_pretrained` with a meta device context manager"
+                    ):
+                        _ = model_class.from_pretrained(tmpdirname)
 
     def test_config_attn_implementation_setter(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
