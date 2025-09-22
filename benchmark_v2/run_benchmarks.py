@@ -195,6 +195,7 @@ def upload_results_to_hf_dataset(
     summary_file: str,
     dataset_name: str,
     run_id: Optional[str] = None,
+    token: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
 ) -> Optional[str]:
     """
@@ -205,6 +206,7 @@ def upload_results_to_hf_dataset(
         summary_file: Path to the summary file
         dataset_name: Name of the HuggingFace dataset to upload to
         run_id: Unique run identifier (if None, will generate one)
+        token: HuggingFace token for authentication (if None, will use environment variables)
         logger: Logger instance
     Returns:
         The run_id used for the upload, None if upload failed
@@ -237,9 +239,6 @@ def upload_results_to_hf_dataset(
     logger.info(f"Uploading benchmark results to dataset '{dataset_name}' at path '{repo_path}'")
 
     try:
-        # Get the authentication token (prioritize specific token, fallback to HF_TOKEN)
-        token = os.getenv("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN") or os.getenv("HF_TOKEN")
-
         # Upload all files in the output directory
         from pathlib import Path
 
@@ -357,6 +356,10 @@ Examples:
         "--run-id", type=str, help="Custom run ID for organizing results (if not provided, will generate a unique ID)"
     )
 
+    parser.add_argument(
+        "--token", type=str, help="HuggingFace token for dataset uploads (if not provided, will use HF_TOKEN environment variable)"
+    )
+
     args = parser.parse_args()
 
     # Setup logging
@@ -440,6 +443,7 @@ Examples:
                 summary_file=summary_file,
                 dataset_name=args.upload_to_hub,
                 run_id=effective_run_id,
+                token=args.token,
                 logger=logger,
             )
             if upload_run_id:
