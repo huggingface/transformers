@@ -151,7 +151,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
         offset_mapping: Optional[list[tuple[int, int]]] = None,
-        is_split_into_words: Optional[bool] = False,
+        is_split_into_words: bool = False,
         stride: Optional[int] = None,
         delimiter: Optional[str] = None,
     ):
