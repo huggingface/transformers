@@ -38,6 +38,7 @@ import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
 from pathlib import Path
+from typing import Optional
 
 from transformers import is_torch_available
 from transformers.models.auto.auto_factory import get_values
@@ -593,7 +594,7 @@ def get_model_test_files() -> list[str]:
 
 # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the tester class
 # for the all_model_classes variable.
-def find_tested_models(test_file: str) -> list[str]:
+def find_tested_models(test_file: str) -> Optional[list[str]]:
     """
     Parse the content of test_file to detect what's in `all_model_classes`. This detects the models that inherit from
     the common test class.
@@ -617,6 +618,20 @@ def find_tested_models(test_file: str) -> list[str]:
                 if len(name) > 0:
                     model_tested.append(name)
         return model_tested
+
+    # Models that inherit from `CausalLMModelTester` don't need to set `all_model_classes` -- it is built from other
+    # attributes by default.
+    if "CausalLMModelTester" in content:
+        all_models += re.findall(r"base_model_class\s+=.*", content)
+        all_models += re.findall(r"causal_lm_class\s+=.*", content)
+        all_models += re.findall(r"sequence_classification_class\s+=.*", content)
+        all_models += re.findall(r"question_answering_class\s+=.*", content)
+        all_models += re.findall(r"token_classification_class\s+=.*", content)
+        if len(all_models) > 0:
+            model_tested = []
+            for entry in all_models:
+                model_tested.append(entry.split("=")[1].strip())
+            return model_tested
 
 
 def should_be_tested(model_name: str) -> bool:
