@@ -60,6 +60,7 @@ class GemmaConfig(PretrainedConfig):
     e.g. [google/gemma-7b](https://huggingface.co/google/gemma-7b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the Gemma model. Defines the number of different tokens that can be represented by the
@@ -109,6 +110,9 @@ class GemmaConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
+        use_bidirectional_attention (`bool`, *optional*):
+            If True, the model will attend to all text tokens instead of using a causal mask.
+
     ```python
     >>> from transformers import GemmaModel, GemmaConfig
     >>> # Initializing a Gemma gemma-7b style configuration
