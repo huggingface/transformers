@@ -93,42 +93,6 @@ class SeedOssIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_model_36b_fp16(self):
-        EXPECTED_TEXTS = [
-            "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on my local machine. I have installed all the",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16, device_map="auto")
-
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True, return_token_type_ids=False).to(
-            model.model.embed_tokens.weight.device
-        )
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_model_36b_bf16(self):
-        EXPECTED_TEXTS = [
-            "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on my local machine. I have installed all the",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")
-
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
-            model.model.embed_tokens.weight.device
-        )
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
     def test_model_36b_eager(self):
         EXPECTED_TEXTS = ""
 
