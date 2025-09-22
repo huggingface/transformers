@@ -719,7 +719,7 @@ In summary:"""
         with self.subTest("Eager matches flash attention"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
 
-    def test_qwen3_greedy_determinism():
+    def test_qwen3_greedy_determinism(self):
         """
         Ensures Qwen3 generate is deterministic when do_sample=False (greedy decoding as per HFs documentation).
         """
