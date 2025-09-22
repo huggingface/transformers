@@ -122,7 +122,10 @@ except:
     BicubicVideoProcessor = None
 
 if BicubicVideoProcessor is not None:
-    bicubic = BicubicVideoProcessor()
+    try:
+        bicubic = BicubicVideoProcessor()
+    except:
+        bicubic = None
 
 
 def eager_attention_forward(
@@ -3405,11 +3408,7 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel, Qwen2_5_VLModel):
 
 
 class KeyeVL1_5ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^visual": "model.visual",
-        "^mlp_AR": "model.mm_projector",
-        r"^model(?!\.(language_model|visual|mm_projector))": "model.language_model",
-    }
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
     config_class = KeyeVL1_5Config
     _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionEncoderLayer"]

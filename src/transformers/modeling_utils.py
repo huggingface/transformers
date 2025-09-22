@@ -239,7 +239,6 @@ VLMS = [
     "qwen2_5_vl",
     "videollava",
     "vipllava",
-    "keyevl1_5",
 ]
 
 
