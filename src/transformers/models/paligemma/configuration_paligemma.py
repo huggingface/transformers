@@ -121,7 +121,8 @@ class PaliGemmaConfig(PretrainedConfig):
                 vocab_size=vocab_size,
             )
 
-        # BC: `use_bidirectional_attention` was originally unset in PaliGemma1. PaliGemma1 wants to default to True.
+        # BC: `use_bidirectional_attention` was originally unset in PaliGemma1 (backbone = Gemma1) AND PaliGemma2
+        # (backbone = Gemma2). Both PaliGemmas want to default to True.
         if self.text_config.use_bidirectional_attention is None:
             self.text_config.use_bidirectional_attention = True
 
