@@ -466,7 +466,7 @@ def torch_chunk_gated_delta_rule(
     value = F.pad(value, (0, 0, 0, pad_size))
     beta = F.pad(beta, (0, pad_size))
     g = F.pad(g, (0, pad_size))
-    tot_heads = sequence_length + pad_size
+    total_sequence_length = sequence_length + pad_size
     scale = 1 / (query.shape[-1] ** 0.5)
     query = query * scale
 
@@ -499,7 +499,7 @@ def torch_chunk_gated_delta_rule(
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
 
     # for each chunk
-    for i in range(0, tot_heads // chunk_size):
+    for i in range(0, total_sequence_length // chunk_size):
         q_i, k_i, v_i = query[:, :, i], key[:, :, i], value[:, :, i]
         attn = (q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]).masked_fill_(mask, 0)
         v_prime = (k_cumdecay[:, :, i]) @ last_recurrent_state
