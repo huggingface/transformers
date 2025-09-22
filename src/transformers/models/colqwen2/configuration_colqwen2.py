@@ -76,7 +76,7 @@ class ColQwen2Config(PretrainedConfig):
                 )
             vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
         elif isinstance(vlm_config, PretrainedConfig):
-            vlm_config = vlm_config
+            pass
         else:
             raise TypeError(
                 f"Invalid type for `vlm_config`. Expected `PretrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."

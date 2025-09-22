@@ -60,9 +60,6 @@ def paged_attention_forward(
     if isinstance(cu_seq_lens_k, dict):
         cu_seq_lens_k = cu_seq_lens_k[layer_type].clone()
         max_seqlen_k = max_seqlen_k[layer_type]
-    else:
-        cu_seq_lens_k = cu_seq_lens_k.clone()
-        max_seqlen_k = max_seqlen_k
 
     if implementation is not None and hasattr(implementation, "flash_attn_varlen_func"):
         flash_attn_varlen_func = implementation.flash_attn_varlen_func

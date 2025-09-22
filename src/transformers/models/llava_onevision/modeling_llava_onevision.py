@@ -433,7 +433,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
         elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
+            pass
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
 
@@ -634,7 +634,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         if vision_feature_select_strategy == "default":
             selected_video_feature = selected_video_feature[:, 1:]
         elif vision_feature_select_strategy == "full":
-            selected_video_feature = selected_video_feature
+            pass
         video_features = self.multi_modal_projector(selected_video_feature)
 
         video_features = self.apply_pooling(video_features)

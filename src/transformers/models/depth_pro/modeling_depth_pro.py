@@ -299,7 +299,6 @@ class DepthProPatchEncoder(nn.Module):
         scaled_images_features = []
         for i in range(self.n_scaled_images):
             hidden_state = scaled_images_last_hidden_state[i]
-            batch_size = batch_size
             padding = torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[i]))
             output_height = base_height * 2**i
             output_width = base_width * 2**i

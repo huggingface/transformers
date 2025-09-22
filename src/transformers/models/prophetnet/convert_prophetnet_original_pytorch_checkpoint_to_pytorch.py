@@ -133,7 +133,7 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
                 model = getattr(model, attribute)
 
                 if old_attribute == "":
-                    old_model = old_model
+                    pass
                 else:
                     if not hasattr(old_model, old_attribute):
                         raise ValueError(f"{old_model} does not have {old_attribute}")
