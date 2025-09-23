@@ -3659,9 +3659,12 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
 
             # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
             # behaves as usual.
+            # On Github Actions or CircleCI, this is set automatically.
+            # When running manually, it's the user to determine if to set it.
             # This is to avoid the patched function being called `with self.assertRaises(AssertionError):` and fails
             # because of the missing expected `AssertionError`.
             # TODO (ydshieh): If there is way to raise only when we are inside such context managers?
+            # TODO (ydshieh): How not to record the failure if it happens inside `self.assertRaises(AssertionError)`?
             if os.getenv("CI") == "true":
                 raise captured_exception.with_traceback(test_traceback)
 
