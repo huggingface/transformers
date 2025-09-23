@@ -226,10 +226,6 @@ class Gemma2RMSNorm(GemmaRMSNorm):
     pass
 
 
-class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
-    pass
-
-
 class Gemma2MLP(GemmaMLP):
     def __init__(self, config):
         super().__init__(config)

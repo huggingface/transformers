@@ -98,6 +98,8 @@ class Gemma3TextConfig(PretrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
+        use_bidirectional_attention (``bool``, *optional*, defaults to `False`):
+            Whether to use bidirectional mask for image inputs or not.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig

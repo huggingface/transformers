@@ -59,7 +59,10 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 750):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):

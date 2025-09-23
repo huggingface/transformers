@@ -65,7 +65,10 @@ class HeliumConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         pad_token_id (`int`, *optional*, defaults to 3):
             Padding token id.
         eos_token_id (`int` | `list`, *optional*, defaults to 2):

@@ -15,7 +15,6 @@
 # limitations under the License.
 
 import warnings
-
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation

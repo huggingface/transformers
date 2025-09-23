@@ -1708,7 +1708,6 @@ def apply_rotary_pos_emb(
 
 class Gemma3nTextAttention(Gemma3Attention):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         super().__init__(config, layer_idx)
         self.is_causal = True
         del self.attn_logit_softcapping

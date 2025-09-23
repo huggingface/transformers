@@ -24,7 +24,7 @@ from transformers.utils import (
     logging,
 )
 
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, extract_rope_scaling_dict_from_config
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
@@ -37,6 +37,7 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -130,47 +131,48 @@ class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-class HunYuanDenseV1RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(self, config: HunYuanDenseV1Config, device=None):
-        super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
+        nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        if self.rope_type == "dynamic" and config.rope_scaling["alpha"]:
-            # DynamicNTKAlphaRotary
-            self.dim = config.head_dim
-            base = config.rope_theta * config.rope_scaling.get("alpha") ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
-            self.attention_scaling = 1.0
+
+        self.layer_types = getattr(config, "layer_types", [None])
+        self.rope_type = {}
+        inv_freq, attention_scaling = {}, {}
+        for layer_type in self.layer_types:
+            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            if rope_params is None:
+                continue
+            curr_rope_type = rope_params["rope_type"]
+
+            # Diff from Llama - DynamicNTKAlphaRotary
+            if curr_rope_type == "dynamic" and rope_params["alpha"]:
+                base = rope_params["rope_theta"] * rope_params["alpha"] ** (config.head_dim / (config.head_dim - 2))
+                curr_inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / config.head_dim))
+                curr_attention_scaling = 1.0
+            else:
+                rope_init_fn: Callable = self.compute_default_rope_parameters
+                if curr_rope_type != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
+                curr_inv_freq, curr_attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+
+            self.rope_type[layer_type] = curr_rope_type
+            inv_freq[layer_type] = curr_inv_freq
+            attention_scaling[layer_type] = curr_attention_scaling
+
+        if len(self.layer_types) == 1:
+            self.rope_type = self.rope_type[self.layer_types[0]]
+            self.attention_scaling = attention_scaling[self.layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[self.layer_types[0]]
         else:
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+            for layer_type in self.layer_types:
+                if layer_type in inv_freq:
+                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
 
 
 class HunYuanDenseV1Model(LlamaModel):

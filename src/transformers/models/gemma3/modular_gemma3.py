@@ -24,7 +24,7 @@ from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -122,6 +122,8 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
+        use_bidirectional_attention (``bool``, *optional*, defaults to `False`):
+            Whether to use bidirectional mask for image inputs or not.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -203,7 +205,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
                 "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type

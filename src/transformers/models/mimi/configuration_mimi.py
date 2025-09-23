@@ -115,7 +115,10 @@ class MimiConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         use_streaming (`bool`, *optional*, defaults to `False`):
             Whether to use streaming mode. If `True`, the model encode method will return the padding cache that can be used in a subsequent call to the encode method.
-        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         sliding_window (`int`, *optional*, defaults to 250):
             Sliding window attention window size. If not specified, will default to `250`.
         attention_dropout (`float`, *optional*, defaults to 0.0):

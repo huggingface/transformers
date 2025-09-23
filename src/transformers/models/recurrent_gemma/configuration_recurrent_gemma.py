@@ -77,7 +77,10 @@ class RecurrentGemmaConfig(PretrainedConfig):
             The hidden activation used in the recurrent block as well as the MLP layer of the decoder layers.
         partial_rotary_factor (`float`, *optional*, defaults to 0.5):
             The partial rotary factor used in the initialization of the rotary embeddings.
-        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
             List of aleternating blocks that will be repeated to initialize the `temporal_block` layer.
         attention_dropout (`float`, *optional*, defaults to 0.0): dropout value to use after the attention softmax.

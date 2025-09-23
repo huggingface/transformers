@@ -24,7 +24,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, rope_config_validation
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, extract_rope_scaling_dict_from_config
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ..olmo2.configuration_olmo2 import Olmo2Config
@@ -88,45 +88,10 @@ class Olmo3Config(Olmo2Config):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -185,7 +150,6 @@ class Olmo3Config(Olmo2Config):
         bos_token_id=None,
         eos_token_id=50279,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
@@ -209,7 +173,6 @@ class Olmo3Config(Olmo2Config):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
             rope_scaling=rope_scaling,
             attention_bias=attention_bias,
             attention_dropout=attention_dropout,
@@ -223,13 +186,7 @@ class Olmo3Config(Olmo2Config):
             self.layer_types = [
                 "sliding_attention" if (i + 1) % 4 != 0 else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
-
-    def _rope_scaling_validation(self):
-        """
-        Validate the `rope_scaling` configuration.
-        """
-        rope_config_validation(self)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 class Olmo3RMSNorm(Olmo2RMSNorm):
@@ -303,24 +260,39 @@ class Olmo3DecoderLayer(Olmo2DecoderLayer):
 class Olmo3RotaryEmbedding(Olmo2RotaryEmbedding):
     def __init__(self, config: Olmo3Config, device=None, rope_type: Optional[str] = None):
         nn.Module.__init__(self)
-        if rope_type is not None:
-            self.rope_type = rope_type
-        elif hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            # BC: "rope_type" was originally "type"
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        assert self.rope_type is not None
 
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.layer_types = getattr(config, "layer_types", [None])
+        self.rope_type = {}
+        inv_freq, attention_scaling = {}, {}
+        for layer_type in self.layer_types:
+            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            if rope_params is None:
+                continue
+
+            curr_rope_type = rope_type or rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if curr_rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+            self.rope_type[layer_type] = curr_rope_type
+            inv_freq[layer_type] = curr_inv_freq
+            attention_scaling[layer_type] = curr_attention_scaling
+
+        if len(self.layer_types) == 1:
+            self.rope_type = self.rope_type[self.layer_types[0]]
+            self.attention_scaling = attention_scaling[self.layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[self.layer_types[0]]
+        else:
+            for layer_type in self.layer_types:
+                if layer_type in inv_freq:
+                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
 
 
 class Olmo3PreTrainedModel(Olmo2PreTrainedModel):
@@ -339,7 +311,7 @@ class Olmo3Model(Olmo2Model):
         )
         self.rotary_embs = nn.ModuleDict(
             {
-                "sliding_attention": Olmo3RotaryEmbedding(config=config, rope_type="default"),
+                "sliding_attention": Olmo3RotaryEmbedding(config=config),
                 "full_attention": Olmo3RotaryEmbedding(config=config),
             }
         )

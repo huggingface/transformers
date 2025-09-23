@@ -37,7 +37,7 @@ from ...modeling_layers import (
     GradientCheckpointingLayer,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_scaling_dict_from_config
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -181,33 +181,94 @@ class Qwen3NextRotaryEmbedding(nn.Module):
 
     def __init__(self, config: Qwen3NextConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.layer_types = getattr(config, "layer_types", [None])
+        self.rope_type = {}
+        inv_freq, attention_scaling = {}, {}
+        for layer_type in self.layer_types:
+            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            if rope_params is None:
+                continue
+
+            curr_rope_type = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if curr_rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+            self.rope_type[layer_type] = curr_rope_type
+            inv_freq[layer_type] = curr_inv_freq
+            attention_scaling[layer_type] = curr_attention_scaling
+
+        if len(self.layer_types) == 1:
+            self.rope_type = self.rope_type[self.layer_types[0]]
+            self.attention_scaling = attention_scaling[self.layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[self.layer_types[0]]
+        else:
+            for layer_type in self.layer_types:
+                if layer_type in inv_freq:
+                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[Qwen3NextConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PretrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
+        if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
+            rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+        else:
+            rope_scaling_dict = config.rope_scaling_dict
+
+        base = rope_scaling_dict["rope_theta"]
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+    def forward(self, x, position_ids, layer_type=None):
+        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        inv_freq = getattr(self, f"{prefix}inv_freq")
+        attention_scaling = getattr(self, f"{prefix}attention_scaling")
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 

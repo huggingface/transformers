@@ -429,7 +429,6 @@ class DeepseekV3Attention(nn.Module):
             bias=config.attention_bias,
         )
 
-        self.rotary_emb = DeepseekV3RotaryEmbedding(config=config)
         self.scaling = self.qk_head_dim ** (-0.5)
         if self.config.rope_scaling.get("rope_type", "default") != "default":
             mscale_all_dim = self.config.rope_scaling.get("mscale_all_dim", 0)

@@ -236,7 +236,7 @@ class Dots1Attention(nn.Module):
 
     def __init__(self, config: Dots1Config, layer_idx: int):
         super().__init__()
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -259,7 +259,7 @@ class Dots1Attention(nn.Module):
         )
         self.q_norm = Dots1RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Dots1RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(

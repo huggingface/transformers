@@ -221,7 +221,7 @@ class Qwen2Attention(nn.Module):
 
     def __init__(self, config: Qwen2Config, layer_idx: int):
         super().__init__()
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -233,7 +233,7 @@ class Qwen2Attention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(

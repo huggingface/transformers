@@ -336,7 +336,7 @@ class GptOssAttention(nn.Module):
 
     def __init__(self, config: GptOssConfig, layer_idx: int):
         super().__init__()
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -356,7 +356,7 @@ class GptOssAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")

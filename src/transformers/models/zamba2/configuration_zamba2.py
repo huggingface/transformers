@@ -94,7 +94,10 @@ class Zamba2Config(PretrainedConfig):
             Rank of the adapter in the shared MLP and shared attention layers.
         use_mem_rope (`bool`, *optional*, defaults to `False`):
             If True, includes RoPE in the shared attention layers.
-        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
