@@ -98,7 +98,7 @@ class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Exaone4IntegrationTest(unittest.TestCase):
-    TEST_MODEL_ID = "LGAI-EXAONE/EXAONE-4.0-Instruct"  # dummy model id
+    TEST_MODEL_ID = "LGAI-EXAONE/EXAONE-4.0-32B"
 
     def tearDown(self):
         # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
