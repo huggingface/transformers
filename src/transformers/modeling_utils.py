@@ -5808,8 +5808,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return cls._supports_attention_backend
 
     def _move_missing_keys_from_meta_to_cpu(
-        self, missing_keys: list[str], dtype: Optional[torch.dtype], hf_quantizer: Optional[HfQuantizer]
-    ) -> "PreTrainedModel":
+        self, missing_keys: list[str], dtype: torch.dtype, hf_quantizer: Optional[HfQuantizer]
+    ) -> None:
         """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts) back
         from meta device to cpu.
         """
