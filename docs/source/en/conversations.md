@@ -165,7 +165,7 @@ chat templates can handle dropping it correctly. You should generally include it
 > [!TIP]
 Parsing a message into `content` and `thinking` depends on the [response parsing](./chat_response_parsing) feature. Some
 models may not have a response schema yet, and so this will not work for them. In these cases, you will have to manually
-parse the model output. We're working hard on adding response parsing support to new models!
+separate the thinking trace from the rest of the model output. We're working hard on adding response parsing support to new models!
 
 ## Performance and memory usage
 
