@@ -128,7 +128,7 @@ class TimerContext:
 
 
 inputs = processor(speech_samples[0], **processor_kwargs)
-inputs = inputs.to(device, dtype=model.dtype)
+inputs.to(device, dtype=model.dtype)
 print("\n" + "="*50)
 print("First generation - compiling...")
 # Generate with the compiled model
@@ -137,7 +137,7 @@ with TimerContext("First generation"):
 print(processor.batch_decode(outputs))
 
 inputs = processor(speech_samples[1], **processor_kwargs)
-inputs = inputs.to(device, dtype=model.dtype)
+inputs.to(device, dtype=model.dtype)
 print("\n" + "="*50)
 print("Second generation - recording CUDA graphs...")
 with TimerContext("Second generation"):
@@ -145,7 +145,7 @@ with TimerContext("Second generation"):
 print(processor.batch_decode(outputs))
 
 inputs = processor(speech_samples[2], **processor_kwargs)
-inputs = inputs.to(device, dtype=model.dtype)
+inputs.to(device, dtype=model.dtype)
 print("\n" + "="*50)
 print("Third generation - fast !!!")
 with TimerContext("Third generation"):
@@ -153,7 +153,7 @@ with TimerContext("Third generation"):
 print(processor.batch_decode(outputs))
 
 inputs = processor(speech_samples[3], **processor_kwargs)
-inputs = inputs.to(device, dtype=model.dtype)
+inputs.to(device, dtype=model.dtype)
 print("\n" + "="*50)
 print("Fourth generation - still fast !!!")
 with TimerContext("Fourth generation"):
