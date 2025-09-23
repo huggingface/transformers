@@ -10,11 +10,13 @@ from ..utils import is_flash_attn_2_available
 try:
     if is_flash_attn_2_available():
         from flash_attn import flash_attn_varlen_func  # noqa: F401
+
         FLASH_ATTN_VARLEN_FUNC = flash_attn_varlen_func
     else:
         raise RuntimeError("is_flash_attn_2_available returned False")
 except Exception as e:
     msg = repr(e)
+
     def FLASH_ATTN_VARLEN_FUNC(*args, **kwargs):
         raise Exception(f"flash_attn_varlen_func is not available: {msg}")
 
