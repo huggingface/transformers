@@ -5318,7 +5318,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
-        model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, unexpected_keys, dtype, hf_quantizer)
+        model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
@@ -5829,10 +5829,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return cls._supports_attention_backend
 
     def _move_missing_keys_from_meta_to_cpu(
-        self,
-        missing_keys: list[str],
-        dtype: Optional[torch.dtype],
-        hf_quantizer: Optional[HfQuantizer],
+        self, missing_keys: list[str], dtype: Optional[torch.dtype], hf_quantizer: Optional[HfQuantizer]
     ) -> "PreTrainedModel":
         """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts) back
         from meta device to cpu.
