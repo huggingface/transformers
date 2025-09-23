@@ -311,6 +311,7 @@ class GgufModelTests(unittest.TestCase):
     qwen3_model_id = "Qwen/Qwen3-0.6B-GGUF"
     qwen3moe_model_id = "Qwen/Qwen3-30B-A3B-GGUF"
     umt5_encoder_model_id = "city96/umt5-xxl-encoder-gguf"
+    lfm2_model_id = "LiquidAI/LFM2-1.2B-GGUF"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -350,6 +351,7 @@ class GgufModelTests(unittest.TestCase):
     q8_0_qwen3_model_id = "Qwen3-0.6B-Q8_0.gguf"
     q4_k_m_qwen3moe_model_id = "Qwen3-30B-A3B-Q4_K_M.gguf"
     q8_0_umt5_encoder_model_id = "umt5-xxl-encoder-Q8_0.gguf"
+    q4_k_m_lfm2_model_id = "LFM2-1.2B-Q4_K_M.gguf"
 
     example_text = "Hello"
 
@@ -1116,3 +1118,21 @@ class GgufModelTests(unittest.TestCase):
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], EXPECTED_OUTPUT, rtol=6e-3, atol=4e-4)
+
+
+    @require_read_token
+    ## to be precise, it currently require upstream gguf-py to be installed as lfm2 is not yet present in gguf 0.17.1
+    @unittest.skipUnless(is_gguf_available("0.17.0"), "test requires gguf version >= 0.17.0")
+    def test_lfm2_q4_k_m(self):
+        tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-1.2B")
+        model = AutoModelForCausalLM.from_pretrained(
+            self.lfm2_model_id,
+            gguf_file=self.q4_k_m_lfm2_model_id,
+            dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello Atari 2600! es un videoj"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
