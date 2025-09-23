@@ -32,6 +32,7 @@ class T5GemmaModuleConfig(PretrainedConfig):
     e.g. [google/t5_gemma_module-7b](https://huggingface.co/google/t5_gemma_module-7b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the T5GemmaModule model. Defines the number of different tokens that can be represented by the

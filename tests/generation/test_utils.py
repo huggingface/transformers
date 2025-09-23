@@ -744,8 +744,15 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
+            old_models = [  # models that we won't commit resources fixing because they are old and have little usage
+                # reformer: has a different cache format
+                "reformer",
+                # imagegpt: the output lm head uses `vocab_size - 1` tokens, so the `NoBadWordsLogitsProcessor` used
+                # by prompt lookup may fail
+                "imagegpt",
+            ]
+            if any(model_name in model_class.__name__.lower() for model_name in old_models):
+                self.skipTest(reason="Won't fix: old model")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [

@@ -1073,8 +1073,8 @@ def create_masks_for_generate(
     **kwargs,
 ):
     """
-    This function mimics how we create the masks in the `modeling_xxx.py` files, and is used in `generate` in order
-    to easily create the masks in advance, when we compile the forwards with Static caches.
+    This function mimics how we create the masks in the `modeling_xxx.py` files, and is used in places like `generate`
+    in order to easily create the masks in advance, when we compile the forwards with Static caches.
 
     Args:
         config (`PretrainedConfig`):
