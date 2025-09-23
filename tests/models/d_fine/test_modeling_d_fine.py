@@ -361,10 +361,6 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Not relevant for the model")
-    def test_can_init_all_missing_weights(self):
-        pass
-
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
