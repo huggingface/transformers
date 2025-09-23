@@ -241,7 +241,8 @@ class Gemma2TensorProcessor(TensorProcessor):
         if "norm.weight" in name:
             weights = weights - 1
         return GGUFTensor(weights, name, {})
-    
+
+
 class Lfm2TensorProcessor(TensorProcessor):
     def __init__(self, config=None):
         super().__init__(config=config)
@@ -249,7 +250,7 @@ class Lfm2TensorProcessor(TensorProcessor):
     def process(self, weights, name, **kwargs):
         if "shortconv.conv.weight" in name:
             ## GGUF shape is [hidden_dim, L_cache], HF expects [hidden_dim, 1, L_cache]
-            weights = np.expand_dims(weights, axis=1) ## equivalent to unsqueeze(1)
+            weights = np.expand_dims(weights, axis=1)  ## equivalent to unsqueeze(1)
         return GGUFTensor(weights, name, {})
 
 
@@ -479,7 +480,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
         ## llama.cpp defines the layers that are full-attention by looking at num_key_value_heads
         ## we need to set the full_attn_idxs to the layers that are full-attention
-        parsed_parameters["config"]["full_attn_idxs"] = [i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0]
+        parsed_parameters["config"]["full_attn_idxs"] = [
+            i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0
+        ]
 
     # retrieve config vocab_size from tokenizer
     # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details

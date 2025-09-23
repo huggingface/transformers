@@ -1119,7 +1119,6 @@ class GgufModelTests(unittest.TestCase):
 
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], EXPECTED_OUTPUT, rtol=6e-3, atol=4e-4)
 
-
     @require_read_token
     ## to be precise, it currently require upstream gguf-py to be installed as lfm2 is not yet present in gguf 0.17.1
     @unittest.skipUnless(is_gguf_available("0.17.0"), "test requires gguf version >= 0.17.0")
