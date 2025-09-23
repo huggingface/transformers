@@ -253,16 +253,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
 
-🤗 Transformers 有一个特别酷的功能，它能够保存一个模型，并且将它加载为 PyTorch 或 TensorFlow 模型。`from_pt` 或 `from_tf` 参数可以将模型从一个框架转换为另一个框架：
-
-
-```py
->>> from transformers import AutoModel
-
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
-```
-
 ## 自定义模型构建
 
 你可以修改模型的配置类来改变模型的构建方式。配置指明了模型的属性，比如隐藏层或者注意力头的数量。当你从自定义的配置类初始化模型时，你就开始自定义模型构建了。模型属性是随机初始化的，你需要先训练模型，然后才能得到有意义的结果。
