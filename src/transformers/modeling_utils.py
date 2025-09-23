@@ -2951,7 +2951,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and all(
                 getattr(buffer, "_is_hf_initialized", False)
                 for buffer in module.buffers(recurse=False)
-                if buffer.is_persistent
+                if buffer not in module._non_persistent_buffers_set
             )
         ):
             # Mark the module itself as initialized so that higher modules in the graph see it
