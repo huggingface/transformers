@@ -60,7 +60,7 @@ class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.6]
 
     model_tester_class = HeliumModelTester
-
+    
 
 @slow
 # @require_torch_gpu

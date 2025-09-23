@@ -242,8 +242,6 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 
 ## 训练
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 如果您不熟悉使用[`Trainer`]微调模型，请查看这里的基本教程[here](../training#train-with-pytorch-trainer)！
@@ -311,8 +309,6 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -356,8 +352,6 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 
 如果您愿意，您也可以手动复制 `pipeline` 的结果：
 
-<frameworkcontent>
-<pt>
 
 加载一个处理器来预处理音频文件和转录，并将 `input` 返回为 PyTorch 张量：
 
@@ -388,5 +382,3 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 >>> transcription
 ['I WOUL LIKE O SET UP JOINT ACOUNT WTH Y PARTNER']
 ```
-</pt>
-</frameworkcontent>

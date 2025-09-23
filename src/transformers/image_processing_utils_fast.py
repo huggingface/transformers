@@ -85,7 +85,7 @@ def validate_fast_preprocess_arguments(
     size: Optional[SizeDict] = None,
     interpolation: Optional["F.InterpolationMode"] = None,
     return_tensors: Optional[Union[str, TensorType]] = None,
-    data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+    data_format: ChannelDimension = ChannelDimension.FIRST,
 ):
     """
     Checks validity of typically used arguments in an `ImageProcessorFast` `preprocess` method.
@@ -142,8 +142,8 @@ def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int, ...]:
 
 
 def divide_to_patches(
-    image: Union[np.array, "torch.Tensor"], patch_size: int
-) -> list[Union[np.array, "torch.Tensor"]]:
+    image: Union[np.ndarray, "torch.Tensor"], patch_size: int
+) -> list[Union[np.ndarray, "torch.Tensor"]]:
     """
     Divides an image into patches of a specified size.
 

@@ -2470,9 +2470,6 @@ class Gemma3nModel(PaliGemmaModel):
         audio_outputs, audio_mask = self.audio_tower(input_features, input_features_mask)
         return self.embed_audio(inputs_embeds=audio_outputs), audio_mask
 
-    def _update_causal_mask(self, **super_kwargs):
-        raise AttributeError("We don't want to inherit it")
-
 
 @auto_docstring(
     custom_intro="""
@@ -2666,8 +2663,8 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         return model_inputs
 
-    def _prepare_4d_causal_attention_mask_with_cache_position(self, **super_kwargs):
-        raise AttributeError("Do not inherit _prepare_4d_causal_attention_mask_with_cache_position from PaliGemma")
+    def create_masks_for_generate(self, **super_kwargs):
+        raise AttributeError("Do not inherit create_masks_for_generate from PaliGemma")
 
 
 __all__ = [

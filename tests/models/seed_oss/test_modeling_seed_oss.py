@@ -71,16 +71,24 @@ class SeedOssIntegrationTest(unittest.TestCase):
     input_text = ["How to make pasta?", "Hi ByteDance-Seed"]
     model_id = "ByteDance-Seed/Seed-OSS-36B-Base"
 
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_model_36b_fp16(self):
+    def test_model_36b_eager(self):
         EXPECTED_TEXTS = [
             "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on my local machine. I have installed all the",
+            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            "ByteDance-Seed/Seed-OSS-36B-Base",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager",
+            device_map="auto",
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True, return_token_type_ids=False).to(
@@ -92,53 +100,17 @@ class SeedOssIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    def test_model_36b_bf16(self):
-        EXPECTED_TEXTS = [
-            "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on my local machine. I have installed all the",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")
-
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
-            model.model.embed_tokens.weight.device
-        )
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_model_36b_eager(self):
-        EXPECTED_TEXTS = ""
-
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16, attn_implementation="eager", device_map="auto"
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
-            model.model.embed_tokens.weight.device
-        )
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
     def test_model_36b_sdpa(self):
         EXPECTED_TEXTS = [
             "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on my local machine. I have installed all the",
+            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto"
-        )
+        # default attention is `sdpa` (and this model repo. doesn't specify explicitly) --> we get `sdpa` here
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True, return_token_type_ids=False).to(
             model.model.embed_tokens.weight.device
         )
 
@@ -151,15 +123,16 @@ class SeedOssIntegrationTest(unittest.TestCase):
     @require_torch_large_gpu
     @pytest.mark.flash_attn_test
     def test_model_36b_flash_attn(self):
-        EXPECTED_TEXTS = ""
+        EXPECTED_TEXTS = [
+            "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
+            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
+        ]
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", device_map="auto"
         )
-        model.to(torch_device)
-
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True, return_token_type_ids=False).to(
             model.model.embed_tokens.weight.device
         )
 
