@@ -29,9 +29,10 @@ from typing import Any, Callable, Optional, Union
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
+from ...models.siglip.configuration_siglip import SiglipVisionConfig
 
 
-class KeyeVL1_5VisionConfig(PretrainedConfig):
+class KeyeVL1_5VisionConfig(SiglipVisionConfig):
     r"""
     This is the configuration class to store the configuration of a [`KeyeVL1_5VisionModel`]. It is used to instantiate a
     KeyeVL1_5 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -106,18 +107,19 @@ class KeyeVL1_5VisionConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+        super().__init__(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_channels=num_channels,
+            image_size=image_size,
+            patch_size=patch_size,
+            hidden_act=hidden_act,
+            layer_norm_eps=layer_norm_eps,
+            attention_dropout=attention_dropout,
+            **kwargs,
+        )
         self.spatial_merge_size = spatial_merge_size
         self.tokens_per_second = tokens_per_second
         self.initializer_range = initializer_range

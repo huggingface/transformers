@@ -40,9 +40,17 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...models.qwen2_5_vl.modeling_qwen2_5_vl import (
+    Qwen2_5_VLCausalLMOutputWithPast,
+    Qwen2_5_VLDecoderLayer,
+    Qwen2_5_VLModelOutputWithPast,
+    apply_multimodal_rotary_pos_emb,
+    apply_rotary_pos_emb_vision,
+)
+from ...models.siglip.modeling_siglip import SiglipMLP, SiglipVisionModelOutput
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -63,7 +71,7 @@ if is_flash_attn_2_available():
     from flash_attn import flash_attn_varlen_func
     from flash_attn.layers.rotary import apply_rotary_emb
 
-    from transformers.modeling_flash_attention_utils import _flash_attention_forward
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 else:
     flash_attn_varlen_func = None
     apply_rotary_emb = None
@@ -169,27 +177,6 @@ class KeyeVL1_5VisionEmbeddings(nn.Module):
         embeddings = torch.cat(outs, dim=0)  # (batch * length, dim)
         embeddings = embeddings.view(batch, length, -1)
         return embeddings
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb_vision(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    orig_q_dtype = q.dtype
-    orig_k_dtype = k.dtype
-    q, k = q.float(), k.float()
-    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    q_embed = q_embed.to(orig_q_dtype)
-    k_embed = k_embed.to(orig_k_dtype)
-    return q_embed, k_embed
 
 
 def eager_attention_forward(
@@ -331,19 +318,8 @@ class KeyeVL1_5VisionAttention(nn.Module):
         return attn_output, None
 
 
-class KeyeVL1_5VisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+class KeyeVL1_5VisionMLP(SiglipMLP):
+    pass
 
 
 class KeyeVL1_5VisionBlock(GradientCheckpointingLayer):
@@ -562,22 +538,8 @@ class KeyeVL1_5VisionEncoder(nn.Module):
         )
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
-    """
-)
-class KeyeVL1_5VisionModelOutput(ModelOutput):
-    r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-        The image embeddings obtained by applying the projection layer to the pooler_output.
-    """
-
-    image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+class KeyeVL1_5VisionModelOutput(SiglipVisionModelOutput):
+    pass
 
 
 KEYE_VL_1_5_VISION_INPUTS_DOCSTRING = r"""
@@ -684,65 +646,15 @@ class KeyeVL1_5RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
-
-    Explanation:
-        Multimodal 3D rotary position embedding is an extension to 1D rotary position embedding. The input embedding
-        sequence contains vision (images / videos) embedding and text embedding or just contains text embedding. For
-        vision embedding part, we apply rotary position embedding on temporal, height and width dimension separately.
-        Here we split the channel dimension to 3 chunks for the temporal, height and width rotary position embedding.
-        For text embedding part, we just apply 1D rotary position embedding. The three rotary position index (temporal,
-        height and width) of text embedding is always the same, so the text embedding rotary position embedding has no
-        difference with modern LLMs.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
-        mrope_section(`List(int)`):
-            Multimodal rope section is for channel dimension of temporal, height and width in rope calculation.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    mrope_section = mrope_section * 2
-    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 @auto_docstring
 class KeyeVL1_5PreTrainedModel(PreTrainedModel):
-    config: KeyeVL1_5Config
+    config_class: KeyeVL1_5Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionBlock"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    config_class: KeyeVL1_5Config
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = False  # TODO (joao): fix. torch.compile failing probably due to `cache_positions`
 
@@ -874,53 +786,12 @@ class KeyeVL1_5VisionRotaryEmbedding(nn.Module):
     Base class for KeyeVL1_5 causal language model (or autoregressive) outputs.
     """
 )
-class KeyeVL1_5CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    rope_deltas: Optional[torch.LongTensor] = None
+class KeyeVL1_5CausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
+    pass
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
-class KeyeVL1_5ModelOutputWithPast(ModelOutput):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    rope_deltas: Optional[torch.LongTensor] = None
+class KeyeVL1_5ModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
+    pass
 
 
 class KeyeVL1_5RotaryEmbedding(nn.Module):
@@ -1355,9 +1226,9 @@ KEYE_VL_1_5_ATTENTION_CLASSES = {
 }
 
 
-class KeyeVL1_5DecoderLayer(GradientCheckpointingLayer):
+class KeyeVL1_5DecoderLayer(Qwen2_5_VLDecoderLayer):
     def __init__(self, config: KeyeVL1_5TextConfig, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
 
         if config.use_sliding_window and config._attn_implementation != "flash_attention_2":
@@ -1370,7 +1241,6 @@ class KeyeVL1_5DecoderLayer(GradientCheckpointingLayer):
         self.mlp = KeyeVL1_5MLP(config)
         self.input_layernorm = KeyeVL1_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = KeyeVL1_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -1387,27 +1257,6 @@ class KeyeVL1_5DecoderLayer(GradientCheckpointingLayer):
         ] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -1742,18 +1591,21 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
 class KeyeVL1_5Projector(nn.Module):
     def __init__(self, config: KeyeVL1_5Config):
         super().__init__()
-        spatial_merge_size = config.vision_config.spatial_merge_size
-        hidden_size = self.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
-        
-        self.text_config = config.text_config
-        self.vision_config = config.vision_config
-        
-        self.merge_kernel_size = (spatial_merge_size, spatial_merge_size)
+        vision_config = config.vision_config
+        text_config = config.text_config
+        merge_size = vision_config.spatial_merge_size
+        merge_kernel_size = (merge_size, merge_size)
+        hidden_size = vision_config.hidden_size * merge_kernel_size[0] * merge_kernel_size[1]
+
+        self.text_config = text_config
+        self.vision_config = vision_config
+
+        self.merge_kernel_size = merge_kernel_size
 
         self.pre_norm = nn.LayerNorm(hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(hidden_size, hidden_size, bias=True)
         self.act = GELUActivation()
-        self.linear_2 = nn.Linear(hidden_size, self.text_config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(hidden_size, text_config.hidden_size, bias=True)
 
     def forward(
         self,
@@ -1799,18 +1651,17 @@ def split_thw(thw: torch.LongTensor) -> torch.LongTensor:
 
 @auto_docstring
 class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
-    base_model_prefix = ""
-    _checkpoint_conversion_mapping = {"^model": "language_model"}
     config: KeyeVL1_5Config
+    base_model_prefix = ""
     _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionBlock"]
 
     def __init__(self, config: KeyeVL1_5Config):
         super().__init__(config)
         self.visual = KeyeVL1_5VisionModel._from_config(config.vision_config)
         self.language_model = KeyeVL1_5TextModel._from_config(config.text_config)
+        self.mm_projector = KeyeVL1_5Projector(config)
 
         self.rope_deltas = None  # cache rope_deltas here
-        self.mm_projector = KeyeVL1_5Projector(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2024,7 +1875,6 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
         device = pixel_values_videos.device
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         pixel_values_videos = pixel_values_videos.unsqueeze(0)
-        video_grid_thw = split_thw(video_grid_thw.squeeze(0)).to(device)
 
         assert torch.all(video_grid_thw[:, 0] == 1)
 
@@ -2067,8 +1917,8 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
         device = pixel_values.device
         pixel_values = pixel_values.type(self.visual.dtype)
         pixel_values = pixel_values.unsqueeze(0)
-        assert torch.all(image_grid_thw[:, 0] == 1)
-        image_grid_thw = image_grid_thw.to(device)
+        # assert torch.all(image_grid_thw[:, 0] == 1)
+        # image_grid_thw = image_grid_thw.to(device)
 
         total_patches = image_grid_thw.prod(dim=1)
         width = torch.repeat_interleave(image_grid_thw[:, 2], total_patches)
@@ -2094,46 +1944,6 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
 
         image_embeds = vision_outputs.last_hidden_state
         return image_embeds
-
-    def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
-    ):
-        """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-            special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_video_mask = special_video_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-            special_video_mask = input_ids == self.config.video_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
-            )
-
-        n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
-            )
-
-        return special_image_mask, special_video_mask
 
     @auto_docstring
     def forward(
@@ -2176,42 +1986,45 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
+        device = inputs_embeds.device
+
         if pixel_values is not None:
-            device = pixel_values.device
-            pixel_values = pixel_values.type(self.visual.dtype)
-            pixel_values = pixel_values.unsqueeze(0)
-            assert torch.all(image_grid_thw[:, 0] == 1)
-            image_grid_thw = image_grid_thw.to(device)
+            # device = pixel_values.device
+            # pixel_values = pixel_values.type(self.visual.dtype)
+            # pixel_values = pixel_values.unsqueeze(0)
+            # assert torch.all(image_grid_thw[:, 0] == 1)
+            # image_grid_thw = image_grid_thw.to(device)
 
-            total_patches = image_grid_thw.prod(dim=1)
-            width = torch.repeat_interleave(image_grid_thw[:, 2], total_patches)
-            cu_seqlens = total_patches.cumsum(0)
+            # total_patches = image_grid_thw.prod(dim=1)
+            # width = torch.repeat_interleave(image_grid_thw[:, 2], total_patches)
+            # cu_seqlens = total_patches.cumsum(0)
 
-            arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-            image_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
+            # arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
+            # image_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
 
-            width_position_ids = torch.remainder(image_position_ids, width)
-            height_position_ids = torch.div(image_position_ids, width, rounding_mode="floor")
-            cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
-            width_position_ids = width_position_ids.to(device)
-            height_position_ids = height_position_ids.to(device)
+            # width_position_ids = torch.remainder(image_position_ids, width)
+            # height_position_ids = torch.div(image_position_ids, width, rounding_mode="floor")
+            # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
+            # width_position_ids = width_position_ids.to(device)
+            # height_position_ids = height_position_ids.to(device)
 
-            vision_outputs = self.visual(
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                position_ids=image_position_ids,
-                cu_seqlens=cu_seqlens,
-                width_position_ids=width_position_ids,
-                height_position_ids=height_position_ids,
-            )
+            # vision_outputs = self.visual(
+            #     pixel_values=pixel_values,
+            #     image_grid_thw=image_grid_thw,
+            #     position_ids=image_position_ids,
+            #     cu_seqlens=cu_seqlens,
+            #     width_position_ids=width_position_ids,
+            #     height_position_ids=height_position_ids,
+            # )
 
-            image_embeds = vision_outputs.last_hidden_state
+            # image_embeds = vision_outputs.last_hidden_state
 
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
             image_embeds = self.mm_projector(image_embeds, image_grid_thw)
 
             if input_ids is None:
                 image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=device)
                 )
                 image_mask = image_mask.all(-1)
             else:
@@ -2232,39 +2045,42 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            device = pixel_values_videos.device
-            pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-            pixel_values_videos = pixel_values_videos.unsqueeze(0)
+            # device = pixel_values_videos.device
+            # pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+            # pixel_values_videos = pixel_values_videos.unsqueeze(0)
+            # video_grid_thw = split_thw(video_grid_thw.squeeze(0)).to(device)
+
+            # assert torch.all(video_grid_thw[:, 0] == 1)
+
+            # total_patches = video_grid_thw.prod(dim=1)
+            # width = torch.repeat_interleave(video_grid_thw[:, 2], total_patches)
+            # cu_seqlens = total_patches.cumsum(0)
+            # arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
+            # video_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
+
+            # width_position_ids = torch.remainder(video_position_ids, width)
+            # height_position_ids = torch.div(video_position_ids, width, rounding_mode="floor")
+            # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
+            # width_position_ids = width_position_ids.to(device)
+            # height_position_ids = height_position_ids.to(device)
+
+            # vision_outputs = self.visual(
+            #     pixel_values=pixel_values_videos,
+            #     image_grid_thw=video_grid_thw,
+            #     position_ids=video_position_ids,
+            #     cu_seqlens=cu_seqlens,
+            #     width_position_ids=width_position_ids,
+            #     height_position_ids=height_position_ids,
+            # )
+
+            # video_embeds = vision_outputs.last_hidden_state
             video_grid_thw = split_thw(video_grid_thw.squeeze(0)).to(device)
-
-            assert torch.all(video_grid_thw[:, 0] == 1)
-
-            total_patches = video_grid_thw.prod(dim=1)
-            width = torch.repeat_interleave(video_grid_thw[:, 2], total_patches)
-            cu_seqlens = total_patches.cumsum(0)
-            arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-            video_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
-
-            width_position_ids = torch.remainder(video_position_ids, width)
-            height_position_ids = torch.div(video_position_ids, width, rounding_mode="floor")
-            cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
-            width_position_ids = width_position_ids.to(device)
-            height_position_ids = height_position_ids.to(device)
-
-            vision_outputs = self.visual(
-                pixel_values=pixel_values_videos,
-                image_grid_thw=video_grid_thw,
-                position_ids=video_position_ids,
-                cu_seqlens=cu_seqlens,
-                width_position_ids=width_position_ids,
-                height_position_ids=height_position_ids,
-            )
-
-            video_embeds = vision_outputs.last_hidden_state
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
             video_embeds = self.mm_projector(video_embeds, video_grid_thw)
+
             if input_ids is None:
                 video_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=device)
                 )
                 video_mask = video_mask.all(-1)
             else:
@@ -2301,12 +2117,8 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
-                delta = (
-                    (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
-                    if cache_position is not None
-                    else 0
-                )
-                position_ids = torch.arange(seq_length, device=inputs_embeds.device)
+                delta = (cache_position[0] + self.rope_deltas).to(device) if cache_position is not None else 0
+                position_ids = torch.arange(seq_length, device=device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 if cache_position is not None:  # otherwise `deltas` is an int `0`
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
@@ -2341,11 +2153,7 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
 
 
 class KeyeVL1_5ForConditionalGeneration(KeyeVL1_5PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^visual": "model.visual",
-        "^mlp_AR": "model.mm_projector",
-        r"^model(?!\.(language_model|visual|mm_projector))": "model.language_model",
-    }
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
     config_class = KeyeVL1_5Config
     _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionEncoderLayer"]
@@ -2368,23 +2176,6 @@ class KeyeVL1_5ForConditionalGeneration(KeyeVL1_5PreTrainedModel, GenerationMixi
 
     def get_decoder(self):
         return self.model.get_decoder()
-
-    def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
-    ):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw)
-
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
-        return self.model.get_image_features(pixel_values, image_grid_thw)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def visual(self):
-        return self.model.visual
 
     @can_return_tuple
     @replace_return_docstrings(output_type=KeyeVL1_5CausalLMOutputWithPast, config_class="KeyeVL1_5Config")

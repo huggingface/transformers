@@ -36,24 +36,28 @@ from numpy.typing import NDArray
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput
+from ...models.qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import (
-    add_start_docstrings,
-)
+from ...utils import add_start_docstrings, logging
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
 from ...video_utils import VideoInput
 from .image_processing_keye_vl_1_5 import KeyeVL1_5ImageProcessor
-from transformers.models.qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 
+
+logger = logging.get_logger(__name__)
 
 try:
     from keye_vl_utils import BicubicVideoProcessor
 except:
     BicubicVideoProcessor = None
+    bicubic = None
 
 if BicubicVideoProcessor is not None:
-    bicubic = BicubicVideoProcessor()
+    try:
+        bicubic = BicubicVideoProcessor()
+    except:
+        bicubic = None
 
 
 class KeyeVL1_5VideosProcessorKwargs(VideosKwargs, total=False):
@@ -265,6 +269,11 @@ class KeyeVL1_5Processor(ProcessorMixin):
         self.factor = self.merge_size * self.patch_size
 
         self.enable_fusion_op = bool(int(os.environ.get("ENABLE_FUSION_PROCESSOR_OP", 1))) and (bicubic is not None)
+
+        if self.enable_fusion_op:
+            logger.warning_once("Fusion op is enabled to processing videos.")
+        else:
+            logger.warning_once("Fusion op is not enabled to processing videos.")
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
