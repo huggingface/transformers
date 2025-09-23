@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
@@ -239,18 +238,6 @@ class Cohere2Config(PretrainedConfig):
         rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
         self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
         rope_config_validation(self)
-
-    @property
-    def sliding_window_pattern(self):
-        warnings.warn(
-            "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.55.0.",
-            FutureWarning,
-        )
-        return self._sliding_window_pattern
-
-    @sliding_window_pattern.setter
-    def sliding_window_pattern(self, value):
-        self._sliding_window_pattern = value
 
 
 __all__ = ["Cohere2Config"]

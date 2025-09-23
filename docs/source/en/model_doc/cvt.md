@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -30,7 +29,7 @@ You can find all the CvT checkpoints under the [Microsoft](https://huggingface.c
 
 > [!TIP]
 > This model was contributed by [anujunj](https://huggingface.co/anugunj).
-> 
+>
 > Click on the CvT models in the right sidebar for more examples of how to apply CvT to different computer vision tasks.
 
 The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
@@ -45,8 +44,8 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="microsoft/cvt-13",
-    torch_dtype=torch.float16,
-    device=0 
+    dtype=torch.float16,
+    device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
@@ -63,7 +62,7 @@ from transformers import AutoModelForImageClassification, AutoImageProcessor
 image_processor = AutoImageProcessor.from_pretrained("microsoft/cvt-13")
 model = AutoModelForImageClassification.from_pretrained(
     "microsoft/cvt-13",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto"
 )
 
@@ -91,9 +90,6 @@ Refer to this set of ViT [notebooks](https://github.com/NielsRogge/Transformers-
 
 [[autodoc]] CvtConfig
 
-<frameworkcontent>
-<pt>
-
 ## CvtModel
 
 [[autodoc]] CvtModel
@@ -103,19 +99,3 @@ Refer to this set of ViT [notebooks](https://github.com/NielsRogge/Transformers-
 
 [[autodoc]] CvtForImageClassification
     - forward
-
-</pt>
-<tf>
-
-## TFCvtModel
-
-[[autodoc]] TFCvtModel
-    - call
-
-## TFCvtForImageClassification
-
-[[autodoc]] TFCvtForImageClassification
-    - call
-
-</tf>
-</frameworkcontent>

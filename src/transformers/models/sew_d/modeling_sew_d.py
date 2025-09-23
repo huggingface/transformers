@@ -21,7 +21,6 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
@@ -510,7 +509,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         (output,) = ctx.saved_tensors
-        inputGrad = softmax_backward_data(ctx, grad_output, output, ctx.dim, output)
+        inputGrad = softmax_backward_data(ctx, grad_output, output)
         return inputGrad, None, None
 
     @staticmethod
@@ -1198,8 +1197,6 @@ class SEWDPreTrainedModel(PreTrainedModel):
             )
             nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()

@@ -114,7 +114,7 @@ class MiniMaxConfig(PretrainedConfig):
         num_local_experts (`int`, *optional*, defaults to 8):
             Number of experts per Sparse MLP layer.
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
+            Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
@@ -255,7 +255,7 @@ class MiniMaxConfig(PretrainedConfig):
             self.layer_types = [
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
@@ -435,7 +435,7 @@ class MiniMaxLightningAttention(nn.Module):
                 current_attn_output = attn_output_inter + attn_output_intra
                 attn_output.append(current_attn_output)
 
-                # cacluate attn_weights_inter for next block or cache
+                # calculate attn_weights_inter for next block or cache
                 next_attn_weights_inter = torch.matmul(
                     (current_key_states * current_key_decay).transpose(-1, -2), current_value_states
                 )
@@ -509,7 +509,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -523,7 +523,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
                 with `head_dim` being the embedding dimension of each attention head.
             attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -578,7 +578,7 @@ class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
 class MiniMaxModel(MixtralModel):
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[MiniMaxCache] = None,

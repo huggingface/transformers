@@ -331,7 +331,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
         inputs = self.processor(images=self.image, text=self.prompt_image, return_tensors="pt").to(
@@ -363,7 +363,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
         inputs = self.processor(
@@ -389,7 +389,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
@@ -412,11 +412,11 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
-        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = (
             "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
@@ -440,11 +440,11 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#34585)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
-        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompts = [
             "user\nTell me about the french revolution.<|im_end|>\n<|im_start|>assistant\n",  # text-only case
@@ -472,7 +472,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
@@ -494,7 +494,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -525,7 +525,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_matches_single(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 

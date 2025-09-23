@@ -33,6 +33,8 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
 )
 from ..llama.tokenization_llama import LlamaTokenizer
 
@@ -80,9 +82,6 @@ class GemmaConfig(PretrainedConfig):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The legacy activation function. It is overwritten by the `hidden_activation`.
-        hidden_activation (`str` or `function`, *optional*):
-            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
-            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -145,7 +144,6 @@ class GemmaConfig(PretrainedConfig):
         num_key_value_heads: Optional[int] = 16,
         head_dim: Optional[int] = 256,
         hidden_act: Optional[str] = "gelu_pytorch_tanh",
-        hidden_activation: Optional[int] = None,
         max_position_embeddings: Optional[int] = 8192,
         initializer_range: Optional[float] = 0.02,
         rms_norm_eps: Optional[int] = 1e-6,
@@ -168,7 +166,6 @@ class GemmaConfig(PretrainedConfig):
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
-        self.hidden_activation = hidden_activation
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
@@ -373,10 +370,23 @@ class GemmaRMSNorm(nn.Module):
 
 class GemmaMLP(LlamaMLP):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+
+
+class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+
+class GemmaPreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        if "RMSNorm" in module.__class__.__name__:
+            module.weight.data.zero_()
 
 
 class GemmaModel(LlamaModel):
@@ -398,7 +408,7 @@ class GemmaModel(LlamaModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

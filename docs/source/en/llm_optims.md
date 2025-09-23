@@ -53,7 +53,7 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", torch_dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", dtype="auto", device_map="auto")
 
 model.generation_config.cache_implementation = "static"
 
@@ -83,7 +83,7 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", torch_dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", dtype="auto", device_map="auto")
 
 model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
 input_text = "The theory of special relativity states "
@@ -184,36 +184,6 @@ text
 ```
 
 </hfoption>
-<hfoption id="3. compile entire generate function">
-
-Compiling the entire [`~GenerationMixin.generate`] function also compiles the input preparation logit processor operations, and more, in addition to the forward pass. With this approach, you don't need to initialize [`StaticCache`] or set the [cache_implementation](https://hf.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.cache_implementation) parameter.
-
-```py
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
-import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
-
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", torch_dtype="auto", device_map="auto")
-
-model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
-input_text = "The theory of special relativity states "
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device.type)
-
-outputs = model.generate(**input_ids)
-print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['The theory of special relativity states 1. The speed of light is constant in all inertial reference']
-```
-
-This usage pattern is more appropriate for unique hardware or use cases, but there are several drawbacks to consider.
-
-1. Compilation is much slower.
-2. Parameters must be configured through [`GenerationConfig`].
-3. Many warnings and exceptions are suppressed. We recommend testing the uncompiled model first.
-4. Many features are unavailable at the moment. For example, generation does not stop if an `EOS` token is selected.
-
-</hfoption>
 </hfoptions>
 
 ## Decoding strategies
@@ -246,7 +216,7 @@ device = infer_device()
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("Einstein's theory of relativity states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", dtype="auto").to(device)
 assistant_model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m").to(device)
 outputs = model.generate(**inputs, assistant_model=assistant_model)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -267,7 +237,7 @@ device = infer_device()
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("Einstein's theory of relativity states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", dtype="auto").to(device)
 assistant_model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m").to(device)
 outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.7)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -295,7 +265,7 @@ device = infer_device()
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("The second law of thermodynamics states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", dtype="auto").to(device)
 assistant_model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m").to(device)
 outputs = model.generate(**inputs, prompt_lookup_num_tokens=3)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -316,7 +286,7 @@ device = infer_device()
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("The second law of thermodynamics states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", dtype="auto").to(device)
 outputs = model.generate(**inputs, prompt_lookup_num_tokens=3, do_sample=True, temperature=0.7)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ["The second law of thermodynamics states that energy cannot be created nor destroyed. It's not a"]
@@ -342,7 +312,7 @@ quant_config = BitsAndBytesConfig(load_in_8bit=True)
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2b",
     quantization_config=quant_config,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
 
@@ -350,7 +320,7 @@ model = AutoModelForCausalLM.from_pretrained(
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2b",
     quantization_config=quant_config,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 model.set_attention_implementation("flash_attention_2")
 ```
@@ -371,7 +341,7 @@ from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
@@ -396,14 +366,14 @@ Use the Model Memory Calculator below to estimate and compare how much memory is
 	height="450"
 ></iframe>
 
-To load a model in half-precision, set the [torch_dtype](https://hf.co/docs/transformers/main/en/main_classes/text_generation#transformers.PreTrainedModel.from_pretrained.torch_dtype) parameter in [`~transformers.AutoModelForCausalLM.from_pretrained`] to `torch.bfloat16`. This requires 13.74GB of memory.
+To load a model in half-precision, set the [dtype](https://hf.co/docs/transformers/main/en/main_classes/text_generation#transformers.PreTrainedModel.from_pretrained.dtype) parameter in [`~transformers.AutoModelForCausalLM.from_pretrained`] to `torch.bfloat16`. This requires 13.74GB of memory.
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
 model = AutoModelForCausalLM.from_pretrained(
-    "mistralai/Mistral-7B-v0.1", torch_dtype=torch.bfloat16, device_map="auto",
+    "mistralai/Mistral-7B-v0.1", dtype=torch.bfloat16, device_map="auto",
 )
 ```
 

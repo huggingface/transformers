@@ -65,7 +65,7 @@ class Cohere2VisionText2TextModelTester:
             "vocab_size": 99,
             "hidden_size": 128,
             "intermediate_size": 37,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "output_channels": 64,
             "hidden_act": "silu",
@@ -170,7 +170,7 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="Siglip backbone uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip backbone uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -186,7 +186,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     def get_model(self, dummy=True):
         device_type, major, _ = get_device_properties()
-        torch_dtype = torch.float16
+        dtype = torch.float16
 
         # too large to fit into A10
         config = Cohere2VisionConfig.from_pretrained(self.model_checkpoint)
@@ -197,7 +197,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         model = Cohere2VisionForConditionalGeneration.from_pretrained(
             self.model_checkpoint,
             config=config,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             device_map="auto",
         )
         return model
@@ -330,7 +330,10 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        },
                         {"type": "text", "text": "Describe this image"},
                     ],
                 },

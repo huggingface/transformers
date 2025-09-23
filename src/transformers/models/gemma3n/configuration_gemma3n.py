@@ -56,7 +56,7 @@ class Gemma3nTextConfig(PretrainedConfig):
             Dimension of the hidden representations for per-layer emebeddings.
         intermediate_size (`int` or `Sequence[int]`, *optional*, defaults to 16384):
             Dimension of the MLP representations. MatFormer configurations may wish to provide a sequence of integers
-            to account for vairable intermediate_size values across layers. In such cases,
+            to account for variable intermediate_size values across layers. In such cases,
             `len(intermediate_size) == num_hidden_layers`.
         num_hidden_layers (`int`, *optional*, defaults to 35):
             Number of hidden layers in the Transformer decoder.
@@ -68,7 +68,7 @@ class Gemma3nTextConfig(PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout this
-            [paper](https://arxiv.org/pdf/2305.13245.pdf). If not specified, will default to `num_attention_heads`.
+            [paper](https://huggingface.co/papers/2305.13245). If not specified, will default to `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
         hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
@@ -110,7 +110,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         altup_active_idx (`int`, *optional*, defaults to 0):
             The index of the prediction from which AltUp will compute additional predictions or correct
         altup_coef_clip (`float`, *optional*, defaults to 120.0):
-            The maximum amplitude of an AltUp prediction or correction coeficient weight.
+            The maximum amplitude of an AltUp prediction or correction coefficient weight.
         altup_correct_scale (`bool`, *optional*, defaults to `True`):
             If True, apply the `AltUp.correct_output_scale` to the corrected prediction at `altup_active_idx`.
         altup_num_inputs (`int`, *optional*, defaults to 4):
@@ -119,12 +119,13 @@ class Gemma3nTextConfig(PretrainedConfig):
             The number of layer that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
             layers in the model "share" the KV values in that each local and global layer in this range uses the KV
             cache values computed for the last local or global layer, respectively, before entering this range. The
-            value should be `num_kv_shared_layers` should be a scalar of `sliding_window_pattern`.
+            value should be a multiple of the attention pattern size (see `layer_types` parameter).
         laurel_rank (int, *optional*, defaults to 64):
             The intermediate size for the linear projections in the Learned Augmented Residual Layer.
-        activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)`):
+        activation_sparsity_pattern (Sequence[float], *optional*):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
-            explicitly provide a sparsity value for each layer in the model.
+            explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
+            sparse with a sparsity factor of 0.95 and the rest are dense.
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -188,7 +189,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         altup_num_inputs: int = 4,
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
-        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = (0.95,) * 10 + (0.0,) * 25,
+        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -232,7 +233,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         else:
             self.layer_types = layer_types
 
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
@@ -262,7 +263,10 @@ class Gemma3nTextConfig(PretrainedConfig):
         self.laurel_rank = laurel_rank
 
         if activation_sparsity_pattern is None:
-            activation_sparsity_pattern = [0.0] * num_hidden_layers
+            num_sparse_layers = 10 if num_hidden_layers > 10 else 0
+            activation_sparsity_pattern = (0.95,) * num_sparse_layers + (0.0,) * (
+                num_hidden_layers - num_sparse_layers
+            )
 
         if (len_asp := len(activation_sparsity_pattern)) != num_hidden_layers:
             raise ValueError(
@@ -297,7 +301,7 @@ class Gemma3nAudioConfig(PretrainedConfig):
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         gradient_clipping (`float`, *optional*, defaults to 10000000000.0):
-            Clipping value used to stablize extremely large gradient values.
+            Clipping value used to stabilize extremely large gradient values.
         conf_attention_chunk_size (`int`, *optional*, defaults to 12):
             The sub-sequence size for local attention processing inside the Conformer ("conf") section of the
             Universal Speech Model.
@@ -471,10 +475,10 @@ class Gemma3nVisionConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.architecture = architecture
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
         self.model_args = model_args  # named "model_args" for BC with timm
-        self.architecture = architecture
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
         self.vocab_offset = vocab_offset

@@ -17,7 +17,6 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
@@ -260,9 +259,9 @@ class Glm4MoeRotaryEmbedding(CohereRotaryEmbedding):
     pass
 
 
-class Glm4MoeAttention(CohereAttention, nn.Module):
+class Glm4MoeAttention(CohereAttention):
     def __init__(self, config: Glm4MoeConfig, layer_idx: Optional[int] = None):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -292,9 +291,9 @@ class Glm4MoeMLP(DeepseekV3MLP):
     pass
 
 
-class Glm4MoeTopkRouter(DeepseekV3TopkRouter, nn.Module):
+class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config: Glm4MoeConfig):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts

@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -524,32 +523,15 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "ydshieh/kosmos-2.5"
+        model_name = "microsoft/kosmos-2.5"
         model = Kosmos2_5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
-        super().test_model_parallelism()
-
-    # TODO: ydshieh
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    @unittest.skip(reason="kosmos-2.5 flash attention does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     # TODO: ydshieh
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    @unittest.skip(reason="kosmos-2.5 test : the dummy inputs should be tweaked: dummy_input = inputs_dict")
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    # TODO: ydshieh
-    @require_torch_sdpa
     @require_torch_gpu
     @slow
     @unittest.skip(reason="_update_causal_mask is not implemented yet which fails this test")
@@ -586,67 +568,26 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_from_inputs_embeds(self):
         pass
 
-    # TODO: ydshieh
-    @pytest.mark.generate
-    @unittest.skip(
-        "Kosmos2_5ForConditionalGeneration returns `vision_model_output` which is currently not working with `stack_model_outputs`",
-    )
-    def test_beam_search_low_memory(self):
-        pass
-
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # Overwrite because Kosmos-2.5 need to padd pixel values and pad image-attn-mask
+        # Overwrite -- Kosmos-2.5 needs to prepare `image_embeds_position_mask`, and it must be padded accordingly
+        _, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        input_ids = inputs_dict["input_ids"]
 
-        def _prepare_model_kwargs(input_ids, attention_mask, pad_size, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            if "image_embeds_position_mask" in signature:
-                image_embeds_position_mask = torch.zeros_like(input_ids)
-                image_embeds_position_mask[:, (pad_size + 1) : pad_size + 1 + self.model_tester.latent_query_num] = 1
-                model_kwargs["image_embeds_position_mask"] = image_embeds_position_mask
-            return model_kwargs
-
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
-            flattened_patches = inputs_dict["flattened_patches"]
-            attention_mask = inputs_dict.get("attention_mask")
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
-
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, pad_size=0, signature=signature)
-            next_logits_wo_padding = model(**model_kwargs, flattened_patches=flattened_patches).logits[:, -1, :]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+        def _prepare_image_embeds_position_mask(input_ids, pad_size):
+            image_embeds_position_mask = torch.zeros(
+                input_ids.shape[0], input_ids.shape[1] + pad_size, device=torch_device, dtype=input_ids.dtype
             )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(
-                padded_input_ids, padded_attention_mask, pad_size=32, signature=signature
-            )
-            next_logits_with_padding = model(**model_kwargs, flattened_patches=flattened_patches).logits[:, -1, :]
+            image_embeds_position_mask[:, (pad_size + 1) : pad_size + 1 + self.model_tester.latent_query_num] = 1
+            return image_embeds_position_mask
 
-            # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-3))
+        # `image_embeds_position_mask` is randomly generated in `prepare_config_and_inputs_for_generate`, and it must
+        # match its padded version for the test to be valid -- we need to pass both
+        unpadded_custom_inputs = {"image_embeds_position_mask": _prepare_image_embeds_position_mask(input_ids, 0)}
+        padded_custom_inputs = {"image_embeds_position_mask": _prepare_image_embeds_position_mask(input_ids, 32)}
+        super().test_left_padding_compatibility(
+            unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
+        )
 
 
 @require_vision
@@ -678,13 +619,13 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         return generated_ids, generated_text
 
     def test_eager(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
-            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="eager"
+            repo, device_map=torch_device, dtype=dtype, attn_implementation="eager"
         )
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
@@ -715,13 +656,13 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT[self.cuda_compute_capability_major_version])
 
     def test_sdpa(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
-            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="sdpa"
+            repo, device_map=torch_device, dtype=dtype, attn_implementation="sdpa"
         )
         processor = AutoProcessor.from_pretrained(repo)
         prompt = "<ocr>"
@@ -756,15 +697,15 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_FA2(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo,
             device_map=torch_device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation="flash_attention_2",
         )
         processor = AutoProcessor.from_pretrained(repo)

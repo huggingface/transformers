@@ -272,9 +272,7 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="PaliGemma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
-    )
+    @unittest.skip(reason="PaliGemma's SigLip encoder uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -311,7 +309,7 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         """
         model = ColPaliForRetrieval.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map=torch_device,
         ).eval()
 

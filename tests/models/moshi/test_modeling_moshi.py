@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 import numpy as np
 import pytest
@@ -35,11 +36,9 @@ from transformers.testing_utils import (
     is_torch_available,
     require_torch,
     require_torch_fp16,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -194,11 +193,10 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         return logits_processor_kwargs
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
-        if use_attention_mask or (not use_attention_mask and torch_dtype == "fp32" and not output_attentions):
+        if use_attention_mask or (not use_attention_mask and dtype == "fp32" and not output_attentions):
             self.skipTest("Test is failing, fix me :) ")
         parent_parameterized_test = getattr(ModelTesterMixin, self._testMethodName)
         parent_parameterized_test(self)
@@ -605,18 +603,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_generate_continue_from_past_key_values(self):
         pass
 
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
     @unittest.skip(
         "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
     )
@@ -632,7 +618,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip(reason="Unimplemented. Relies on `test_eager_matches_sdpa_generate` to check correctness.")
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
         pass
 
@@ -643,56 +629,31 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+        # Overwrite -- Moshi needs to prepare the audio codes, and they must be padded accordingly
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        input_ids = inputs_dict["input_ids"]
+        moshi_audio_codes = inputs_dict["moshi_audio_codes"]
+        user_audio_codes = inputs_dict["user_audio_codes"]
 
-        # Then, test left-padding
+        pad_size = (input_ids.shape[0], 32)
+        padding = (
+            torch.ones((pad_size[0], self.model_tester.num_codebooks, 32), dtype=input_ids.dtype, device=torch_device)
+            * config.audio_vocab_size
+        )
+        padded_moshi_audio_codes = torch.cat((padding, moshi_audio_codes), dim=2)
+        padded_user_audio_codes = torch.cat((padding, user_audio_codes), dim=2)
 
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, input_dict = self._get_input_ids_and_config()
-            model = model_class(config).to(torch_device).eval()
+        # the audio codes are randomly generated in `prepare_config_and_inputs_for_generate`, and they must match
+        # their padded version for the test to be valid -- we need to pass both
+        unpadded_custom_inputs = {"moshi_audio_codes": moshi_audio_codes, "user_audio_codes": user_audio_codes}
+        padded_custom_inputs = {
+            "moshi_audio_codes": padded_moshi_audio_codes,
+            "user_audio_codes": padded_user_audio_codes,
+        }
+        super().test_left_padding_compatibility(
+            unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
+        )
 
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            next_logits_wo_padding = model(input_ids=input_ids, attention_mask=attention_mask, **input_dict).logits[
-                :, -1, :
-            ]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
-            )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-
-            padding = (
-                torch.ones(
-                    (pad_size[0], self.model_tester.num_codebooks, 32), dtype=input_ids.dtype, device=torch_device
-                )
-                * config.audio_vocab_size
-            )
-            padded_moshi_audio_codes = torch.cat((padding, input_dict["moshi_audio_codes"]), dim=2)
-            padded_user_audio_codes = torch.cat((padding, input_dict["user_audio_codes"]), dim=2)
-
-            model_kwargs = {
-                "input_ids": padded_input_ids,
-                "attention_mask": padded_attention_mask,
-                "moshi_audio_codes": padded_moshi_audio_codes,
-                "user_audio_codes": padded_user_audio_codes,
-            }
-
-            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
-
-    @require_torch_sdpa
     @slow
     @is_flaky(max_attempts=5, description="flaky on some models.")
     def test_eager_matches_sdpa_generate(self):
@@ -723,14 +684,14 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
                 model_sdpa = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                 ).to(torch_device)
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation="eager",
                 ).to(torch_device)
 
@@ -883,6 +844,14 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_save_load(self):
         super().test_save_load()
 
+    @pytest.mark.generate
+    @unittest.skip(reason="Moshi requires setting `model.generated_audio_codes` in generate() before preparing inputs")
+    def test_prepare_inputs_for_generation_kwargs_forwards(self):
+        # If in the future `model.generated_audio_codes` is not required, this test can be re-enabled
+        super().test_prepare_inputs_for_generation_kwargs_forwards(
+            last_hidden_state=torch.randn(2, 3, 32), kwargs_depth_decoder={}
+        )
+
 
 def place_dict_on_device(dict_to_place, device):
     for key in dict_to_place:
@@ -911,7 +880,7 @@ class MoshiIntegrationTests(unittest.TestCase):
     @slow
     def test_moshika_conditional_greedy(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshika", torch_dtype=torch.float16, device_map="auto"
+            "kmhf/hf-moshika", dtype=torch.float16, device_map="auto"
         )
         inputs = self.feature_extractor(self._load_datasample(), return_tensors="pt").to(
             device=torch_device, dtype=torch.float16
@@ -956,7 +925,7 @@ class MoshiIntegrationTests(unittest.TestCase):
     @slow
     def test_moshiko_greedy_unconditional_fp16_eager(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshiko", torch_dtype=torch.float16, device_map="auto"
+            "kmhf/hf-moshiko", dtype=torch.float16, device_map="auto"
         )
         some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
 
@@ -970,7 +939,7 @@ class MoshiIntegrationTests(unittest.TestCase):
     @slow
     def test_moshiko_greedy_unconditional_fp32(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshiko", torch_dtype=torch.float32, device_map="auto"
+            "kmhf/hf-moshiko", dtype=torch.float32, device_map="auto"
         )
 
         expected_audio_codesum = 72065
@@ -992,7 +961,7 @@ class MoshiIntegrationTests(unittest.TestCase):
     @require_torch_fp16
     def test_moshiko_greedy_unconditional_fp16(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshiko", torch_dtype=torch.float16, device_map="auto"
+            "kmhf/hf-moshiko", dtype=torch.float16, device_map="auto"
         )
 
         expected_audio_codesum = 72065
@@ -1014,7 +983,7 @@ class MoshiIntegrationTests(unittest.TestCase):
     @require_torch_fp16
     def test_moshika_greedy_unconditional_fp16(self):
         model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshika", torch_dtype=torch.float16, device_map="auto"
+            "kmhf/hf-moshika", dtype=torch.float16, device_map="auto"
         )
 
         expected_audio_codesum = 72932

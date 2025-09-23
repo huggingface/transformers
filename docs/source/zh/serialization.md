@@ -94,12 +94,6 @@ optimum-cli export onnx --model local_path --task question-answering distilbert_
 >>> outputs = model(**inputs)
 ```
 
-从 Hub 导出 TensorFlow 检查点的过程也一样。例如，以下是从 [Keras 组织](https://huggingface.co/keras-io) 导出纯 TensorFlow 检查点的命令：
-
-```bash
-optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_squad_onnx/
-```
-
 ### 使用 `optimum.onnxruntime` 将 🤗 Transformers 模型导出为 ONNX
 
 除了 CLI 之外，你还可以使用代码将 🤗 Transformers 模型导出为 ONNX，如下所示：
@@ -166,12 +160,6 @@ python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
 >>> onnx_config = DistilBertOnnxConfig(config)
 >>> print(list(onnx_config.outputs.keys()))
 ["last_hidden_state"]
-```
-
-从 Hub 导出 TensorFlow 检查点的过程也一样。导出纯 TensorFlow 检查点的示例代码如下：
-
-```bash
-python -m transformers.onnx --model=keras-io/transformers-qa onnx/
 ```
 
 要导出本地存储的模型，请将模型的权重和分词器文件保存在同一目录中（例如 `local-pt-checkpoint`），然后通过将 `transformers.onnx` 包的 `--model` 参数指向该目录，将其导出为 ONNX：

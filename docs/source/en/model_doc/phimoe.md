@@ -68,8 +68,7 @@ torch.random.manual_seed(0)
 model = AutoModelForCausalLM.from_pretrained( 
     "microsoft/Phi-3.5-MoE-instruct",  
     device_map="auto",  
-    torch_dtype="auto",  
-    trust_remote_code=True,  
+    dtype="auto",
 ) 
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct") 
@@ -102,8 +101,6 @@ print(output[0]['generated_text'])
 
 [[autodoc]] PhimoeConfig
 
-<frameworkcontent>
-<pt>
 
 ## PhimoeModel
 
@@ -121,5 +118,3 @@ print(output[0]['generated_text'])
 [[autodoc]] PhimoeForSequenceClassification
     - forward
 
-</pt>
-</frameworkcontent>

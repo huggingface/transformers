@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     nested_simplify,
     require_av,
     require_torch,
-    require_torch_or_tf,
     require_vision,
 )
 
@@ -32,7 +31,7 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 @require_vision
 @require_av
 class VideoClassificationPipelineTests(unittest.TestCase):
@@ -54,7 +53,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         self._load_dataset()
         video_classifier = VideoClassificationPipeline(
@@ -63,7 +62,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             top_k=2,
         )
         examples = [

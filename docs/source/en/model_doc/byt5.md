@@ -17,8 +17,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-    <img alt="Flax" src="https://img.shields.io/badge/Flax-29a79b.svg?style=flat&logo=flax&logoColor=white">
   </div>
 </div>
 
@@ -43,7 +41,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text2text-generation",
     model="google/byt5-small",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("translate English to French: The weather is nice today")
@@ -61,7 +59,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/byt5-small",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto"
 )
 
@@ -72,10 +70,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers">
 
 ```bash
-echo -e "translate English to French: Life is beautiful." | transformers-cli run --task text2text-generation --model google/byt5-small --device 0
+echo -e "translate English to French: Life is beautiful." | transformers run --task text2text-generation --model google/byt5-small --device 0
 ```
 
 </hfoption>
@@ -83,7 +81,7 @@ echo -e "translate English to French: Life is beautiful." | transformers-cli run
 
 ## Quantization
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends. 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
@@ -96,7 +94,7 @@ quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/byt5-xl",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -116,11 +114,11 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```python
     import torch
     from transformers import AutoModelForSeq2SeqLM
-    
+
     model = AutoModelForSeq2SeqLM.from_pretrained("google/byt5-small")
-    
+
     num_special_tokens = 3
-    
+
     input_ids = torch.tensor([list("Life is like a box of chocolates.".encode("utf-8"))]) + num_special_tokens
     labels = torch.tensor([list("La vie est comme une boîte de chocolat.".encode("utf-8"))]) + num_special_tokens
     loss = model(input_ids, labels=labels).loss

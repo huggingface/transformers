@@ -158,6 +158,11 @@ class MistralConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
 
+        if "layer_types" in kwargs:
+            logger.warning_once(
+                "Detected Mistral model with layer_types. Consider using AutoModel or Ministral classes instead to enable alternating attention compatibility."
+            )
+
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
         if rope_scaling is None:

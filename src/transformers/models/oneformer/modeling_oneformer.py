@@ -23,7 +23,6 @@ from typing import Optional, Union
 import numpy as np
 import torch
 from torch import Tensor, nn
-from torch.cuda.amp import autocast
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -322,7 +321,7 @@ class OneFormerHungarianMatcher(nn.Module):
                 align_corners=False,
             ).squeeze(1)
 
-            with autocast(enabled=False):
+            with torch.autocast(device_type="cuda", enabled=False):
                 pred_mask = pred_mask.float()
                 target_mask = target_mask.float()
 
@@ -781,7 +780,7 @@ class OneFormerPixelDecoderOutput(ModelOutput):
         or when `config.output_attentions=True`
     """
 
-    multi_scale_features: tuple[torch.FloatTensor] = None
+    multi_scale_features: Optional[tuple[torch.FloatTensor]] = None
     mask_features: Optional[torch.FloatTensor] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -806,8 +805,8 @@ class OneFormerPixelLevelModuleOutput(ModelOutput):
         1/4 scale features from the last Pixel Decoder Layer.
     """
 
-    encoder_features: list[torch.FloatTensor] = None
-    decoder_features: list[torch.FloatTensor] = None
+    encoder_features: Optional[list[torch.FloatTensor]] = None
+    decoder_features: Optional[list[torch.FloatTensor]] = None
     decoder_last_feature: Optional[torch.FloatTensor] = None
 
 
@@ -2882,7 +2881,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
         text_inputs (`list[torch.Tensor]`, *optional*):
-            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
+            Tensor of shape `(num_queries, sequence_length)` to be fed to a model
 
         Example:
 
@@ -3068,7 +3067,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
         text_inputs (`list[torch.Tensor]`, *optional*):
-            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
+            Tensor of shape `(num_queries, sequence_length)` to be fed to a model
         mask_labels (`list[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
         class_labels (`list[torch.LongTensor]`, *optional*):

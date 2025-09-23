@@ -131,6 +131,23 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    do_pad = {
+        "description": """
+    Whether to pad the image. Padding is done either to the largest size in the batch
+    or to a fixed square size per image. The exact padding strategy depends on the model.
+    """,
+        "shape": None,
+    }
+
+    pad_size = {
+        "description": """
+    The size in `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+        height and width in the batch. Applied only when `do_pad=True.`
+    """,
+        "shape": None,
+    }
+
     do_rescale = {
         "description": """
     Whether to rescale the image.
@@ -1098,7 +1115,7 @@ def contains_type(type_hint, target_type) -> tuple[bool, Optional[object]]:
     if args == ():
         try:
             return issubclass(type_hint, target_type), type_hint
-        except Exception as _:
+        except Exception:
             return issubclass(type(type_hint), target_type), type_hint
     found_type_tuple = [contains_type(arg, target_type)[0] for arg in args]
     found_type = any(found_type_tuple)
@@ -1112,6 +1129,8 @@ def get_model_name(obj):
     Get the model name from the file path of the object.
     """
     path = inspect.getsourcefile(obj)
+    if path is None:
+        return None
     if path.split(os.path.sep)[-3] != "models":
         return None
     file_name = path.split(os.path.sep)[-1]
@@ -1208,7 +1227,7 @@ def get_checkpoint_from_config_class(config_class):
     return checkpoint
 
 
-def add_intro_docstring(func, class_name, parent_class=None, indent_level=0):
+def add_intro_docstring(func, class_name, indent_level=0):
     intro_docstring = ""
     if func.__name__ == "forward":
         intro_docstring = rf"""The [`{class_name}`] forward method, overrides the `__call__` special method.
@@ -1450,9 +1469,7 @@ def find_sig_line(lines, line_end):
     return sig_line_end
 
 
-def _process_kwargs_parameters(
-    sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
-):
+def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters):
     """
     Process **kwargs parameters if needed.
 
@@ -1460,7 +1477,6 @@ def _process_kwargs_parameters(
         sig (`inspect.Signature`): Function signature
         func (`function`): Function the parameters belong to
         parent_class (`class`): Parent class of the function
-        model_name_lowercase (`str`): Lowercase model name
         documented_kwargs (`dict`): Dictionary of kwargs that are already documented
         indent_level (`int`): Indentation level
         undocumented_parameters (`list`): List to append undocumented parameters to
@@ -1491,7 +1507,7 @@ def _process_kwargs_parameters(
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
-                documented_kwargs, _ = parse_docstring(kwargs_documentation)
+                documented_kwargs = parse_docstring(kwargs_documentation)[0]
 
             # Process each kwarg parameter
             for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
@@ -1578,7 +1594,7 @@ def _process_parameters_section(
 
     # Process **kwargs parameters if needed
     kwargs_docstring = _process_kwargs_parameters(
-        sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
+        sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters
     )
     docstring += kwargs_docstring
 
@@ -1738,9 +1754,7 @@ def auto_method_docstring(
         if not docstring.strip().endswith("\n"):
             docstring += "\n"
     else:
-        docstring = add_intro_docstring(
-            func, class_name=class_name, parent_class=parent_class, indent_level=indent_level
-        )
+        docstring = add_intro_docstring(func, class_name=class_name, indent_level=indent_level)
 
     # Process Parameters section
     docstring += _process_parameters_section(
@@ -1783,9 +1797,10 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
     is_dataclass = False
     docstring_init = ""
+    docstring_args = ""
     if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
         docstring_init = auto_method_docstring(
-            cls.__init__, parent_class=cls, custom_args=custom_args
+            cls.__init__, parent_class=cls, custom_args=custom_args, checkpoint=checkpoint
         ).__doc__.replace("Args:", "Parameters:")
     elif "ModelOutput" in (x.__name__ for x in cls.__mro__):
         # We have a data class
@@ -1797,6 +1812,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             cls.__init__,
             parent_class=cls,
             custom_args=custom_args,
+            checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source(ModelOutputArgs),
         ).__doc__
     indent_level = get_indent_level(cls)
@@ -1836,7 +1852,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             docstring += docstring_args if docstring_args else "\nArgs:\n"
             source_args_dict = get_args_doc_from_source(ModelOutputArgs)
             doc_class = cls.__doc__ if cls.__doc__ else ""
-            documented_kwargs, _ = parse_docstring(doc_class)
+            documented_kwargs = parse_docstring(doc_class)[0]
             for param_name, param_type_annotation in cls.__annotations__.items():
                 param_type = str(param_type_annotation)
                 optional = False

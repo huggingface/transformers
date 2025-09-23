@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
@@ -154,6 +153,7 @@ class Gemma3TextConfig(PretrainedConfig):
         final_logit_softcapping: Optional[float] = None,
         attn_logit_softcapping: Optional[float] = None,
         rope_scaling: Optional[RopeParameters] = None,
+        use_bidirectional_attention: Optional[bool] = False,
         **kwargs,
     ):
         super().__init__(
@@ -182,6 +182,9 @@ class Gemma3TextConfig(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        self.use_bidirectional_attention = use_bidirectional_attention
+        if use_bidirectional_attention:
+            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)
@@ -191,7 +194,7 @@ class Gemma3TextConfig(PretrainedConfig):
                 "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
@@ -209,18 +212,6 @@ class Gemma3TextConfig(PretrainedConfig):
         rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
         self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
         rope_config_validation(self)
-
-    @property
-    def sliding_window_pattern(self):
-        warnings.warn(
-            "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.55.0.",
-            FutureWarning,
-        )
-        return self._sliding_window_pattern
-
-    @sliding_window_pattern.setter
-    def sliding_window_pattern(self, value):
-        self._sliding_window_pattern = value
 
 
 class Gemma3Config(PretrainedConfig):

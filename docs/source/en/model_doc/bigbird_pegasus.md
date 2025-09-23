@@ -44,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="summarization",
     model="google/bigbird-pegasus-large-arxiv",
-    torch_dtype=torch.float32,
+    dtype=torch.float32,
     device=0
 )
 pipeline("""Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
@@ -64,7 +64,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/bigbird-pegasus-large-arxiv",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -78,10 +78,10 @@ output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers">
 
 ```bash
-echo -e "Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet. Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts." | transformers-cli run --task summarization --model google/bigbird-pegasus-large-arxiv --device 0
+echo -e "Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet. Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts." | transformers run --task summarization --model google/bigbird-pegasus-large-arxiv --device 0
 ```
 
 </hfoption>
@@ -102,7 +102,7 @@ quantization_config = BitsAndBytesConfig(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/bigbird-pegasus-large-arxiv",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

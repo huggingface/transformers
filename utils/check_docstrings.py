@@ -75,11 +75,13 @@ _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
 # Args that are always overridden in the docstring, for clarity we don't want to remove them from the docstring
 ALWAYS_OVERRIDE = ["labels"]
 
-# This is a temporary list of objects to ignore while we progressively fix them. Do not add anything here, fix the
+# This is a temporary set of objects to ignore while we progressively fix them. Do not add anything here, fix the
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
-OBJECTS_TO_IGNORE = [
+OBJECTS_TO_IGNORE = {
+    "ApertusConfig",
     "Mxfp4Config",
+    "Qwen3OmniMoeConfig",
     "Exaone4Config",
     "SmolLM3Config",
     "Gemma3nVisionConfig",
@@ -127,6 +129,8 @@ OBJECTS_TO_IGNORE = [
     "BlipVisionConfig",
     "BloomConfig",
     "BloomTokenizerFast",
+    "BLTConfig",
+    "BLTPatcherConfig",
     "BridgeTowerTextConfig",
     "BridgeTowerVisionConfig",
     "BrosModel",
@@ -187,128 +191,6 @@ OBJECTS_TO_IGNORE = [
     "ErnieMTokenizer",
     "EsmConfig",
     "EsmModel",
-    "FlaxAlbertForMaskedLM",
-    "FlaxAlbertForMultipleChoice",
-    "FlaxAlbertForPreTraining",
-    "FlaxAlbertForQuestionAnswering",
-    "FlaxAlbertForSequenceClassification",
-    "FlaxAlbertForTokenClassification",
-    "FlaxAlbertModel",
-    "FlaxBartForCausalLM",
-    "FlaxBartForConditionalGeneration",
-    "FlaxBartForQuestionAnswering",
-    "FlaxBartForSequenceClassification",
-    "FlaxBartModel",
-    "FlaxBeitForImageClassification",
-    "FlaxBeitForMaskedImageModeling",
-    "FlaxBeitModel",
-    "FlaxBertForCausalLM",
-    "FlaxBertForMaskedLM",
-    "FlaxBertForMultipleChoice",
-    "FlaxBertForNextSentencePrediction",
-    "FlaxBertForPreTraining",
-    "FlaxBertForQuestionAnswering",
-    "FlaxBertForSequenceClassification",
-    "FlaxBertForTokenClassification",
-    "FlaxBertModel",
-    "FlaxBigBirdForCausalLM",
-    "FlaxBigBirdForMaskedLM",
-    "FlaxBigBirdForMultipleChoice",
-    "FlaxBigBirdForPreTraining",
-    "FlaxBigBirdForQuestionAnswering",
-    "FlaxBigBirdForSequenceClassification",
-    "FlaxBigBirdForTokenClassification",
-    "FlaxBigBirdModel",
-    "FlaxBlenderbotForConditionalGeneration",
-    "FlaxBlenderbotModel",
-    "FlaxBlenderbotSmallForConditionalGeneration",
-    "FlaxBlenderbotSmallModel",
-    "FlaxBloomForCausalLM",
-    "FlaxBloomModel",
-    "FlaxCLIPModel",
-    "FlaxDinov2ForImageClassification",
-    "FlaxDinov2Model",
-    "FlaxDistilBertForMaskedLM",
-    "FlaxDistilBertForMultipleChoice",
-    "FlaxDistilBertForQuestionAnswering",
-    "FlaxDistilBertForSequenceClassification",
-    "FlaxDistilBertForTokenClassification",
-    "FlaxDistilBertModel",
-    "FlaxElectraForCausalLM",
-    "FlaxElectraForMaskedLM",
-    "FlaxElectraForMultipleChoice",
-    "FlaxElectraForPreTraining",
-    "FlaxElectraForQuestionAnswering",
-    "FlaxElectraForSequenceClassification",
-    "FlaxElectraForTokenClassification",
-    "FlaxElectraModel",
-    "FlaxEncoderDecoderModel",
-    "FlaxGPT2LMHeadModel",
-    "FlaxGPT2Model",
-    "FlaxGPTJForCausalLM",
-    "FlaxGPTJModel",
-    "FlaxGPTNeoForCausalLM",
-    "FlaxGPTNeoModel",
-    "FlaxLlamaForCausalLM",
-    "FlaxLlamaModel",
-    "FlaxGemmaForCausalLM",
-    "FlaxGemmaModel",
-    "FlaxMBartForConditionalGeneration",
-    "FlaxMBartForQuestionAnswering",
-    "FlaxMBartForSequenceClassification",
-    "FlaxMBartModel",
-    "FlaxMarianMTModel",
-    "FlaxMarianModel",
-    "FlaxMistralForCausalLM",
-    "FlaxMistralModel",
-    "FlaxOPTForCausalLM",
-    "FlaxPegasusForConditionalGeneration",
-    "FlaxPegasusModel",
-    "FlaxRegNetForImageClassification",
-    "FlaxRegNetModel",
-    "FlaxResNetForImageClassification",
-    "FlaxResNetModel",
-    "FlaxRoFormerForMaskedLM",
-    "FlaxRoFormerForMultipleChoice",
-    "FlaxRoFormerForQuestionAnswering",
-    "FlaxRoFormerForSequenceClassification",
-    "FlaxRoFormerForTokenClassification",
-    "FlaxRoFormerModel",
-    "FlaxRobertaForCausalLM",
-    "FlaxRobertaForMaskedLM",
-    "FlaxRobertaForMultipleChoice",
-    "FlaxRobertaForQuestionAnswering",
-    "FlaxRobertaForSequenceClassification",
-    "FlaxRobertaForTokenClassification",
-    "FlaxRobertaModel",
-    "FlaxRobertaPreLayerNormForCausalLM",
-    "FlaxRobertaPreLayerNormForMaskedLM",
-    "FlaxRobertaPreLayerNormForMultipleChoice",
-    "FlaxRobertaPreLayerNormForQuestionAnswering",
-    "FlaxRobertaPreLayerNormForSequenceClassification",
-    "FlaxRobertaPreLayerNormForTokenClassification",
-    "FlaxRobertaPreLayerNormModel",
-    "FlaxSpeechEncoderDecoderModel",
-    "FlaxViTForImageClassification",
-    "FlaxViTModel",
-    "FlaxVisionEncoderDecoderModel",
-    "FlaxVisionTextDualEncoderModel",
-    "FlaxWav2Vec2ForCTC",
-    "FlaxWav2Vec2ForPreTraining",
-    "FlaxWav2Vec2Model",
-    "FlaxWhisperForAudioClassification",
-    "FlaxWhisperForConditionalGeneration",
-    "FlaxWhisperModel",
-    "FlaxWhisperTimeStampLogitsProcessor",
-    "FlaxXGLMForCausalLM",
-    "FlaxXGLMModel",
-    "FlaxXLMRobertaForCausalLM",
-    "FlaxXLMRobertaForMaskedLM",
-    "FlaxXLMRobertaForMultipleChoice",
-    "FlaxXLMRobertaForQuestionAnswering",
-    "FlaxXLMRobertaForSequenceClassification",
-    "FlaxXLMRobertaForTokenClassification",
-    "FlaxXLMRobertaModel",
     "FNetConfig",
     "FNetModel",
     "FNetTokenizerFast",
@@ -517,26 +399,6 @@ OBJECTS_TO_IGNORE = [
     "Text2TextGenerationPipeline",
     "TextClassificationPipeline",
     "TextGenerationPipeline",
-    "TFBartForConditionalGeneration",
-    "TFBartForSequenceClassification",
-    "TFBartModel",
-    "TFBertModel",
-    "TFConvNextModel",
-    "TFData2VecVisionModel",
-    "TFDeiTModel",
-    "TFEncoderDecoderModel",
-    "TFEsmModel",
-    "TFMobileViTModel",
-    "TFRagModel",
-    "TFRagSequenceForGeneration",
-    "TFRagTokenForGeneration",
-    "TFRepetitionPenaltyLogitsProcessor",
-    "TFSwinModel",
-    "TFViTModel",
-    "TFVisionEncoderDecoderModel",
-    "TFVisionTextDualEncoderModel",
-    "TFXGLMForCausalLM",
-    "TFXGLMModel",
     "TimeSeriesTransformerConfig",
     "TokenClassificationPipeline",
     "TrOCRConfig",
@@ -601,6 +463,13 @@ OBJECTS_TO_IGNORE = [
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
     "Llama4TextConfig",
+    "BltConfig",
+    "BltPatcherConfig",
+}
+# In addition to the objects above, we also ignore objects with certain prefixes. If you add an item to the list
+# below, make sure to add a comment explaining why.
+OBJECT_TO_IGNORE_PREFIXES = [
+    "_",  # Private objects are not documented
 ]
 
 # Supported math operations when interpreting the value of defaults.
@@ -1057,14 +926,10 @@ def find_matching_model_files(check_all: bool = False):
     potential_files = glob.glob(modeling_glob_pattern)
     image_processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/image_processing_*_fast.py")
     potential_files += glob.glob(image_processing_glob_pattern)
-    exclude_substrings = ["modeling_tf_", "modeling_flax_"]
     matching_files = []
     for file_path in potential_files:
         if os.path.isfile(file_path):
-            filename = os.path.basename(file_path)
-            is_excluded = any(exclude in filename for exclude in exclude_substrings)
-            if not is_excluded:
-                matching_files.append(file_path)
+            matching_files.append(file_path)
     if not check_all:
         # intersect with module_diff_files
         matching_files = sorted([file for file in matching_files if file in module_diff_files])
@@ -1542,7 +1407,11 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
     to_clean = []
     for name in dir(transformers):
         # Skip objects that are private or not documented.
-        if name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE:
+        if (
+            any(name.startswith(prefix) for prefix in OBJECT_TO_IGNORE_PREFIXES)
+            or ignore_undocumented(name)
+            or name in OBJECTS_TO_IGNORE
+        ):
             continue
 
         obj = getattr(transformers, name)

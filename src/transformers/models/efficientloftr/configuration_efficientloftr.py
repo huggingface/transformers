@@ -19,7 +19,7 @@ from ...modeling_rope_utils import rope_config_validation
 
 class EfficientLoFTRConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EffientLoFTRFromKeypointMatching`].
+    This is the configuration class to store the configuration of a [`EfficientLoFTRFromKeypointMatching`].
     It is used to instantiate a EfficientLoFTR model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     EfficientLoFTR [zju-community/efficientloftr](https://huggingface.co/zju-community/efficientloftr) architecture.
@@ -68,8 +68,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
             Kernel size used for the fine feature matching
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        embedding_size (`List`, *optional*, defaults to [15, 20]):
-            The size (height, width) of the embedding for the position embeddings.
         partial_rotary_factor (`float`, *optional*, defaults to 4.0):
             Dim factor for the RoPE embeddings, in EfficientLoFTR, frequencies should be generated for
             the whole hidden_size, so this factor is used to compensate.
@@ -128,7 +126,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
         coarse_matching_border_removal: int = 2,
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
-        embedding_size: Optional[list[int]] = None,
         partial_rotary_factor: float = 4.0,
         rope_scaling: Optional[dict] = None,
         fine_matching_slice_dim: int = 8,
@@ -160,7 +157,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         if self.hidden_size != self.out_features[-1]:
             raise ValueError(
-                f"hidden_size should be equal to the last value in out_features. hidden_size = {self.hidden_size}, out_features = {self.stage_out_channels}"
+                f"hidden_size should be equal to the last value in out_features. hidden_size = {self.hidden_size}, out_features = {self.out_features[-1]}"
             )
 
         self.activation_function = activation_function
@@ -184,7 +181,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.fine_matching_regress_temperature = fine_matching_regress_temperature
 
         self.num_key_value_heads = num_attention_heads
-        self.embedding_size = embedding_size if embedding_size is not None else [15, 20]
         self.partial_rotary_factor = partial_rotary_factor
         self.initializer_range = initializer_range
 

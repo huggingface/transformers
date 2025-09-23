@@ -23,7 +23,6 @@ from typing import Callable, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_rope_utils import dynamic_rope_update

@@ -13,12 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-05-31 and added to Hugging Face Transformers on 2025-08-18.*
 
 # Ovis2
 
 ## Overview
 
-The [Ovis2](https://github.com/AIDC-AI/Ovis) is an updated version of the [Ovis](https://arxiv.org/abs/2405.20797) model developed by the AIDC-AI team at Alibaba International Digital Commerce Group. 
+The [Ovis2](https://github.com/AIDC-AI/Ovis) is an updated version of the [Ovis](https://huggingface.co/papers/2405.20797) model developed by the AIDC-AI team at Alibaba International Digital Commerce Group. 
 
 Ovis2 is the latest advancement in multi-modal large language models (MLLMs), succeeding Ovis1.6. It retains the architectural design of the Ovis series, which focuses on aligning visual and textual embeddings, and introduces major improvements in data curation and training methods.
 
@@ -44,7 +45,7 @@ device = f"{infer_device()}:0"
 
 model = AutoModelForVision2Seq.from_pretrained(
     "thisisiron/Ovis2-2B-hf",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 ).eval().to(device)
 processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-2B-hf")
 

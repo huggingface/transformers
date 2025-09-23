@@ -28,7 +28,7 @@ from ...image_utils import (
     ImageInput,
     get_image_size,
     infer_channel_dimension_format,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -51,7 +51,7 @@ DEFAULT_FONT_PATH = "ybelkada/fonts"
 # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
-    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape
+    Utility function to extract patches from a given image tensor. Returns a tensor of shape
     (1, `rows`, `columns`, `num_channels`x `patch_height` x `patch_width`).
 
     Args:
@@ -207,7 +207,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             rendered onto the input images.
     """
 
-    model_input_names = ["flattened_patches"]
+    model_input_names = ["flattened_patches", "attention_mask"]
 
     def __init__(
         self,
@@ -316,9 +316,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         """
         Normalize an image. image = (image - image_mean) / image_std.
 
-        The image std is to mimic the tensorflow implementation of the `per_image_standardization`:
-        https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization
-
         Args:
             image (`np.ndarray`):
                 Image to normalize.
@@ -361,10 +358,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         """
         Preprocess an image or batch of images. The processor first computes the maximum possible number of
         aspect-ratio preserving patches of size `patch_size` that can be extracted from the image. It then pads the
-        image with zeros to make the image respect the constraint of `max_patches`. Before extracting the patches the
-        images are standardized following the tensorflow implementation of `per_image_standardization`
-        (https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization).
-
+        image with zeros to make the image respect the constraint of `max_patches`.
 
         Args:
             images (`ImageInput`):
@@ -382,10 +376,8 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -407,13 +399,10 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         if kwargs.get("data_format") is not None:
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         # PIL RGBA images are converted to RGB
         if do_convert_rgb:

@@ -55,7 +55,7 @@ from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcess
 
 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto"
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
@@ -83,7 +83,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-    video_fps=1,
+    fps=1,
 
     # kwargs to be passed to `Qwen2-5-OmniProcessor`
     padding=True,
@@ -111,7 +111,7 @@ from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5Omni
 
 model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
@@ -168,7 +168,7 @@ from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcess
 
 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto"
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
@@ -288,7 +288,7 @@ The model supports both text and audio outputs, if users do not need audio outpu
 ```python
 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     enable_audio_output=False,
 )
@@ -299,7 +299,7 @@ In order to obtain a flexible experience, we recommend that users set `enable_au
 ```python
 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     enable_audio_output=True,
 )
@@ -336,7 +336,7 @@ from transformers import Qwen2_5OmniForConditionalGeneration
 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
 ```

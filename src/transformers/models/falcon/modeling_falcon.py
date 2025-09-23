@@ -18,7 +18,6 @@ import math
 from typing import Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
@@ -258,7 +257,6 @@ class FalconAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
 
         self.is_causal = True
-        self._use_sdpa = config._attn_implementation == "sdpa"
         self.layer_idx = layer_idx
         if layer_idx is None:
             logger.warning_once(
@@ -381,7 +379,11 @@ class FalconAttention(nn.Module):
             key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
 
         kv_length = key_layer.shape[-2]
-        if self._use_sdpa and query_layer.device.type == "cuda" and attention_mask is not None:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and query_layer.device.type == "cuda"
+            and attention_mask is not None
+        ):
             # For torch<=2.1.2, SDPA with memory-efficient backend is bugged with non-contiguous inputs with custom attn_mask,
             # Reference: https://github.com/pytorch/pytorch/issues/112577.
             query_layer = query_layer.contiguous()
@@ -392,7 +394,7 @@ class FalconAttention(nn.Module):
             attention_mask = attention_mask[:, :, :, : key_layer.shape[-2]]
 
         if alibi is None:
-            if self._use_sdpa and not output_attentions:
+            if self.config._attn_implementation == "sdpa" and not output_attentions:
                 # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
                 # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
                 # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not
@@ -424,7 +426,7 @@ class FalconAttention(nn.Module):
             return attn_output, attention_scores
 
         else:
-            if self._use_sdpa and not output_attentions and head_mask is None:
+            if self.config._attn_implementation == "sdpa" and not output_attentions and head_mask is None:
                 # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
                 # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
                 is_causal = self.is_causal and attention_mask is None and query_length > 1
@@ -714,8 +716,6 @@ class FalconPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, FalconLinear)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -753,8 +753,6 @@ class FalconModel(FalconPreTrainedModel):
 
         # Transformer blocks
         self.h = nn.ModuleList([FalconDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
@@ -818,12 +816,8 @@ class FalconModel(FalconPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
-
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         # Compute alibi tensor: check build_alibi_tensor documentation
         alibi = None
@@ -1170,7 +1164,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1296,7 +1290,7 @@ class FalconForTokenClassification(FalconPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,

@@ -18,11 +18,11 @@
 from typing import Callable, Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -218,7 +218,7 @@ class Phi3PreTrainedModel(MistralPreTrainedModel):
     _version = "0.0.5"
 
 
-class Phi3ForCausalLM(MistralForCausalLM, Phi3PreTrainedModel):
+class Phi3ForCausalLM(MistralForCausalLM):
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -245,7 +245,8 @@ class Phi3ForCausalLM(MistralForCausalLM, Phi3PreTrainedModel):
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
 
-        model_inputs = Phi3PreTrainedModel().prepare_inputs_for_generation(
+        model_inputs = GenerationMixin.prepare_inputs_for_generation(
+            self,
             input_ids=input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,

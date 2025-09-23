@@ -11,25 +11,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from logging import Logger
 import os
+import sys
+from logging import Logger
 from threading import Event, Thread
 from time import perf_counter, sleep
 from typing import Optional
-import sys
+
 
 # Add the parent directory to Python path to import benchmarks_entrypoint
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from benchmarks_entrypoint import MetricsRecorder
-
 import gpustat
 import psutil
 import psycopg2
+from benchmarks_entrypoint import MetricsRecorder
+
 
 # Optional heavy ML dependencies - only required when actually running the benchmark
 try:
     import torch
+
     from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
+
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
@@ -63,7 +66,13 @@ def collect_metrics(benchmark_id, continue_metric_collection, metrics_recorder):
 
 
 def run_benchmark(
-    logger: Logger, repository: str, branch: str, commit_id: str, commit_msg: str, metrics_recorder=None, num_tokens_to_generate=100
+    logger: Logger,
+    repository: str,
+    branch: str,
+    commit_id: str,
+    commit_msg: str,
+    metrics_recorder=None,
+    num_tokens_to_generate=100,
 ):
     # Check if required ML dependencies are available
     if not TRANSFORMERS_AVAILABLE:
@@ -71,11 +80,11 @@ def run_benchmark(
         logger.error("pip install torch transformers")
         logger.error("Skipping LLaMA benchmark due to missing dependencies.")
         return
-    
+
     continue_metric_collection = Event()
     metrics_thread = None
     model_id = "meta-llama/Llama-2-7b-hf"
-    
+
     # If no metrics_recorder is provided, create one for backward compatibility
     if metrics_recorder is None:
         try:
@@ -106,12 +115,12 @@ def run_benchmark(
 
         logger.info("downloading weights")
         # This is to avoid counting download in model load time measurement
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
         gen_config = GenerationConfig(do_sample=False, top_p=1, temperature=1)
         logger.info("loading model")
         start = perf_counter()
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, generation_config=gen_config
+            model_id, dtype=torch.float16, generation_config=gen_config
         ).eval()
         model.to(device)
         torch.cuda.synchronize()
@@ -154,7 +163,7 @@ def run_benchmark(
         # First eager forward pass
         logger.info("running first eager forward pass")
         start = perf_counter()
-        outputs = model(**inputs)
+        _ = model(**inputs)
         torch.cuda.synchronize()
         end = perf_counter()
         first_eager_fwd_pass_time = end - start
@@ -163,7 +172,7 @@ def run_benchmark(
         # Second eager forward pass (should be faster)
         logger.info("running second eager forward pass")
         start = perf_counter()
-        outputs = model(**inputs)
+        _ = model(**inputs)
         torch.cuda.synchronize()
         end = perf_counter()
         second_eager_fwd_pass_time = end - start
@@ -252,7 +261,7 @@ def run_benchmark(
 
         logger.info("compiling model")
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, generation_config=gen_config)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16, generation_config=gen_config)
         model.to(device)
         model = torch.compile(model, mode="max-autotune", fullgraph=True)
 
@@ -339,7 +348,7 @@ def run_benchmark(
     continue_metric_collection.set()
     if metrics_thread is not None:
         metrics_thread.join()
-    
+
     # Only close the recorder if we created it locally
     if should_close_recorder:
-        metrics_recorder.close() 
+        metrics_recorder.close()

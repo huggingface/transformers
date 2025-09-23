@@ -236,7 +236,7 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 }
 ```
 
-这会启用`optimizer offload `和一些其他重要功能。您可以尝试不同的buffer大小，有关详细信息，请参见下面的讨论。
+这会启用`optimizer offload`和一些其他重要功能。您可以尝试不同的buffer大小，有关详细信息，请参见下面的讨论。
 
 关于这种启用类型的实际使用示例，请参阅 [此帖](https://github.com/huggingface/transformers/issues/8771#issuecomment-759176685)。
 
@@ -1650,7 +1650,7 @@ trainer = Trainer(model=model, args=training_args, ...)
 
 有关此方法和其他相关功能的完整详细信息，请参阅[构建大模型](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models)。
 
-此外，在加载fp16预训练模型时，您希望`from_pretrained`使用`torch_dtype=torch.float16`。详情请参见[from_pretrained-torch-dtype](#from_pretrained-torch-dtype)。
+此外，在加载fp16预训练模型时，您希望`from_pretrained`使用`dtype=torch.float16`。详情请参见[from_pretrained-torch-dtype](#from_pretrained-torch-dtype)。
 
 
 #### 参数收集

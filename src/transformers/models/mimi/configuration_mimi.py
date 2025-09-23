@@ -121,7 +121,7 @@ class MimiConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-            Initiale scale of the residual rescaling operation done in the Transformer models.
+            Initial scale of the residual rescaling operation done in the Transformer models.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
     Example:

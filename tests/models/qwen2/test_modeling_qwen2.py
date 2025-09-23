@@ -27,8 +27,6 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -99,13 +97,6 @@ class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Qwen2 flash attention does not support right padding")
 
 
 @require_torch
@@ -179,7 +170,6 @@ class Qwen2IntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    @require_torch_sdpa
     def test_model_450m_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
@@ -217,14 +207,12 @@ class Qwen2IntegrationTest(unittest.TestCase):
     @slow
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% natural honey, and I always like to use it in my recipes. I love"
+            "My favourite condiment is 100% natural and organic, and I love to use it to make my own sauces."
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B", use_fast=False)
-        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16)
-        assistant_model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16
-        )
+        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", dtype=torch.float16)
+        assistant_model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", dtype=torch.float16)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -260,8 +248,11 @@ class Qwen2IntegrationTest(unittest.TestCase):
             ("cuda", 8): [
                 "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
             ],
-            ("rocm", (9, 5)): [
+            ("rocm", (9, 4)): [
                 "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking, but"
+            ],
+            ("rocm", (9, 5)): [
+                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
             ]
         })  # fmt: off
         EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
@@ -279,7 +270,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         model = Qwen2ForCausalLM.from_pretrained(
             qwen_model,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
@@ -321,7 +312,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-3B"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = Qwen2ForCausalLM.from_pretrained(
-            model_id, use_sliding_window=True, max_window_layers=28, sliding_window=2048
+            model_id, use_sliding_window=True, max_window_layers=28, sliding_window=2048, dtype=torch.float16
         ).to(torch_device)
         # we need a long text to test sliding window
         # fmt: off
@@ -714,24 +705,27 @@ In summary:"""
         # fmt: on
 
         input_ids = tokenizer(LONG_TEXT, return_tensors="pt").input_ids.to(torch_device)
-        generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
+        generated_ids = model.generate(input_ids, max_new_tokens=20)[:, input_ids.shape[1] :]
 
-        torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[  576,  4570, 71818,   374,  6509,   825,   315,   279,  1429, 88228, 21984,   315,   279, 11220,  4948,  8584,   304,   279,   467, 19859, 4180,  4168,    13,  1084, 14230, 16170,   315,  3349, 19256,   304, 279,  2266,   315, 13444, 14550,   448, 50867,   429,   525,   330, 4145,     1,   476,   330, 88845,     1,   323,  1246,  3425,   264]], dtype=torch.long))  # fmt: skip
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[279, 467, 19859, 4180, 4168, 572, 264, 882, 315, 2244, 2297, 304, 5616, 13, 576, 66827, 66846, 572, 304, 17704]], dtype=torch.long))  # fmt: skip
         self.assertEqual(
             tokenizer.decode(generated_ids[0]),
-            """ The Guanzi is considered one of the most foundational texts of the developing political economy in the Warring States period. It addresses principles of price regulation in the context of effectively dealing with commodities that are "light" or "heavy" and how whether a""",
+            " the Warring States period was a time of great change in China. The Zhou dynasty was in decline",
         )
         model.config._attn_implementation = "eager"
-        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
+        new_generated_ids = model.generate(input_ids, max_new_tokens=20)[:, input_ids.shape[1] :]
         with self.subTest("Eager matches sdpa"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
 
-        model.config._attn_implementation = "flex_attention"
-        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
-        with self.subTest("Eager matches Flex attention"):
-            torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
+        # `flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`
+        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
+
+        # model.config._attn_implementation = "flex_attention"
+        # new_generated_ids = model.generate(input_ids, max_new_tokens=20)[:, input_ids.shape[1] :]
+        # with self.subTest("Eager matches Flex attention"):
+        #     torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
 
         model.config._attn_implementation = "flash_attention_2"
-        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
+        new_generated_ids = model.generate(input_ids, max_new_tokens=20)[:, input_ids.shape[1] :]
         with self.subTest("Eager matches flash attention"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)

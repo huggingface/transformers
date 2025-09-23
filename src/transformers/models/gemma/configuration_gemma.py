@@ -57,9 +57,6 @@ class GemmaConfig(PretrainedConfig):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The legacy activation function. It is overwritten by the `hidden_activation`.
-        hidden_activation (`str` or `function`, *optional*):
-            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
-            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -122,7 +119,6 @@ class GemmaConfig(PretrainedConfig):
         num_key_value_heads: Optional[int] = 16,
         head_dim: Optional[int] = 256,
         hidden_act: Optional[str] = "gelu_pytorch_tanh",
-        hidden_activation: Optional[int] = None,
         max_position_embeddings: Optional[int] = 8192,
         initializer_range: Optional[float] = 0.02,
         rms_norm_eps: Optional[int] = 1e-6,
@@ -145,7 +141,6 @@ class GemmaConfig(PretrainedConfig):
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
-        self.hidden_activation = hidden_activation
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache

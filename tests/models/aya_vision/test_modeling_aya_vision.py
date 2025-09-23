@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -72,7 +71,7 @@ class AyaVisionVisionText2TextModelTester:
             "vocab_size": 99,
             "hidden_size": 128,
             "intermediate_size": 37,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "output_channels": 64,
             "hidden_act": "silu",
@@ -183,69 +182,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
-    @unittest.skip("Cohere2's forcefully disables sdpa due to softcapping")
-    def test_sdpa_can_dispatch_non_composite_models(self):
-        pass
-
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training(self):
         pass
@@ -262,7 +198,7 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -298,13 +234,13 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         # Use 4-bit on T4
         device_type, major, _ = get_device_properties()
         load_in_4bit = (device_type == "cuda") and (major < 8)
-        torch_dtype = None if load_in_4bit else torch.float16
+        dtype = None if load_in_4bit else torch.float16
 
         if cls.model is None:
             cls.model = AyaVisionForConditionalGeneration.from_pretrained(
                 cls.model_checkpoint,
                 device_map=torch_device,
-                torch_dtype=torch_dtype,
+                dtype=dtype,
                 load_in_4bit=load_in_4bit,
             )
         return cls.model
@@ -443,7 +379,10 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        },
                         {"type": "text", "text": "Describe this image"},
                     ],
                 },

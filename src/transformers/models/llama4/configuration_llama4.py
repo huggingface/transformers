@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 
 from typing import Optional
 
@@ -59,7 +60,6 @@ class Llama4VisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        vision_feature_layer (``, *optional*, defaults to -1): TODO
         vision_feature_select_strategy (`int`, *optional*, defaults to `"default"`): TODO
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -97,7 +97,6 @@ class Llama4VisionConfig(PretrainedConfig):
         image_size: Optional[int] = 448,
         patch_size: Optional[int] = 14,
         norm_eps: Optional[float] = 1e-5,
-        vision_feature_layer: Optional[int] = -1,
         vision_feature_select_strategy: Optional[str] = "default",
         initializer_range: Optional[float] = 0.02,
         pixel_shuffle_ratio: Optional[float] = 0.5,
@@ -126,7 +125,6 @@ class Llama4VisionConfig(PretrainedConfig):
         self.multi_modal_projector_bias = multi_modal_projector_bias
         self.projector_dropout = projector_dropout
         self.attention_dropout = attention_dropout
-        self.vision_feature_layer = vision_feature_layer
         self.vision_feature_select_strategy = vision_feature_select_strategy
 
         # Validate the correctness of rotary position embeddings parameters
@@ -139,6 +137,19 @@ class Llama4VisionConfig(PretrainedConfig):
             rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
         self.rope_scaling = rope_scaling
         rope_config_validation(self)
+
+        @property
+        def vision_feature_layer(self):
+            warnings.warn(
+                "The `vision_feature_layer` attribute is deprecated and will be removed in v4.58.0.",
+                FutureWarning,
+            )
+            return self._vision_feature_layer
+
+        @vision_feature_layer.setter
+        def vision_feature_layer(self, value):
+            self._vision_feature_layer = value
+
         super().__init__(**kwargs)
 
 
@@ -387,7 +398,7 @@ class Llama4TextConfig(PretrainedConfig):
             self.layer_types = [
                 "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type

@@ -17,9 +17,8 @@ rendered properly in your Markdown viewer.
 # Callbacks
 
 Callbacks are objects that can customize the behavior of the training loop in the PyTorch
-[`Trainer`] (this feature is not yet implemented in TensorFlow) that can inspect the training loop
-state (for progress reporting, logging on TensorBoard or other ML platforms...) and take decisions (like early
-stopping).
+[`Trainer`] that can inspect the training loop state (for progress reporting, logging on TensorBoard or other ML
+platforms...) and take decisions (like early stopping).
 
 Callbacks are "read only" pieces of code, apart from the [`TrainerControl`] object they return, they
 cannot change anything in the training loop. For customizations that require changes in the training loop, you should
@@ -48,7 +47,7 @@ By default, `TrainingArguments.report_to` is set to `"all"`, so a [`Trainer`] wi
 - [`~integrations.DVCLiveCallback`] if [dvclive](https://dvc.org/doc/dvclive) is installed.
 - [`~integrations.SwanLabCallback`] if [swanlab](http://swanlab.cn/) is installed.
 
-If a package is installed but you don't wish to use the accompanying integration, you can change `TrainingArguments.report_to` to a list of just those integrations you want to use (e.g. `["azure_ml", "wandb"]`). 
+If a package is installed but you don't wish to use the accompanying integration, you can change `TrainingArguments.report_to` to a list of just those integrations you want to use (e.g. `["azure_ml", "wandb"]`).
 
 The main class that implements callbacks is [`TrainerCallback`]. It gets the
 [`TrainingArguments`] used to instantiate the [`Trainer`], can access that

@@ -94,7 +94,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxialiary loss coefficient
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxiliary loss coefficient
         shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
         position_embedding_type (`str`, *optional*): Positional embedding
             type to be used; defaults to None. Allowed options: `[None, "rope"]`

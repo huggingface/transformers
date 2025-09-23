@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-            <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -45,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="summarization",
     model="allenai/led-base-16384",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("""Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
@@ -66,7 +65,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "allenai/led-base-16384",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto"
 )
 
@@ -85,10 +84,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers">
 
 ```bash
-!echo -e "Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet. Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts." | transformers-cli run --task summarization --model allenai/led-base-16384 --device 0
+!echo -e "Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet. Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts." | transformers run --task summarization --model allenai/led-base-16384 --device 0
 ```
 </hfoption>
 </hfoptions>
@@ -108,7 +107,7 @@ quantization_config = BitsAndBytesConfig(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "allenai/led-large-16384",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -173,15 +172,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] models.led.modeling_led.LEDSeq2SeqQuestionAnsweringModelOutput
 
-[[autodoc]] models.led.modeling_tf_led.TFLEDEncoderBaseModelOutput
-
-[[autodoc]] models.led.modeling_tf_led.TFLEDSeq2SeqModelOutput
-
-[[autodoc]] models.led.modeling_tf_led.TFLEDSeq2SeqLMOutput
-
-<frameworkcontent>
-<pt>
-
 ## LEDModel
 
 [[autodoc]] LEDModel
@@ -201,22 +191,3 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] LEDForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFLEDModel
-
-[[autodoc]] TFLEDModel
-    - call
-
-## TFLEDForConditionalGeneration
-
-[[autodoc]] TFLEDForConditionalGeneration
-    - call
-
-</tf>
-</frameworkcontent>
-
-
-
