@@ -70,23 +70,23 @@ jobs:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
           COMMENT_DATE: ${{ github.event.comment.created_at }}
         run: |
-            git fetch origin refs/pull/$PR_NUMBER/head:refs/remotes/pull/$PR_NUMBER/head
-            git checkout refs/remotes/pull/$PR_NUMBER/head
-            echo "PR_HEAD_SHA: $(git log -1 --format=%H)"
-            echo "PR_HEAD_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
-            git fetch origin refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge
-            git checkout refs/remotes/pull/$PR_NUMBER/merge
-            echo "PR_MERGE_SHA: $(git log -1 --format=%H)"
-            echo "PR_MERGE_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
-            PR_MERGE_COMMIT_TIMESTAMP=$(git log -1 --date=unix --format=%cd)
-            echo "PR_MERGE_COMMIT_TIMESTAMP: $PR_MERGE_COMMIT_TIMESTAMP"
-            COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
-            echo "COMMENT_DATE: $COMMENT_DATE"
-            echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
-            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
-              echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
-              exit -1;
-            fi
+          git fetch origin refs/pull/$PR_NUMBER/head:refs/remotes/pull/$PR_NUMBER/head
+          git checkout refs/remotes/pull/$PR_NUMBER/head
+          echo "PR_HEAD_SHA: $(git log -1 --format=%H)"
+          echo "PR_HEAD_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
+          git fetch origin refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge
+          git checkout refs/remotes/pull/$PR_NUMBER/merge
+          echo "PR_MERGE_SHA: $(git log -1 --format=%H)"
+          echo "PR_MERGE_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
+          PR_MERGE_COMMIT_TIMESTAMP=$(git log -1 --date=unix --format=%cd)
+          echo "PR_MERGE_COMMIT_TIMESTAMP: $PR_MERGE_COMMIT_TIMESTAMP"
+          COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+          echo "COMMENT_DATE: $COMMENT_DATE"
+          echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+          if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+            echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+            exit -1;
+          fi
 
   # use a python script to handle this complex logic
   # case 1: `run-slow` (auto. infer with limited number of models, but in particular, new model)
@@ -108,11 +108,11 @@ jobs:
         env:
           VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
         run: |
-            PR_MERGE_SHA=$(git log -1 --format=%H)
-            if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
-              echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
-              exit -1;
-            fi
+          PR_MERGE_SHA=$(git log -1 --format=%H)
+          if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
+            echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
+            exit -1;
+          fi
 
       - name: Get models to test
         env:
@@ -185,9 +185,15 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.get-tests.outputs.models) }}
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type:
+          [
+            aws-g5-4xlarge-cache,
+            aws-g5-12xlarge-cache,
+            amd-mi325-ci-1gpu,
+            amd-mi325-ci-2gpu,
+          ]
     runs-on:
-       group: '${{ matrix.machine_type }}'
+      group: "${{ matrix.machine_type }}"
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -294,7 +300,7 @@ jobs:
         folders: ${{ fromJson(needs.get-tests.outputs.quantizations) }}
         machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
-      group: '${{ matrix.machine_type }}'
+      group: "${{ matrix.machine_type }}"
     container:
       image: huggingface/transformers-quantization-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
