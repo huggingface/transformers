@@ -1628,28 +1628,20 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
 
         # If classifier_pooling is "cls", isolate the <cls> token
         if self.config.classifier_pooling == "cls":
+            indices_0 = torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device)
             # for left or right padding, <cls> is the first non-pad token
             if attention_mask is not None:
-                indices_0 = torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device)
-                cls_mask = attention_mask.argmax(dim=-1)
+                cls_mask = attention_mask.argmax(dim=-1).to(last_hidden_state.device)
             # if no pad, <cls> is the first token
             else:
-                indices_0 = slice(None)
-                cls_mask = 0
+                cls_mask = torch.tensor(0, dtype=torch.long, device=last_hidden_state.device)
             # extract the <cls> token for the logits
             last_hidden_state = last_hidden_state[indices_0, cls_mask]
-            # and for for the hidden states if they are returned
-            if outputs.hidden_states is not None:
-                outputs.hidden_states = tuple(hs[indices_0, cls_mask] for hs in outputs.hidden_states)
 
         # If classifier_pooling is "mean", pool the hidden states by averaging over the sequence length
         elif self.config.classifier_pooling == "mean":
             num_non_pad_tokens = attention_mask.sum(dim=1, keepdim=True)
             last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / num_non_pad_tokens
-            if outputs.hidden_states is not None:
-                outputs.hidden_states = tuple(
-                    (hs * attention_mask.unsqueeze(-1)).sum(dim=1) / num_non_pad_tokens for hs in outputs.hidden_states
-                )
 
         pooled_output = self.head(last_hidden_state)
         pooled_output = self.drop(pooled_output)
