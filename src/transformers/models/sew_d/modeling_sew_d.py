@@ -509,7 +509,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         (output,) = ctx.saved_tensors
-        inputGrad = softmax_backward_data(ctx, grad_output, output, ctx.dim, output)
+        inputGrad = softmax_backward_data(ctx, grad_output, output)
         return inputGrad, None, None
 
     @staticmethod
