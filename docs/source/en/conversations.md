@@ -130,10 +130,42 @@ some messages to VLMs to be text-only - you don't need to include an image every
 
 ## Chatting with "reasoning" models
 
-Since late 2024, we have started to see the appearance of "reasoning" models, also known as "chain of thought" models.
-These models write a step-by-step reasoning process before their final answer.
+"Reasoning" models, also known as "chain of thought" models, have recently exploded
+in popularity. Many high-profile recent model releases, such as [Deepseek-R1](https://huggingface.co/deepseek-ai/DeepSeek-R1-0528) 
+and [gpt-oss](https://huggingface.co/openai/gpt-oss-20b) are reasoning models.
+These models write a step-by-step reasoning process before their final answer, allowing them to "think deeply" 
+before answering.
 
-TODO example and show response parsing
+Chatting with a reasoning model is exactly the same as any other text chat model, but you should be aware that its
+response will include a "thinking" block as well as the "content" block. Let's see an example:
+
+```python
+from transformers import pipeline
+
+chat = [
+    {
+        "role": "user",
+        "content": "How many Rs are there in the word 'strawberry'?"
+    }
+]
+
+pipe = pipeline(task="text-generation", model="HuggingFaceTB/SmolLM3-3B", dtype="auto", device_map="auto")
+# max_new_tokens should be high for reasoning models, because they need space to write their thoughts!
+out = pipe(text=messages, max_new_tokens=1024)
+
+print(out[0]['generated_text'][-1])
+```
+
+(TODO Merge the response schema PR to SmolLM-3B so this actually works!)
+
+Note that the returned message contains both `content` and `thinking` blocks. You should usually append the entire
+message dict to the chat history. Although some models discard the `thinking` trace of previous messages, most
+chat templates can handle dropping it correctly. You should generally include it unless you're certain it isn't needed!
+
+> [!TIP]
+Parsing a message into `content` and `thinking` depends on the [response parsing](./chat_response_parsing) feature. Some
+models may not have a response schema yet, and so this will not work for them. In these cases, you will have to manually
+parse the model output. We're working hard on adding response parsing support to new models!
 
 ## Performance and memory usage
 
