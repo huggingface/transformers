@@ -74,15 +74,6 @@ def test_attention_sinks():
         print("After calling flex_attention_new...")
         print("Status: SUCCESS")
         print(f"Output: {new_result}")
-
-        # Additional check for attention sink execution
-        if device.type != "cpu" and s_aux is not None:
-            print("✓ Attention sink logic should have been executed (CUDA device + s_aux provided)")
-        elif device.type == "cpu":
-            print("⚠ Attention sink logic was SKIPPED (CPU device, return_lse=False)")
-        else:
-            print("⚠ Attention sink logic was SKIPPED (s_aux is None)")
-
     except Exception as e:
         e = str(e).split("\n")[:2]
         print(f"Status: FAILED - {e}")
