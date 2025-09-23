@@ -1233,7 +1233,7 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
         embeddings instead of randomly initialized word embeddings.
     """
 
-    def __init__(self, config: XLMProphetNetConfig, word_embeddings: nn.Embedding = None):
+    def __init__(self, config: XLMProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
         super().__init__(config)
 
         self.word_embeddings = (

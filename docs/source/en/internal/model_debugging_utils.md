@@ -237,8 +237,7 @@ identical, but not quite. Looking through the file differences makes it easier t
 
 ### Limitations and scope
 
-This feature will only work for torch-based models, and would require more work and case-by-case approach for say
-`jax`-based models that are usually compiled. Models relying heavily on external kernel calls may work, but trace will
+This feature will only work for torch-based models. Models relying heavily on external kernel calls may work, but trace will
 probably miss some things. Regardless, any python implementation that aims at mimicking another implementation can be
 traced once instead of reran N times with breakpoints.
 

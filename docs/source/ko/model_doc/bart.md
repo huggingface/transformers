@@ -129,8 +129,6 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
     - all
 
 
-<frameworkcontent>
-<pt>
 
 ## BartModel[[transformers.BartModel]]
 
@@ -157,8 +155,6 @@ BART를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 [[autodoc]] BartForCausalLM
     - forward
 
-</pt>
-</frameworkcontent>
 
 
 
