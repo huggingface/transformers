@@ -72,7 +72,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             return
 
-        if not torch.cuda.is_available():
+        if not (torch.cuda.is_available() or torch.xpu.is_available()):
             if self.pre_quantized:
                 logger.warning_once(
                     "Using MXFP4 quantized models requires a GPU, we will default to dequantizing the model to bf16"
@@ -85,9 +85,13 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
 
-        compute_capability = torch.cuda.get_device_capability()
-        gpu_is_supported = compute_capability >= (7, 5)
-        kernels_available = is_triton_available("3.4.0") and is_kernels_available()
+        if torch.xpu.is_available():
+            gpu_is_supported = True
+            kernels_available = is_triton_available("3.5.0") and is_kernels_available()
+        else:
+            compute_capability = torch.cuda.get_device_capability()
+            gpu_is_supported = compute_capability >= (7, 5)
+            kernels_available = is_triton_available("3.4.0") and is_kernels_available()
 
         if self.pre_quantized:
             # On unsupported GPUs or without kernels, we will dequantize the model to bf16
