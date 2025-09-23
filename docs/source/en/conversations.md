@@ -48,7 +48,7 @@ transformers chat -h
 
 The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating). It uses the `transformers serve` CLI under the hood ([docs](./serving.md#serve-cli)).
 
-## TextGenerationPipeline
+## Using pipelines to chat
 
 [`TextGenerationPipeline`] is a high-level text generation class with a "chat mode". Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
 
@@ -92,9 +92,52 @@ print(response[0]["generated_text"][-1]["content"])
 By repeating this process, you can continue the conversation as long as you like, at least until the model runs out of context window
 or you run out of memory.
 
+## Including images in chats
+
+Some models, known as vision-language models (VLMs), can accept images as part of the chat input. When loading a VLM, you
+should use the `ImageTextToTextPipeline`, which you can load by setting the `task` argument of `pipeline` to `image-text-to-text`. It works very similarly to
+the `TextGenerationPipeline` above, but we can add `image` keys to our messages:
+
+```py
+messages = [
+    {
+        "role": "system",
+        "content": [{"type": "text", "text": "You are a friendly chatbot who always responds in the style of a pirate"}],
+    },
+    {
+      "role": "user",
+      "content": [
+            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+            {"type": "text", "text": "What are these?"},
+        ],
+    },
+]
+```
+
+Now we just create our pipeline and get a response as before, using the `image-text-to-text` task:
+
+```py
+import torch
+from transformers import pipeline
+
+pipe = pipeline("image-text-to-text", model="Qwen/Qwen2.5-VL-3B-Instruct", device_map="auto", dtype="auto")
+out = pipe(text=messages, max_new_tokens=128)
+print(out[0]['generated_text'][-1]['content'])
+```
+
+And as above, you can continue the conversation by appending your reply to the `messages` list. It's okay for
+some messages to VLMs to be text-only - you don't need to include an image every time!
+
+## Chatting with "reasoning" models
+
+Since late 2024, we have started to see the appearance of "reasoning" models, also known as "chain of thought" models.
+These models write a step-by-step reasoning process before their final answer.
+
+TODO example and show response parsing
+
 ## Performance and memory usage
 
-Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! Use the `torch_dtype="auto"` argument, which generally uses `bfloat16` for models that were trained with it, to reduce your memory usage.
+Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! Use the `dtype="auto"` argument, which generally uses `bfloat16` for models that were trained with it, to reduce your memory usage.
 
 > [!TIP]
 > Refer to the [Quantization](./quantization/overview) docs for more information about the different quantization backends available.
