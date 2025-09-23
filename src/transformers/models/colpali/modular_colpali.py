@@ -136,7 +136,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         )
         suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
-        return_token_type_ids = suffix is not None
+        return_token_type_ids = True
 
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
@@ -167,7 +167,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             inputs = self.tokenizer(
                 input_strings,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -197,14 +197,11 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             batch_query = self.tokenizer(
                 texts_query,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
             return batch_query
-
-    def model_input_names(self):
-        raise AttributeError("Paligemma now always returns token_type_ids.")
 
     def process_images(
         self,
