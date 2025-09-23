@@ -52,6 +52,7 @@ dataset = dataset.map(tokenize, batched=True)
 
 > [!TIP]
 > Fine-tune on a smaller subset of the full dataset to reduce the time it takes. The results won't be as good compared to fine-tuning on the full dataset, but it is useful to make sure everything works as expected first before committing to training on the full dataset.
+>
 > ```py
 > small_train = dataset["train"].shuffle(seed=42).select(range(1000))
 > small_eval = dataset["test"].shuffle(seed=42).select(range(1000))

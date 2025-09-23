@@ -52,6 +52,7 @@ Start with a smaller dataset by including the `max_train_samples`, `max_eval_sam
 
 > [!WARNING]
 > Not all example scripts support the `max_predict_samples` parameter. Run the command below to check whether a script supports it or not.
+>
 > ```bash
 > examples/pytorch/summarization/run_summarization.py -h
 > ```
