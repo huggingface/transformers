@@ -189,7 +189,7 @@ model.generate(**formatted_chat)
 
 ## Model training
 
-Training a model with a chat template is a good way to ensure the template matches the tokens the model was trained on. Apply the chat template as a preprocessing step to your dataset. Set `add_generation_prompt=False` because the additional tokens to prompt an assistant response aren’t helpful during training.
+Training a model with a chat template is a good way to ensure the template matches the tokens the model was trained on. Apply the chat template as a preprocessing step to your dataset. Set `add_generation_prompt=False` because the additional tokens to prompt an assistant response aren't helpful during training.
 
 An example of preprocessing a dataset with a chat template is shown below.
 
