@@ -127,7 +127,6 @@ for output in outputs:
     print(f"Result: {output['generated_text']}")
 ```
 
-
 While the basic few-shot prompting approach embedded examples within a single text string, the chat template format offers the following benefits.
 
 - The model may have a potentially improved understanding because it can better recognize the pattern and the expected roles of user input and assistant output.

@@ -30,7 +30,6 @@ rendered properly in your Markdown viewer.
 
 This architecture turns out to coincide with Qwen2, with the main difference being the presence of biases in attention projections in Ministral.
 
-
 You can find the Ministral checkpoints under the [Mistral AI](https://huggingface.co/mistralai) organization.
 
 ## Usage

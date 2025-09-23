@@ -61,7 +61,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - Check out the Time Series Transformer blog-post in HuggingFace blog: [Probabilistic Time Series Forecasting with 🤗 Transformers](https://huggingface.co/blog/time-series-transformers)
 
-
 ## TimeSeriesTransformerConfig
 
 [[autodoc]] TimeSeriesTransformerConfig

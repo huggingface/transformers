@@ -81,7 +81,6 @@ for out in tqdm(pipe(KeyDataset(dataset, "file"))):
 
 For ease of use, a generator is also possible:
 
-
 ```python
 from transformers import pipeline
 
@@ -196,7 +195,6 @@ This is a occasional very long sentence compared to the other. In that case, the
 tokens long, so the whole batch will be [64, 400] instead of [64, 4], leading to the high slowdown. Even worse, on
 bigger batches, the program simply crashes.
 
-
 ```
 ------------------------------
 Streaming no batching
@@ -245,7 +243,6 @@ multiple forward pass of a model. Under normal circumstances, this would yield i
 In order to circumvent this issue, both of these pipelines are a bit specific, they are `ChunkPipeline` instead of
 regular `Pipeline`. In short:
 
-
 ```python
 preprocessed = pipe.preprocess(inputs)
 model_outputs = pipe.forward(preprocessed)
@@ -253,7 +250,6 @@ outputs = pipe.postprocess(model_outputs)
 ```
 
 Now becomes:
-
 
 ```python
 all_model_outputs = []
@@ -282,7 +278,6 @@ If you want to override a specific pipeline.
 Don't hesitate to create an issue for your task at hand, the goal of the pipeline is to be easy to use and support most
 cases, so `transformers` could maybe support your use case.
 
-
 If you want to try simply you can:
 
 - Subclass your pipeline of choice
@@ -301,7 +296,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ```
 
 That should enable you to do all the custom code you want.
-
 
 ## Implementing a pipeline
 
@@ -328,7 +322,6 @@ Pipelines available for audio tasks include the following.
 [[autodoc]] TextToAudioPipeline
     - __call__
     - all
-
 
 ### ZeroShotAudioClassificationPipeline
 

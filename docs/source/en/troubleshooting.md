@@ -34,7 +34,6 @@ Sometimes errors occur, but we are here to help! This guide covers some of the m
 
 For more details about troubleshooting and getting help, take a look at [Chapter 8](https://huggingface.co/course/chapter8/1?fw=pt) of the Hugging Face course.
 
-
 ## Firewalled environments
 
 Some GPU instances on cloud and intranet setups are firewalled to external connections, resulting in a connection error. When your script attempts to download model weights or datasets, the download will hang and then timeout with the following message:

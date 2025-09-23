@@ -38,5 +38,3 @@ You are now ready to use your local model in Cursor! For instance, if you toggle
 <h3 align="center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_serve_cursor_chat.png"/>
 </h3>
-
-

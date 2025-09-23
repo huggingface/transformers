@@ -71,8 +71,6 @@ logits = outputs.logits # shape [batch, num_labels, height, width]
 
 </hfoptions>
 
-
-
 ## Notes
 
 - SegFormer works with **any input size**, padding inputs to be divisible by `config.patch_sizes`.

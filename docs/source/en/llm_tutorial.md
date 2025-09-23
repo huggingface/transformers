@@ -35,6 +35,7 @@ Before you begin, it's helpful to install [bitsandbytes](https://hf.co/docs/bits
 ```bash
 !pip install -U transformers bitsandbytes
 ```
+
 Bitsandbytes supports multiple backends in addition to CUDA-based GPUs. Refer to the multi-backend installation [guide](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend) to learn more.
 
 Load a LLM with [`~PreTrainedModel.from_pretrained`] and add the following two parameters to reduce the memory requirements.
@@ -153,7 +154,6 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 | `num_beams` | `int` | When set to `>1`, activates the beam search algorithm. Beam search is good on input-grounded tasks. Check [this guide](./generation_strategies) for more information. |
 | `repetition_penalty` | `float` | Set it to `>1.0` if you're seeing the model repeat itself often. Larger values apply a larger penalty. |
 | `eos_token_id` | `list[int]` | The token(s) that will cause generation to stop. The default value is usually good, but you can specify a different token. |
-
 
 ## Pitfalls
 

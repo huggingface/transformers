@@ -110,7 +110,6 @@ See example below for a translation from romanian to german:
 - [Translation task guide](../tasks/translation)
 - [Summarization task guide](../tasks/summarization)
 
-
 ## NllbMoeConfig
 
 [[autodoc]] NllbMoeConfig
@@ -135,4 +134,3 @@ See example below for a translation from romanian to german:
 
 [[autodoc]] NllbMoeForConditionalGeneration
     - forward
-

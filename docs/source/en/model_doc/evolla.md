@@ -75,7 +75,6 @@ Tips:
 - This model was contributed by [Xibin Bayes Zhou](https://huggingface.co/XibinBayesZhou).
 - The original code can be found [here](https://github.com/westlake-repl/Evolla).
 
-
 ## EvollaConfig
 
 [[autodoc]] EvollaConfig

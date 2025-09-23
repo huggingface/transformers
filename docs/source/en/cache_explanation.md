@@ -59,10 +59,8 @@ Refer to the table below to compare how caching improves efficiency.
 
 | without caching | with caching |
 |---|---|
-| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V` 
+| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V`
 | attention cost per step is **quadratic** with sequence length | attention cost per step is **linear** with sequence length (memory grows linearly, but compute/token remains low) |
-
-
 
 ## Cache class
 
@@ -143,7 +141,6 @@ Cache position is used internally for two purposes:
 
 The generation loop usually takes care of the cache position, but if you're writing a custom generation method, it is important that cache positions are accurate since they are used to write and read key/value states into fixed slots.
 
-
 ```py
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache, infer_device
@@ -159,7 +156,6 @@ inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, ret
 generated_ids = model.generate(**inputs, use_cache=True, max_new_tokens=10)
 
 ```
-
 
 ## Legacy cache format
 

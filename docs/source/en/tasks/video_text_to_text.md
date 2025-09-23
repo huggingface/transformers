@@ -18,9 +18,9 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Video-text-to-text models, also known as video language models or vision language models with video input, are language models that take a video input. These models can tackle various tasks, from video question answering to video captioning. 
+Video-text-to-text models, also known as video language models or vision language models with video input, are language models that take a video input. These models can tackle various tasks, from video question answering to video captioning.
 
-These models have nearly the same architecture as [image-text-to-text](../image_text_to_text) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos. Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`". 
+These models have nearly the same architecture as [image-text-to-text](../image_text_to_text) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos. Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`".
 
 In this guide, we provide a brief overview of video LMs and show how to use them with Transformers for inference.
 
@@ -37,7 +37,7 @@ Let's begin installing the dependencies.
 pip install -q transformers accelerate flash_attn 
 ```
 
-Let's initialize the model and the processor. 
+Let's initialize the model and the processor.
 
 ```python
 from transformers import LlavaProcessor, LlavaForConditionalGeneration
@@ -49,7 +49,7 @@ processor = LlavaProcessor.from_pretrained(model_id)
 model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.float16)
 ```
 
-Some models directly consume the `<video>` token, and others accept `<image>` tokens equal to the number of sampled frames. This model handles videos in the latter fashion. We will write a simple utility to handle image tokens, and another utility to get a video from a url and sample frames from it. 
+Some models directly consume the `<video>` token, and others accept `<image>` tokens equal to the number of sampled frames. This model handles videos in the latter fashion. We will write a simple utility to handle image tokens, and another utility to get a video from a url and sample frames from it.
 
 ```python
 import uuid
@@ -130,7 +130,7 @@ prompt = "<|im_start|>user"+ toks + f"\n{user_prompt}<|im_end|><|im_start|>assis
 inputs = processor(text=prompt, images=videos, return_tensors="pt").to(model.device, model.dtype)
 ```
 
-We can now call [`~GenerationMixin.generate`] for inference. The model outputs the question in our input and answer, so we only take the text after the prompt and `assistant` part from the model output. 
+We can now call [`~GenerationMixin.generate`] for inference. The model outputs the question in our input and answer, so we only take the text after the prompt and `assistant` part from the model output.
 
 ```python
 output = model.generate(**inputs, max_new_tokens=100, do_sample=False)
@@ -141,6 +141,6 @@ print(processor.decode(output[0][2:], skip_special_tokens=True)[len(user_prompt)
 
 ```
 
-And voila! 
+And voila!
 
 To learn more about chat templates and token streaming for video-text-to-text models, refer to the [image-text-to-text](../tasks/image_text_to_text) task guide because these models work similarly.

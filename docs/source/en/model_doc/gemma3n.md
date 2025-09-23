@@ -147,6 +147,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
         },
     ]
     ```
+
 -   Text passed to the processor should have a `<image_soft_token>` token wherever an image should be inserted.
 -   Gemma 3n accept at most one target audio clip per input, though multiple audio clips can be provided in few-shot
     prompts, for example.

@@ -86,6 +86,7 @@ echo -e "Plant create energy through a process known as photosynthesis." | trans
     inputs = ["Life is like a box of chocolates.", "You never know what you gonna get."]
     encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt")
     ```
+
 - CANINE is primarily designed to be fine-tuned on a downstream task. The pretrained model can be used for either masked language modeling or next sentence prediction.
 
 ## CanineConfig
