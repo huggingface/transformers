@@ -384,8 +384,6 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         if vision_feature_select_strategy == "default":
             selected_video_features = selected_video_features[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            pass
 
         # Same as image features except that video has pooling layer
         video_features = self.vision_resampler(selected_video_features)
