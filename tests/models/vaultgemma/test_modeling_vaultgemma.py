@@ -24,7 +24,6 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     DynamicCache,
-    VaultGemmaConfig,
     is_torch_available,
     pipeline,
 )
@@ -42,7 +41,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
