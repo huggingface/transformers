@@ -23,8 +23,8 @@ from transformers import (
     AddedToken,
     AutoConfig,
     AutoTokenizer,
-    LlavaConfig,
-    LlavaForConditionalGeneration,
+    FastVlmConfig,
+    FastVlmForConditionalGeneration,
     LlavaProcessor,
     CLIPImageProcessor,
 )
@@ -118,7 +118,7 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     vision_config.model_args = {"inference_mode": True}
     vision_config.hidden_size = vision_config.num_features
 
-    config = LlavaConfig(
+    config = FastVlmConfig(
         text_config=text_config,
         vision_config=vision_config,
     )
@@ -137,7 +137,7 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
     processor.patch_size = 64 # effective patch size (2^6)
 
-    model = LlavaForConditionalGeneration(config)
+    model = FastVlmForConditionalGeneration(config)
 
     state_dict = load_original_state_dict(old_state_dict_id)
     state_dict = convert_state_dict_to_hf(state_dict)
