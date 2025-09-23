@@ -24,12 +24,9 @@ from torch import nn
 from torch.nn import BCELoss
 
 from ..modeling_utils import PreTrainedModel
-from ..utils import ModelOutput, is_torch_available, logging
+from ..utils import ModelOutput, logging
 from .configuration_utils import PretrainedConfig, WatermarkingConfig
-
-
-if is_torch_available():
-    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
+from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
