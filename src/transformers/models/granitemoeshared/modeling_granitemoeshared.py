@@ -728,6 +728,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
+        position_embeddings = None
         if self.config.position_embedding_type == "rope":
             position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 

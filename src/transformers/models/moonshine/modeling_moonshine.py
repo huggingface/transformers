@@ -571,6 +571,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             [MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)]
         )
         self.layer_norm = nn.LayerNorm(embed_dim, bias=False)
+        self.rotary_emb = MoonshineRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -622,12 +623,14 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

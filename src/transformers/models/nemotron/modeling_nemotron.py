@@ -16,7 +16,7 @@
 """PyTorch Nemotron model."""
 
 import math
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import dynamic_rope_update, extract_rope_scaling_dict_from_config
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_scaling_dict_from_config
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -92,20 +92,40 @@ class NemotronLayerNorm1P(nn.LayerNorm):
 class NemotronRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    # Ignore copy
     def __init__(self, config: NemotronConfig, device=None, layer_type=None):
-        super().__init__()
-
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
-        self.rope_type = "default"  # Diff with Llama
-
-        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device, layer_type=layer_type)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
         self.config = config
+
+        self.layer_types = getattr(config, "layer_types", [None])
+        self.rope_type = {}
+        inv_freq, attention_scaling = {}, {}
+        for layer_type in self.layer_types:
+            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            if rope_params is None:
+                continue
+
+            curr_rope_type = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if curr_rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+            self.rope_type[layer_type] = curr_rope_type
+            inv_freq[layer_type] = curr_inv_freq
+            attention_scaling[layer_type] = curr_attention_scaling
+
+        if len(self.layer_types) == 1:
+            self.rope_type = self.rope_type[self.layer_types[0]]
+            self.attention_scaling = attention_scaling[self.layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[self.layer_types[0]]
+        else:
+            for layer_type in self.layer_types:
+                if layer_type in inv_freq:
+                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
 
     @staticmethod
     def compute_default_rope_parameters(

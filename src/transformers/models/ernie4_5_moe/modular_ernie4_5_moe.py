@@ -51,6 +51,11 @@ class Ernie4_5_MoeMLP(Qwen3MoeMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
 
+class Ernie4_5_MoeRotaryEmbedding(Ernie4_5RotaryEmbedding):
+    def __init__(self, config: Ernie4_5_MoeConfig, device=None):
+        super().__init__(config, device)
+
+
 class Ernie4_5_MoeAttention(LlamaAttention):
     def __init__(self, config: Ernie4_5_MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -236,6 +241,7 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
             [Ernie4_5_MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Ernie4_5_MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Ernie4_5_MoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -282,9 +288,13 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
 
         hidden_states = inputs_embeds
 
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
+                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
