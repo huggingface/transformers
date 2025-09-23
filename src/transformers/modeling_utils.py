@@ -2945,20 +2945,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Since this is applied recursively in a depth-first manner, a module is already initialized if and only if
         # all its children are also already initialized, and all its immediate `nn.Parameter` and persistent buffers
         # are also already initialized
-        if (
-            all(getattr(child, "_is_hf_initialized", False) for child in module.children())
-            and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
-            and all(
-                getattr(buffer, "_is_hf_initialized", False)
-                for buffer in module.buffers(recurse=False)
-                if buffer not in module._non_persistent_buffers_set
-            )
-        ):
-            # Mark the module itself as initialized so that higher modules in the graph see it
-            module._is_hf_initialized = True
+        if getattr(module, "_is_hf_initialized", False):
             return
-
-        # In this case, we need to init
         self._init_weights(module)
         module._is_hf_initialized = True
 
@@ -5864,6 +5852,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if key not in missing_keys:
                 param_or_buffer = self.get_parameter_or_buffer(key)
                 param_or_buffer._is_hf_initialized = True
+
+        def set_is_initialized_for_modules(module):
+            # A module is already initialized if and only if all its children are also already initialized, and all
+            # its immediate `nn.Parameter` and persistent buffers are also already initialized
+            if (
+                all(getattr(child, "_is_hf_initialized", False) for child in module.children())
+                and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+                and all(
+                    getattr(buffer, "_is_hf_initialized", False)
+                    for buffer in module.buffers(recurse=False)
+                    if buffer not in module._non_persistent_buffers_set
+                )
+            ):
+                module._is_hf_initialized = True
+
+        # Set the flag on the modules as well. We do it recursively (depth-first), as it's more efficient (we do not
+        # need to check the entire state dict of each module, only the immediate children, so we only iterate once over
+        # each param)
+        self.apply(set_is_initialized_for_modules)
 
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
