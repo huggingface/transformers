@@ -1,10 +1,20 @@
-"""
-Processor class for VibeVoice models.
-"""
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Feature extractor class for VibeVoice."""
 
 import os
-import json
-import warnings
 from typing import List, Optional, Union, Dict, Any
 
 import numpy as np
@@ -16,83 +26,36 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class AudioNormalizer:
+def normalize_audio(audio: np.ndarray, target_dB_FS: float = -25, eps: float = 1e-6) -> np.ndarray:
     """
-    Audio normalization class for VibeVoice tokenizer.
+    Normalize audio to target dB FS level and avoid clipping.
     
-    This class provides audio normalization to ensure consistent input levels
-    for the VibeVoice tokenizer while maintaining audio quality.
+    Args:
+        audio (np.ndarray): Input audio signal
+        target_dB_FS (float): Target dB FS level for the audio. Default: -25
+        eps (float): Small value to avoid division by zero. Default: 1e-6
+        
+    Returns:
+        np.ndarray: Normalized audio signal
     """
+    # Adjust to target dB FS
+    rms = np.sqrt(np.mean(audio**2))
+    scalar = 10 ** (target_dB_FS / 20) / (rms + eps)
+    audio = audio * scalar
     
-    def __init__(self, target_dB_FS: float = -25, eps: float = 1e-6):
-        """
-        Initialize the audio normalizer.
-        
-        Args:
-            target_dB_FS (float): Target dB FS level for the audio. Default: -25
-            eps (float): Small value to avoid division by zero. Default: 1e-6
-        """
-        self.target_dB_FS = target_dB_FS
-        self.eps = eps
+    # Avoid clipping
+    max_val = np.max(np.abs(audio))
+    if max_val > 1.0:
+        audio = audio / (max_val + eps)
     
-    def tailor_dB_FS(self, audio: np.ndarray) -> tuple:
-        """
-        Adjust the audio to the target dB FS level.
-        
-        Args:
-            audio (np.ndarray): Input audio signal
-            
-        Returns:
-            tuple: (normalized_audio, rms, scalar)
-        """
-        rms = np.sqrt(np.mean(audio**2))
-        scalar = 10 ** (self.target_dB_FS / 20) / (rms + self.eps)
-        normalized_audio = audio * scalar
-        return normalized_audio, rms, scalar
-    
-    def avoid_clipping(self, audio: np.ndarray, scalar: Optional[float] = None) -> tuple:
-        """
-        Avoid clipping by scaling down if necessary.
-        
-        Args:
-            audio (np.ndarray): Input audio signal
-            scalar (float, optional): Explicit scaling factor
-            
-        Returns:
-            tuple: (normalized_audio, scalar)
-        """
-        if scalar is None:
-            max_val = np.max(np.abs(audio))
-            if max_val > 1.0:
-                scalar = max_val + self.eps
-            else:
-                scalar = 1.0
-        
-        return audio / scalar, scalar
-    
-    def __call__(self, audio: np.ndarray) -> np.ndarray:
-        """
-        Normalize the audio by adjusting to target dB FS and avoiding clipping.
-        
-        Args:
-            audio (np.ndarray): Input audio signal
-            
-        Returns:
-            np.ndarray: Normalized audio signal
-        """
-        # First adjust to target dB FS
-        audio, _, _ = self.tailor_dB_FS(audio)
-        # Then avoid clipping
-        audio, _ = self.avoid_clipping(audio)
-        return audio
+    return audio
 
 
-# Change from ProcessorMixin to FeatureExtractionMixin which is designed for single components
-class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
+class VibeVoiceFeatureExtractor(FeatureExtractionMixin):
     """
-    Processor for VibeVoice acoustic tokenizer models.
-    
-    This processor handles audio preprocessing for VibeVoice models, including:
+    Feature extractor for VibeVoice acoustic tokenizer models.
+
+    This feature extractor handles audio preprocessing for VibeVoice models, including:
     - Audio format conversion (stereo to mono)
     - Optional audio normalization
     - Streaming support for infinite-length audio
@@ -117,12 +80,8 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         
         self.sampling_rate = sampling_rate
         self.normalize_audio = normalize_audio
-        
-        # Initialize audio normalizer if needed
-        if self.normalize_audio:
-            self.normalizer = AudioNormalizer(target_dB_FS=target_dB_FS, eps=eps)
-        else:
-            self.normalizer = None
+        self.target_dB_FS = target_dB_FS
+        self.eps = eps
         
         # Save config
         self.feature_extractor_dict = {
@@ -180,8 +139,8 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         audio = self._ensure_mono(audio)
         
         # Normalize if requested
-        if self.normalize_audio and self.normalizer is not None:
-            audio = self.normalizer(audio)
+        if self.normalize_audio:
+            audio = normalize_audio(audio, self.target_dB_FS, self.eps)
         
         return audio
     
@@ -218,6 +177,8 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
                 f"Input sampling rate ({sampling_rate}) differs from expected "
                 f"sampling rate ({self.sampling_rate}). Please resample your audio."
             )
+
+        import pudb; pudb.set_trace()
         
         # Handle different input types
         if isinstance(audio, str):
@@ -480,4 +441,4 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         return audio
 
 
-__all__ = ["VibeVoiceTokenizerProcessor", "AudioNormalizer"]
+__all__ = ["VibeVoiceFeatureExtractor"]

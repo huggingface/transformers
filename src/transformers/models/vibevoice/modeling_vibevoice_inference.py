@@ -4,8 +4,6 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 
-from ..auto import AutoModel, AutoModelForCausalLM
-
 from ...generation import GenerationMixin, GenerationConfig, LogitsProcessor, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -16,15 +14,11 @@ from .configuration_vibevoice import VibeVoiceConfig
 from .modular_vibevoice_tokenizer import VibeVoiceTokenizerStreamingCache, VibeVoiceTokenizerEncoderOutput
 from .modular_vibevoice_diffusion_head import VibeVoiceDiffusionHead
 
-from .modular_vibevoice_text_tokenizer import VibeVoiceTextTokenizer, VibeVoiceTextTokenizerFast
-
 from .modeling_vibevoice import VibeVoiceModel, VibeVoicePreTrainedModel
 from .audio_streamer import AudioStreamer, AsyncAudioStreamer
 
 logger = logging.get_logger(__name__)
 
-# if not hasattr(modeling_utils, "ALL_PARALLEL_STYLES") or modeling_utils.ALL_PARALLEL_STYLES is None:
-#     modeling_utils.ALL_PARALLEL_STYLES = ["tp", "none", "colwise", "rowwise"]
 
 @dataclass
 class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
@@ -133,10 +127,6 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
     
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-    
-    def set_speech_tokenizers(self, acoustic_tokenizer=None, semantic_tokenizer=None):
-        """Set the speech tokenizers used for encoding and decoding speech."""
-        self.model.set_speech_tokenizers(acoustic_tokenizer, semantic_tokenizer)
     
     def set_ddpm_inference_steps(self, num_steps=None):
         self.ddpm_inference_steps = num_steps or self.config.diffusion_head_config.ddpm_num_inference_steps
@@ -308,13 +298,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         inputs: Optional[torch.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        synced_gpus: Optional[bool] = None,
-        assistant_model: Optional["PreTrainedModel"] = None,
         audio_streamer: Optional[Union[AudioStreamer, AsyncAudioStreamer]] = None,
-        negative_prompt_ids: Optional[torch.Tensor] = None,
-        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         speech_tensors: Optional[torch.FloatTensor] = None,
         speech_masks: Optional[torch.BoolTensor] = None,
         speech_input_mask: Optional[torch.BoolTensor] = None,
@@ -340,6 +324,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         Returns:
             Generated token sequences and optionally speech outputs
         """
+
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         parsed_scripts = kwargs.pop("parsed_scripts", None)
@@ -515,8 +500,9 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                     negative_model_kwargs['attention_mask'][sample_idx, :] = 0
                     negative_model_kwargs['attention_mask'][sample_idx, -1] = 1
                 # update past key values
-                for layer_idx, (k_cache, v_cache) in enumerate(zip(negative_model_kwargs['past_key_values'].key_cache, 
-                                                                        negative_model_kwargs['past_key_values'].value_cache)):
+                for layer_idx in range(len(negative_model_kwargs['past_key_values'])):
+                    k_cache = negative_model_kwargs['past_key_values'].layers[layer_idx].keys
+                    v_cache = negative_model_kwargs['past_key_values'].layers[layer_idx].values
                     # Process each non-diffusion sample
                     for sample_idx in diffusion_start_indices.tolist():
                         # Shift cache for this sample
@@ -568,8 +554,9 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                         negative_model_kwargs['attention_mask'][sample_idx, start_idx] = 0
 
                     # 2. Update past_key_values
-                    for layer_idx, (k_cache, v_cache) in enumerate(zip(negative_model_kwargs['past_key_values'].key_cache, 
-                                                                        negative_model_kwargs['past_key_values'].value_cache)):
+                    for layer_idx in range(len(negative_model_kwargs['past_key_values'])):
+                        k_cache = negative_model_kwargs['past_key_values'].layers[layer_idx].keys
+                        v_cache = negative_model_kwargs['past_key_values'].layers[layer_idx].values
                         # Process each non-diffusion sample
                         for sample_idx, start_idx in zip(non_diffusion_indices.tolist(), start_indices.tolist()):
                             if start_idx + 1 < k_cache.shape[2] - 1:
@@ -670,9 +657,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             eps = torch.cat([half_eps, half_eps], dim=0)
             speech = self.model.noise_scheduler.step(eps, t, speech).prev_sample
         return speech[: len(speech) // 2]
-    
 
-AutoModelForCausalLM.register(VibeVoiceConfig, VibeVoiceForConditionalGenerationInference)
 
 __all__ = [
     "VibeVoiceForConditionalGenerationInference",

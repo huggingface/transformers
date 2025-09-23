@@ -281,6 +281,4 @@ class VibeVoiceDiffusionHead(PreTrainedModel):
 
 AutoModel.register(VibeVoiceDiffusionHeadConfig, VibeVoiceDiffusionHead)
 
-__all__ = [
-    "VibeVoiceDiffusionHead",
-]
+__all__ = ["VibeVoiceDiffusionHead"]

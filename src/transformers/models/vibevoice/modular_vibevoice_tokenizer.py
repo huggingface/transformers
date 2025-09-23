@@ -1,7 +1,7 @@
 import math
 import typing as tp
 from functools import partial
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 import copy
 
@@ -10,7 +10,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...models.auto import AutoModel
 from ...utils import logging
 from ...modeling_utils import PreTrainedModel
 from ...activations import ACT2FN
@@ -71,39 +70,6 @@ class ConvRMSNorm(RMSNorm):
         output = output.transpose(1, 2)  # b t ... -> b ... t
         return output
 
-# Convolutional layers and utilities
-CONV_NORMALIZATIONS = frozenset(['none', 'weight_norm', 'spectral_norm',
-                                'time_layer_norm', 'layer_norm', 'time_group_norm'])
-
-
-def apply_parametrization_norm(module: nn.Module, norm: str = 'none') -> nn.Module:
-    assert norm in CONV_NORMALIZATIONS
-    if norm == 'weight_norm':
-        return nn.utils.weight_norm(module)
-    elif norm == 'spectral_norm':
-        return nn.utils.spectral_norm(module)
-    else:
-        # We already check was in CONV_NORMALIZATION, so any other choice
-        # doesn't need reparametrization.
-        return module
-
-
-def get_norm_module(module: nn.Module, causal: bool = False, norm: str = 'none', **norm_kwargs) -> nn.Module:
-    """Return the proper normalization module. If causal is True, this will ensure the returned
-    module is causal, or return an error if the normalization doesn't support causal evaluation.
-    """
-    assert norm in CONV_NORMALIZATIONS
-    if norm == 'layer_norm':
-        assert isinstance(module, nn.modules.conv._ConvNd)
-        return ConvLayerNorm(module.out_channels, **norm_kwargs)
-    elif norm == 'time_group_norm':
-        if causal:
-            raise ValueError("GroupNorm doesn't support causal evaluation.")
-        assert isinstance(module, nn.modules.conv._ConvNd)
-        return nn.GroupNorm(1, module.out_channels, **norm_kwargs)
-    else:
-        return nn.Identity()
-
 
 def get_extra_padding_for_conv1d(x: torch.Tensor, kernel_size: int, stride: int,
                                 padding_total: int = 0) -> int:
@@ -143,31 +109,23 @@ def unpad1d(x: torch.Tensor, paddings: tp.Tuple[int, int]):
 
 class NormConv1d(nn.Module):
     """Wrapper around Conv1d and normalization applied to this conv"""
-    def __init__(self, *args, causal: bool = False, norm: str = 'none',
-                norm_kwargs: tp.Dict[str, tp.Any] = {}, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__()
-        self.conv = apply_parametrization_norm(nn.Conv1d(*args, **kwargs), norm)
-        self.norm = get_norm_module(self.conv, causal, norm, **norm_kwargs)
-        self.norm_type = norm
+        self.conv = nn.Conv1d(*args, **kwargs)
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.norm(x)
         return x
 
 
 class NormConvTranspose1d(nn.Module):
     """Wrapper around ConvTranspose1d and normalization applied to this conv"""
-    def __init__(self, *args, causal: bool = False, norm: str = 'none',
-                norm_kwargs: tp.Dict[str, tp.Any] = {}, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__()
-        self.convtr = apply_parametrization_norm(nn.ConvTranspose1d(*args, **kwargs), norm)
-        self.norm = get_norm_module(self.convtr, causal, norm, **norm_kwargs)
-        self.norm_type = norm
+        self.convtr = nn.ConvTranspose1d(*args, **kwargs)
 
     def forward(self, x):
         x = self.convtr(x)
-        x = self.norm(x)
         return x
 
 
@@ -245,8 +203,7 @@ class SConv1d(nn.Module):
                 pad_mode: str = 'reflect'):
         super().__init__()
         self.conv = NormConv1d(in_channels, out_channels, kernel_size, stride,
-                            dilation=dilation, groups=groups, bias=bias, causal=causal,
-                            norm=norm, norm_kwargs=norm_kwargs)
+                            dilation=dilation, groups=groups, bias=bias)
         self.causal = causal
         self.pad_mode = pad_mode
         
@@ -406,8 +363,7 @@ class SConvTranspose1d(nn.Module):
                 norm: str = 'none', trim_right_ratio: float = 1.,
                 norm_kwargs: tp.Dict[str, tp.Any] = {}, bias: bool = True):
         super().__init__()
-        self.convtr = NormConvTranspose1d(in_channels, out_channels, kernel_size, stride,
-                                        causal=causal, norm=norm, norm_kwargs=norm_kwargs, bias=bias)
+        self.convtr = NormConvTranspose1d(in_channels, out_channels, kernel_size, stride, bias=bias)
         self.causal = causal
         self.trim_right_ratio = trim_right_ratio
         assert self.causal or self.trim_right_ratio == 1., \
@@ -1166,8 +1122,6 @@ class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
         sampled_latents, _ = self.sampling(encoder_output, dist_type='none')
         return None, sampled_latents
 
-AutoModel.register(VibeVoiceAcousticTokenizerConfig, VibeVoiceAcousticTokenizerModel)
-AutoModel.register(VibeVoiceSemanticTokenizerConfig, VibeVoiceSemanticTokenizerModel)
 
 __all__ = [
     "VibeVoiceTokenizerStreamingCache",

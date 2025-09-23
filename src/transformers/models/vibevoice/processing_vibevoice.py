@@ -1,20 +1,40 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
-import warnings
 from typing import List, Optional, Union, Dict, Any, Tuple
 import os
 import re
+import json
+
+from ...audio_utils import AudioInput, make_list_of_audio
+from .feature_extraction_vibevoice import VibeVoiceFeatureExtractor
+from .tokenization_vibevoice_fast import VibeVoiceTextTokenizerFast
 
 import numpy as np
 import torch
 
+from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType, logging
-from .vibevoice_audio_processor import AudioNormalizer
+from .feature_extraction_vibevoice import normalize_audio
 
 logger = logging.get_logger(__name__)
 
 
-class VibeVoiceProcessor:
+class VibeVoiceProcessor(ProcessorMixin):
     r"""
     Constructs a VibeVoice processor which wraps a VibeVoice tokenizer and audio processor into a single processor.
 
@@ -24,20 +44,23 @@ class VibeVoiceProcessor:
     Args:
         tokenizer (`VibeVoiceTextTokenizer` or `VibeVoiceTextTokenizerFast`):
             The tokenizer for text processing.
-        audio_processor (`VibeVoiceTokenizerProcessor`):
+        audio_processor (`VibeVoiceFeatureExtractor`):
             The audio processor for speech processing.
         speech_tok_compress_ratio (`int`, *optional*, defaults to 3200):
             The compression ratio for speech tokenization.
         db_normalize (`bool`, *optional*, defaults to True):
             Whether to apply decibel normalization to audio inputs.
     """
+    # TODO `audio_processor` or `feature_extractor`
+    # TODO: add audio tokenizer?
+    attributes = ["audio_processor", "tokenizer"]
+    audio_processor_class = "VibeVoiceFeatureExtractor"
+    tokenizer_class = ("VibeVoiceTextTokenizer", "VibeVoiceTextTokenizerFast")
 
-    def __init__(self, tokenizer=None, audio_processor=None, speech_tok_compress_ratio=3200, db_normalize=True, **kwargs):
-        self.tokenizer = tokenizer
-        self.audio_processor = audio_processor
+    def __init__(self, audio_processor, tokenizer, speech_tok_compress_ratio=3200, db_normalize=True, **kwargs):
+        super().__init__(audio_processor, tokenizer)
         self.speech_tok_compress_ratio = speech_tok_compress_ratio
         self.db_normalize = db_normalize
-        self.audio_normalizer = AudioNormalizer() if db_normalize else None
         self.system_prompt = " Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n"
 
     @classmethod
@@ -54,13 +77,6 @@ class VibeVoiceProcessor:
         Returns:
             [`VibeVoiceProcessor`]: The processor object instantiated from pretrained model.
         """
-        import os
-        import json
-        from .vibevoice_audio_processor import VibeVoiceTokenizerProcessor
-        from .modular_vibevoice_text_tokenizer import (
-            VibeVoiceTextTokenizer, 
-            VibeVoiceTextTokenizerFast
-        )
         
         # Load processor configuration
         config_path = os.path.join(pretrained_model_name_or_path, "preprocessor_config.json")
@@ -93,7 +109,7 @@ class VibeVoiceProcessor:
         if "audio_processor" in config:
             # Create audio processor from config
             audio_config = config["audio_processor"]
-            audio_processor = VibeVoiceTokenizerProcessor(
+            audio_processor = VibeVoiceFeatureExtractor(
                 sampling_rate=audio_config.get("sampling_rate", 24000),
                 normalize_audio=audio_config.get("normalize_audio", True),
                 target_dB_FS=audio_config.get("target_dB_FS", -25),
@@ -101,7 +117,7 @@ class VibeVoiceProcessor:
             )
         else:
             # Create default audio processor
-            audio_processor = VibeVoiceTokenizerProcessor()
+            audio_processor = VibeVoiceFeatureExtractor()
         
         # Create and return the processor
         return cls(
@@ -120,8 +136,6 @@ class VibeVoiceProcessor:
             save_directory (`str` or `os.PathLike`):
                 Directory where the processor will be saved.
         """
-        import os
-        import json
         
         os.makedirs(save_directory, exist_ok=True)
         
@@ -191,22 +205,15 @@ class VibeVoiceProcessor:
         """
         # Handle single vs batch input
         if isinstance(text, str) or (isinstance(text, list) and len(text) > 0 and not isinstance(text[0], str)):
-            # Single input
             texts = [text]
-            is_batched = False
         else:
-            # Batch input
             texts = text
-            is_batched = True
             
-        # Handle voice samples
+        # Handle voice samples (list of lists for each script)
         if voice_samples is not None:
-            if not is_batched or (isinstance(voice_samples[0], (str, np.ndarray))):
-                # Single set of voice samples
-                voice_samples_list = [voice_samples]
-            else:
-                # Batch of voice samples
-                voice_samples_list = voice_samples
+            voice_samples_list = [make_list_of_audio(_voices) for _voices in voice_samples]
+            if len(texts) != len(voice_samples_list):
+                raise ValueError(f"Got {len(texts)} texts but {len(voice_samples)} audios; they must match 1:1.")
         else:
             voice_samples_list = [None] * len(texts)
         
@@ -406,18 +413,16 @@ class VibeVoiceProcessor:
         
         for speaker_id, speaker_audio in enumerate(speaker_samples):
             prefix_tokens = self.tokenizer.encode(f" Speaker {speaker_id}:", add_special_tokens=False)
-            
+
             # Process audio
-            if isinstance(speaker_audio, str):
-                # Load audio from file
-                wav = self.audio_processor._load_audio_from_path(speaker_audio)
-            else:
-                wav = np.array(speaker_audio, dtype=np.float32)
+            wav = np.array(speaker_audio, dtype=np.float32)
             
-            # Apply normalization if needed
-            if self.db_normalize and self.audio_normalizer:
-                wav = self.audio_normalizer(wav)
-            
+            # Apply normalization if needed (TODO: use feature extractor)
+            if self.db_normalize:
+                wav = normalize_audio(wav)
+
+            import pudb; pudb.set_trace()  # DEBUGGING
+
             # Calculate token length based on compression ratio
             # if speaker_audio.endswith('.pt') or speaker_audio.endswith('.npy'):
             #     vae_tok_len = wav.shape[0]
@@ -502,7 +507,6 @@ class VibeVoiceProcessor:
             {"speaker": "2", "text": "Great to be here..."}
         ]
         """
-        import json
         
         with open(json_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -672,6 +676,4 @@ class VibeVoiceProcessor:
         """
         return self.audio_processor.save_audio(audio, output_path=output_path, sampling_rate=sampling_rate, normalize=normalize, batch_prefix=batch_prefix)
     
-__all__ = [
-    "VibeVoiceProcessor",
-]
+__all__ = ["VibeVoiceProcessor"]

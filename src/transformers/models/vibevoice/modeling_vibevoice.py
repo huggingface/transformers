@@ -22,9 +22,6 @@ from .schedule.dpm_solver import DPMSolverMultistepScheduler
 
 logger = logging.get_logger(__name__)
 
-# if not hasattr(modeling_utils, "ALL_PARALLEL_STYLES") or modeling_utils.ALL_PARALLEL_STYLES is None:
-#     modeling_utils.ALL_PARALLEL_STYLES = ["tp", "none", "colwise", "rowwise"]
-
 @dataclass
 class VibeVoiceCausalLMOutputWithPast(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
@@ -51,7 +48,7 @@ class VibeVoiceGenerationOutput(ModelOutput):
     speech_outputs: Optional[List[torch.FloatTensor]] = None
 
 
-class SpeechConnector(nn.Module):
+class VibeVoiceSpeechConnector(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
         self.fc1 = nn.Linear(input_dim, output_dim)
@@ -117,11 +114,11 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         self.language_model = AutoModel.from_config(lm_config)
         
         # Initialize speech components if needed
-        self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config).to(dtype)
-        self.semantic_tokenizer = AutoModel.from_config(config.semantic_tokenizer_config).to(dtype)
+        self.acoustic_tokenizer = VibeVoiceAcousticTokenizerModel(config.acoustic_tokenizer_config).to(dtype)
+        self.semantic_tokenizer = VibeVoiceSemanticTokenizerModel(config.semantic_tokenizer_config).to(dtype)
 
-        self.acoustic_connector = SpeechConnector(config.acoustic_vae_dim, lm_config.hidden_size).to(dtype)
-        self.semantic_connector = SpeechConnector(config.semantic_vae_dim, lm_config.hidden_size).to(dtype)
+        self.acoustic_connector = VibeVoiceSpeechConnector(config.acoustic_vae_dim, lm_config.hidden_size).to(dtype)
+        self.semantic_connector = VibeVoiceSpeechConnector(config.semantic_vae_dim, lm_config.hidden_size).to(dtype)
         
         # Register scaling factors as buffers - use 1D tensors for FSDP compatibility
         self.register_buffer('speech_scaling_factor', torch.tensor(float('nan')))  
@@ -149,18 +146,6 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.embed_tokens = value
-    
-    def set_speech_tokenizers(self, acoustic_tokenizer=None, semantic_tokenizer=None):
-        """Set the speech tokenizers used for encoding and decoding speech."""
-        self.acoustic_tokenizer = acoustic_tokenizer
-        self.semantic_tokenizer = semantic_tokenizer
-        
-        # Reset the encoder to evaluation mode
-        if self.acoustic_tokenizer is not None:
-            self.acoustic_tokenizer.eval()
-            
-        if self.semantic_tokenizer is not None:
-            self.semantic_tokenizer.eval()
     
     def forward(
         self,
@@ -472,13 +457,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
             attentions=outputs.attentions,
         )
 
-AutoModel.register(VibeVoiceConfig, VibeVoiceModel)
-AutoModelForCausalLM.register(VibeVoiceConfig, VibeVoiceForConditionalGeneration)
-
 __all__ = [
     "VibeVoiceModel",
     "VibeVoicePreTrainedModel",
     "VibeVoiceForConditionalGeneration",
-    "VibeVoiceCausalLMOutputWithPast",
-    "VibeVoiceGenerationOutput",
 ]
