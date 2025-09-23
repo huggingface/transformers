@@ -2942,9 +2942,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Initialize the weights if they are not already initialized.
         """
-        # Since this is applied recursively in a depth-first manner, a module is already initialized if and only if
-        # all its children are also already initialized, and all its immediate `nn.Parameter` and persistent buffers
-        # are also already initialized
         if getattr(module, "_is_hf_initialized", False):
             return
         self._init_weights(module)
