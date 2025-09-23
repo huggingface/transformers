@@ -45,13 +45,12 @@ from .utils.hub import cached_file
 
 
 if TYPE_CHECKING:
-    if is_torch_available():
-        import torch  # noqa
+    from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 
 logger = logging.get_logger(__name__)
 
-PreTrainedFeatureExtractor = Union["SequenceFeatureExtractor"]  # noqa: F821
+PreTrainedFeatureExtractor = Union["SequenceFeatureExtractor"]
 
 # type hinting: specifying the type of feature extractor class that inherits from FeatureExtractionMixin
 SpecificFeatureExtractorType = TypeVar("SpecificFeatureExtractorType", bound="FeatureExtractionMixin")
@@ -110,7 +109,7 @@ class BatchFeature(UserDict):
         if tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-            import torch  # noqa
+            import torch
 
             def as_tensor(value):
                 if isinstance(value, (list, tuple)) and len(value) > 0:
@@ -535,7 +534,9 @@ class FeatureExtractionMixin(PushToHubMixin):
         return feature_extractor_dict, kwargs
 
     @classmethod
-    def from_dict(cls, feature_extractor_dict: dict[str, Any], **kwargs) -> PreTrainedFeatureExtractor:
+    def from_dict(
+        cls, feature_extractor_dict: dict[str, Any], **kwargs
+    ) -> Union["FeatureExtractionMixin", tuple["FeatureExtractionMixin", dict[str, Any]]]:
         """
         Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python dictionary of
         parameters.
@@ -585,7 +586,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         return output
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> PreTrainedFeatureExtractor:
+    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> "FeatureExtractionMixin":
         """
         Instantiates a feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] from the path to
         a JSON file of parameters.

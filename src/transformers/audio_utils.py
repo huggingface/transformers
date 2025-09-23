@@ -23,8 +23,11 @@ import os
 import warnings
 from collections.abc import Sequence
 from io import BytesIO
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
+
+if TYPE_CHECKING:
+    import torch
 import numpy as np
 import requests
 from packaging import version
@@ -51,7 +54,7 @@ if is_librosa_available():
 if is_torchcodec_available():
     TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
-AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]  # noqa: F821
+AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
 
 
 def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:

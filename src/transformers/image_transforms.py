@@ -313,7 +313,7 @@ def get_resize_output_image_size(
 def resize(
     image: np.ndarray,
     size: tuple[int, int],
-    resample: "PILImageResampling" = None,
+    resample: Optional["PILImageResampling"] = None,
     reducing_gap: Optional[int] = None,
     data_format: Optional[ChannelDimension] = None,
     return_numpy: bool = True,

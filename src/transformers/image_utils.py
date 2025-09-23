@@ -569,7 +569,7 @@ class ImageFeatureExtractionMixin:
     def _ensure_format_supported(self, image):
         if not isinstance(image, (PIL.Image.Image, np.ndarray)) and not is_torch_tensor(image):
             raise ValueError(
-                f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.array` and "
+                f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.ndarray` and "
                 "`torch.Tensor` are."
             )
 

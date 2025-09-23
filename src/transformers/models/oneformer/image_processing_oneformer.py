@@ -265,7 +265,7 @@ def compute_segments(
 
 # Copied from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
 def convert_segmentation_map_to_binary_masks(
-    segmentation_map: "np.ndarray",
+    segmentation_map: np.ndarray,
     instance_id_to_semantic_id: Optional[dict[int, int]] = None,
     ignore_index: Optional[int] = None,
     do_reduce_labels: bool = False,
@@ -549,7 +549,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.convert_segmentation_map_to_binary_masks
     def convert_segmentation_map_to_binary_masks(
         self,
-        segmentation_map: "np.ndarray",
+        segmentation_map: np.ndarray,
         instance_id_to_semantic_id: Optional[dict[int, int]] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,

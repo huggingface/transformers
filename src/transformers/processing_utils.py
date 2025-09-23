@@ -311,7 +311,7 @@ class AudioKwargs(TypedDict, total=False):
     """
 
     sampling_rate: Optional[int]
-    raw_speech: Optional[Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]]]
+    raw_speech: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]]
     padding: Optional[Union[bool, str, PaddingStrategy]]
     max_length: Optional[int]
     truncation: Optional[bool]

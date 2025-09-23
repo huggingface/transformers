@@ -158,7 +158,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
 
     def decode(
         self,
-        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor"],
+        token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         truncate_before_pattern: Optional[list[str]] = None,

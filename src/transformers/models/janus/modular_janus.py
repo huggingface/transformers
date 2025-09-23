@@ -1359,7 +1359,7 @@ class JanusImageProcessor(BlipImageProcessor):
         background_color: Union[int, tuple[int, int, int]] = 0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Pads an image to a square based on the longest edge.
 
@@ -1700,7 +1700,7 @@ class JanusImageProcessor(BlipImageProcessor):
         image_mean: Union[float, Iterable[float]],
         image_std: Union[float, Iterable[float]],
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Unnormalizes `image` using the mean and standard deviation specified by `mean` and `std`.
         image = (image * image_std) + image_mean

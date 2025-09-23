@@ -308,7 +308,7 @@ def compute_segments(
 
 # TODO: (Amy) Move to image_transforms
 def convert_segmentation_map_to_binary_masks(
-    segmentation_map: "np.ndarray",
+    segmentation_map: np.ndarray,
     instance_id_to_semantic_id: Optional[dict[int, int]] = None,
     ignore_index: Optional[int] = None,
     do_reduce_labels: bool = False,
@@ -585,7 +585,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
 
     def convert_segmentation_map_to_binary_masks(
         self,
-        segmentation_map: "np.ndarray",
+        segmentation_map: np.ndarray,
         instance_id_to_semantic_id: Optional[dict[int, int]] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,

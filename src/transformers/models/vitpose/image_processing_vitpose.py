@@ -380,12 +380,12 @@ class VitPoseImageProcessor(BaseImageProcessor):
         size: dict[str, int],
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Apply an affine transformation to an image.
 
         Args:
-            image (`np.array`):
+            image (`np.ndarray`):
                 Image to transform.
             center (`tuple[float]`):
                 Center of the bounding box (x, y).

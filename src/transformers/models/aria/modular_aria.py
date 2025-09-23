@@ -722,12 +722,12 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def _resize_for_patching(
         self, image: np.ndarray, target_resolution: tuple, resample, input_data_format: ChannelDimension
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
 
         Args:
-            image (np.array):
+            image (np.ndarray):
                 The input image.
             target_resolution (tuple):
                 The target resolution (height, width) of the image.
@@ -737,7 +737,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            np.array: The resized and padded image.
+            np.ndarray: The resized and padded image.
         """
         new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
@@ -755,7 +755,7 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def _pad_for_patching(
         self, image: np.ndarray, target_resolution: tuple, input_data_format: ChannelDimension
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
@@ -840,12 +840,12 @@ class AriaImageProcessor(BaseImageProcessor):
         resample: PILImageResampling,
         data_format: ChannelDimension,
         input_data_format: ChannelDimension,
-    ) -> list[np.array]:
+    ) -> list[np.ndarray]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
         Args:
-            image (`np.array`):
+            image (`np.ndarray`):
                 The input image to be processed.
             grid_pinpoints (list[tuple[int, int]]):
                 A list of possible resolutions as tuples.
@@ -859,7 +859,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            `list[np.array]`: A list of NumPy arrays containing the processed image patches.
+            `list[np.ndarray]`: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
