@@ -30,7 +30,6 @@ See the table below for additional torchao features.
 > [!TIP]
 > Refer to the torchao [README.md](https://github.com/pytorch/ao#torchao-pytorch-architecture-optimization) for more details about the library.
 
-
 torchao supports the [quantization techniques](https://github.com/pytorch/ao/blob/main/torchao/quantization/README.md) below.
 
 - A16W8 Float8 Dynamic Quantization
@@ -43,7 +42,6 @@ torchao supports the [quantization techniques](https://github.com/pytorch/ao/blo
 
 torchao also supports module level configuration by specifying a dictionary from fully qualified name of module and its corresponding quantization config. This allows skip quantizing certain layers and using different quantization config for different modules.
 
-
 Check the table below to see if your hardware is compatible.
 
 | Component | Compatibility |
@@ -51,8 +49,6 @@ Check the table below to see if your hardware is compatible.
 | CUDA Versions | ✅ cu118, cu126, cu128 |
 | XPU Versions | ✅ pytorch2.8 |
 | CPU | ✅ change `device_map="cpu"` (see examples below) |
-
-
 
 Install torchao from PyPi or the PyTorch index with the following commands.
 
@@ -64,13 +60,15 @@ Install torchao from PyPi or the PyTorch index with the following commands.
 # Stable release from Pypi which will default to CUDA 12.6
 pip install --upgrade torchao transformers
 ```
+
 </hfoption>
 <hfoption id="PyTorch Index">
 Stable Release from the PyTorch index
-    
+
 ```bash
 pip install torchao --index-url https://download.pytorch.org/whl/cu126 # options are cpu/cu118/cu126/cu128
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -118,6 +116,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 <hfoption id="int4-weight-only">
 
@@ -146,6 +145,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -177,13 +177,14 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 </hfoptions>
 
 ### A100 GPU
 <hfoptions id="examples-A100-GPU">
 <hfoption id="int8-dynamic-and-weight-only">
-    
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -210,6 +211,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 
 <hfoption id="int4-weight-only">
@@ -245,6 +247,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -276,13 +279,14 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 </hfoptions>
 
 ### Intel XPU
 <hfoptions id="examples-Intel-XPU">
 <hfoption id="int8-dynamic-and-weight-only">
-    
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -309,6 +313,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 
 <hfoption id="int4-weight-only">
@@ -340,14 +345,14 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 </hfoptions>
-
 
 ### CPU
 <hfoptions id="examples-CPU">
 <hfoption id="int8-dynamic-and-weight-only">
-    
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -373,6 +378,7 @@ input_ids = tokenizer(input_text, return_tensors="pt")
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 <hfoption id="int4-weight-only">
 
@@ -404,12 +410,14 @@ input_ids = tokenizer(input_text, return_tensors="pt")
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 </hfoptions>
 
 ### Per Module Quantization
 #### 1. Skip quantization for certain layers
 With `ModuleFqnToConfig` we can specify a default configuration for all layers while skipping quantization for certain layers.
+
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
@@ -438,6 +446,7 @@ print(output_text)
 ```
 
 #### 2. Quantizing different layers with different quantization configs
+
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
@@ -485,7 +494,6 @@ Note: autoquant is for GPU only right now.
 
 Create a [`TorchAoConfig`] and set to `"autoquant"`. Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method. Finally, call `finalize_autoquant` on the quantized model to finalize the quantization and log the input shapes.
 
-
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -509,7 +517,6 @@ quantized_model.finalize_autoquant()
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-
 ## Serialization
 
 torchao implements [torch.Tensor subclasses](https://pytorch.org/docs/stable/notes/extending.html#subclassing-torch-tensor) for maximum flexibility in supporting new quantized torch.Tensor formats. [Safetensors](https://huggingface.co/docs/safetensors/en/index) serialization and deserialization does not work with torchao.
@@ -518,15 +525,16 @@ To avoid arbitrary user code execution, torchao sets `weights_only=True` in [tor
 
 <hfoptions id="serialization-examples">
 <hfoption id="save-locally">
-    
+
 ```py
 # don't serialize model with Safetensors
 output_dir = "llama3-8b-int4wo-128"
 quantized_model.save_pretrained("llama3-8b-int4wo-128", safe_serialization=False)
 ```
+
 </hfoption>
 <hfoption id="push-to-huggingface-hub">
-    
+
 ```py
 # don't serialize model with Safetensors
 USER_ID = "your_huggingface_user_id"
@@ -534,13 +542,14 @@ REPO_ID = "llama3-8b-int4wo-128"
 quantized_model.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128", safe_serialization=False)
 tokenizer.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
 ```
+
 </hfoption>
 </hfoptions>
-
 
 ## Loading quantized models
 
 Loading a quantized model depends on the quantization scheme. For quantization schemes, like int8 and float8, you can quantize the model on any device and also load it on any device. The example below demonstrates quantizing a model on the CPU and then loading it on CUDA or XPU.
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -574,6 +583,7 @@ output = reloaded_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
+
 For int4, the model can only be loaded on the same device it was quantized on because the layout is specific to the device. The example below demonstrates quantizing and loading a model on the CPU.
 
 ```py
@@ -640,8 +650,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 > | `"int8_dynamic_activation_int8_weight"` | `Int8DynamicActivationInt8WeightConfig()` |
 >
 > All configuration objects accept parameters for customization (e.g., `group_size`, `scheme`, `layout`).
-
-
 
 ## Resources
 
