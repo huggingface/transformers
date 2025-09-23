@@ -55,8 +55,6 @@ Swin Transformer의 사용을 도울 수 있는 Hugging Face 및 커뮤니티(�
 
 [[autodoc]] SwinConfig
 
-<frameworkcontent>
-<pt>
 
 ## SwinModel [[transformers.SwinModel]]
 
@@ -73,5 +71,3 @@ Swin Transformer의 사용을 도울 수 있는 Hugging Face 및 커뮤니티(�
 [[autodoc]] transformers.SwinForImageClassification
     - forward
 
-</pt>
-</frameworkcontent>

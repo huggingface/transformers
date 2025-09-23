@@ -1228,6 +1228,10 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
         )
         self.rotary_emb = Qwen3OmniMoeThinkerTextRotaryEmbedding(config)
 
+    def _deepstack_process(self, hidden_states, visual_pos_masks, visual_embeds):
+        visual_pos_masks = visual_pos_masks[..., 0]
+        return super()._deepstack_process(hidden_states, visual_pos_masks, visual_embeds)
+
 
 @dataclass
 class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
@@ -1408,7 +1412,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             use_cache=use_cache,
             output_router_logits=output_router_logits,
             cache_position=cache_position,
-            deepstack_visual_embeds_multiscale=visual_embeds_multiscale,
+            deepstack_visual_embeds=visual_embeds_multiscale,
             visual_pos_masks=visual_pos_masks,
             **kwargs,
         )
@@ -2713,7 +2717,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
             audio_lengths = iter([])
 
         if images is not None:
-            images_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            images_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = iter(images_inputs["image_grid_thw"])
         else:
             images_inputs = {}
@@ -2721,7 +2725,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
 
         if videos is not None:
             videos = make_batched_videos(videos)
-            videos_inputs = self.video_processor(images=None, videos=videos, **output_kwargs["videos_kwargs"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             fps = [fps] * len(videos)
             videos_inputs["video_second_per_grid"] = [
                 self.video_processor.temporal_patch_size / fps[i] for i in range(len(fps))
