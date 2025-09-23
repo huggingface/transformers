@@ -56,8 +56,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] RagRetriever
 
-<frameworkcontent>
-<pt>
 
 ## RagModel [[transformers.RagModel]]
 
@@ -76,5 +74,3 @@ rendered properly in your Markdown viewer.
     - forward
     - generate
 
-</pt>
-</frameworkcontent>

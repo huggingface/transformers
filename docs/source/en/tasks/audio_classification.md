@@ -187,8 +187,6 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -247,8 +245,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -289,8 +285,6 @@ The simplest way to try out your fine-tuned model for inference is to use it in 
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
-<frameworkcontent>
-<pt>
 Load a feature extractor to preprocess the audio file and return the `input` as PyTorch tensors:
 
 ```py
@@ -320,5 +314,3 @@ Get the class with the highest probability, and use the model's `id2label` mappi
 >>> predicted_label
 'cash_deposit'
 ```
-</pt>
-</frameworkcontent>

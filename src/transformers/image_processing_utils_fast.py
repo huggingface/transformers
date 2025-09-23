@@ -85,7 +85,7 @@ def validate_fast_preprocess_arguments(
     size: Optional[SizeDict] = None,
     interpolation: Optional["F.InterpolationMode"] = None,
     return_tensors: Optional[Union[str, TensorType]] = None,
-    data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+    data_format: ChannelDimension = ChannelDimension.FIRST,
 ):
     """
     Checks validity of typically used arguments in an `ImageProcessorFast` `preprocess` method.
@@ -131,7 +131,7 @@ def max_across_indices(values: Iterable[Any]) -> list[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int]:
+def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int, ...]:
     """
     Get the maximum height and width across all images in a batch.
     """
