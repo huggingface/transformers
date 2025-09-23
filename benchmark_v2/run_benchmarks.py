@@ -348,7 +348,7 @@ Examples:
     )
 
     parser.add_argument(
-        "--upload-to-hub",
+        "--push-to-hub",
         type=str,
         help="Upload results to HuggingFace Dataset (provide dataset name, e.g., 'username/benchmark-results')",
     )
