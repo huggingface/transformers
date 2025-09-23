@@ -40,6 +40,7 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
 
     def __init__(self, config: ParakeetEncoderConfig, device=None):
         super().__init__()
+        self.max_position_embeddings = config.max_position_embeddings
         base = 10000.0
         inv_freq = 1.0 / (
             base
@@ -54,6 +55,12 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[1]
+        if seq_length > self.max_position_embeddings:
+            raise ValueError(
+                f"Sequence Length: {seq_length} has to be less or equal than "
+                f"config.max_position_embeddings {self.max_position_embeddings}."
+            )
+
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
         inv_freq_expanded = (
             self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
