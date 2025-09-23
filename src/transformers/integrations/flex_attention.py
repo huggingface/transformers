@@ -290,6 +290,13 @@ def flex_attention_forward(
     # On CPU we must skip returning LSE due to a runtime issue; elsewhere, follow PyTorch API and return it
     return_lse = query.device.type != "cpu"
 
+    # Validate that s_aux is not silently ignored
+    if not return_lse and s_aux is not None:
+        raise ValueError(
+            "s_aux is not supported when return_lse=False (e.g., on CPU). "
+            "Attention sinks require LSE computation which is not available on this device."
+        )
+
     flex_attention_output = compile_friendly_flex_attention(
         query,
         key,
