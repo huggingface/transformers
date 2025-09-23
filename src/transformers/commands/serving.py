@@ -35,6 +35,8 @@ from typing import Optional, TypedDict, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
+from openai.types.chat.chat_completion import Choice
+from starlette.responses import StreamingResponse
 from tokenizers.decoders import DecodeStream
 
 import transformers
@@ -90,13 +92,15 @@ if serve_dependencies_available:
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.audio.transcription import Transcription
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
-    from openai.types.chat import ChatCompletionMessageParam
+    from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageParam
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
-        Choice,
         ChoiceDelta,
         ChoiceDeltaToolCall,
         ChoiceDeltaToolCallFunction,
+    )
+    from openai.types.chat.chat_completion_chunk import (
+        Choice as ChoiceChunk,
     )
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.responses import (
@@ -345,8 +349,11 @@ class TimedModel:
             self._timer.cancel()
 
     def timeout_reached(self):
-        self.delete_model()
-        logger.info(f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity")
+        if self.timeout_seconds > 0:
+            self.delete_model()
+            logger.info(
+                f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
+            )
 
     def is_deleted(self):
         """Check if the instances have been deleted."""
@@ -412,9 +419,13 @@ class ServeArguments:
     # Serving settings
     host: str = field(default="localhost", metadata={"help": "Interface the server will listen to."})
     port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
-    model_timeout: int = field(
-        default=300,
-        metadata={"help": "Time in seconds after which a model will be removed from memory."},
+    model_timeout: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Time in seconds after which a model will be removed from memory; defaults to 300 unless "
+            "`force_model` is set, in which case the model will not be removed from memory unless a value"
+            "is specified here."
+        },
     )
 
     # Other settings
@@ -511,6 +522,14 @@ class ServeCommand(BaseTransformersCLICommand):
         self.last_messages = None
         self.last_kv_cache = None
         self.last_model = None
+
+        if self.args.model_timeout is None:
+            self.args.model_timeout = -1 if self.args.force_model else 300
+
+        if self.args.force_model:
+            model_id_and_revision = self.process_model_name(self.args.force_model)
+            self.last_model = model_id_and_revision
+            self.load_model_and_processor(model_id_and_revision)
 
     def _validate_request(
         self,
@@ -621,12 +640,13 @@ class ServeCommand(BaseTransformersCLICommand):
         """
         if decode_stream is not None and content is not None and tokenizer is not None:
             content = decode_stream.step(tokenizer._tokenizer, content)
+
         chunk = ChatCompletionChunk(
             id=request_id,
             created=int(time.time()),
             model=model,
             choices=[
-                Choice(
+                ChoiceChunk(
                     delta=ChoiceDelta(
                         content=content,
                         role=role,
@@ -639,6 +659,10 @@ class ServeCommand(BaseTransformersCLICommand):
             system_fingerprint="",
             object="chat.completion.chunk",
         )
+
+        return chunk
+
+    def chunk_to_sse_element(self, chunk: ChatCompletionChunk) -> str:
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     def build_response_event(self, response: "BaseModel") -> str:
@@ -703,10 +727,9 @@ class ServeCommand(BaseTransformersCLICommand):
             self.validate_chat_completion_request(request=body)
 
             if self.use_continuous_batching:
-                output = self.continuous_batching_chat_completion(body, request.state.request_id)
+                return self.continuous_batching_chat_completion(body, request.state.request_id)
             else:
-                output = self.generate_chat_completion(body)
-            return StreamingResponse(output, media_type="text/event-stream")
+                return self.generate_chat_completion(body)
 
         @app.post("/v1/responses")
         def responses(request: dict):
@@ -803,7 +826,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for model in model_infos
             ]
 
-    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> AsyncGenerator[str, None]:
+    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """
         Generates an OpenAI Chat Completion using continuous batching.
 
@@ -816,14 +839,16 @@ class ServeCommand(BaseTransformersCLICommand):
 
         model_id_and_revision = self.process_model_name(req["model"])
         must_discard_cache = model_id_and_revision != self.last_model
+
         self.last_model = model_id_and_revision
+
+        # When switching models, terminate a continuous batching manager if it is running.
         if must_discard_cache:
-            # When switching models, terminate a continuous batching manager if it is running.
             if self.running_continuous_batching_manager is not None:
                 self.running_continuous_batching_manager.stop(block=True, timeout=2)
                 self.running_continuous_batching_manager = None
-        model, processor = self.load_model_and_processor(model_id_and_revision)
 
+        model, processor = self.load_model_and_processor(model_id_and_revision)
         tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
 
         generation_config = create_generation_config_from_req(
@@ -838,11 +863,10 @@ class ServeCommand(BaseTransformersCLICommand):
 
         if self.running_continuous_batching_manager is None:
             self.running_continuous_batching_manager = model.init_continuous_batching(
-                generation_config=generation_config, streaming=True
+                generation_config=generation_config
             )
 
-            # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching
-            # and correctly applied in non-cb
+            # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching and correctly applied in non-cb
             self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
             self.running_continuous_batching_manager.start()
 
@@ -879,21 +903,67 @@ class ServeCommand(BaseTransformersCLICommand):
                 self.running_continuous_batching_manager.cancel_request(request_id)
                 yield f'data: {{"error": "{str(e)}"}}'
 
-        async def cancellation_wrapper(_inputs, request_id):
+        def block_chat_completion(request_id, decode_stream):
+            result = None
+            while self.running_continuous_batching_manager.is_running() and result is None:
+                result = self.running_continuous_batching_manager.get_result(request_id=request_id, timeout=1)
+
+            content = tokenizer.decode(result.generated_tokens)
+
+            chat_completion_result = ChatCompletion(
+                id=request_id,
+                created=int(time.time()),
+                object="chat.completion",
+                model=model_id_and_revision,
+                choices=[
+                    Choice(
+                        # TODO check the index
+                        index=0,
+                        message=ChatCompletionMessage(content=content, role="assistant"),
+                        finish_reason="stop",
+                    )
+                ],
+                # TODO implement function calling
+                # TODO implement usage
+            )
+
+            return chat_completion_result
+
+        async def cancellation_wrapper(_inputs, request_id, stream: bool = True):
             try:
                 decode_stream = DecodeStream(_inputs.tolist(), False)
-                # XXX: using returned request_id as safety in case it is None
                 request_id = self.running_continuous_batching_manager.add_request(
-                    _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens
+                    _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens, streaming=stream
                 )
-                for chunk in stream_chat_completion(request_id, decode_stream):
+
+                if stream:
+                    for chunk in stream_chat_completion(request_id, decode_stream):
+                        yield self.chunk_to_sse_element(chunk)
+                        print("within cancellation wrapper:", chunk)
+
+                        await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
+                else:
+                    chunk = block_chat_completion(request_id, decode_stream)
                     yield chunk
-                    await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
+                    print("within cancellation wrapper:", chunk)
+                    return
             except asyncio.CancelledError:
                 self.running_continuous_batching_manager.cancel_request(request_id)
                 logger.warning(f"Request {request_id} was cancelled.")
 
-        return cancellation_wrapper(inputs[0], request_id)
+        if req.get("stream"):
+            return StreamingResponse(
+                cancellation_wrapper(inputs[0], request_id, stream=True), media_type="text/event-stream"
+            )
+        else:
+
+            async def unpack_generator(agen):
+                return [x async for x in agen]
+
+            async_gen = cancellation_wrapper(inputs[0], request_id, stream=False)
+            chunk: ChatCompletion = asyncio.run(unpack_generator(async_gen))[0]
+            json_chunk = chunk.model_dump_json(exclude_none=True)
+            return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
     def get_model_modality(model: "PreTrainedModel") -> Modality:
@@ -953,7 +1023,7 @@ class ServeCommand(BaseTransformersCLICommand):
             processor_inputs.append(parsed_message)
         return processor_inputs
 
-    def generate_chat_completion(self, req: dict) -> Generator[str, None, None]:
+    def generate_chat_completion(self, req: dict) -> StreamingResponse | JSONResponse:
         """
         Generates an OpenAI Chat Completion using `generate`.
 
@@ -1132,7 +1202,10 @@ class ServeCommand(BaseTransformersCLICommand):
                                 )
 
                             yield self.build_chat_completion_chunk(
-                                request_id=_request_id, role=None, tool_calls=[tool], model=model_id_and_revision
+                                request_id=_request_id,
+                                role=None,
+                                tool_calls=[tool],
+                                model=model_id_and_revision,
                             )
                             continue
                     # ====== END OF TOOL CALL LOGIC ======
@@ -1152,7 +1225,51 @@ class ServeCommand(BaseTransformersCLICommand):
             finally:
                 thread.join()
 
-        return stream_chat_completion(generation_streamer, request_id)
+        if req.get("stream"):
+
+            def sse(_generator):
+                for chunk in _generator:
+                    yield self.chunk_to_sse_element(chunk)
+
+            return StreamingResponse(
+                sse(stream_chat_completion(generation_streamer, request_id)), media_type="text/event-stream"
+            )
+        else:
+            content = []
+            finish_reason = "stop"
+
+            generator = stream_chat_completion(generation_streamer, request_id)
+            usage = None
+
+            for chunk in generator:
+                choice = chunk.choices[0]
+                if getattr(choice.delta, "content", None):
+                    content.append(choice.delta.content)
+                if choice.finish_reason:
+                    finish_reason = choice.finish_reason
+                if getattr(chunk, "usage", None):
+                    usage = chunk.usage
+
+            chat_completion_result = ChatCompletion(
+                id=request_id,
+                created=int(time.time()),
+                object="chat.completion",
+                model=model_id_and_revision,
+                choices=[
+                    Choice(
+                        # TODO check the index
+                        index=0,
+                        message=ChatCompletionMessage(content="".join(content), role="assistant"),
+                        finish_reason=finish_reason,
+                    )
+                ],
+                # TODO implement function calling
+                usage=usage,
+            )
+
+            result = chat_completion_result.model_dump(exclude_none=True)
+
+            return JSONResponse(result, media_type="application/json")
 
     def generate_response(self, req: dict) -> Generator[str, None, None]:
         """

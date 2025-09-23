@@ -2509,14 +2509,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             try:
                 load_and_register_attn_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
-                if attn_implementation.startswith("flash_attention"):
+                if attn_implementation.startswith("flash_"):
                     logger.warning_once(
                         f"You do not have `flash_attn` installed, using `{applicable_attn_implementation}` "
                         "from the `kernels` library instead!"
                     )
             except Exception as e:
                 # raise the proper exception for requested flash attention
-                if attn_implementation.startswith("flash_attention"):
+                if attn_implementation.startswith("flash_"):
                     if attn_implementation.endswith("2"):
                         self._flash_attn_2_can_dispatch()
                     else:
@@ -2529,7 +2529,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 applicable_attn_implementation, is_init_check
             )
             # preload flash attention here to allow compile with fullgraph
-            if applicable_attn_implementation.startswith("flash_attention"):
+            if applicable_attn_implementation.startswith("flash_"):
                 lazy_import_flash_attention(applicable_attn_implementation, force_import=True)
         return applicable_attn_implementation
 
