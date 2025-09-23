@@ -47,12 +47,8 @@ if is_torch_available():
 
 class GPT2ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = GPT2Config
         base_model_class = GPT2Model
         causal_lm_class = GPT2LMHeadModel
-        sequence_classification_class = GPT2ForSequenceClassification
-        token_classification_class = GPT2ForTokenClassification
-        question_answering_class = GPT2ForQuestionAnswering
 
     def __init__(
         self,
@@ -151,18 +147,6 @@ class GPT2ModelTester(CausalLMModelTester):
 
 @require_torch
 class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            GPT2Model,
-            GPT2LMHeadModel,
-            GPT2DoubleHeadsModel,
-            GPT2ForQuestionAnswering,
-            GPT2ForSequenceClassification,
-            GPT2ForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": GPT2Model,
