@@ -121,6 +121,7 @@ if TYPE_CHECKING:
     from .falcon_h1 import *
     from .falcon_mamba import *
     from .fastspeech2_conformer import *
+    from .fast_vlm import *
     from .flaubert import *
     from .flava import *
     from .florence2 import *
