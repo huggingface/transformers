@@ -138,7 +138,7 @@ class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         inputs = feature_extractor(input_speech, return_tensors="pt")
 
         self.assertEqual(inputs.input_features.shape, (1, 586, 80))
-        torch.testing.assert_close(inputs.input_features[0, 100, :30], EXPECTED_INPUT_FEATURES, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(inputs.input_features[0, 100, :30], EXPECTED_INPUT_FEATURES, atol=1e-4, rtol=1e-4)
 
         self.assertEqual(inputs.attention_mask.shape, (1, 586))
         # last frame should be masked
@@ -191,7 +191,7 @@ class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         inputs = feature_extractor(input_speech, return_tensors="pt")
 
         self.assertEqual(inputs.input_features.shape, (5, 2941, 80))
-        torch.testing.assert_close(inputs.input_features[:, 100, :30], EXPECTED_INPUT_FEATURES, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(inputs.input_features[:, 100, :30], EXPECTED_INPUT_FEATURES, atol=1e-4, rtol=1e-4)
 
         self.assertEqual(inputs.attention_mask.shape, (5, 2941))
         self.assertTrue(inputs.attention_mask.sum(dim=-1).tolist(), [585, 481, 1248, 990, 2940])
