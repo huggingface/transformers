@@ -51,7 +51,7 @@ if __name__ == "__main__":
         "stevhliu",
         "vasqu",
         "ydshieh",
-        "zucchini-nlp"
+        "zucchini-nlp",
     ]
 
     # Counting the number of failures grouped by authors
