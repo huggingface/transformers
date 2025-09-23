@@ -22,9 +22,9 @@ from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
 from .utils import (
+    get_available_devices,
     is_torch_greater_or_equal,
     is_torch_xla_available,
-    is_torch_xpu_available,
     is_torchdynamo_compiling,
     logging,
 )
@@ -367,14 +367,14 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
     return decorator
 
 
-def infer_device():
+def infer_device() -> str:
     """
     Infers available device.
     """
-    torch_device = "cpu"
-    if torch.cuda.is_available():
-        torch_device = "cuda"
-    elif is_torch_xpu_available():
-        torch_device = "xpu"
 
-    return torch_device
+    devices = get_available_devices()
+    # If there are cpu and an accelerator, we prefer the accelerator
+    if len(devices) > 1:
+        devices = set(devices)
+        devices.remove("cpu")
+    return list(devices)[0]
