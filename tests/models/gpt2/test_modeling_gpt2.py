@@ -147,6 +147,19 @@ class GPT2ModelTester(CausalLMModelTester):
 
 @require_torch
 class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
+    # `all_model_classes` is overwritten because of `GPT2DoubleHeadsModel`
+    all_model_classes = (
+        (
+            GPT2Model,
+            GPT2LMHeadModel,
+            GPT2DoubleHeadsModel,
+            GPT2ForQuestionAnswering,
+            GPT2ForSequenceClassification,
+            GPT2ForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": GPT2Model,
