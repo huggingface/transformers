@@ -190,3 +190,4 @@ print(processor.batch_decode(outputs))
 ## ParakeetForCTC
 
 [[autodoc]] ParakeetForCTC
+

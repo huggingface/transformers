@@ -439,6 +439,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         >>> encoder_outputs = encoder(**inputs)
 
         >>> print(encoder_outputs.last_hidden_state.shape)
+        ```
         """
 
         hidden_states = self.subsampling(input_features, attention_mask)
