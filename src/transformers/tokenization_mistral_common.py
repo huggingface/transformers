@@ -1219,7 +1219,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
 
-        # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
+        # If we have PyTorch/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
@@ -1239,7 +1239,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
-                    "Should be one of a python, numpy, pytorch or tensorflow object."
+                    "Should be one of a python, numpy, or pytorch object."
                 )
 
             for key, value in encoded_inputs.items():
@@ -1607,11 +1607,6 @@ class MistralCommonTokenizer(PushToHubMixin):
                 "`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`."
             )
 
-        if return_tensors in ("tf", "jax"):
-            raise ValueError(
-                "`MistralCommonTokenizer` does not support `return_tensors='tf'` or `return_tensors='jax'`."
-            )
-
         def _is_valid_text_input(t):
             if isinstance(t, str):
                 # Strings are fine
@@ -1824,7 +1819,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
         **kwargs,
-    ) -> tuple[str]:
+    ) -> tuple[str, ...]:
         """
         Save the full tokenizer state.
 

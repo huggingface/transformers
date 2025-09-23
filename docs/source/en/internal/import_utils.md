@@ -51,12 +51,7 @@ Let's see how to specify specific object dependencies.
 
 All objects under a given filename have an automatic dependency to the tool linked to the filename
 
-**TensorFlow**: All files starting with `modeling_tf_` have an automatic TensorFlow dependency.
-
-**Flax**: All files starting with `modeling_flax_` have an automatic Flax dependency
-
-**PyTorch**: All files starting with `modeling_` and not valid with the above (TensorFlow and Flax) have an automatic 
-PyTorch dependency
+**PyTorch**: All files starting with `modeling_` have an automatic PyTorch dependency
 
 **Tokenizers**: All files starting with `tokenization_` and ending with `_fast` have an automatic `tokenizers` dependency
 

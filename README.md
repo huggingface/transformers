@@ -51,6 +51,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
     </p>
 </h4>
 
@@ -80,7 +81,7 @@ Explore the [Hub](https://huggingface.com/) today to find a model and use Transf
 
 ## Installation
 
-Transformers works with Python 3.9+ [PyTorch](https://pytorch.org/get-started/locally/) 2.1+, [TensorFlow](https://www.tensorflow.org/install/pip) 2.6+, and [Flax](https://flax.readthedocs.io/en/latest/) 0.4.1+.
+Transformers works with Python 3.9+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.1+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 

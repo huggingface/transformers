@@ -530,7 +530,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
             return_tensors (`str`, *optional*, defaults to `pt`):
-                If `pt`, returns `torch.Tensor`. If `tf`, returns `tf.Tensor`.
+                If `pt`, returns `torch.Tensor`.
         """
         image = self._process_image(image)
         crop_boxes, points_per_crop, cropped_images, input_labels = _generate_crop_boxes(
