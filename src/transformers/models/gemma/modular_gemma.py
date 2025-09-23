@@ -391,6 +391,7 @@ class GemmaAttention(LlamaAttention):
         super().__init__()
         self.is_causal = not getattr(config, "use_bidirectional_attention", False)
 
+
 class GemmaDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GemmaConfig, layer_idx: int):
         super().__init__()
