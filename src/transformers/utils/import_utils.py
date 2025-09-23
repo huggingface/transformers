@@ -738,7 +738,7 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False) -> bool:
 @lru_cache
 def is_torch_neuroncore_available(check_device=True) -> bool:
     if importlib.util.find_spec("torch_neuronx") is not None:
-        return is_torch_xla_available()
+        return is_torch_xla_available(check_is_tpu=check_device, check_is_gpu=check_device)
     return False
 
 
