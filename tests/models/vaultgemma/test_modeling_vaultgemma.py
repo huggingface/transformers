@@ -74,10 +74,6 @@ class VaultGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.6]
     model_tester_class = VaultGemmaModelTester
 
-    def setUp(self):
-        self.model_tester = VaultGemmaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VaultGemmaConfig, hidden_size=37)
-
 
 @slow
 @require_torch_accelerator
