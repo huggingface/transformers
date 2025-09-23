@@ -140,14 +140,18 @@ def create_causal_mask_mapping(
     position_ids: Optional[torch.Tensor],
     token_type_ids: Optional[torch.Tensor] = None,
     pixel_values: Optional[torch.FloatTensor] = None,
+    is_training: bool = False,
     **kwargs,
 ) -> dict:
     """
     Overwrites the base `create_masks_for_generate` with `token_type_ids` masking to create the causal mask mapping
-    for all kinds of forward passes.
+    for all kinds of forward passes. Paligemma uses a bidirectional mask on the prompt tokens.
 
     Uses `pixel_values` as an optional input to disambiguate edge cases.
     """
+    if is_training and token_type_ids is None:
+        raise ValueError("`token_type_ids` is required as a model input when training")
+
     mask_kwargs = {
         "config": config.get_text_config(),
         "input_embeds": input_embeds,
@@ -160,13 +164,29 @@ def create_causal_mask_mapping(
     # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
     # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
     may_have_image_input = past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
+
+    if may_have_image_input:
+        if token_type_ids is not None:
+            # The logic bellow was originally written for Gemma3, where `token_type_ids` is reversed. Let's reverse
+            # it to then use exactly the same logic.
+            token_type_ids = 1 - token_type_ids
+        else:
+            logger.warning_once(
+                "There may be an image in the input to Paligemma but `token_type_ids` is not provided. We recommend "
+                "passing `token_type_ids` to the model to prevent bad attention masking."
+            )
+            # BC: when NOT training, use bidirectional mask if sequence length > 1. Otherwise, use the default causal
+            # mask. This is incorrect in some advanced use cases, hence the warning above.
+            # NOTE: this branch can't be reached when training because `token_type_ids` is required as a model input.
+            if input_embeds.shape[1] > 1:
+                token_type_ids = torch.ones_like(input_embeds)[:, :, 0]
+
+    # Logic originally copied from Gemma3. It holds up for Paligemma as well because Paligemma assumes up to one image
+    # per prompt AND we reverse `token_type_ids` above. Gemma3 uses a bidirectional mask for images, tagged through
+    # `token_type_ids` 1s.
     if token_type_ids is not None and may_have_image_input:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
         # undo the causal masking)
-
-        # The logic bellow was originally written for gemma3, where `token_type_ids` is reversed. Let's reverse it to
-        # then use exactly the same logic.
-        token_type_ids = 1 - token_type_ids
 
         # First find where a new image block starts: 1 if image and previous not image
         # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
@@ -380,6 +400,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
                 position_ids,
                 token_type_ids,
                 pixel_values,
+                is_training=self.training,
             )
 
         outputs = self.language_model(

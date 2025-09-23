@@ -203,6 +203,9 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             return batch_query
 
+    def model_input_names(self):
+        raise AttributeError("Paligemma now always returns token_type_ids.")
+
     def process_images(
         self,
         images: Optional[ImageInput] = None,

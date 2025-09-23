@@ -733,14 +733,18 @@ def create_causal_mask_mapping(
     position_ids: Optional[torch.Tensor],
     token_type_ids: Optional[torch.Tensor] = None,
     pixel_values: Optional[torch.FloatTensor] = None,
+    is_training: bool = False,
     **kwargs,
 ) -> dict:
     """
     Overwrites the base `create_masks_for_generate` with `token_type_ids` masking to create the causal mask mapping
-    for all kinds of forward passes.
+    for all kinds of forward passes. Gemma3 uses a bidirectional mask for images.
 
     Uses `pixel_values` as an optional input to disambiguate edge cases.
     """
+    if is_training and token_type_ids is None:
+        raise ValueError("`token_type_ids` is required as a model input when training")
+
     mask_kwargs = {
         "config": config.get_text_config(),
         "input_embeds": input_embeds,
@@ -766,6 +770,11 @@ def create_causal_mask_mapping(
         image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
         mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
             token_type_ids.to(cache_position.device), image_group_ids
+        )
+    elif may_have_image_input:
+        logger.warning_once(
+            "There may be an image in the input to Gemma3 but `token_type_ids` is not provided. We recommend "
+            "passing `token_type_ids` to the model to prevent bad attention masking."
         )
 
     return create_masks_for_generate(**mask_kwargs)
@@ -858,6 +867,7 @@ class Gemma3Model(PaliGemmaModel):
                 position_ids,
                 token_type_ids,
                 pixel_values,
+                is_training=self.training,
             )
 
         outputs = self.language_model(

@@ -282,6 +282,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     test_missing_keys = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+    additional_model_inputs = ["token_type_ids"]
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]

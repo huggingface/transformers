@@ -299,6 +299,7 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         return_data = {**inputs, "pixel_values": pixel_values}
 
+        # TODO: ideally we would control label generation separately, now that we always return token_type_ids.
         if return_token_type_ids:
             labels = np.array(inputs["input_ids"])
             labels[np.array(inputs["token_type_ids"]) == 0] = -100
@@ -329,6 +330,12 @@ class PaliGemmaProcessor(ProcessorMixin):
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids", "labels"]
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(tokenizer_input_names + image_processor_input_names)
 
 
 __all__ = ["PaliGemmaProcessor"]
