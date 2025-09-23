@@ -805,11 +805,6 @@ def create_causal_mask_mapping(
         mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
             token_type_ids.to(cache_position.device), image_group_ids
         )
-    elif may_have_image_input:
-        logger.warning_once(
-            "There may be an image in the input to Gemma3 but `token_type_ids` is not provided. We recommend "
-            "passing `token_type_ids` to the model to prevent bad attention masking."
-        )
 
     return create_masks_for_generate(**mask_kwargs)
 

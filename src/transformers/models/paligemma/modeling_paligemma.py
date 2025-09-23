@@ -160,19 +160,19 @@ def create_causal_mask_mapping(
         "past_key_values": past_key_values,
         "position_ids": position_ids,
     }
-    # NOTE: this `may_have_image_input` logic is not flawless, it fails when we're using a cache eagerly initialized
+    # NOTE: this `is_prompt` logic is not flawless, it fails when we're using a cache eagerly initialized
     # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
     # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
-    may_have_image_input = past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
+    maybe_is_prompt = past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
 
-    if may_have_image_input:
+    if maybe_is_prompt:
         if token_type_ids is not None:
             # The logic bellow was originally written for Gemma3, where `token_type_ids` is reversed. Let's reverse
             # it to then use exactly the same logic.
             token_type_ids = 1 - token_type_ids
         else:
             logger.warning_once(
-                "There may be an image in the input to Paligemma but `token_type_ids` is not provided. We recommend "
+                "The input may be the prompt, but `token_type_ids` is not provided. We recommend "
                 "passing `token_type_ids` to the model to prevent bad attention masking."
             )
             # BC: when NOT training, use bidirectional mask if sequence length > 1. Otherwise, use the default causal
@@ -184,7 +184,7 @@ def create_causal_mask_mapping(
     # Logic originally copied from Gemma3. It holds up for Paligemma as well because Paligemma assumes up to one image
     # per prompt AND we reverse `token_type_ids` above. Gemma3 uses a bidirectional mask for images, tagged through
     # `token_type_ids` 1s.
-    if token_type_ids is not None and may_have_image_input:
+    if token_type_ids is not None and maybe_is_prompt:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
         # undo the causal masking)
 
