@@ -213,10 +213,6 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
     def test_model(self):
         pass
 
-    @unittest.skip(reason="Not relevant for the model")
-    def test_can_init_all_missing_weights(self):
-        pass
-
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
