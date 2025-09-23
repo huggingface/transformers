@@ -21,9 +21,7 @@ provides for it.
 
 Most of those are only useful if you are adding new models in the library.
 
-
 ## Model addition debuggers
-
 
 ### Model addition debugger - context manager for model adders
 
@@ -71,7 +69,6 @@ with model_addition_debugger_context(
     output = model.forward(**inputs)
 
 ```
-
 
 ### Reading results
 
@@ -231,9 +228,7 @@ Once the forward passes of two models have been traced by the debugger, one can 
 below: we can see slight differences between these two implementations' key projection layer. Inputs are mostly
 identical, but not quite. Looking through the file differences makes it easier to pinpoint which layer is wrong.
 
-
 ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/files_difference_debugging.png)
-
 
 ### Limitations and scope
 
@@ -253,7 +248,7 @@ layers.
 
 This small util is a power user tool intended for model adders and maintainers. It lists all test methods
 existing in `test_modeling_common.py`, inherited by all model tester classes, and scans the repository to measure
-how many tests are being skipped and for which models. 
+how many tests are being skipped and for which models.
 
 ### Rationale
 
@@ -268,8 +263,7 @@ This utility:
 
 ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/f7f671f69b88ce4967e19179172c248958d35742/transformers/tests_skipped_visualisation.png)
 
-
-### Usage 
+### Usage
 
 You can run the skipped test analyzer in two ways:
 

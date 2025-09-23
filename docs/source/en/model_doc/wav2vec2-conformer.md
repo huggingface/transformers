@@ -38,7 +38,7 @@ Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](https://huggingf
 
 - Wav2Vec2-Conformer follows the same architecture as Wav2Vec2, but replaces the *Attention*-block with a *Conformer*-block
   as introduced in [Conformer: Convolution-augmented Transformer for Speech Recognition](https://huggingface.co/papers/2005.08100).
-- For the same number of layers, Wav2Vec2-Conformer requires more parameters than Wav2Vec2, but also yields 
+- For the same number of layers, Wav2Vec2-Conformer requires more parameters than Wav2Vec2, but also yields
 an improved word error rate.
 - Wav2Vec2-Conformer uses the same tokenizer and feature extractor as Wav2Vec2.
 - Wav2Vec2-Conformer can use either no relative position embeddings, Transformer-XL-like position embeddings, or

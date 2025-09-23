@@ -27,7 +27,7 @@ In this guide, you will:
 
 ## Image Similarity using `image-feature-extraction` Pipeline
 
-We have two images of cats sitting on top of fish nets, one of them is generated. 
+We have two images of cats sitting on top of fish nets, one of them is generated.
 
 ```python
 from PIL import Image
@@ -66,7 +66,7 @@ print(outputs)
 # [[[-0.03909236937761307, 0.43381670117378235, -0.06913255900144577,
 ```
 
-To get the similarity score, we need to pass them to a similarity function. 
+To get the similarity score, we need to pass them to a similarity function.
 
 ```python
 from torch.nn.functional import cosine_similarity
@@ -131,4 +131,3 @@ print(similarity_score)
 
 # tensor([0.6061], device='cuda:0', grad_fn=<SumBackward1>)
 ```
-

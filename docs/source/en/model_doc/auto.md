@@ -23,7 +23,6 @@ automatically retrieve the relevant model given the name/path to the pretrained 
 Instantiating one of [`AutoConfig`], [`AutoModel`], and
 [`AutoTokenizer`] will directly create a class of the relevant architecture. For instance
 
-
 ```python
 model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 ```

@@ -68,7 +68,7 @@ a part of the [NASA](https://www.nasa.gov/multimedia/imagegallery/index.html) Gr
 </div>
 
 Pass the image and the candidate object labels to look for to the pipeline.
-Here we pass the image directly; other suitable options include a local path to an image or an image url. We also pass text descriptions for all items we want to query the image for. 
+Here we pass the image directly; other suitable options include a local path to an image or an image url. We also pass text descriptions for all items we want to query the image for.
 
 ```py
 >>> predictions = detector(

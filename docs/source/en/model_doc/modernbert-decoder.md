@@ -36,7 +36,7 @@ You can find all the original ModernBERT Decoder checkpoints under the [jhu-clsp
 >
 > Click on the ModernBERT Decoder models in the right sidebar for more examples of how to apply ModernBERT Decoder to different text generation tasks.
 
-The example below demonstrates how to use ModernBERT Decoder for text generation with [`Pipeline`], [`AutoModel`] (with and without quantization), and from the command line. 
+The example below demonstrates how to use ModernBERT Decoder for text generation with [`Pipeline`], [`AutoModel`] (with and without quantization), and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -151,6 +151,7 @@ with torch.no_grad():
 generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
 print(f"Generated text: {generated_text}")
 ```
+
 </hfoption>
 
 <hfoption id="transformers CLI">
@@ -162,11 +163,9 @@ echo "The future of artificial intelligence is" | transformers run --task text-g
 </hfoption>
 </hfoptions>
 
-
 ## ModernBertDecoderConfig
 
 [[autodoc]] ModernBertDecoderConfig
-
 
 ## ModernBertDecoderModel
 
@@ -182,4 +181,3 @@ echo "The future of artificial intelligence is" | transformers run --task text-g
 
 [[autodoc]] ModernBertDecoderForSequenceClassification
     - forward
-

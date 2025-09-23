@@ -50,6 +50,7 @@ Phi-3.5-MoE-instruct has been integrated in the development version (4.44.2.dev)
 The current `transformers` version can be verified with: `pip list | grep transformers`.
 
 Examples of required packages:
+
 ```
 flash_attn==2.5.8
 torch==2.3.1
@@ -101,7 +102,6 @@ print(output[0]['generated_text'])
 
 [[autodoc]] PhimoeConfig
 
-
 ## PhimoeModel
 
 [[autodoc]] PhimoeModel
@@ -117,4 +117,3 @@ print(output[0]['generated_text'])
 
 [[autodoc]] PhimoeForSequenceClassification
     - forward
-

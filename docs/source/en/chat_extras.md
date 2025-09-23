@@ -29,7 +29,6 @@ the arguments, argument types, and function docstring are parsed in order to gen
 Although passing Python functions is very convenient, the parser can only handle [Google-style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings)
 docstrings. Refer to the examples below for how to format a tool-ready function.
 
-
 ```py
 def get_current_temperature(location: str, unit: str):
     """
@@ -103,7 +102,6 @@ Hold the call in the `tool_calls` key of an `assistant` message. This is the rec
 > [!WARNING]
 > Although `tool_calls` is similar to the OpenAI API, the OpenAI API uses a JSON string as its `tool_calls` format. This may cause errors or strange model behavior if used in Transformers, which expects a dict.
 
-
 ```py
 tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
 messages.append({"role": "assistant", "tool_calls": [{"type": "function", "function": tool_call}]})
@@ -130,7 +128,6 @@ The temperature in Paris, France right now is 22°C.<|im_end|>
 > [!WARNING]
 > Although the key in the assistant message is called `tool_calls`, in most cases, models only emit a single tool call at a time. Some older models emit multiple tool calls at the same time, but this is a
 > significantly more complex process, as you need to handle multiple tool responses at once and disambiguate them, often using tool call IDs. Please refer to the model card to see exactly what format a model expects for tool calls.
-
 
 ## JSON schemas
 

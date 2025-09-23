@@ -77,6 +77,7 @@ output_text = processor.batch_decode(
 )
 print(output_text)
 ```
+
 </hfoption>
 </hfoptions>
 

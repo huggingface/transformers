@@ -48,7 +48,6 @@ See also:
 - [Token classification task guide](../tasks/token_classification)
 - [Question answering task guide](../tasks/question_answering)
 
-
 ⚡️ Inference
 - A blog on [Optimization story: Bloom inference](https://huggingface.co/blog/bloom-inference-optimization).
 - A blog on [Incredibly Fast BLOOM Inference with DeepSpeed and Accelerate](https://huggingface.co/blog/bloom-inference-pytorch-scripts).

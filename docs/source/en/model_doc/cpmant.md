@@ -45,7 +45,7 @@ This model was contributed by [OpenBMB](https://huggingface.co/openbmb). The ori
 
 [[autodoc]] CpmAntModel
     - all
-    
+
 ## CpmAntForCausalLM
 
 [[autodoc]] CpmAntForCausalLM

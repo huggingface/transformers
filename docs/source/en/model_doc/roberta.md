@@ -28,7 +28,6 @@ rendered properly in your Markdown viewer.
 
 You can find all the original RoBERTa checkpoints under the [Facebook AI](https://huggingface.co/FacebookAI) organization.
 
-
 > [!TIP]
 > Click on the RoBERTa models in the right sidebar for more examples of how to apply RoBERTa to different language tasks.
 

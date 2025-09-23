@@ -67,7 +67,6 @@ Here is how to use the processor to process text and audio:
 >>> text_inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
 ```
 
-
 ### Speech
 
 [`SeamlessM4Tv2Model`] can *seamlessly* generate text or speech with few or no changes. Let's target Russian voice translation:
@@ -84,7 +83,7 @@ With basically the same code, I've translated English text and Arabic speech to 
 Similarly, you can generate translated text from audio files or from text with the same model. You only have to pass `generate_speech=False` to [`SeamlessM4Tv2Model.generate`].
 This time, let's translate to French.
 
-```python 
+```python
 >>> # from audio
 >>> output_tokens = model.generate(**audio_inputs, tgt_lang="fra", generate_speech=False)
 >>> translated_text_from_audio = processor.decode(output_tokens[0].tolist()[0], skip_special_tokens=True)
@@ -96,11 +95,10 @@ This time, let's translate to French.
 
 ### Tips
 
-
 #### 1. Use dedicated models
 
 [`SeamlessM4Tv2Model`] is transformers top level model to generate speech and text, but you can also use dedicated models that perform the task without additional components, thus reducing the memory footprint.
-For example, you can replace the audio-to-audio generation snippet with the model dedicated to the S2ST task, the rest is exactly the same code: 
+For example, you can replace the audio-to-audio generation snippet with the model dedicated to the S2ST task, the rest is exactly the same code:
 
 ```python
 >>> from transformers import SeamlessM4Tv2ForSpeechToSpeech
@@ -161,7 +159,6 @@ Here's how the generation process works:
 - If speech generation is required, the second seq2seq model, generates unit tokens in an non auto-regressive way.
 - These unit tokens are then passed through the final vocoder to produce the actual speech.
 
-
 This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/seamless_communication).
 
 ## SeamlessM4Tv2Model
@@ -169,18 +166,15 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 [[autodoc]] SeamlessM4Tv2Model
     - generate
 
-
 ## SeamlessM4Tv2ForTextToSpeech
 
 [[autodoc]] SeamlessM4Tv2ForTextToSpeech
     - generate
 
-
 ## SeamlessM4Tv2ForSpeechToSpeech
 
 [[autodoc]] SeamlessM4Tv2ForSpeechToSpeech
     - generate
-
 
 ## SeamlessM4Tv2ForTextToText
 

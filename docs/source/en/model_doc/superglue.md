@@ -153,4 +153,3 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 [[autodoc]] SuperGlueForKeypointMatching
 
 - forward
-

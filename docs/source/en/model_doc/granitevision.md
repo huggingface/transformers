@@ -25,11 +25,13 @@ Tips:
 - This model is loaded into Transformers as an instance of LlaVA-Next. The usage and tips from [LLaVA-NeXT](llava_next) apply to this model as well.
 
 - You can apply the chat template on the tokenizer / processor in the same way as well. Example chat format:
+
 ```bash
 "<|user|>\nWhat’s shown in this image?\n<|assistant|>\nThis image shows a red stop sign.<|end_of_text|><|user|>\nDescribe the image in more details.\n<|assistant|>\n"
 ```
 
 Sample inference:
+
 ```python
 from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration, infer_device
 
