@@ -77,22 +77,6 @@ class Qwen2MoeAttention(LlamaAttention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
-class Qwen2MoeRouter(nn.Linear):
-    def __init__(self, config):
-        super().__init__(config.hidden_size, config.num_experts, bias=False)
-        self.top_k = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        router_logits = super().forward(hidden_states)
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        if self.norm_topk_prob:
-            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
-        return router_logits, selected_experts, routing_weights
-
-
 class Qwen2MoeExperts(MixtralExperts, nn.Module):
     def __init__(self, config):
         nn.ModuleList.__init__(self)
@@ -105,16 +89,27 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         # gating
-        self.gate = Qwen2MoeRouter(config)
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = Qwen2MoeExperts(config)
+        self.num_experts_per_tok = config.num_experts_per_tok
+        self.norm_topk_prob = config.norm_topk_prob
 
         self.shared_expert = Qwen2MoeMLP(config, intermediate_size=config.shared_expert_intermediate_size)
         self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        routing_weights = F.softmax(router_logits, dim=-1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.num_experts_per_tok, dim=-1)
+        if self.norm_topk_prob:
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return selected_experts, routing_weights
+
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        router_logits, selected_experts, routing_weights = self.gate(hidden_states_reshaped)
+        router_logits = self.gate(hidden_states_reshaped)
+        selected_experts, routing_weights = self.route_tokens_to_experts(hidden_states_reshaped, router_logits)
         expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
 
         shared_expert_output = self.shared_expert(hidden_states_reshaped)
