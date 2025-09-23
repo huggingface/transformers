@@ -311,7 +311,6 @@ def flex_attention_forward(
 
         if s_aux is not None:
             # Apply attention sinks by renormalizing using LSE
-            print(attention_output.shape, lse.shape, s_aux.shape)
             batch_size, num_heads, seq_len_q, _ = attention_output.shape  # batch, num_heads, seq_len, head_dim
             sinks = s_aux.view(1, -1, 1, 1).expand(batch_size, num_heads, seq_len_q, 1)
 
