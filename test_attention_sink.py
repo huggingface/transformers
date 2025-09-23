@@ -14,9 +14,15 @@ from transformers.integrations.flex_attention_old import flex_attention_forward 
 def test_attention_sinks():
     """Test attention sinks with old vs new implementation."""
 
-    # Setup test data
-    batch_size, num_heads, seq_len, head_dim = 1, 2, 4, 8
-    device = torch.device("cpu")
+    # Setup test data - head_dim must be at least 16 for flex_attention
+    batch_size, num_heads, seq_len, head_dim = (
+        1,
+        2,
+        4,
+        16,
+    )
+    device = torch.device("cuda")
+
     dtype = torch.float32
 
     # Create test tensors
@@ -60,16 +66,27 @@ def test_attention_sinks():
         e = str(e).split("\n")[:2]
         print(f"Status: FAILED - {e}")
 
-
     # Test new implementation
     print("\n--- New Implementation ---")
     try:
+        print("Before calling flex_attention_new...")
         new_result = flex_attention_new(module, query, key, value, **test_params)
+        print("After calling flex_attention_new...")
         print("Status: SUCCESS")
         print(f"Output: {new_result}")
+
+        # Additional check for attention sink execution
+        if device.type != "cpu" and s_aux is not None:
+            print("✓ Attention sink logic should have been executed (CUDA device + s_aux provided)")
+        elif device.type == "cpu":
+            print("⚠ Attention sink logic was SKIPPED (CPU device, return_lse=False)")
+        else:
+            print("⚠ Attention sink logic was SKIPPED (s_aux is None)")
+
     except Exception as e:
         e = str(e).split("\n")[:2]
         print(f"Status: FAILED - {e}")
+
 
 if __name__ == "__main__":
     test_attention_sinks()

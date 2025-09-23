@@ -311,13 +311,13 @@ def flex_attention_forward(
 
         if s_aux is not None:
             # Apply attention sinks by renormalizing using LSE
-
-            batch_size, seq_len_q, num_heads, _ = attention_output.shape # batch, seq_len, num_heads, head_dim
-            sinks = s_aux.view(1, 1, -1, 1).expand(batch_size, seq_len_q, num_heads, 1)
+            print(attention_output.shape, lse.shape, s_aux.shape)
+            batch_size, num_heads, seq_len_q, _ = attention_output.shape  # batch, num_heads, seq_len, head_dim
+            sinks = s_aux.view(1, -1, 1, 1).expand(batch_size, num_heads, seq_len_q, 1)
 
             # We need to compute the normalization that includes the sinks
             # NB: log(sum(exp(scores)) + exp(sink)) = log(exp(lse) + exp(sink))
-            lse_expanded = lse.unsqueeze(-1)  # [batch, seq_len, num_heads, 1]
+            lse_expanded = lse.unsqueeze(-1)  # [batch, num_heads, seq_len, 1]
             combined_lse = torch.logsumexp(torch.cat([lse_expanded, sinks], dim=-1), dim=-1, keepdim=True)
 
             # Use new_norm / old_norm = exp(combined_lse - lse) to compute renorm and apply
