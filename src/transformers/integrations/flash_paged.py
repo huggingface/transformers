@@ -58,7 +58,7 @@ def paged_attention_forward(
 
     # Retrieve the cumulative sequence lengths for the current layer
     if isinstance(cu_seq_lens_k, dict):
-        cu_seq_lens_k = cu_seq_lens_k[layer_type].clone()
+        cu_seq_lens_k = cu_seq_lens_k[layer_type]
         max_seqlen_k = max_seqlen_k[layer_type]
 
     if implementation is not None and hasattr(implementation, "flash_attn_varlen_func"):
