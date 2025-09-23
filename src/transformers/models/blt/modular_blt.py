@@ -146,6 +146,7 @@ def _prepare_patch_cross_attention_mask(
     patches_as_queries: bool = False,
     cross_attn_k: int = 1,
     dtype: torch.dtype = torch.float32,
+    attn_implementation: str = "eager",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Prepare cross-attention mask for patch-based attention, following mllama's robust approach.
@@ -160,10 +161,11 @@ def _prepare_patch_cross_attention_mask(
         patches_as_queries (bool): If True, patches are used as queries, otherwise as keys.
         cross_attn_k (int): Cross-attention multiplier for repeating patches.
         dtype (torch.dtype): Data type for the output mask.
+        attn_implementation (str): Attention implementation type to determine mask format.
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor]:
-            - cross_attention_mask: 4D tensor [batch_size, 1, q_len, kv_len]
+            - cross_attention_mask: 4D tensor [batch_size, 1, q_len, kv_len] or 2D for flash attention
     """
     batch_size, seq_len = patch_ids.shape
     device = patch_ids.device
@@ -204,17 +206,28 @@ def _prepare_patch_cross_attention_mask(
             f"Cross attention mask shape {cross_attention_mask.shape} doesn't match expected {expected_shape}"
         )
 
-    # Reshape so it can be used by attn module - add head dimension
-    cross_attention_mask = cross_attention_mask.unsqueeze(1)  # [batch_size, 1, q_len, kv_len]
+    if "flash" in attn_implementation:
+        cross_attention_mask = cross_attention_mask.unsqueeze(1)
+        # Flash attention expects 1 / 0 mask
+        flash_mask = cross_attention_mask.to(dtype)
 
-    # Invert the mask (following mllama pattern exactly)
-    # True -> 0.0 (attend), False -> 1.0 (will become -inf)
-    inverted_cross_attn_mask = 1.0 - cross_attention_mask.to(dtype)
-    cross_attention_mask = inverted_cross_attn_mask.masked_fill(
-        inverted_cross_attn_mask.to(torch.bool), torch.finfo(dtype).min
-    )
+        # flash attention expects 2D mask [batch, seq_len]
+        # so if we have a 4D mask [batch, 1, q_len, kv_len], we need to convert it
+        if flash_mask.dim() == 4:
+            flash_mask = flash_mask.squeeze(1).any(dim=1).to(dtype)
+        return flash_mask
+    else:
+        # Reshape so it can be used by attn module - add head dimension
+        cross_attention_mask = cross_attention_mask.unsqueeze(1)  # [batch_size, 1, q_len, kv_len]
 
-    return cross_attention_mask
+        # Invert the mask (following mllama pattern exactly)
+        # True -> 0.0 (attend), False -> 1.0 (will become -inf)
+        inverted_cross_attn_mask = 1.0 - cross_attention_mask.to(dtype)
+        cross_attention_mask = inverted_cross_attn_mask.masked_fill(
+            inverted_cross_attn_mask.to(torch.bool), torch.finfo(dtype).min
+        )
+
+        return cross_attention_mask
 
 
 def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: Optional[int]) -> torch.Tensor:
@@ -355,9 +368,6 @@ class BltCrossAttention(MllamaTextCrossAttention):
 
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        if "flash" in self.config._attn_implementation:
-            attention_mask = None
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -869,7 +879,13 @@ class BltModel(BltPreTrainedModel):
         )
 
         cross_attn_mask_enc = _prepare_patch_cross_attention_mask(
-            patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
+            patch_ids,
+            patch_lengths.shape[1],
+            sequence_length,
+            True,
+            self.config.cross_attn_k,
+            encoder_embeds.dtype,
+            self.config._attn_implementation,
         )
         encoder_hidden_states, encoder_cross_states = self.local_encoder(
             input_ids=input_ids,
@@ -907,6 +923,7 @@ class BltModel(BltPreTrainedModel):
             False,
             self.config.cross_attn_k,
             encoder_embeds.dtype,
+            self.config._attn_implementation,
         )
         output = self.local_decoder(
             input_ids=input_ids,
