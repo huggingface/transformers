@@ -294,7 +294,7 @@ def default_hp_space_optuna(trial) -> dict[str, float]:
     }
 
 
-def default_hp_space_ray(trial) -> dict[str, float]:
+def default_hp_space_ray(trial) -> dict[str, Any]:
     from .integrations import is_ray_tune_available
 
     assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
@@ -321,7 +321,7 @@ def default_hp_space_sigopt(trial):
     ]
 
 
-def default_hp_space_wandb(trial) -> dict[str, float]:
+def default_hp_space_wandb(trial) -> dict[str, Any]:
     from .integrations import is_wandb_available
 
     if not is_wandb_available():
