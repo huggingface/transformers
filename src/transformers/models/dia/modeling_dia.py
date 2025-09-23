@@ -495,6 +495,7 @@ class DiaEncoder(DiaPreTrainedModel):
             [DiaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.rotary_emb = DiaRotaryEmbedding(config=config)
 
     @auto_docstring
     @can_return_tuple
@@ -517,6 +518,7 @@ class DiaEncoder(DiaPreTrainedModel):
             attention_mask,
             hidden_states,
         )
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -529,6 +531,7 @@ class DiaEncoder(DiaPreTrainedModel):
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -710,14 +713,13 @@ class DiaDecoder(DiaPreTrainedModel):
                 hidden_states,
                 # Needs to be an arg in order to function properly
                 # on inplace operations to be carried (e.g. compile)
-                None,
+                position_embeddings,
                 attention_mask,
                 encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
                 position_ids=position_ids,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]

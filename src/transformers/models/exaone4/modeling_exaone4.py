@@ -468,10 +468,10 @@ class Exaone4Model(Exaone4PreTrainedModel):
                 causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_embeddings(hidden_states, position_ids=position_ids)
 
         for i, decoder_layer in enumerate(self.layers):
             layer_type = self.config.layer_types[i]
+            position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=layer_type)
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[layer_type],

@@ -1242,7 +1242,6 @@ class Gemma3nTextAttention(nn.Module):
             else None
         )
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
-        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
         layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
@@ -1264,6 +1263,7 @@ class Gemma3nTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.sliding_window = config.sliding_window if self.is_sliding else None
+        self.is_sliding = layer_type == "sliding_attention"
 
         self.q_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)

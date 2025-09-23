@@ -335,7 +335,8 @@ class Gemma3Attention(nn.Module):
 
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         super().__init__()
-        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.is_sliding = self.layer_type == "sliding_attention"
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)

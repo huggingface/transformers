@@ -718,7 +718,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type="full_attention")
 
         # decoder layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:

@@ -1289,6 +1289,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
 
         self._attn_implementation = config._attn_implementation
         self.final_layernorm = FalconH1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = FalconH1RotaryEmbedding(config=config)
 
         self.embedding_multiplier = config.embedding_multiplier
         self.lm_head_multiplier = config.lm_head_multiplier
@@ -1351,6 +1352,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
         mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1368,6 +1370,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
             )
 
             hidden_states = layer_outputs[0]

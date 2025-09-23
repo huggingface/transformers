@@ -675,6 +675,7 @@ class NemotronModel(NemotronPreTrainedModel):
             [NemotronDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = NemotronLayerNorm1P(config.hidden_size, eps=config.norm_eps)
+        self.rotary_emb = NemotronRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -732,6 +733,7 @@ class NemotronModel(NemotronPreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -749,6 +751,7 @@ class NemotronModel(NemotronPreTrainedModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
             )
 
             hidden_states = layer_outputs[0]

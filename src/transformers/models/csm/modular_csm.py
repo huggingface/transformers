@@ -224,6 +224,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         position_ids = cache_position.unsqueeze(0)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
@@ -233,6 +234,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

@@ -273,14 +273,14 @@ def eager_attention_forward(
 
 class Gemma2Attention(GemmaAttention):
     def __init__(self, config: Gemma2Config, layer_idx: int):
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
 
         super().__init__(config, layer_idx)
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
         self.scaling = config.query_pre_attn_scalar**-0.5
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(

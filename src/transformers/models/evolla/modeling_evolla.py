@@ -1616,6 +1616,7 @@ class EvollaModel(EvollaPreTrainedModel):
 
         self.norm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
+        self.rotary_emb = EvollaRotaryEmbedding(config=config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1695,6 +1696,7 @@ class EvollaModel(EvollaPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
@@ -1711,6 +1713,7 @@ class EvollaModel(EvollaPreTrainedModel):
                 structure_batch_mask=structure_batch_mask,
                 msa_batch_mask=msa_batch_mask,
                 query_attn_mask=attention_mask,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

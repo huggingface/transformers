@@ -2111,8 +2111,8 @@ class Qwen2_5OmniAttention(Qwen2_5_VLAttention, nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
 
 class Qwen2MLP(Qwen2_5_VLMLP):

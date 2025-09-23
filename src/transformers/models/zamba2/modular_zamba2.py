@@ -225,8 +225,6 @@ class Zamba2Attention(ZambaAttention):
                 self.linear_v_adapter_list.append(linear_v_adapter)
 
         self.layer_dic = {value: index for index, value in enumerate(self.layer_block_map)}
-        if config.use_mem_rope:
-            self.rotary_emb = Zamba2RotaryEmbedding(config=config)
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -1078,6 +1076,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1097,7 +1096,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                     past_key_values,
                     output_attentions,
                     use_cache,
-                    None,
+                    position_embeddings,
                     position_ids,
                 )
             else:
@@ -1110,6 +1109,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                     past_key_values=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
+                    position_embeddings=position_embeddings,
                     position_ids=position_ids,
                 )
             hidden_states = layer_outputs[0]

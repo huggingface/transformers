@@ -526,7 +526,6 @@ class MllamaTextSelfAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.rotary_emb = MllamaRotaryEmbedding(config=config)
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -726,24 +725,44 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LlamaConfig->MllamaTextConfig,Llama->Mllama
 class MllamaRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: MllamaTextConfig, device=None, layer_type=None):
+    def __init__(self, config: MllamaTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
-        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        self.rope_type = rope_scaling_dict["rope_type"]
-        self.rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(config, device, layer_type=layer_type)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
         self.config = config
+
+        layer_types = getattr(config, "layer_types", [None])
+        self.rope_type = {}
+        inv_freq, attention_scaling = {}, {}
+        for layer_type in layer_types:
+            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            if rope_params is None:
+                continue
+
+            curr_rope_type = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if curr_rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+            self.rope_type[layer_type] = curr_rope_type
+            inv_freq[layer_type] = curr_inv_freq
+            attention_scaling[layer_type] = curr_attention_scaling
+
+        if len(layer_types) == 1:
+            self.rope_type = self.rope_type[layer_types[0]]
+            self.attention_scaling = attention_scaling[layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[layer_types[0]]
+        else:
+            for layer_type in layer_types:
+                if layer_type in inv_freq:
+                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
+                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
+                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -784,18 +803,26 @@ class MllamaRotaryEmbedding(nn.Module):
         )
         return inv_freq, attention_factor
 
+    # Ignore copy
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+    def forward(self, x, position_ids, layer_type=None):
+        if layer_type is not None:
+            inv_freq = getattr(self, f"{layer_type}_inv_freq")
+            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+        else:
+            inv_freq = self.inv_freq
+            attention_scaling = self.attention_scaling
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -1203,6 +1230,8 @@ class MllamaTextModel(MllamaPreTrainedModel):
 
         self.layers = nn.ModuleList(layers)
         self.norm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = MllamaRotaryEmbedding(config=config)
+
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -1284,6 +1313,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_key_values)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for idx, decoder_layer in enumerate(self.layers):
@@ -1308,6 +1338,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

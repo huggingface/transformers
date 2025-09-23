@@ -172,9 +172,12 @@ class Qwen2Model(MistralModel):
         hidden_states = inputs_embeds
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            position_embeddings = self.rotary_emb(
-                hidden_states, position_ids=position_ids, layer_type=decoder_layer.attention_type
-            )
+            if self.has_sliding_layers:
+                position_embeddings = self.rotary_emb(
+                    hidden_states, position_ids=position_ids, layer_type=decoder_layer.attention_type
+                )
+            else:
+                position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],

@@ -950,9 +950,12 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            position_embeddings = self.rotary_emb(
-                hidden_states, position_ids=position_ids, layer_type=decoder_layer.attention_type
-            )
+            if self.has_sliding_layers:
+                position_embeddings = self.rotary_emb(
+                    hidden_states, position_ids=position_ids, layer_type=decoder_layer.attention_type
+                )
+            else:
+                position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],

@@ -366,7 +366,8 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
 # Weird way to inherit but otherwise the sliding window gets defined first and can't access `is_sliding`
 class Gemma3Attention(Gemma2Attention):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
-        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.is_sliding = self.layer_type == "sliding_attention"
 
         super().__init__()
         self.sliding_window = config.sliding_window if self.is_sliding else None

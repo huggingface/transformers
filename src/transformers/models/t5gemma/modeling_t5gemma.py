@@ -766,6 +766,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
             [T5GemmaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.dropout = nn.Dropout(config.dropout_rate)
+        self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -824,9 +825,12 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         hidden_states = self.dropout(hidden_states)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
+            position_embeddings = self.rotary_emb(
+                hidden_states, position_ids=position_ids, layer_type=layer_module.attention_type
+            )
             hidden_states = layer_module(
                 hidden_states,
-                None,
+                position_embeddings,
                 self_attn_mask_mapping[layer_module.attention_type],
                 position_ids,
                 **kwargs,

@@ -1398,7 +1398,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
                     past_key_values,
                     output_attentions,
                     use_cache,
-                    None,
+                    position_embeddings,
                     position_ids,
                 )
             else:
@@ -1411,8 +1411,8 @@ class Zamba2Model(Zamba2PreTrainedModel):
                     past_key_values=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
-                    position_ids=position_ids,
                     position_embeddings=position_embeddings,
+                    position_ids=position_ids,
                 )
             hidden_states = layer_outputs[0]
 

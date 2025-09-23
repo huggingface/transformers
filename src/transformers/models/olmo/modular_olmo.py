@@ -26,6 +26,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 
 from ...cache_utils import Cache
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import logging
 from ...utils.deprecation import deprecate_kwarg
@@ -70,17 +71,26 @@ class OlmoMLP(LlamaMLP):
 # This is identical to LlamaRotaryEmbedding except the output cos and sin are returned
 # as float32 rather than the input type.
 class OlmoRotaryEmbedding(LlamaRotaryEmbedding):
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids, layer_type=None):
+        if layer_type is not None:
+            inv_freq = getattr(self, f"{layer_type}_inv_freq")
+            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+        else:
+            inv_freq = self.inv_freq
+            attention_scaling = self.attention_scaling
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-            return cos, sin
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
+        return cos, sin
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):

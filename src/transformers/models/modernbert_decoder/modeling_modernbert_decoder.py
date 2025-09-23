@@ -193,7 +193,7 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.attn_norm(hidden_states)
 
         # apply global RoPE to non-sliding layer only
-        if position_embeddings is not None:
+        if position_embeddings is None:
             if self.attn.is_sliding:
                 position_embeddings = position_embeddings_local
             else:

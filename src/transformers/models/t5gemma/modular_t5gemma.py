@@ -251,6 +251,7 @@ class T5GemmaCrossAttention(Gemma2Attention):
     def __init__(self, config: T5GemmaModuleConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         del self.sliding_window
+        del self.layer_type
         self.is_causal = False
 
         if config.cross_attention_hidden_size is None:
@@ -718,13 +719,15 @@ class T5GemmaDecoder(T5GemmaEncoder):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
         hidden_states = self.dropout(hidden_states)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
+            position_embeddings = self.rotary_emb(
+                hidden_states, position_ids=position_ids, layer_type=layer_module.attention_type
+            )
             hidden_states = layer_module(
                 hidden_states,
                 position_embeddings,
