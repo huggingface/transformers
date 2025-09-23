@@ -159,11 +159,19 @@ class ParakeetCTCConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-            vocab_size (`<fill_type>`, *optional*, defaults to 1025): <fill_docstring>
-            ctc_loss_reduction (`<fill_type>`, *optional*, defaults to `"mean"`): <fill_docstring>
-            ctc_zero_infinity (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-            encoder_config (`Union`, *optional*): <fill_docstring>
-            pad_token_id (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
+            vocab_size (`int`, *optional*, defaults to 1025):
+                Vocabulary size of the model.
+            ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+                Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+                instance of [`ParakeetForCTC`].
+            ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
+                Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+                occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+                of [`ParakeetForCTC`].
+            encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
+                The config object or dictionary of the encoder.
+            pad_token_id (`int`, *optional*, defaults to 1024):
+                Padding token id. Also used as blank token id.
 
     Example:
         ```python

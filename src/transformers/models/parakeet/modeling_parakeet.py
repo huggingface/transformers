@@ -657,11 +657,11 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_features, dtype=torch.long)
             )
-            input_lengths = self._get_subsampling_output_length(attention_mask.sum(-1)).to(torch.long)
+            input_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
 
             # assuming that padded tokens are filled with -100
             # when not being attended to
-            labels_mask = labels >= 0
+            labels_mask = labels != self.config.pad_token_id
             target_lengths = labels_mask.sum(-1)
             flattened_targets = labels.masked_select(labels_mask)
 

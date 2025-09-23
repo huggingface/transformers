@@ -20,6 +20,13 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 class ParakeetTokenizerFast(PreTrainedTokenizerFast):
+    """
+    Inherits all methods from [`PreTrainedTokenizerFast`]. Users should refer to this superclass for more information regarding those methods,
+    except for `_decode` which is overridden to adapt it to CTC decoding:
+    1. Group consecutive tokens
+    2. Filter out the blank token
+    """
+
     def _decode(
         self,
         token_ids: Union[int, list[int]],

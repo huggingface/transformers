@@ -31,7 +31,7 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
         },
         "text_kwargs": {
             "padding": True,
-            "padding_side": "left",
+            "padding_side": "right",
             "add_special_tokens": False,
         },
         "common_kwargs": {"return_tensors": "pt"},

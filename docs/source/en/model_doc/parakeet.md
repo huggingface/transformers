@@ -36,6 +36,8 @@ Parakeet models, [introduced by NVIDIA NeMo](https://developer.nvidia.com/blog/p
 The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo).
 Model checkpoints are to be found under [the NVIDIA organization](https://huggingface.co/nvidia/models?search=parakeet).
 
+This model was contributed by [Nithin Rao Koluguri](https://huggingface.co/nithinraok), [Eustache Le Bihan](https://huggingface.co/eustlb) and [Eric Bezzam](https://huggingface.co/bezzam).
+
 ## Usage
 
 ### Basic usage
@@ -157,6 +159,31 @@ print("Fourth generation - still fast !!!")
 with TimerContext("Fourth generation"):
     outputs = model.generate(**inputs)
 print(processor.batch_decode(outputs))
+```
+
+### Training
+
+```python
+from transformers import AutoModelForCTC, AutoProcessor
+from datasets import load_dataset, Audio
+import torch
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+processor = AutoProcessor.from_pretrained("eustlb/parakeet-ctc-1.1b")
+model = AutoModelForCTC.from_pretrained("eustlb/parakeet-ctc-1.1b", dtype="auto", device_map=device)
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el['array'] for el in ds["audio"][:5]]
+text_samples = [el for el in ds["text"][:5]]
+
+# passing `text` to the processor will prepare inputs' `labels` key
+inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(device, dtype=model.dtype)
+
+outputs = model(**inputs)
+outputs.loss.backward()
 ```
 
 ## ParakeetTokenizerFast
