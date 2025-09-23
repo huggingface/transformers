@@ -3657,6 +3657,14 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
             info = _prepare_debugging_info(test_info, info)
 
+            # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
+            # behaves as usual.
+            # This is to avoid the patched function being called `with self.assertRaises(AssertionError):` and fails
+            # because of the missing expected `AssertionError`.
+            # TODO (ydshieh): If there is way to raise only when we are inside such context managers?
+            if os.getenv("CI") == "true":
+                raise captured_exception.with_traceback(test_traceback)
+
             # Save this, so we can raise at the end of the current test
             captured_failure = {
                 "result": "failed",
