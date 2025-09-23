@@ -17,6 +17,7 @@
 from ...utils import logging
 from ..qwen2.tokenization_qwen2 import Qwen2Tokenizer
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -70,10 +71,10 @@ class VibeVoiceTextTokenizer(Qwen2Tokenizer):
             add_special_tokens=add_special_tokens,
             **kwargs,
         )
-        
+
         # Add VibeVoice-specific special tokens
         self._add_vibevoice_special_tokens()
-        
+
     def _add_vibevoice_special_tokens(self):
         """Add VibeVoice-specific special tokens."""
         special_tokens = {
@@ -84,36 +85,36 @@ class VibeVoiceTextTokenizer(Qwen2Tokenizer):
             ]
         }
         num_added = self.add_special_tokens(special_tokens)
-        
+
         # Cache special token IDs
         self._speech_start_id = self.convert_tokens_to_ids("<|vision_start|>")
         self._speech_end_id = self.convert_tokens_to_ids("<|vision_end|>")
         self._speech_diffusion_id = self.convert_tokens_to_ids("<|vision_pad|>")
-        
+
         self._eos_id = self.convert_tokens_to_ids('<|endoftext|>')
 
         return num_added
-    
+
     @property
     def eos_id(self) -> int:
         """Id of the end of sequence token."""
         return self._eos_id
-    
+
     @property
     def speech_start_id(self) -> int:
         """Id of the speech start token."""
         return self._speech_start_id
-    
+
     @property
     def speech_end_id(self) -> int:
         """Id of the speech end token."""
         return self._speech_end_id
-    
+
     @property
     def speech_diffusion_id(self) -> int:
         """Id of the speech diffusion token."""
         return self._speech_diffusion_id
-    
+
     @property
     def pad_id(self) -> int:
         """Id used for padding (returns -100 for loss masking)."""

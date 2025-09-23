@@ -15,15 +15,15 @@
 # DISCLAIMER: This file is strongly influenced by https://github.com/LuChengTHU/dpm-solver
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
-
 from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.schedulers.scheduling_utils import KarrasDiffusionSchedulers, SchedulerMixin, SchedulerOutput
 from diffusers.utils import deprecate
 from diffusers.utils.torch_utils import randn_tensor
-from diffusers.schedulers.scheduling_utils import KarrasDiffusionSchedulers, SchedulerMixin, SchedulerOutput
+
 
 def betas_for_alpha_bar(
     num_diffusion_timesteps,
@@ -206,7 +206,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         beta_start: float = 0.0001,
         beta_end: float = 0.02,
         beta_schedule: str = "linear",
-        trained_betas: Optional[Union[np.ndarray, List[float]]] = None,
+        trained_betas: Optional[Union[np.ndarray, list[float]]] = None,
         solver_order: int = 2,
         prediction_type: str = "epsilon",
         thresholding: bool = False,
@@ -322,7 +322,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         self,
         num_inference_steps: int = None,
         device: Union[str, torch.device] = None,
-        timesteps: Optional[List[int]] = None,
+        timesteps: Optional[list[int]] = None,
     ):
         """
         Sets the discrete timesteps used for the diffusion chain (to be run before inference).
@@ -695,7 +695,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     def multistep_dpm_solver_second_order_update(
         self,
-        model_output_list: List[torch.Tensor],
+        model_output_list: list[torch.Tensor],
         *args,
         sample: torch.Tensor = None,
         noise: Optional[torch.Tensor] = None,
@@ -818,7 +818,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     def multistep_dpm_solver_third_order_update(
         self,
-        model_output_list: List[torch.Tensor],
+        model_output_list: list[torch.Tensor],
         *args,
         sample: torch.Tensor = None,
         **kwargs,
@@ -940,7 +940,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         generator=None,
         variance_noise: Optional[torch.Tensor] = None,
         return_dict: bool = True,
-    ) -> Union[SchedulerOutput, Tuple]:
+    ) -> Union[SchedulerOutput, tuple]:
         """
         Predict the sample from the previous timestep by reversing the SDE. This function propagates the sample with
         the multistep DPMSolver.
@@ -1042,7 +1042,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
             sigma_t = sigma_t.unsqueeze(-1)
         noisy_samples = alpha_t * original_samples + sigma_t * noise
         return noisy_samples
-    
+
     def get_velocity(self, original_samples: torch.Tensor, noise: torch.Tensor, timesteps: torch.IntTensor) -> torch.Tensor:
         # alpha_t = self.alpha_t.to(device=original_samples.device, dtype=original_samples.dtype)
         # sigma_t = self.sigma_t.to(device=original_samples.device, dtype=original_samples.dtype)

@@ -1,21 +1,17 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union, Callable
-from tqdm import tqdm
+from typing import Callable, Optional, Union
+
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 
-from ...generation import GenerationMixin, GenerationConfig, LogitsProcessor, LogitsProcessorList, StoppingCriteriaList
+from ...generation import GenerationConfig, GenerationMixin, LogitsProcessor, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...utils import logging
-
-from .configuration_vibevoice import VibeVoiceConfig
-from .modular_vibevoice_tokenizer import VibeVoiceTokenizerStreamingCache, VibeVoiceTokenizerEncoderOutput
-from .modular_vibevoice_diffusion_head import VibeVoiceDiffusionHead
-
+from .audio_streamer import AsyncAudioStreamer, AudioStreamer
 from .modeling_vibevoice import VibeVoiceModel, VibeVoicePreTrainedModel
-from .audio_streamer import AudioStreamer, AsyncAudioStreamer
+from .modular_vibevoice_tokenizer import VibeVoiceTokenizerStreamingCache
+
 
 logger = logging.get_logger(__name__)
 
@@ -36,37 +32,37 @@ class VibeVoiceGenerationOutput(ModelOutput):
             List of generated speech waveforms or latents for each speech segment.
     """
     sequences: torch.LongTensor = None
-    speech_outputs: Optional[List[torch.FloatTensor]] = None
+    speech_outputs: Optional[list[torch.FloatTensor]] = None
     reach_max_step_sample: Optional[torch.BoolTensor] = None
 
 class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
     """Constrains token generation to only valid tokens during speech generation."""
-    
-    def __init__(self, valid_token_ids: List[int], device: torch.device = None):
+
+    def __init__(self, valid_token_ids: list[int], device: torch.device = None):
         self.valid_token_ids = torch.tensor(valid_token_ids, dtype=torch.long, device=device)
-        
+
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         # Create a mask for valid tokens
         mask = torch.full_like(scores, float('-inf'))
         mask[:, self.valid_token_ids] = 0
-        
+
         # Apply mask to scores
         scores = scores + mask
         return scores
-    
+
 class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config):
         super().__init__(config)
-        
+
         # Initialize the base model
         self.model = VibeVoiceModel(config)
-        
+
         # LM head for text generation
         self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.decoder_config.vocab_size, bias=False)
-        
+
         # inference configuration
         self.ddpm_inference_steps = config.diffusion_head_config.ddpm_num_inference_steps
 
@@ -80,7 +76,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
     @property
     def prediction_head(self):
         return self.model.prediction_head
-    
+
     @property
     def speech_scaling_factor(self):
         return self.model.speech_scaling_factor
@@ -96,7 +92,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
     @property
     def semantic_tokenizer(self):
         return self.model.semantic_tokenizer
-    
+
     @property
     def acoustic_connector(self):
         return self.model.acoustic_connector
@@ -104,7 +100,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
     @property
     def semantic_connector(self):
         return self.model.semantic_connector
-        
+
     def tie_weights(self):
         """
         Tie the weights between the input embeddings and the output embeddings.
@@ -112,22 +108,22 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         # Tie lm_head.weight to language_model.embed_tokens.weight
         if not getattr(self.config, 'tie_word_embeddings', False):
             return
-         
+
         if hasattr(self, 'lm_head') and hasattr(self.model.language_model, 'embed_tokens'):
             self.lm_head.weight = self.model.language_model.embed_tokens.weight
-        
+
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
-    
+
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-    
+
     def get_output_embeddings(self):
         return self.lm_head
-    
+
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-    
+
     def set_ddpm_inference_steps(self, num_steps=None):
         self.ddpm_inference_steps = num_steps or self.config.diffusion_head_config.ddpm_num_inference_steps
 
@@ -135,22 +131,22 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         """Process speech inputs through tokenizers and connectors."""
         encoder_output = self.model.acoustic_tokenizer.encode(speech_tensors.unsqueeze(1))
         acoustic_latents = encoder_output.sample(dist_type=self.model.acoustic_tokenizer.std_dist_type)[0]
-        
+
         # Apply scaling and bias
         acoustic_features = (acoustic_latents + self.model.speech_bias_factor.to(acoustic_latents.device)) * self.model.speech_scaling_factor.to(acoustic_latents.device)
-        
+
         # Connect to language model space
         acoustic_connected = self.model.acoustic_connector(acoustic_features)[speech_masks.cpu()]
-        
+
         return acoustic_features, acoustic_connected
-    
+
     # @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -163,7 +159,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         speech_input_mask: Optional[torch.BoolTensor] = None,
         logits_to_keep: Union[int, slice] = 0,
         **kwargs,
-    ) -> Union[Tuple, VibeVoiceCausalLMOutputWithPast]:
+    ) -> Union[tuple, VibeVoiceCausalLMOutputWithPast]:
         """
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -181,11 +177,11 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             `VibeVoiceCausalLMOutputWithPast` or tuple
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         # Get embeddings
         if inputs_embeds is None:
             inputs_embeds = self.model.get_input_embeddings()(input_ids)
-        
+
         # Process speech inputs if provided
         if speech_tensors is not None and speech_masks is not None:
             acoustic_features, speech_embeds = self._process_speech_inputs(speech_tensors.to(self.dtype), speech_masks)
@@ -209,7 +205,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-                
+
         if labels is not None:
             raise NotImplementedError("Loss computation is not implemented in this version.")
 
@@ -236,11 +232,11 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             )
 
         generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, 
-            True, 
-            speech_start_id=tokenizer.speech_start_id, 
-            speech_end_id=tokenizer.speech_end_id, 
-            speech_diffusion_id=tokenizer.speech_diffusion_id, 
+            generation_config,
+            True,
+            speech_start_id=tokenizer.speech_start_id,
+            speech_end_id=tokenizer.speech_end_id,
+            speech_diffusion_id=tokenizer.speech_diffusion_id,
             **kwargs
         )
         generation_config.speech_start_id = tokenizer.speech_start_id
@@ -250,7 +246,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(inputs, generation_config.bos_token_id, model_kwargs)
         batch_size = inputs_tensor.shape[0]
         device = self.device
-        
+
         self._prepare_special_tokens(generation_config, True, device=device)
         generation_config.use_cache = True
         model_kwargs["use_cache"] = generation_config.use_cache
@@ -274,7 +270,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         for k, v in model_kwargs.items():
             if isinstance(v, torch.Tensor):
                 model_kwargs[k] = v.to(device=device)
-        
+
         if return_processors:
             logits_processor = self._get_logits_processor(
                 generation_config=generation_config,
@@ -287,11 +283,11 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             )
 
             stopping_criteria = self._get_stopping_criteria(generation_config=generation_config, stopping_criteria=StoppingCriteriaList())
-        
+
             return generation_config, model_kwargs, input_ids, logits_processor, stopping_criteria
         else:
             return generation_config, model_kwargs, input_ids
-        
+
     @torch.no_grad()
     def generate(
         self,
@@ -331,17 +327,17 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         all_speakers_list = kwargs.pop("all_speakers_list", None)
         max_length_times = kwargs.pop("max_length_times", 2)
 
-        if kwargs.get('max_new_tokens', None) is None:
+        if kwargs.get('max_new_tokens') is None:
             kwargs['max_new_tokens'] = self.config.decoder_config.max_position_embeddings - kwargs['input_ids'].shape[-1]
 
         generation_config, model_kwargs, input_ids, logits_processor, stopping_criteria = self._build_generate_config_model_kwargs(
             generation_config, inputs, tokenizer, return_processors=True, **kwargs
         )
-        
+
         negative_kwargs = {
             'input_ids': torch.full((kwargs['input_ids'].shape[0], 1), tokenizer.speech_start_id, dtype=torch.long, device=kwargs['input_ids'].device),
             'attention_mask':  torch.ones((kwargs['input_ids'].shape[0], 1), dtype=torch.long, device=kwargs['input_ids'].device),
-            'max_new_tokens': kwargs.get('max_new_tokens', 100) 
+            'max_new_tokens': kwargs.get('max_new_tokens', 100)
         }
         negative_generation_config, negative_model_kwargs, negative_input_ids = self._build_generate_config_model_kwargs(
             None, None, tokenizer, return_processors=False, **negative_kwargs
@@ -349,7 +345,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
 
         acoustic_cache = VibeVoiceTokenizerStreamingCache()
         semantic_cache = VibeVoiceTokenizerStreamingCache()
-        
+
         batch_size = input_ids.shape[0]
         device = input_ids.device
         finished_tags = torch.zeros(batch_size, dtype=torch.bool, device=device)
@@ -367,20 +363,20 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
        # Define all valid tokens that can be generated
         valid_tokens = [
             generation_config.speech_start_id,
-            generation_config.speech_end_id, 
+            generation_config.speech_end_id,
             generation_config.speech_diffusion_id,
             generation_config.eos_token_id
         ]
         # Add bos_token_id if it exists
         if hasattr(generation_config, 'bos_token_id') and generation_config.bos_token_id is not None:
             valid_tokens.append(generation_config.bos_token_id)
-        
+
         # Add custom processor to constrain token generation
         token_constraint_processor = VibeVoiceTokenConstraintProcessor(valid_tokens, device=device)
         if logits_processor is None:
             logits_processor = LogitsProcessorList()
         logits_processor.append(token_constraint_processor)
-        
+
         max_steps = min(generation_config.max_length - initial_length, int(max_length_times * initial_length))
         max_step_per_sample = torch.min(generation_config.max_length - initial_length_per_sample, (max_length_times * initial_length_per_sample).long())
         reach_max_step_sample = torch.zeros(batch_size, dtype=torch.bool, device=device)
@@ -390,7 +386,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             progress_bar = tqdm(range(max_steps), desc="Generating", leave=False)
         else:
             progress_bar = range(max_steps)
-        
+
         for step in progress_bar:
             # Check for external stop signal
             if stop_check_fn is not None and stop_check_fn():
@@ -400,14 +396,14 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                 if audio_streamer is not None:
                     audio_streamer.end()
                 break
-            
+
             # Check if audio_streamer has been ended (stopped externally)
             if audio_streamer is not None and hasattr(audio_streamer, 'finished_flags'):
                 if any(audio_streamer.finished_flags):
                     if verbose:
                         print(f"Audio generation stopped externally at step {step + 1}")
                     break
-            
+
             if finished_tags.all():
                 if hasattr(progress_bar, 'set_description'):
                     progress_bar.set_description("Generation complete")
@@ -419,7 +415,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                 if reached_samples.numel() > 0:
                     reach_max_step_sample[reached_samples] = True
                 break
-            
+
             # Update progress bar description with active samples
             if hasattr(progress_bar, 'set_description'):
                 active_samples = (~finished_tags).sum().item()
@@ -450,7 +446,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
             # next_token_logits = outputs.logits[:, -1, :].to(copy=True, device=input_ids.device)
             next_token_scores = logits_processor(input_ids, next_token_logits)
-            
+
             # token selection
             if generation_config.do_sample:
                 probs = nn.functional.softmax(next_token_scores, dim=-1)
@@ -491,7 +487,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                 # Clear tokenizer caches for samples that reached speech end
                 acoustic_cache.set_to_zero(diffusion_end_indices)
                 semantic_cache.set_to_zero(diffusion_end_indices)
-            
+
             # speech_begin
             diffusion_start_indices = torch.arange(batch_size, device=device)[~finished_tags & (next_tokens == generation_config.speech_start_id)]
             if diffusion_start_indices.numel() > 0 and kwargs.get('refresh_negative', True):
@@ -511,15 +507,15 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                 # update negative_input_ids
                 for sample_idx in diffusion_start_indices.tolist():
                     negative_input_ids[sample_idx, -1] = generation_config.speech_start_id
-            
+
             # Prepare inputs_embeds for next iteration
             # Initialize with default embeddings for all tokens
             next_inputs_embeds = self.model.get_input_embeddings()(next_tokens).unsqueeze(1)  # [batch_size, 1, hidden_size]
-            
+
             # forward diffusion
             # Diffusion indices are those that are not finished and not special tokens
             diffusion_indices = torch.arange(batch_size, device=device)[~finished_tags & (next_tokens == generation_config.speech_diffusion_id)]
-            
+
             if diffusion_indices.numel() > 0:
                 negative_model_inputs = self.prepare_inputs_for_generation(negative_input_ids, **negative_model_kwargs)
                 # Forward negative pass through the model
@@ -536,7 +532,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                 negative_input_ids = torch.cat([negative_input_ids, next_tokens[:, None]], dim=-1)
 
                 # correct the non-diffusion indices
-                # we forward all samples' negative outputs even if 
+                # we forward all samples' negative outputs even if
                 #   they are not in diffusion mode to keep the cache consistent
                 # So we need to correct the kv cache of non-diffusion samples
                 non_diffusion_mask = ~finished_tags & (next_tokens != generation_config.speech_diffusion_id)
@@ -563,24 +559,24 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                                 # Shift cache for this sample
                                 k_cache[sample_idx, :, start_idx+1:, :] = k_cache[sample_idx, :, start_idx:-1, :].clone()
                                 v_cache[sample_idx, :, start_idx+1:, :] = v_cache[sample_idx, :, start_idx:-1, :].clone()
-                    
+
                     # 3. Update negative_input_ids
                     for sample_idx, start_idx in zip(non_diffusion_indices.tolist(), start_indices.tolist()):
                         if start_idx + 1 < negative_input_ids.shape[1] - 1:
                             negative_input_ids[sample_idx, start_idx+1:] = \
                                 negative_input_ids[sample_idx, start_idx:-1].clone()
-                                
+
                     correct_cnt[non_diffusion_indices] += 1
 
                 positive_condition = outputs.last_hidden_state[diffusion_indices, -1, :]
                 negative_condition = negative_outputs.last_hidden_state[diffusion_indices, -1, :]
-                
+
                 speech_latent = self.sample_speech_tokens(
                     positive_condition,
                     negative_condition,
                     cfg_scale=cfg_scale,
                 ).unsqueeze(1)
-                                
+
                 # Decode acoustic latent to audio using acoustic streaming cache
                 scaled_latent = speech_latent / self.model.speech_scaling_factor.to(speech_latent.device) - self.model.speech_bias_factor.to(speech_latent.device)
                 audio_chunk = self.model.acoustic_tokenizer.decode(
@@ -590,7 +586,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                     use_cache=True,
                     debug=False
                 )
-                
+
                 # Store audio chunks for each sample
                 for i, sample_idx in enumerate(diffusion_indices):
                     idx = sample_idx.item()
@@ -602,7 +598,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                 if audio_streamer is not None:
                     # Stream the audio chunks immediately
                     audio_streamer.put(audio_chunk, diffusion_indices)
-                    
+
                 # Encode audio to semantic features using semantic streaming cache
                 semantic_features = self.model.semantic_tokenizer.encode(
                     audio_chunk,
@@ -611,7 +607,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                     use_cache=True,
                     debug=False
                 ).mean # semantic tokenizer has no VAE.
-                
+
                 # Combine acoustic and semantic features for next input
                 acoustic_embed = self.model.acoustic_connector(speech_latent)
                 semantic_embed = self.model.semantic_connector(semantic_features)
@@ -619,7 +615,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
 
                 # Update embeddings for diffusion indices
                 next_inputs_embeds[diffusion_indices] = diffusion_embeds
-            
+
             # Set inputs_embeds for next iteration
             inputs_embeds = next_inputs_embeds
 
@@ -642,7 +638,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             speech_outputs=final_audio_outputs if return_speech else None,
             reach_max_step_sample=reach_max_step_sample,
         )
-    
+
     @torch.no_grad()
     def sample_speech_tokens(self, condition, neg_condition, cfg_scale=3.0):
         self.model.noise_scheduler.set_timesteps(self.ddpm_inference_steps)
