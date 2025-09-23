@@ -262,7 +262,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: list[str],
     ):
         """
         Each nn.Linear layer that needs to be quantized is processed here.

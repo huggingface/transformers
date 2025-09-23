@@ -142,7 +142,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         Quantizes weights into weight and weight_scale
@@ -194,8 +193,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
 
         module._parameters[tensor_name] = torch.nn.Parameter(new_value.to(target_device))
 
-        if unexpected_keys is not None and param_name in unexpected_keys:
-            unexpected_keys.remove(param_name)
         del param_name
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):

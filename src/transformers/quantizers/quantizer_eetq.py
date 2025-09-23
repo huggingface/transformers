@@ -130,7 +130,6 @@ class EetqHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         quantizes weights into qweight and weight_scales

@@ -82,7 +82,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         Quantizes weights to FP8 format using Block-wise quantization

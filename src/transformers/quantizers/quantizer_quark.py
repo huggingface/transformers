@@ -92,9 +92,7 @@ class QuarkHfQuantizer(HfQuantizer):
     ) -> bool:
         return True
 
-    def create_quantized_param(
-        self, model, param, param_name, param_device, state_dict, unexpected_keys
-    ) -> "torch.nn.Parameter":
+    def create_quantized_param(self, model, param, param_name, param_device, state_dict) -> "torch.nn.Parameter":
         postfix = param_name.split(".")[-1]
 
         if postfix in CHECKPOINT_KEYS:

@@ -88,7 +88,6 @@ class HiggsHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         from ..integrations import quantize_with_higgs
 
@@ -116,9 +115,6 @@ class HiggsHfQuantizer(HfQuantizer):
                 self.quantization_config.tune_metadata[module_name] = value.to_dict()
             else:
                 raise ValueError(f"Unexpected key {key} in module {module}")
-
-        if unexpected_keys is not None and param_name in unexpected_keys:
-            unexpected_keys.remove(param_name)
 
     def _process_model_before_weight_loading(
         self,

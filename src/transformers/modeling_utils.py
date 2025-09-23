@@ -711,7 +711,6 @@ def _load_state_dict_into_meta_model(
     hf_quantizer: Optional[HfQuantizer] = None,
     is_safetensors: bool = False,
     keep_in_fp32_regex: Optional[re.Pattern] = None,
-    unexpected_keys: Optional[list[str]] = None,  # passing `unexpected` for cleanup from quantization items
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
 ) -> tuple[Optional[dict], Optional[dict]]:
     """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
@@ -791,7 +790,6 @@ def _load_state_dict_into_meta_model(
                     param_name,
                     device_mesh.get_local_rank(),
                     state_dict,
-                    unexpected_keys,
                     **sharding_kwargs,
                 )
         else:
@@ -836,9 +834,7 @@ def _load_state_dict_into_meta_model(
 
             else:
                 # TODO naming is stupid it loads it as well
-                hf_quantizer.create_quantized_param(
-                    model, param, param_name, param_device, state_dict, unexpected_keys
-                )
+                hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict)
 
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
@@ -887,7 +883,6 @@ def load_shard_file(args):
         cpu_offload_index,
         is_offloaded_safetensors,
         keep_in_fp32_regex,
-        unexpected_keys,
         device_mesh,
     ) = args
 
@@ -949,7 +944,6 @@ def load_shard_file(args):
             hf_quantizer=hf_quantizer,
             is_safetensors=is_offloaded_safetensors,
             keep_in_fp32_regex=keep_in_fp32_regex,
-            unexpected_keys=unexpected_keys,
             device_mesh=device_mesh,
         )
 
@@ -5455,7 +5449,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 cpu_offload_index,
                 is_offloaded_safetensors,
                 keep_in_fp32_regex,
-                unexpected_keys,
                 device_mesh,
             )
             for shard_file in checkpoint_files
@@ -5838,7 +5831,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def _move_missing_keys_from_meta_to_cpu(
         self,
         missing_keys: list[str],
-        unexpected_keys: list[str],
         dtype: Optional[torch.dtype],
         hf_quantizer: Optional[HfQuantizer],
     ) -> "PreTrainedModel":
@@ -5868,7 +5860,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ):
                     _load_parameter_into_model(self, key, value)
                 else:
-                    hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict, unexpected_keys)
+                    hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict)
 
     def _initialize_missing_keys(
         self,

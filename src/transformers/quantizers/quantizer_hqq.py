@@ -182,7 +182,6 @@ class HqqHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: list[str],
     ):
         """
         Each nn.Linear layer is processed here.
@@ -216,8 +215,6 @@ class HqqHfQuantizer(HfQuantizer):
         for k, v in state_dict.items():
             if layer_name + "." in k:
                 module_state_dict[k.split(".")[-1]] = v
-                if unexpected_keys is not None and k in unexpected_keys:
-                    unexpected_keys.remove(k)
 
         if self.pre_quantized:
             if isinstance(module, HQQLinear):

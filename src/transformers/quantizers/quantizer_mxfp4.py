@@ -178,7 +178,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import (

@@ -187,19 +187,15 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
-        needs aux items from state dicts, if found - removes them from unexpected_keys
+        needs aux items from state dicts, if found
         """
         import bitsandbytes as bnb
 
         fp16_statistics_key = param_name.replace("weight", "SCB")
-        fp16_weights_format_key = param_name.replace("weight", "weight_format")
-
         fp16_statistics = state_dict.get(fp16_statistics_key)
-        fp16_weights_format = state_dict.get(fp16_weights_format_key)
 
         module, tensor_name = get_module_from_name(model, param_name)
         if tensor_name not in module._parameters:
@@ -235,13 +231,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         module._parameters[tensor_name] = new_value
         if fp16_statistics is not None:
             setattr(module.weight, "SCB", fp16_statistics.to(target_device))
-            if unexpected_keys is not None:
-                unexpected_keys.remove(fp16_statistics_key)
-
-        # We just need to pop the `weight_format` keys from the state dict to remove unneeded
-        # messages. The correct format is correctly retrieved during the first forward pass.
-        if fp16_weights_format is not None and unexpected_keys is not None:
-            unexpected_keys.remove(fp16_weights_format_key)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_loaded_in_8bit = True
