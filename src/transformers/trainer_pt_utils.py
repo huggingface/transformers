@@ -929,7 +929,7 @@ def _secs2timedelta(secs):
     return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
 
 
-def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
+def metrics_format(metrics: dict[str, float]) -> dict[str, float]:
     """
     Reformat Trainer metrics values to a human-readable format.
 
@@ -1038,7 +1038,7 @@ def log_metrics(self, split, metrics):
         return
 
     print(f"***** {split} metrics *****")
-    metrics_formatted = self.metrics_format(metrics)
+    metrics_formatted = metrics_format(metrics)
     k_width = max(len(str(x)) for x in metrics_formatted)
     v_width = max(len(str(x)) for x in metrics_formatted.values())
     for key in sorted(metrics_formatted.keys()):

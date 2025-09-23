@@ -188,7 +188,7 @@ class FillMaskPipeline(Pipeline):
             return result[0]
         return result
 
-    def get_target_ids(self, targets, top_k=None):
+    def get_target_ids(self, targets):
         if isinstance(targets, str):
             targets = [targets]
         try:
@@ -238,7 +238,7 @@ class FillMaskPipeline(Pipeline):
         postprocess_params = {}
 
         if targets is not None:
-            target_ids = self.get_target_ids(targets, top_k)
+            target_ids = self.get_target_ids(targets)
             postprocess_params["target_ids"] = target_ids
 
         if top_k is not None:
