@@ -30,8 +30,8 @@ A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templat
 ```
 
 If you stare at this for a while, you should realize that this is actually very like Python, albeit with some strange
-`{%-` syntax. The template iterates over a list of messages, and for each message, it prints the role and content of 
-the message, followed by an end-of-sequence token. If `add_generation_prompt=True`, it adds 
+`{%-` syntax. The template iterates over a list of messages, and for each message, it prints the role and content of
+the message, followed by an end-of-sequence token. If `add_generation_prompt=True`, it adds
 the starting header for an assistant message to the end of the conversation.
 
 Load the written template as a string and assign it to the tokenizer's `chat_template` attribute. Once set, the template is used whenever you call [`~PreTrainedTokenizerBase.apply_chat_template`]. It is also saved
@@ -42,7 +42,7 @@ edit this file directly to change the template, which is often easier than manip
 
 The easiest way to start writing Jinja templates is to refer to existing templates. Use `print(tokenizer.chat_template)` on any chat model to see the template it's using. Try starting with simple models that don't call any tools or support RAG because tool-use models can have very complex templates. Finally, take a look at the [Jinja documentation](https://jinja.palletsprojects.com/en/stable/templates/#synopsis) for more details about formatting and syntax.
 
-There are some specific tips and pitfalls you may encounter while writing chat templates specifically, though, and this section will cover some of them in more detail. 
+There are some specific tips and pitfalls you may encounter while writing chat templates specifically, though, and this section will cover some of them in more detail.
 
 ### Writing multimodal chat templates
 
@@ -133,7 +133,7 @@ Make the changes below to ensure compatibility across all Jinja implementations.
 
 ### Big templates
 
-Newer models or models with features like [tool-calling](./chat_extras#tools) and [RAG](./chat_extras#retrieval-augmented-generation-rag) require larger templates that can be longer than 100 lines. It may be easier to write larger templates in a separate file. The line numbers in the separate file corresponds exactly to the line numbers in template parsing or execution errors, making it easier to debug any potential issues.
+Newer models or models with features like [tool-calling](./chat_extras) and RAG require larger templates that can be longer than 100 lines. It may be easier to write larger templates in a separate file. The line numbers in the separate file corresponds exactly to the line numbers in template parsing or execution errors, making it easier to debug any potential issues.
 
 Write the template in a separate file and extract it to the chat template.
 
@@ -166,22 +166,22 @@ The example below shows how a tool is defined in JSON schema format.
 
 ```json
 {
-  "type": "function", 
+  "type": "function",
   "function": {
-    "name": "multiply", 
-    "description": "A function that multiplies two numbers", 
+    "name": "multiply",
+    "description": "A function that multiplies two numbers",
     "parameters": {
-      "type": "object", 
+      "type": "object",
       "properties": {
         "a": {
-          "type": "number", 
+          "type": "number",
           "description": "The first number to multiply"
-        }, 
+        },
         "b": {
           "type": "number",
           "description": "The second number to multiply"
         }
-      }, 
+      },
       "required": ["a", "b"]
     }
   }
