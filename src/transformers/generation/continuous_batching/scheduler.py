@@ -31,7 +31,6 @@ class Scheduler(ABC):
     def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False):
         self.active_requests: dict[str, RequestState] = {}
         self.waiting_requests: dict[str, RequestState] = {}
-        self.waiting_requests_order: deque[str] = deque()
         self.cache = cache
         self.retain_cache_on_finish = retain_cache_on_finish
         self._cancellation_lock = threading.Lock()
@@ -46,7 +45,6 @@ class Scheduler(ABC):
             state.allocated_blocks = old_state.allocated_blocks
             state.position_offset = old_state.position_offset
         self.waiting_requests[state.request_id] = state
-        self.waiting_requests_order.append(state.request_id)
 
     @abstractmethod
     def schedule_batch(self, token_budget: int) -> list[RequestState]:
@@ -92,8 +90,6 @@ class Scheduler(ABC):
                     del self.active_requests[request_id]
                 if request_id in self.waiting_requests:
                     del self.waiting_requests[request_id]
-                if request_id in self.waiting_requests_order:
-                    self.waiting_requests_order.remove(request_id)
                 self.cache.free_blocks(request_id)
             self._requests_to_cancel = set()
 
@@ -124,9 +120,7 @@ class Scheduler(ABC):
         return True
 
     @traced(span_name="prepare_request")
-    def _prepare_request_for_processing(
-        self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
-    ):
+    def _prepare_request_for_processing(self, state: RequestState, token_budget: int):
         """Prepares a request for processing in the current batch."""
         request_tokens = (
             state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
@@ -136,7 +130,6 @@ class Scheduler(ABC):
             if state.status == RequestStatus.PENDING:
                 self.active_requests[state.request_id] = state
                 state.status = RequestStatus.PREFILLING
-                request_ids_to_remove_from_waiting.add(state.request_id)
             elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
                 state.status = RequestStatus.PREFILLING
                 state.prompt_ids = state.remaining_prompt_ids
@@ -146,7 +139,6 @@ class Scheduler(ABC):
             if state.status == RequestStatus.PENDING:
                 self.active_requests[state.request_id] = state
                 state.status = RequestStatus.PREFILLING_SPLIT
-                request_ids_to_remove_from_waiting.add(state.request_id)
             elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
                 state.status = RequestStatus.PREFILLING_SPLIT
             state.remaining_prompt_ids = request_tokens[token_budget:]
@@ -180,11 +172,9 @@ class FIFOScheduler(Scheduler):
                 second_priority_states.append(state)
 
         # Add waiting requests to second priority
-        for req_id in self.waiting_requests_order:
-            second_priority_states.append(self.waiting_requests[req_id])
+        second_priority_states.extend(self.waiting_requests.values())
 
         candidates = priority_states + second_priority_states
-        request_ids_to_remove_from_waiting = set()
         safety_margins = self.safety_margin * self.cache.num_blocks
 
         for state in candidates:
@@ -194,7 +184,7 @@ class FIFOScheduler(Scheduler):
             if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
                 break
 
-            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
+            self._prepare_request_for_processing(state, token_budget)
             request_len = len(state.prompt_ids)
             if not self._allocate_blocks_if_needed(
                 state, len(state.prompt_ids)
@@ -216,16 +206,11 @@ class FIFOScheduler(Scheduler):
                 req_id = state.request_id
                 if req_id in self.waiting_requests:
                     del self.waiting_requests[req_id]
-                    request_ids_to_remove_from_waiting.add(req_id)
 
             _remove_from_waiting_requests(state)
 
             if token_budget == 0:
                 break
-
-        self.waiting_requests_order = deque(
-            [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
-        )
 
         return scheduled_requests
 
@@ -250,15 +235,12 @@ class PrefillFirstScheduler(Scheduler):
             elif state.status == RequestStatus.DECODING:
                 second_priority_states.append(state)
 
-        for req_id in self.waiting_requests_order:
-            second_priority_states.append(self.waiting_requests[req_id])
+        second_priority_states.extend(self.waiting_requests.values())
 
         candidates = priority_states + second_priority_states
 
-        request_ids_to_remove_from_waiting = set()
-
         for state in candidates:
-            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
+            self._prepare_request_for_processing(state, token_budget)
             request_len = len(state.prompt_ids)
             if not self._allocate_blocks_if_needed(
                 state, len(state.prompt_ids)
@@ -280,16 +262,11 @@ class PrefillFirstScheduler(Scheduler):
                 req_id = state.request_id
                 if req_id in self.waiting_requests:
                     del self.waiting_requests[req_id]
-                    request_ids_to_remove_from_waiting.add(req_id)
 
             _remove_from_waiting_requests(state)
 
             if token_budget == 0:
                 break
-
-        self.waiting_requests_order = deque(
-            [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
-        )
 
         return scheduled_requests
 
