@@ -99,30 +99,8 @@ class ParakeetEncoderFeedForward(nn.Module):
 
 
 class ParakeetEncoderConvolutionModule(FastSpeech2ConformerConvolutionModule):
-    # TODO: this should not be necessary but for some reason modular does not catch the correct config type
     def __init__(self, config: ParakeetEncoderConfig, module_config=None):
-        """
-        Args:
-            config (ParakeetEncoderConfig): Configuration for the model.
-            module_config (dict): Configuration for the module (e.g., encoder or decoder).
-        """
-        super().__init__()
-        channels = config.hidden_size
-        # kernel_size should be an odd number for 'SAME' padding
-        if module_config is None:
-            # e.g. using `ParakeetEncoderEncoderConfig` in src/transformers/models/parakeet_encoder/configuration_parakeet_encoder.py
-            kernel_size = config.conv_kernel_size
-            self.activation = ACT2FN[getattr(config, "hidden_act", "silu")]
-        else:
-            kernel_size = module_config["kernel_size"]
-            self.activation = ACT2FN[module_config.get("activation", "silu")]
-        self.padding = (kernel_size - 1) // 2
-        self.pointwise_conv1 = nn.Conv1d(channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=True)
-        self.depthwise_conv = nn.Conv1d(
-            channels, channels, kernel_size, stride=1, padding=self.padding, groups=channels, bias=True
-        )
-        self.norm = nn.BatchNorm1d(channels)
-        self.pointwise_conv2 = nn.Conv1d(channels, channels, kernel_size=1, stride=1, padding=0, bias=True)
+        super().__init__(config, module_config)
 
 
 class ParakeetEncoderAttention(LlamaAttention):
