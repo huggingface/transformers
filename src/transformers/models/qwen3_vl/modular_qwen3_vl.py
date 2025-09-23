@@ -29,7 +29,7 @@ from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, rope_config_validation
+from ...modeling_rope_utils import dynamic_rope_update, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -46,10 +46,10 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
     Qwen2VLModelOutputWithPast,
     Qwen2VLPreTrainedModel,
+    Qwen2VLRotaryEmbedding,
     TransformersKwargs,
     VisionAttention,
     VisionRotaryEmbedding,
-    Qwen2VLRotaryEmbedding,
 )
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
 from ..qwen3.modeling_qwen3 import (

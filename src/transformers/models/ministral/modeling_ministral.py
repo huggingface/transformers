@@ -438,10 +438,8 @@ class MinistralModel(MinistralPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            position_embeddings = self.rotary_emb(hidden_states, position_ids, decoder_layer.attention_type)
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],

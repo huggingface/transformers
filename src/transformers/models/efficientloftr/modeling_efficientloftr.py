@@ -402,7 +402,6 @@ class EfficientLoFTRAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_emb = EfficientLoFTRRotaryEmbedding(config=config)
 
     def forward(
         self,
@@ -421,18 +420,7 @@ class EfficientLoFTRAttention(nn.Module):
         value_states = self.v_proj(current_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
 
         if not self.is_cross_attention:
-            if position_embeddings is None:
-                cos, sin = self.rotary_emb(hidden_states)
-                cos = cos.expand(batch_size, -1, -1, -1).reshape(batch_size, -1, dim)
-                sin = sin.expand(batch_size, -1, -1, -1).reshape(batch_size, -1, dim)
-            else:
-                logger.warning_once(
-                    "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
-                    "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
-                    "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
-                    "removed in v4.60.0."
-                )
-                cos, sin = position_embeddings
+            cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
 
         query_states = query_states.view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
@@ -734,6 +722,7 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         self.config = config
         self.backbone = EfficientLoFTRepVGG(config)
         self.local_feature_transformer = EfficientLoFTRLocalFeatureTransformer(config)
+        self.rotary_emb = EfficientLoFTRRotaryEmbedding(config=config)
 
         self.post_init()
 
@@ -786,9 +775,15 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         coarse_embed_dim, coarse_height, coarse_width = coarse_features.shape[-3:]
 
         # 2. Coarse-level LoFTR module
-        coarse_features = coarse_features.reshape(batch_size, 2, coarse_embed_dim, coarse_height, coarse_width)
-        coarse_features = self.local_feature_transformer(coarse_features, **kwargs)
+        cos, sin = self.rotary_emb(coarse_features)
+        cos = cos.expand(batch_size * 2, -1, -1, -1).reshape(batch_size * 2, -1, coarse_embed_dim)
+        sin = sin.expand(batch_size * 2, -1, -1, -1).reshape(batch_size * 2, -1, coarse_embed_dim)
+        position_embeddings = (cos, sin)
 
+        coarse_features = coarse_features.reshape(batch_size, 2, coarse_embed_dim, coarse_height, coarse_width)
+        coarse_features = self.local_feature_transformer(
+            coarse_features, position_embeddings=position_embeddings, **kwargs
+        )
         features = (coarse_features,) + tuple(residual_features)
 
         return BackboneOutput(feature_maps=features)

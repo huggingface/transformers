@@ -80,7 +80,7 @@ def dynamic_rope_update(rope_forward):
             original_max_position_embeddings = self.config.max_position_embeddings
         if seq_len > original_max_position_embeddings:
             if not hasattr(self, f"{layer_type}_long_inv_freq"):
-                rope_type = self.rope_type if hasattr(self, "rope_type") else self.rope_types[layer_type]
+                rope_type = self.rope_type[layer_type] if layer_type is not None else self.rope_type
                 rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
                 long_inv_freq, _ = rope_init_fn(
                     self.config,
@@ -111,7 +111,7 @@ def dynamic_rope_update(rope_forward):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            rope_type = self.rope_type if hasattr(self, "rope_type") else self.rope_types[layer_type]
+            rope_type = self.rope_type[layer_type] if layer_type is not None else self.rope_type
             rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
             inv_freq, self.attention_scaling = rope_init_fn(
                 self.config,
@@ -139,7 +139,7 @@ def dynamic_rope_update(rope_forward):
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):
-        rope_type = self.rope_type if hasattr(self, "rope_type") else self.rope_types[layer_type]
+        rope_type = self.rope_type[layer_type] if layer_type is not None else self.rope_type
         if "dynamic" in rope_type:
             dynamic_frequency_update(self, position_ids, device=x.device, layer_type=layer_type)
         elif rope_type == "longrope":
