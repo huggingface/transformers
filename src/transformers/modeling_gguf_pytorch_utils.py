@@ -241,6 +241,16 @@ class Gemma2TensorProcessor(TensorProcessor):
         if "norm.weight" in name:
             weights = weights - 1
         return GGUFTensor(weights, name, {})
+    
+class Lfm2TensorProcessor(TensorProcessor):
+    def __init__(self, config=None):
+        super().__init__(config=config)
+
+    def process(self, weights, name, **kwargs):
+        if "shortconv.conv.weight" in name:
+            ## GGUF shape is [hidden_dim, L_cache], HF expects [hidden_dim, 1, L_cache]
+            weights = np.expand_dims(weights, axis=1) ## equivalent to unsqueeze(1)
+        return GGUFTensor(weights, name, {})
 
 
 TENSOR_PROCESSORS = {
@@ -255,6 +265,7 @@ TENSOR_PROCESSORS = {
     "nemotron": NemotronTensorProcessor,
     "gemma2": Gemma2TensorProcessor,
     "gemma3": Gemma2TensorProcessor,
+    "lfm2": Lfm2TensorProcessor,
 }
 
 
