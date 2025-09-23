@@ -1227,7 +1227,7 @@ def get_checkpoint_from_config_class(config_class):
     return checkpoint
 
 
-def add_intro_docstring(func, class_name, parent_class=None, indent_level=0):
+def add_intro_docstring(func, class_name, indent_level=0):
     intro_docstring = ""
     if func.__name__ == "forward":
         intro_docstring = rf"""The [`{class_name}`] forward method, overrides the `__call__` special method.
@@ -1469,9 +1469,7 @@ def find_sig_line(lines, line_end):
     return sig_line_end
 
 
-def _process_kwargs_parameters(
-    sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
-):
+def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters):
     """
     Process **kwargs parameters if needed.
 
@@ -1479,7 +1477,6 @@ def _process_kwargs_parameters(
         sig (`inspect.Signature`): Function signature
         func (`function`): Function the parameters belong to
         parent_class (`class`): Parent class of the function
-        model_name_lowercase (`str`): Lowercase model name
         documented_kwargs (`dict`): Dictionary of kwargs that are already documented
         indent_level (`int`): Indentation level
         undocumented_parameters (`list`): List to append undocumented parameters to
@@ -1510,7 +1507,7 @@ def _process_kwargs_parameters(
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
-                documented_kwargs, _ = parse_docstring(kwargs_documentation)
+                documented_kwargs = parse_docstring(kwargs_documentation)[0]
 
             # Process each kwarg parameter
             for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
@@ -1597,7 +1594,7 @@ def _process_parameters_section(
 
     # Process **kwargs parameters if needed
     kwargs_docstring = _process_kwargs_parameters(
-        sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
+        sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters
     )
     docstring += kwargs_docstring
 
@@ -1757,9 +1754,7 @@ def auto_method_docstring(
         if not docstring.strip().endswith("\n"):
             docstring += "\n"
     else:
-        docstring = add_intro_docstring(
-            func, class_name=class_name, parent_class=parent_class, indent_level=indent_level
-        )
+        docstring = add_intro_docstring(func, class_name=class_name, indent_level=indent_level)
 
     # Process Parameters section
     docstring += _process_parameters_section(
