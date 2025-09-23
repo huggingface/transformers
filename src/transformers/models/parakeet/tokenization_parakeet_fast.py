@@ -28,8 +28,13 @@ class ParakeetTokenizerFast(PreTrainedTokenizerFast):
         group_tokens: bool = True,
         **kwargs,
     ) -> str:
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
         if group_tokens:
             token_ids = [token_group[0] for token_group in itertools.groupby(token_ids)]
+
+        # for CTC we filter out the blank token, which is the pad token
+        token_ids = [token for token in token_ids if token != self.pad_token_id]
 
         return super()._decode(
             token_ids=token_ids,
