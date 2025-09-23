@@ -541,3 +541,39 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
         ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
         self.assertEqual(eg_predicted_mask, ep_predicted_mask)
+
+    @slow
+    def test_inference_multiple_choice(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
+        model = (
+            ModernBertForMultipleChoice.from_pretrained(
+                "netique/ModernBertForMultipleChoice",
+                reference_compile=False,
+                attn_implementation="sdpa",
+            )
+            .eval()
+            .to(torch_device)
+        )
+
+        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        choices = [
+            "It is eaten with a fork and a knife.",
+            "It is eaten while held in the hand.",
+            "It also walks on the sidewalks.",
+            "It is a common drink.",
+        ]
+        labels = torch.tensor([0], device=torch_device)
+
+        encoding = tokenizer([prompt for _ in choices], choices, return_tensors="pt", padding=True)
+        outputs = model(**{k: v.unsqueeze(0).to(torch_device) for k, v in encoding.items()}, labels=labels)
+
+        expected_logits = torch.tensor([[0.1973, 0.2041, 0.1835, 0.1896]])
+        logits = outputs.logits.to("cpu")
+
+        self.assertTrue(
+            torch.allclose(logits, expected_logits, atol=1e-4, rtol=1e-4),
+            f"Logits: {logits.tolist()}\nExpected: {expected_logits.tolist()}",
+        )
