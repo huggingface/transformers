@@ -189,8 +189,6 @@ class VideoLlama3ImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
-            vision_info (`list[Dict]`, *optional*):
-                Optional list of dictionaries containing additional information about vision inputs.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`dict[str, int]`, *optional*, defaults to `self.size`):

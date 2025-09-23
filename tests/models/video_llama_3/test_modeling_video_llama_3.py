@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     require_torch,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
-    set_model_tester_for_less_flaky_test,
     torch_device,
 )
 from transformers.utils import (
@@ -58,12 +57,9 @@ if is_torch_available():
     import torch
 
 
-def _test_eager_matches_sdpa_inference(
+def _test_encoder_eager_matches_sdpa_inference(
     self,
-    name,
     dtype,
-    padding_side,
-    use_attention_mask,
     output_attentions,
     enable_kernels,
     atols=None,
@@ -127,22 +123,6 @@ def _test_eager_matches_sdpa_inference(
             ("cuda", True, torch.float16): 5e-3,
         }
 
-    set_model_tester_for_less_flaky_test(self)
-
-    def _can_output_attn(model):
-        parameters = inspect.signature(model.forward).parameters
-        if "output_attentions" in parameters:
-            return True
-
-        kwargs_param = parameters.get("kwargs")
-        if kwargs_param is not None:
-            try:
-                annotation = kwargs_param.annotation.__args__
-                return "output_attentions" in annotation[0].__annotations__
-            except AttributeError:
-                return False
-        return False
-
     for model_class in self.all_model_classes:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
@@ -171,10 +151,6 @@ def _test_eager_matches_sdpa_inference(
 
         set_model_for_less_flaky_test(model_eager)
         set_model_for_less_flaky_test(model_sdpa)
-
-        can_output_attn = _can_output_attn(model_sdpa)
-        if not (self.has_attentions and can_output_attn) and output_attentions:
-            self.skipTest(reason="Model does not support output_attentions")
 
         # TODO: if we can also check with `batch_size=1` without being flaky?
         for batch_size in [7]:
@@ -218,42 +194,12 @@ def _test_eager_matches_sdpa_inference(
                 pixel_values = pixel_values[:target_len]
             processed_inputs["pixel_values"] = pixel_values
 
-            if not use_attention_mask:
-                dummy_attention_mask = None
-            else:
-                dummy_attention_mask = inputs_dict.get("attention_mask", None)
-                if dummy_attention_mask is None:
-                    seqlen = processed_inputs[model.main_input_name].shape[-1]
-                    dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
-
-                # extend dummy_attention_mask to have at least `batch_size` elements
-                if dummy_attention_mask.shape[0] < batch_size:
-                    size = (batch_size - dummy_attention_mask.shape[0], *dummy_attention_mask.shape[1:])
-                    extension = torch.ones(size=size, dtype=dummy_attention_mask.dtype, device=torch_device)
-                    dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
-
-                dummy_attention_mask = dummy_attention_mask[:batch_size].to(torch_device)
-
-                dummy_attention_mask[:] = 1
-                if padding_side == "left":
-                    dummy_attention_mask[-1, :2] = 0
-                    dummy_attention_mask[-1, 2:] = 1
-                elif padding_side == "right":
-                    dummy_attention_mask[-1, -2:] = 0
-                    dummy_attention_mask[-1, :-2] = 1
-
             processed_inputs.update(
                 {
                     "output_hidden_states": True,
+                    "output_attentions": output_attentions,
                 }
             )
-
-            # Otherwise fails for e.g. WhisperEncoderModel
-            if "attention_mask" in inspect.signature(model_eager.forward).parameters:
-                processed_inputs["attention_mask"] = dummy_attention_mask
-
-            if self.has_attentions and _can_output_attn(model_sdpa):
-                processed_inputs["output_attentions"] = output_attentions
 
             # TODO: test gradients as well (& for FA2 as well!)
             with torch.no_grad():
@@ -270,35 +216,11 @@ def _test_eager_matches_sdpa_inference(
                     outputs_eager = model_eager(**prepared_inputs)
                     outputs_sdpa = model_sdpa(**prepared_inputs)
 
-            if "logits_per_text" in outputs_eager:
-                key = "logits_per_text"
-            elif "vision_hidden_states" in outputs_eager:
-                key = "vision_hidden_states"
-            elif "audio_values" in outputs_eager:
-                key = "audio_values"
-            elif "decoder_hidden_states" in outputs_eager:
-                key = "decoder_hidden_states"
-            elif "logits" in outputs_eager and "Classification" in model_class.__name__:
-                key = "logits"
-            elif "language_model_outputs" in outputs_eager and "blip" in model_class.__name__.lower():
-                outputs_eager = outputs_eager["language_model_outputs"]
-                outputs_sdpa = outputs_sdpa["language_model_outputs"]
-                key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
-            else:
-                key = "hidden_states"
+            key = "hidden_states"
 
             # TODO: rename logits -> hidden_states
-            logits_eager = outputs_eager[key]
-            logits_sdpa = outputs_sdpa[key]
-
-            if key in ["vision_hidden_states", "decoder_hidden_states", "hidden_states"]:
-                logits_eager = logits_eager[-1]
-                logits_sdpa = logits_sdpa[-1]
-
-            if key == "logits_per_text":
-                nan_mask = torch.isnan(logits_eager)
-                logits_eager[nan_mask] = 0
-                logits_sdpa[nan_mask] = 0
+            logits_eager = outputs_eager[key][-1]
+            logits_sdpa = outputs_sdpa[key][-1]
 
             if torch_device in ["cpu", "cuda"]:
                 atol = atols[torch_device, enable_kernels, dtype]
@@ -315,25 +237,6 @@ def _test_eager_matches_sdpa_inference(
             else:
                 atol = 1e-7
                 rtol = 1e-4
-
-            # Masked tokens output slightly deviates - we don't mind that.
-            if use_attention_mask:
-                _logits_sdpa = torch.zeros_like(input=logits_sdpa)
-                _logits_eager = torch.zeros_like(input=logits_eager)
-
-                _logits_sdpa[:-1] = logits_sdpa[:-1]
-                _logits_eager[:-1] = logits_eager[:-1]
-
-                if padding_side == "left":
-                    _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
-                    _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
-
-                elif padding_side == "right":
-                    _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
-                    _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
-
-                logits_sdpa = _logits_sdpa
-                logits_eager = _logits_eager
 
             # Avoid test flakiness with bf16!
             # bf16 is not good at precision when the magnitude is larger. We have some models like `SiglipVision` with
@@ -467,14 +370,11 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_eager_matches_sdpa_inference(
         self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
-        _test_eager_matches_sdpa_inference(
-            self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
-        )
+        if use_attention_mask:
+            self.skipTest(reason="VideoLlama3VisionModel does not use attention mask")
+        _test_encoder_eager_matches_sdpa_inference(self, dtype, output_attentions, enable_kernels)
 
     def test_attention_outputs(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model does not output attentions")
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
         # force eager attention to support output attentions
@@ -494,7 +394,7 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -508,7 +408,7 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
@@ -526,13 +426,7 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
+            self.assertEqual(out_len + 1, len(outputs))
 
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
@@ -640,7 +534,7 @@ class VideoLlama3VisionText2TextModelTester:
             "max_window_layers": 3,
             "model_type": "qwen2",
             "num_attention_heads": 4,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_key_value_heads": 2,
             "rms_norm_eps": 1e-06,
             "rope_scaling": None,
