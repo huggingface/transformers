@@ -20,7 +20,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import Qwen3NextConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
 
@@ -46,13 +46,8 @@ from ...test_modeling_common import (
 
 
 class Qwen3NextModelTester(CausalLMModelTester):
-    config_class = Qwen3NextConfig
     if is_torch_available():
         base_model_class = Qwen3NextModel
-        causal_lm_class = Qwen3NextForCausalLM
-        question_answering_class = Qwen3NextForQuestionAnswering
-        sequence_classification_class = Qwen3NextForSequenceClassification
-        token_classification_class = Qwen3NextForTokenClassification
 
     def __init__(self, parent):
         super().__init__(parent=parent)

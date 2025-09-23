@@ -18,7 +18,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import NemotronConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_read_token,
@@ -46,12 +46,7 @@ if is_torch_available():
 
 class NemotronModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = NemotronConfig
         base_model_class = NemotronModel
-        causal_lm_class = NemotronForCausalLM
-        question_answering_class = NemotronForQuestionAnswering
-        sequence_classification_class = NemotronForSequenceClassification
-        token_classification_class = NemotronForTokenClassification
 
 
 @require_torch

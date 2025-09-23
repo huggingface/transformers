@@ -43,12 +43,7 @@ if is_torch_available():
 
 class ArceeModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = ArceeConfig
         base_model_class = ArceeModel
-        causal_lm_class = ArceeForCausalLM
-        question_answering_class = ArceeForQuestionAnswering
-        sequence_classification_class = ArceeForSequenceClassification
-        token_classification_class = ArceeForTokenClassification
 
 
 @require_torch

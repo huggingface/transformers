@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import BitsAndBytesConfig, Cache, DeepseekV2Config, is_torch_available
+from transformers import BitsAndBytesConfig, Cache, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -33,10 +33,7 @@ if is_torch_available():
 
 class DeepseekV2ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = DeepseekV2Config
         base_model_class = DeepseekV2Model
-        causal_lm_class = DeepseekV2ForCausalLM
-        sequence_classification_class = DeepseekV2ForSequenceClassification
 
     def __init__(
         self,

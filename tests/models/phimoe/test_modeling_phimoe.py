@@ -18,7 +18,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import PhimoeConfig, StaticCache, is_torch_available
+from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -86,10 +86,7 @@ if is_torch_available():
 
 class PhimoeModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = PhimoeConfig
         base_model_class = PhimoeModel
-        causal_lm_class = PhimoeForCausalLM
-        sequence_classification_class = PhimoeForSequenceClassification
 
 
 @require_torch

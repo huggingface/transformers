@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, JetMoeConfig, is_torch_available
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     require_flash_attn,
@@ -42,11 +42,8 @@ if is_torch_available():
 
 
 class JetMoeModelTester(CausalLMModelTester):
-    config_class = JetMoeConfig
     if is_torch_available():
         base_model_class = JetMoeModel
-        causal_lm_class = JetMoeForCausalLM
-        sequence_classification_class = JetMoeForSequenceClassification
 
     def __init__(
         self,

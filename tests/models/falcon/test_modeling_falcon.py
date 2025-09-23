@@ -36,7 +36,6 @@ if is_torch_available():
 
     from transformers import (
         FalconForCausalLM,
-        FalconForQuestionAnswering,
         FalconForSequenceClassification,
         FalconForTokenClassification,
         FalconModel,
@@ -45,12 +44,7 @@ if is_torch_available():
 
 class FalconModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = FalconConfig
         base_model_class = FalconModel
-        causal_lm_class = FalconForCausalLM
-        question_answering_class = FalconForQuestionAnswering
-        sequence_classification_class = FalconForSequenceClassification
-        token_classification_class = FalconForTokenClassification
 
     def __init__(self, parent, new_decoder_architecture=True):
         super().__init__(parent)

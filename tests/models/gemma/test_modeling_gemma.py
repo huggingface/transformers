@@ -18,7 +18,7 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     DeviceProperties,
@@ -50,12 +50,8 @@ if is_torch_available():
 
 @require_torch
 class GemmaModelTester(CausalLMModelTester):
-    config_class = GemmaConfig
     if is_torch_available():
         base_model_class = GemmaModel
-        causal_lm_class = GemmaForCausalLM
-        sequence_classification_class = GemmaForSequenceClassification
-        token_classification_class = GemmaForTokenClassification
 
 
 @require_torch

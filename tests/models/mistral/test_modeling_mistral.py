@@ -20,7 +20,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, DynamicCache, MistralConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, DynamicCache, is_torch_available, set_seed
 from transformers.cache_utils import DynamicSlidingWindowLayer
 from transformers.testing_utils import (
     DeviceProperties,
@@ -52,13 +52,8 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MistralModelTester(CausalLMModelTester):
-    config_class = MistralConfig
     if is_torch_available():
         base_model_class = MistralModel
-        causal_lm_class = MistralForCausalLM
-        question_answering_class = MistralForQuestionAnswering
-        sequence_classification_class = MistralForSequenceClassification
-        token_classification_class = MistralForTokenClassification
 
 
 @require_torch

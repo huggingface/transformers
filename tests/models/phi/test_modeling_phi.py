@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import PhiConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -39,12 +39,8 @@ if is_torch_available():
 
 
 class PhiModelTester(CausalLMModelTester):
-    config_class = PhiConfig
     if is_torch_available():
         base_model_class = PhiModel
-        causal_lm_class = PhiForCausalLM
-        sequence_classification_class = PhiForSequenceClassification
-        token_classification_class = PhiForTokenClassification
 
 
 @require_torch

@@ -20,7 +20,7 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, Gemma2Config, is_torch_available, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, is_torch_available, pipeline
 from transformers.cache_utils import DynamicLayer, DynamicSlidingWindowLayer
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
@@ -54,11 +54,7 @@ if is_torch_available():
 
 class Gemma2ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Gemma2Config
         base_model_class = Gemma2Model
-        causal_lm_class = Gemma2ForCausalLM
-        sequence_classification_class = Gemma2ForSequenceClassification
-        token_classification_class = Gemma2ForTokenClassification
 
 
 @require_torch

@@ -27,7 +27,6 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    GptOssConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -57,11 +56,7 @@ if is_torch_available():
 
 class GptOssModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = GptOssConfig
         base_model_class = GptOssModel
-        causal_lm_class = GptOssForCausalLM
-        sequence_classification_class = GptOssForSequenceClassification
-        token_classification_class = GptOssForTokenClassification
 
 
 @require_torch

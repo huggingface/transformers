@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import MiniMaxConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.cache_utils import Cache
 from transformers.testing_utils import (
     Expectations,
@@ -42,13 +42,8 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MiniMaxModelTester(CausalLMModelTester):
-    config_class = MiniMaxConfig
     if is_torch_available():
         base_model_class = MiniMaxModel
-        causal_lm_class = MiniMaxForCausalLM
-        question_answering_class = MiniMaxForQuestionAnswering
-        sequence_classification_class = MiniMaxForSequenceClassification
-        token_classification_class = MiniMaxForTokenClassification
 
     def __init__(self, parent, layer_types=None, block_size=3):
         super().__init__(parent)

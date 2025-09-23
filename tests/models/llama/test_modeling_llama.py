@@ -38,7 +38,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        LlamaConfig,
         LlamaForCausalLM,
         LlamaForQuestionAnswering,
         LlamaForSequenceClassification,
@@ -50,12 +49,7 @@ if is_torch_available():
 
 class LlamaModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = LlamaConfig
         base_model_class = LlamaModel
-        causal_lm_class = LlamaForCausalLM
-        question_answering_class = LlamaForQuestionAnswering
-        sequence_classification_class = LlamaForSequenceClassification
-        token_classification_class = LlamaForTokenClassification
 
 
 @require_torch

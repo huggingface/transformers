@@ -16,7 +16,7 @@
 import gc
 import unittest
 
-from transformers import PersimmonConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     require_bitsandbytes,
@@ -44,11 +44,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 class PersimmonModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = PersimmonConfig
         base_model_class = PersimmonModel
-        causal_lm_class = PersimmonForCausalLM
-        sequence_classification_class = PersimmonForSequenceClassification
-        token_classification_class = PersimmonForTokenClassification
 
 
 @require_torch

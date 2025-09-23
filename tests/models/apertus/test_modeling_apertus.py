@@ -33,7 +33,6 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 if is_torch_available():
     from transformers import (
-        ApertusConfig,
         ApertusForCausalLM,
         ApertusForTokenClassification,
         ApertusModel,
@@ -42,10 +41,7 @@ if is_torch_available():
 
 class ApertusModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = ApertusConfig
         base_model_class = ApertusModel
-        causal_lm_class = ApertusForCausalLM
-        token_classification_class = ApertusForTokenClassification
 
 
 @require_torch

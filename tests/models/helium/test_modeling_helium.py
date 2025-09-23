@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_read_token,
@@ -41,10 +41,6 @@ if is_torch_available():
 class HeliumModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = HeliumModel
-        causal_lm_class = HeliumForCausalLM
-        config_class = HeliumConfig
-        sequence_classification_class = HeliumForSequenceClassification
-        token_classification_class = HeliumForTokenClassification
 
 
 @require_torch

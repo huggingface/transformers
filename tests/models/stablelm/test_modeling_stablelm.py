@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import StableLmConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -43,11 +43,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 class StableLmModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = StableLmConfig
         base_model_class = StableLmModel
-        causal_lm_class = StableLmForCausalLM
-        sequence_classification_class = StableLmForSequenceClassification
-        token_classification_class = StableLmForTokenClassification
 
 
 @require_torch

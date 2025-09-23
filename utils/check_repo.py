@@ -46,6 +46,7 @@ from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_M
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
+from transformers.testing_utils import _COMMON_MODEL_NAMES_MAP
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
@@ -593,7 +594,7 @@ def get_model_test_files() -> list[str]:
 
 # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the tester class
 # for the all_model_classes variable.
-def find_tested_models(test_file: str) -> list[str]:
+def find_tested_models(test_file: str) -> set[str]:
     """
     Parse the content of test_file to detect what's in `all_model_classes`. This detects the models that inherit from
     the common test class.
@@ -602,12 +603,12 @@ def find_tested_models(test_file: str) -> list[str]:
         test_file (`str`): The path to the test file to check
 
     Returns:
-        `List[str]`: The list of models tested in that file.
+        `Set[str]`: The set of models tested in that file.
     """
     with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
 
-    model_tested = []
+    model_tested = set()
 
     all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
     # Check with one less parenthesis as well
@@ -617,19 +618,29 @@ def find_tested_models(test_file: str) -> list[str]:
             for line in entry.split(","):
                 name = line.strip()
                 if len(name) > 0:
-                    model_tested.append(name)
+                    model_tested.add(name)
 
     # Models that inherit from `CausalLMModelTester` don't need to set `all_model_classes` -- it is built from other
     # attributes by default.
     if "CausalLMModelTester" in content:
-        causal_lm_models = re.findall(r"base_model_class\s+=.*", content)
-        causal_lm_models += re.findall(r"causal_lm_class\s+=.*", content)
-        causal_lm_models += re.findall(r"sequence_classification_class\s+=.*", content)
-        causal_lm_models += re.findall(r"question_answering_class\s+=.*", content)
-        causal_lm_models += re.findall(r"token_classification_class\s+=.*", content)
-        if len(causal_lm_models) > 0:
-            for entry in causal_lm_models:
-                model_tested.append(entry.split("=")[1].strip())
+        base_model_class = re.findall(r"base_model_class\s+=.*", content)  # Required attribute
+        base_class = base_model_class[0].split("=")[1].strip()
+        model_tested.add(base_class)
+
+        model_name = base_class.replace("Model", "")
+        # Optional attributes: if not set explicitly, the tester will attempt to infer and use the corresponding class
+        for test_class_type in [
+            "causal_lm_class",
+            "sequence_classification_class",
+            "question_answering_class",
+            "token_classification_class",
+        ]:
+            tested_class = re.findall(rf"{test_class_type}\s+=.*", content)
+            if tested_class:
+                tested_class = tested_class[0].split("=")[1].strip()
+            else:
+                tested_class = model_name + _COMMON_MODEL_NAMES_MAP[test_class_type]
+            model_tested.add(tested_class)
 
     return model_tested
 

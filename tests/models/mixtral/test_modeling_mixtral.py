@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import MixtralConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_flash_attn,
@@ -44,13 +44,8 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MixtralModelTester(CausalLMModelTester):
-    config_class = MixtralConfig
     if is_torch_available():
         base_model_class = MixtralModel
-        causal_lm_class = MixtralForCausalLM
-        question_answering_class = MixtralForQuestionAnswering
-        sequence_classification_class = MixtralForSequenceClassification
-        token_classification_class = MixtralForTokenClassification
 
 
 @require_torch

@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import Starcoder2Config, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -44,12 +44,8 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Starcoder2ModelTester(CausalLMModelTester):
-    config_class = Starcoder2Config
     if is_torch_available():
         base_model_class = Starcoder2Model
-        causal_lm_class = Starcoder2ForCausalLM
-        sequence_classification_class = Starcoder2ForSequenceClassification
-        token_classification_class = Starcoder2ForTokenClassification
 
 
 @require_torch

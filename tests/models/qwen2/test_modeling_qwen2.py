@@ -19,7 +19,7 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, Qwen2Config, is_torch_available, set_seed
+from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
@@ -48,13 +48,8 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Qwen2ModelTester(CausalLMModelTester):
-    config_class = Qwen2Config
     if is_torch_available():
         base_model_class = Qwen2Model
-        causal_lm_class = Qwen2ForCausalLM
-        question_answering_class = Qwen2ForQuestionAnswering
-        sequence_classification_class = Qwen2ForSequenceClassification
-        token_classification_class = Qwen2ForTokenClassification
 
 
 @require_torch

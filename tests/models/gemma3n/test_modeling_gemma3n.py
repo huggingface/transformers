@@ -31,7 +31,6 @@ from transformers import (
     Gemma3nAudioConfig,
     Gemma3nAudioFeatureExtractor,
     Gemma3nConfig,
-    Gemma3nTextConfig,
     GenerationConfig,
     StaticCache,
     is_torch_available,
@@ -253,7 +252,6 @@ class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
 class Gemma3nTextModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Gemma3nTextConfig
         base_model_class = Gemma3nTextModel
         causal_lm_class = Gemma3nForCausalLM
 
@@ -294,7 +292,7 @@ class Gemma3nTextModelTester(CausalLMModelTester):
         eos_token_id=2,
         is_decoder=False,
     ):
-        self._verify_model_attributes()
+        self._verify_and_infer_model_attributes()
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length

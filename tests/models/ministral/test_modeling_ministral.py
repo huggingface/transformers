@@ -20,7 +20,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, GenerationConfig, MinistralConfig, is_torch_available
+from transformers import AutoTokenizer, GenerationConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
@@ -50,13 +50,8 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MinistralModelTester(CausalLMModelTester):
-    config_class = MinistralConfig
     if is_torch_available():
         base_model_class = MinistralModel
-        causal_lm_class = MinistralForCausalLM
-        question_answering_class = MinistralForQuestionAnswering
-        sequence_classification_class = MinistralForSequenceClassification
-        token_classification_class = MinistralForTokenClassification
 
 
 @require_torch

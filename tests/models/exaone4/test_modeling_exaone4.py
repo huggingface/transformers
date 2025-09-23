@@ -21,7 +21,6 @@ from packaging import version
 
 from transformers import (
     AutoTokenizer,
-    Exaone4Config,
     GenerationConfig,
     is_torch_available,
 )
@@ -50,13 +49,8 @@ if is_torch_available():
 
 
 class Exaone4ModelTester(CausalLMModelTester):
-    config_class = Exaone4Config
     if is_torch_available():
         base_model_class = Exaone4Model
-        causal_lm_class = Exaone4ForCausalLM
-        question_answering_class = Exaone4ForQuestionAnswering
-        sequence_classification_class = Exaone4ForSequenceClassification
-        token_classification_class = Exaone4ForTokenClassification
 
 
 @require_torch

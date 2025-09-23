@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GlmConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_flash_attn,
@@ -43,12 +43,8 @@ if is_torch_available():
 
 @require_torch
 class GlmModelTester(CausalLMModelTester):
-    config_class = GlmConfig
     if is_torch_available():
         base_model_class = GlmModel
-        causal_lm_class = GlmForCausalLM
-        sequence_classification_class = GlmForSequenceClassification
-        token_classification_class = GlmForTokenClassification
 
 
 @require_torch
