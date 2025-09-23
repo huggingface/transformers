@@ -272,9 +272,12 @@ def flex_attention_forward(
             score = score + score_mask[batch_idx][0][q_idx][kv_idx]
         if head_mask is not None:
             score = score + head_mask[batch_idx][head_idx][0][0]
-        # Note: attention sinks cannot be correctly implemented in score_mod
-        # because it requires operating on the full attention matrix before softmax.
-        # ==> this is done after flex attention
+        if s_aux is not None:
+            logits_max = torch.max(score, dim=-1, keepdim=True).values
+            sinks = torch.exp(s_aux - logits_max)
+            unnormalized_scores = torch.exp(score - logits_max)
+            normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
+            score = unnormalized_scores / normalizer
         return score
 
     enable_gqa = True
@@ -308,21 +311,6 @@ def flex_attention_forward(
     if return_lse:
         attention_output, lse = flex_attention_output  # type: ignore[misc]
         lse = lse.to(value.dtype)
-
-        if s_aux is not None:
-            # Apply attention sinks by renormalizing using LSE
-
-            batch_size, seq_len_q, num_heads, _ = attention_output.shape # batch, seq_len, num_heads, head_dim
-            sinks = s_aux.view(1, 1, -1, 1).expand(batch_size, seq_len_q, num_heads, 1)
-
-            # We need to compute the normalization that includes the sinks
-            # NB: log(sum(exp(scores)) + exp(sink)) = log(exp(lse) + exp(sink))
-            lse_expanded = lse.unsqueeze(-1)  # [batch, seq_len, num_heads, 1]
-            combined_lse = torch.logsumexp(torch.cat([lse_expanded, sinks], dim=-1), dim=-1, keepdim=True)
-
-            # Use new_norm / old_norm = exp(combined_lse - lse) to compute renorm and apply
-            renorm_factor = torch.exp(lse_expanded - combined_lse)
-            attention_output = attention_output * renorm_factor
     else:
         attention_output = flex_attention_output  # type: ignore[assignment]
         lse = None
