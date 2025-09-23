@@ -19,7 +19,6 @@ import functools
 import gc
 import importlib.metadata
 import inspect
-import itertools
 import json
 import os
 import re
@@ -559,26 +558,6 @@ def load_state_dict(
                     ) from e
         except (UnicodeDecodeError, ValueError):
             raise OSError(f"Unable to load weights from pytorch checkpoint file '{checkpoint_file}'.")
-
-
-def set_initialized_submodules(model, state_dict_keys):
-    """
-    Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
-    dict.
-    """
-    state_dict_keys = set(state_dict_keys)
-    not_initialized_submodules = {}
-    for module_name, module in model.named_modules():
-        if module_name == "":
-            # When checking if the root module is loaded there's no need to prepend module_name.
-            module_keys = set(module.state_dict())
-        else:
-            module_keys = {f"{module_name}.{k}" for k in module.state_dict()}
-        if module_keys.issubset(state_dict_keys):
-            module._is_hf_initialized = True
-        else:
-            not_initialized_submodules[module_name] = module
-    return not_initialized_submodules
 
 
 def _end_ptr(tensor: torch.Tensor) -> int:
@@ -2963,8 +2942,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Initialize the weights if they are not already initialized.
         """
-        if getattr(module, "_is_hf_initialized", False):
+        # Since this is applied recursively in a depth-first manner, a module is already initialized if and only if
+        # all its children are also already initialized, and all its immediate `nn.Parameter` and persistent buffers
+        # are also already initialized
+        if (
+            all(getattr(child, "_is_hf_initialized", False) for child in module.children())
+            and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+            and all(
+                getattr(buffer, "_is_hf_initialized", False)
+                for buffer in module.buffers(recurse=False)
+                if buffer.is_persistent
+            )
+        ):
+            # Mark the module itself as initialized so that higher modules in the graph see it
+            module._is_hf_initialized = True
             return
+
+        # In this case, we need to init
         self._init_weights(module)
         module._is_hf_initialized = True
 
@@ -5861,8 +5855,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def _initialize_missing_keys(
         self,
-        loaded_keys: list[str],
-        ignore_mismatched_sizes: bool,
+        missing_keys: list[str],
         is_quantized: bool,
     ) -> "PreTrainedModel":
         """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
@@ -5870,30 +5863,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         be initialized correctly (i.e. weight initialization distribution).
         Also take care of setting the `_is_hf_initialized` flag for keys that are not missing.
         """
-        if not ignore_mismatched_sizes:
-            not_initialized_submodules = set_initialized_submodules(self, loaded_keys)
-            # If we're about to tie the output embeds to the input embeds we don't need to init them
-            if (
-                hasattr(self.config.get_text_config(decoder=True), "tie_word_embeddings")
-                and self.config.get_text_config(decoder=True).tie_word_embeddings
-            ):
-                output_embeddings = self.get_output_embeddings()
-                if output_embeddings is not None:
-                    # Still need to initialize if there is a bias term since biases are not tied.
-                    if not hasattr(output_embeddings, "bias") or output_embeddings.bias is None:
-                        output_embeddings._is_hf_initialized = True
-        else:
-            not_initialized_submodules = dict(self.named_modules())
+        for key in self.state_dict():
+            # If it's part of the keys that will be loaded, mark it as already initialized
+            if key not in missing_keys:
+                param_or_buffer = self.get_parameter_or_buffer(key)
+                param_or_buffer._is_hf_initialized = True
+
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             not_initialized_parameters = list(
-                set(
-                    itertools.chain.from_iterable(
-                        submodule.parameters(recurse=False) for submodule in not_initialized_submodules.values()
-                    )
-                )
+                {v for v in self.state_dict().values() if not getattr(v, "_is_hf_initialized", False)}
             )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()
