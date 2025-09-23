@@ -546,8 +546,8 @@ def read_video_torchvision(
     metadata.update(
         {
             "frames_indices": indices,
-            "height": video.shape[1],
-            "width": video.shape[2],
+            "height": video.shape[2],
+            "width": video.shape[3],
         }
     )
     return video, metadata
