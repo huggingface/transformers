@@ -38,7 +38,6 @@ import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
 from pathlib import Path
-from typing import Optional
 
 from transformers import is_torch_available
 from transformers.models.auto.auto_factory import get_values
@@ -594,7 +593,7 @@ def get_model_test_files() -> list[str]:
 
 # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the tester class
 # for the all_model_classes variable.
-def find_tested_models(test_file: str) -> Optional[list[str]]:
+def find_tested_models(test_file: str) -> list[str]:
     """
     Parse the content of test_file to detect what's in `all_model_classes`. This detects the models that inherit from
     the common test class.
@@ -607,31 +606,32 @@ def find_tested_models(test_file: str) -> Optional[list[str]]:
     """
     with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
+
+    model_tested = []
+
     all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
     # Check with one less parenthesis as well
     all_models += re.findall(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
     if len(all_models) > 0:
-        model_tested = []
         for entry in all_models:
             for line in entry.split(","):
                 name = line.strip()
                 if len(name) > 0:
                     model_tested.append(name)
-        return model_tested
 
     # Models that inherit from `CausalLMModelTester` don't need to set `all_model_classes` -- it is built from other
     # attributes by default.
     if "CausalLMModelTester" in content:
-        all_models += re.findall(r"base_model_class\s+=.*", content)
-        all_models += re.findall(r"causal_lm_class\s+=.*", content)
-        all_models += re.findall(r"sequence_classification_class\s+=.*", content)
-        all_models += re.findall(r"question_answering_class\s+=.*", content)
-        all_models += re.findall(r"token_classification_class\s+=.*", content)
-        if len(all_models) > 0:
-            model_tested = []
-            for entry in all_models:
+        causal_lm_models = re.findall(r"base_model_class\s+=.*", content)
+        causal_lm_models += re.findall(r"causal_lm_class\s+=.*", content)
+        causal_lm_models += re.findall(r"sequence_classification_class\s+=.*", content)
+        causal_lm_models += re.findall(r"question_answering_class\s+=.*", content)
+        causal_lm_models += re.findall(r"token_classification_class\s+=.*", content)
+        if len(causal_lm_models) > 0:
+            for entry in causal_lm_models:
                 model_tested.append(entry.split("=")[1].strip())
-            return model_tested
+
+    return model_tested
 
 
 def should_be_tested(model_name: str) -> bool:
@@ -656,22 +656,24 @@ def check_models_are_tested(module: types.ModuleType, test_file: str) -> list[st
     # XxxPreTrainedModel are not tested
     defined_models = get_models(module)
     tested_models = find_tested_models(test_file)
-    if tested_models is None:
+    if len(tested_models) == 0:
         if test_file.replace(os.path.sep, "/") in TEST_FILES_WITH_NO_COMMON_TESTS:
             return
         return [
-            f"{test_file} should define `all_model_classes` to apply common tests to the models it tests. "
-            + "If this intentional, add the test filename to `TEST_FILES_WITH_NO_COMMON_TESTS` in the file "
-            + "`utils/check_repo.py`."
+            f"{test_file} should define `all_model_classes` or inherit from `CausalLMModelTester` (and fill in the "
+            "model class attributes) to apply common tests to the models it tests. "
+            "If this intentional, add the test filename to `TEST_FILES_WITH_NO_COMMON_TESTS` in the file "
+            "`utils/check_repo.py`."
         ]
     failures = []
     for model_name, _ in defined_models:
         if model_name not in tested_models and should_be_tested(model_name):
             failures.append(
                 f"{model_name} is defined in {module.__name__} but is not tested in "
-                + f"{os.path.join(PATH_TO_TESTS, test_file)}. Add it to the all_model_classes in that file."
-                + "If common tests should not applied to that model, add its name to `IGNORE_NON_TESTED`"
-                + "in the file `utils/check_repo.py`."
+                f"{os.path.join(PATH_TO_TESTS, test_file)}. Add it to the `all_model_classes` in that file or, if "
+                "it inherits from `CausalLMModelTester`, fill in the model class attributes. "
+                "If common tests should not applied to that model, add its name to `IGNORE_NON_TESTED`"
+                "in the file `utils/check_repo.py`."
             )
     return failures
 
