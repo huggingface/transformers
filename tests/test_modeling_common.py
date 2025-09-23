@@ -2374,6 +2374,7 @@ class ModelTesterMixin:
                     model = model_class(config)
             else:
                 model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
