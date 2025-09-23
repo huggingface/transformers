@@ -1413,9 +1413,15 @@ def _find_missing_and_unexpected_keys(
     loading_base_model_from_task_state_dict: bool,
     hf_quantizer: Optional[HfQuantizer],
     device_map: dict,
-) -> tuple[list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str]]:
     """Find missing keys (keys that are part of the model parameters but were NOT found in the loaded state dict keys) and unexpected keys
     (keys found in the loaded state dict keys, but that are NOT part of the model parameters)
+
+    Returns:
+        tuple: (missing_keys, unexpected_keys, tied_params_to_move)
+        - missing_keys: parameters that are in the model but not in the checkpoint
+        - unexpected_keys: parameters that are in the checkpoint but not in the model
+        - tied_params_to_move: tied parameters that were removed from missing_keys but need device movement
     """
     prefix = model.base_model_prefix
 
@@ -1444,9 +1450,13 @@ def _find_missing_and_unexpected_keys(
         unexpected_keys = [k for k in unexpected_keys if "rotary_emb.inv_freq" not in k]
 
     tied_params = find_tied_parameters(model)
+    tied_params_to_move = []  # Track tied parameters that need device movement
     for group in tied_params:
         missing_in_group = [k for k in missing_keys if k in group]
         if len(missing_in_group) > 0 and len(missing_in_group) < len(group):
+            # Some tied parameters are missing, some are in checkpoint
+            # We'll remove missing ones from missing_keys, but need to ensure they're moved from meta device
+            tied_params_to_move.extend(missing_in_group)
             missing_keys = [k for k in missing_keys if k not in missing_in_group]
 
     if hf_quantizer is not None:
@@ -1462,7 +1472,7 @@ def _find_missing_and_unexpected_keys(
         for pattern in cls._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
 
-    return missing_keys, unexpected_keys
+    return missing_keys, unexpected_keys, tied_params_to_move
 
 
 def _find_mismatched_keys(
@@ -5311,7 +5321,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         checkpoint_keys = list(key_renaming_mapping.values())
 
         # Find missing and unexpected keys from the state dict
-        missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
+        missing_keys, unexpected_keys, tied_params_to_move = _find_missing_and_unexpected_keys(
             cls,
             model,
             original_checkpoint_keys,
@@ -5339,6 +5349,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
         model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, unexpected_keys, dtype, hf_quantizer)
+
+        # Handle tied parameters that were removed from missing_keys but still need to be moved from meta device
+        if tied_params_to_move:
+            model._move_missing_keys_from_meta_to_cpu(tied_params_to_move, [], dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
