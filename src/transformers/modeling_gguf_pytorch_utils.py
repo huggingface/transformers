@@ -470,6 +470,17 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     if parsed_parameters["config"]["model_type"] == "gemma3":
         parsed_parameters["config"]["model_type"] = "gemma3_text"
 
+    if parsed_parameters["config"]["model_type"] == "lfm2":
+        gguf_num_key_value_heads = parsed_parameters["config"]["num_key_value_heads"]
+        # LFM2 GGUF checkpoint defines num_key_value_heads as a list of integers .e.g [0, 0, 8, 0, 0, 8, 0, 0, 8, 0, 8, 0, 8, 0, 8, 0] but we need to set it to the max value for HF
+        parsed_parameters["config"]["num_key_value_heads"] = max(gguf_num_key_value_heads)
+        ## we already read the correct intermediate_size from the GGUF checkpoint so we need to set block_auto_adjust_ff_dim to False
+        parsed_parameters["config"]["block_auto_adjust_ff_dim"] = False
+
+        ## llama.cpp defines the layers that are full-attention by looking at num_key_value_heads
+        ## we need to set the full_attn_idxs to the layers that are full-attention
+        parsed_parameters["config"]["full_attn_idxs"] = [i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0]
+
     # retrieve config vocab_size from tokenizer
     # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details
     if "vocab_size" not in parsed_parameters["config"]:
