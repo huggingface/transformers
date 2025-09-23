@@ -34,16 +34,24 @@ if __name__ == "__main__":
 
     # TODO: extend
     team_members = [
-        "ydshieh",
-        "zucchini-nlp",
         "ArthurZucker",
-        "gante",
+        "Cyrilvallez",
         "LysandreJik",
-        "molbap",
-        "qubvel",
+        "MekkCyber",
         "Rocketknight1",
-        "muellerzr",
         "SunMarc",
+        "ebezzam",
+        "eustlb",
+        "gante",
+        "itazap",
+        "ivarflakstad",
+        "molbap",
+        "muellerzr",
+        "remi-or",
+        "stevhliu",
+        "vasqu",
+        "ydshieh",
+        "zucchini-nlp"
     ]
 
     # Counting the number of failures grouped by authors
