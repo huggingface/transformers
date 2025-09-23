@@ -751,7 +751,6 @@ class ContinuousBatchingManager:
             if request_id is not None and result.request_id != request_id:
                 self.output_queue.put(result)
                 return None
-            logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
             return None
@@ -772,6 +771,14 @@ class ContinuousBatchingManager:
                 yield result
             if self.batch_processor is not None:
                 request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
+
+    @staticmethod
+    def supported_attention_implementations() -> set[str]:
+        return {"eager_paged", "sdpa_paged", "flash_attention_2", "paged_attention"}
+
+    @staticmethod
+    def default_attention_implementation() -> str:
+        return "sdpa_paged"
 
     @traced
     def warmup(self, batch_processor):
