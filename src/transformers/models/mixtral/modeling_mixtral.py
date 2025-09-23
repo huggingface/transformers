@@ -83,9 +83,9 @@ class MixtralExperts(nn.ModuleList):
         for _ in range(self.num_experts):
             self.append(MixtralMLP(config))
 
-
-
-    def forward(self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states: (batch_size * sequence_length, hidden_dim)
@@ -120,7 +120,7 @@ class MixtralSparseMoeBlock(nn.Module):
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
         top_k_weights = top_k_weights.to(hidden_states.dtype)
         return top_k_index, top_k_weights
-    
+
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.jitter_noise > 0:
