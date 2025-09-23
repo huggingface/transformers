@@ -1026,7 +1026,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
-            last_kv_cache = self.last_kv_cache
+            seq_len = self.last_kv_cache.get_seq_length()
+            if inputs["input_ids"].shape[-1] > seq_len:
+                last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
             **inputs,
@@ -1213,7 +1215,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
-            last_kv_cache = self.last_kv_cache
+            seq_len = self.last_kv_cache.get_seq_length()
+            if inputs["input_ids"].shape[-1] > seq_len:
+                last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
             "inputs": inputs,
