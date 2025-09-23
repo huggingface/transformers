@@ -15,7 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2024-05-07 and added to Hugging Face Transformers on 2025-07-25.*
 
-
 # xLSTM
 
 ## Overview
@@ -31,7 +30,6 @@ The abstract from the paper is the following:
 
 This model was contributed by [NX-AI](https://huggingface.co/NX-AI).
 The original code can be found [here](https://github.com/NX-AI/xlstm).
-
 
 ## xLSTMConfig
 

@@ -65,7 +65,6 @@ values. Here, for instance, it has two keys that are `sequences` and `scores`.
 
 We document here all output types.
 
-
 [[autodoc]] generation.GenerateDecoderOnlyOutput
 
 [[autodoc]] generation.GenerateEncoderDecoderOutput
@@ -74,12 +73,10 @@ We document here all output types.
 
 [[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
-
 ## LogitsProcessor
 
 A [`LogitsProcessor`] can be used to modify the prediction scores of a language model head for
 generation.
-
 
 [[autodoc]] AlternatingCodebooksLogitsProcessor
     - __call__
@@ -176,8 +173,6 @@ generation.
 
 [[autodoc]] WatermarkLogitsProcessor
     - __call__
-
-
 
 ## StoppingCriteria
 
@@ -302,7 +297,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] EncoderDecoderCache
     - to_legacy_cache
     - from_legacy_cache
-
 
 ## Watermark Utils
 
