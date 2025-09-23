@@ -79,7 +79,7 @@ class Qwen2VLVisionText2TextModelTester:
         max_window_layers=3,
         model_type="qwen2_vl",
         num_attention_heads=4,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_key_value_heads=2,
         rope_theta=10000,
         tie_word_embeddings=True,
@@ -235,7 +235,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)  # successfull forward with no modifications
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
             patch_size = config.vision_config.patch_size
@@ -311,7 +311,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 model = (
                     model_class.from_pretrained(
                         tmpdirname,
-                        torch_dtype=torch.bfloat16,
+                        dtype=torch.bfloat16,
                         attn_implementation=attn_implementation,
                     )
                     .to(torch_device)
@@ -394,10 +394,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
-        pass
-
 
 @require_torch
 class Qwen2VLIntegrationTest(unittest.TestCase):
@@ -422,7 +418,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -459,7 +455,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
@@ -481,7 +477,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_expand(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
@@ -501,7 +497,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
@@ -528,7 +524,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -567,7 +563,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-VL-7B-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
@@ -594,7 +590,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-VL-7B-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )

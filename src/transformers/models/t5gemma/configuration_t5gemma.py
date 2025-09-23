@@ -178,7 +178,7 @@ class T5GemmaModuleConfig(PretrainedConfig):
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 class T5GemmaConfig(PretrainedConfig):
@@ -323,9 +323,8 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
 
-    def get_text_config(self, decoder=False):
+    def get_text_config(self, *args, **kwargs):
         # Always return self, regardless of the decoder option.
-        del decoder
         return self
 
 

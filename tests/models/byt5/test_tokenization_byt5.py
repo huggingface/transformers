@@ -18,20 +18,11 @@ import re
 import shutil
 import tempfile
 import unittest
-from functools import lru_cache
+from functools import cached_property
 
 from transformers import AddedToken, BatchEncoding, ByT5Tokenizer
-from transformers.utils import cached_property, is_tf_available, is_torch_available
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
-
-
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -49,8 +40,6 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return ByT5Tokenizer.from_pretrained("google/byt5-small")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> ByT5Tokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -124,13 +113,10 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.t5_base_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         expected_src_tokens = [68, 35, 111, 114, 113, 106, 35, 115, 100, 117, 100, 106, 117, 100, 115, 107, 35, 105, 114, 117, 35, 118, 120, 112, 112, 100, 117, 108, 125, 100, 119, 108, 114, 113, 49, 1, 0]  # fmt: skip
-        batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
         self.assertIsInstance(batch, BatchEncoding)
 
-        if FRAMEWORK != "jax":
-            result = list(batch.input_ids.numpy()[0])
-        else:
-            result = list(batch.input_ids.tolist()[0])
+        result = list(batch.input_ids.numpy()[0])
 
         self.assertListEqual(expected_src_tokens, result)
 
@@ -140,7 +126,7 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_empty_target_text(self):
         tokenizer = self.t5_base_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
         # check if input_ids are returned and no decoder_input_ids
         self.assertIn("input_ids", batch)
         self.assertIn("attention_mask", batch)
@@ -154,7 +140,7 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Another summary.",
         ]
         targets = tokenizer(
-            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
+            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors="pt"
         )
         self.assertEqual(32, targets["input_ids"].shape[1])
 

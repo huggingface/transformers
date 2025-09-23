@@ -18,7 +18,6 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -43,6 +42,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_pix2struct import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
 
 
@@ -142,7 +142,6 @@ class Pix2StructVisionAttention(nn.Module):
         self.dropout = config.attention_dropout
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.key = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
@@ -163,7 +162,7 @@ class Pix2StructVisionAttention(nn.Module):
         """
         # Input is (batch_size, seq_length, dim)
         # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
-        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
+        # past_key_values[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = hidden_states.shape[:2]
 
         def to_projection_shape(states):
@@ -304,7 +303,7 @@ class Pix2StructVisionLayer(GradientCheckpointingLayer):
 
 
 class Pix2StructVisionEncoder(nn.Module):
-    def __init__(self, config: Pix2StructConfig) -> None:
+    def __init__(self, config: Pix2StructVisionConfig) -> None:
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([Pix2StructVisionLayer(config) for _ in range(config.num_hidden_layers)])
@@ -387,8 +386,6 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
         elif isinstance(module, Pix2StructTextAttention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             hidden_size = (
                 self.config.text_config.hidden_size
                 if isinstance(self.config, Pix2StructConfig)
@@ -479,7 +476,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Pix2StructVisionLayer"]
 
-    def __init__(self, config: Pix2StructConfig):
+    def __init__(self, config: Pix2StructVisionConfig):
         super().__init__(config)
         self.config = config
 
@@ -651,7 +648,6 @@ class Pix2StructTextAttention(nn.Module):
                 "when creating this class."
             )
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.key = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
@@ -733,13 +729,14 @@ class Pix2StructTextAttention(nn.Module):
         return values
 
     # Adapted from transformers.models.t5.modeling_t5.T5Attention.forward
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         mask=None,
         key_value_states=None,
         position_bias=None,
-        past_key_value=None,
+        past_key_values=None,
         layer_head_mask=None,
         query_length=None,
         use_cache=False,
@@ -760,18 +757,18 @@ class Pix2StructTextAttention(nn.Module):
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
-        if past_key_value is not None and isinstance(past_key_value, EncoderDecoderCache):
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
+        if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_value = past_key_value.cross_attention_cache
+                curr_past_key_value = past_key_values.cross_attention_cache
             else:
-                curr_past_key_value = past_key_value.self_attention_cache
+                curr_past_key_value = past_key_values.self_attention_cache
         else:
-            curr_past_key_value = past_key_value
+            curr_past_key_value = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
+        if is_cross_attention and past_key_values and is_updated:
             # reuse k,v, cross_attentions
             key_states = curr_past_key_value.layers[self.layer_idx].keys
             value_states = curr_past_key_value.layers[self.layer_idx].values
@@ -781,7 +778,7 @@ class Pix2StructTextAttention(nn.Module):
             key_states = key_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
             value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = curr_past_key_value.update(
@@ -789,7 +786,7 @@ class Pix2StructTextAttention(nn.Module):
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+                    past_key_values.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
         scores = torch.matmul(query_states, key_states.transpose(3, 2))
@@ -854,13 +851,14 @@ class Pix2StructTextLayerSelfAttention(nn.Module):
         self.layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         position_bias=None,
         layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         use_cache=False,
         output_attentions=False,
         cache_position=None,
@@ -871,7 +869,7 @@ class Pix2StructTextLayerSelfAttention(nn.Module):
             mask=attention_mask,
             position_bias=position_bias,
             layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -889,6 +887,7 @@ class Pix2StructTextLayerCrossAttention(nn.Module):
         self.layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -896,7 +895,7 @@ class Pix2StructTextLayerCrossAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         use_cache=False,
         query_length=None,
         output_attentions=False,
@@ -909,7 +908,7 @@ class Pix2StructTextLayerCrossAttention(nn.Module):
             key_value_states=key_value_states,
             position_bias=position_bias,
             layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             query_length=query_length,
             output_attentions=output_attentions,
@@ -937,6 +936,7 @@ class Pix2StructTextBlock(GradientCheckpointingLayer):
 
         self.mlp = Pix2StructTextLayerFF(config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -947,7 +947,7 @@ class Pix2StructTextBlock(GradientCheckpointingLayer):
         encoder_decoder_position_bias=None,
         layer_head_mask=None,
         cross_attn_layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         use_cache=False,
         output_attentions=False,
         return_dict=True,
@@ -958,7 +958,7 @@ class Pix2StructTextBlock(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_bias=position_bias,
             layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -979,7 +979,7 @@ class Pix2StructTextBlock(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
@@ -1122,9 +1122,11 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         if use_cache and past_key_values is None:
             if self.config.is_encoder_decoder:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                past_key_values = EncoderDecoderCache(
+                    DynamicCache(config=self.config), DynamicCache(config=self.config)
+                )
             else:
-                past_key_values = DynamicCache()
+                past_key_values = DynamicCache(config=self.config)
 
         past_key_values_length = 0
         if cache_position is not None:
@@ -1196,7 +1198,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                 encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
                 layer_head_mask=layer_head_mask,
                 cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
@@ -1413,9 +1415,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
 
     def set_output_embeddings(self, new_embeddings):
         self.decoder.set_output_embeddings(new_embeddings)
-
-    def get_decoder(self):
-        return self.decoder
 
     def get_encoder(self):
         return self.encoder

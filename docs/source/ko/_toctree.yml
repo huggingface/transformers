@@ -9,8 +9,8 @@
 - isExpanded: false
   sections:
   - sections:
-    - local: in_translation
-      title: (번역중) Loading models
+    - local: models
+      title: 모델 로드하기
     - local: custom_models
       title: 사용자 정의 모델 공유하기
     - local: how_to_hack_models
@@ -29,8 +29,8 @@
   - sections:
     - local: fast_tokenizers
       title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
-    - local: in_translation
-      title: (번역중) Image processors
+    - local: image_processors
+      title: 이미지 프로세서
     - local: in_translation
       title: (번역중) Video processors
     - local: in_translation
@@ -92,6 +92,10 @@
       title: (번역중) Tools and RAG
     title: 모델을 사용해 대화하기
   - sections:
+    - local: tiny_agents
+      title: Tiny-Agents CLI 및 MCP 도구
+    title: 서빙(Serving)
+  - sections:
     - local: in_translation
       title: (번역중) torch.compile
     - local: perf_infer_gpu_one
@@ -113,8 +117,8 @@
       title: 트레이너(Trainer)
     - local: training
       title: 사전 학습된 모델 미세 조정하기
-    - local: in_translation
-      title: (번역중) Optimizers
+    - local: optimizers
+      title: 옵티마이저(Optimizers)
     - local: hpo_train
       title: Trainer API를 사용한 하이퍼파라미터 탐색
     title: Trainer API
@@ -204,8 +208,6 @@
   sections:
   - local: serialization
     title: ONNX로 내보내기
-  - local: tflite
-    title: TFLite로 내보내기
   - local: executorch
     title: ExecuTorch
   - local: torchscript
@@ -398,8 +400,6 @@
       title: Configuration
     - local: main_classes/data_collator
       title: Data Collator
-    - local: main_classes/keras_callbacks
-      title: Keras callbacks
     - local: main_classes/logging
       title: Logging
     - local: main_classes/model
@@ -408,20 +408,22 @@
       title: 텍스트 생성
     - local: main_classes/onnx
       title: ONNX
-    - local: in_translation
-      title: (번역중) Optimization
+    - local: main_classes/optimizer_schedules
+      title: 최적화
     - local: main_classes/output
       title: 모델 출력
     - local: main_classes/peft
       title: PEFT
-    - local: in_translation
-      title: (번역중) Pipelines
-    - local: main_classes/tokenizer
-      title: 토크나이저
+    - local: main_classes/pipelines
+      title: 파이프라인
+    - local: main_classes/processors
+      title: 프로세서
     - local: main_classes/quantization
       title: 양자화
     - local: in_translation
       title: (번역중) Tokenizer
+    - local: main_classes/tokenizer
+      title: 토크나이저
     - local: main_classes/trainer
       title: Trainer
     - local: in_translation
@@ -501,7 +503,7 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
-      - local: in_translation
+      - local: model_doc/deepseek_v3
         title: DeepSeek-V3
       - local: in_translation
         title: DialoGPT
@@ -567,8 +569,8 @@
         title: GPT NeoX Japanese
       - local: in_translation
         title: GPT-J
-      - local: in_translation
-        title: GPT2
+      - local: model_doc/gpt2
+        title: GPT-2
       - local: in_translation
         title: GPTBigCode
       - local: in_translation
@@ -591,7 +593,7 @@
         title: HGNet-V2
       - local: in_translation
         title: I-BERT
-      - local: in_translation
+      - local: model_doc/jamba
         title: Jamba
       - local: in_translation
         title: JetMoe
@@ -601,6 +603,8 @@
         title: LED
       - local: in_translation
         title: LFM2
+      - local: in_translation
+        title: LFM2-VL
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
@@ -991,6 +995,8 @@
         title: WavLM
       - local: model_doc/whisper
         title: Whisper
+      - local: model_doc/xclip
+        title: xclip
       - local: in_translation
         title: XLS-R
       - local: in_translation
@@ -1029,7 +1035,7 @@
         title: Chinese-CLIP
       - local: model_doc/clip
         title: CLIP
-      - local: in_translation
+      - local: model_doc/clipseg
         title: CLIPSeg
       - local: in_translation
         title: CLVP
@@ -1047,7 +1053,7 @@
         title: Emu3
       - local: in_translation
         title: FLAVA
-      - local: in_translation
+      - local: model_doc/gemma3
         title: Gemma3
       - local: in_translation
         title: Gemma3n
@@ -1060,6 +1066,8 @@
       - local: in_translation
         title: GraniteVision
       - local: in_translation
+        title: (번역중) GIT
+      - local: model_doc/grounding-dino
         title: Grounding DINO
       - local: in_translation
         title: GroupViT
@@ -1151,8 +1159,8 @@
         title: SigLIP2
       - local: in_translation
         title: SmolLM3
-      - local: in_translation
-        title: SmolVLM
+      - local: model_doc/smolvlm
+        title: 소형 비전 언어 모델
       - local: in_translation
         title: Speech Encoder Decoder Models
       - local: in_translation

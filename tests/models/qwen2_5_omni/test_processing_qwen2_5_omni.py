@@ -38,7 +38,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
@@ -213,6 +213,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+        processor.image_processor.size = {"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
+        processor.video_processor.size = {"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
         processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -318,26 +320,6 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with pytest.raises(ValueError):
             processor(images=image_input)
 
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
-        video_processor = self.get_video_processor()
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
-        audio_input = self.prepare_audio_inputs()
-
-        inputs = processor(text=input_str, images=image_input, videos=video_inputs, audio=audio_input)
-        self.assertListEqual(sorted(inputs.keys()), sorted(processor.model_input_names))
-
     @require_torch
     def _test_apply_chat_template(
         self,
@@ -428,6 +410,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             for thw in out_dict["video_grid_thw"]:
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
             mm_len = expected_video_token_count
+        elif modality == "audio":
+            mm_len = batch_size
         else:
             mm_len = batch_size * 1564
         self.assertEqual(len(out_dict[input_name]), mm_len)
@@ -474,7 +458,9 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages[0][0]["content"].append(
             {
                 "type": "video",
-                "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+                "url": url_to_local_path(
+                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                ),
             }
         )
         num_frames = 3
@@ -498,7 +484,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 14400)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5760)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -519,15 +505,19 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 432000)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 17280)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
         messages[0][0]["content"][-1] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
             ],
         }
         out_dict_with_video = processor.apply_chat_template(
@@ -539,11 +529,21 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2904)
 
+        # When the inputs are frame URLs/paths we expect that those are already
+        # sampled and will raise an error is asked to sample again.
+        with self.assertRaisesRegex(
+            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
+        ):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                do_sample_frames=True,
+            )
+
     @require_librosa
     @require_av
-    @unittest.skip(
-        "@raushan: librosa can'r decode this audio in CI runner, fix after adding moviepy or another decoder"
-    )
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
@@ -590,7 +590,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            return_tensors="np",
+            return_tensors="pt",
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)

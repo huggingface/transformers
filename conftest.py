@@ -16,6 +16,7 @@
 # by pytest before any tests are run
 
 import doctest
+import os
 import sys
 import warnings
 from os.path import abspath, dirname, join
@@ -23,7 +24,13 @@ from os.path import abspath, dirname, join
 import _pytest
 import pytest
 
-from transformers.testing_utils import HfDoctestModule, HfDocTestParser, is_torch_available
+from transformers.testing_utils import (
+    HfDoctestModule,
+    HfDocTestParser,
+    is_torch_available,
+    patch_testing_methods_to_collect_info,
+    patch_torch_compile_force_graph,
+)
 
 
 NOT_DEVICE_TESTS = {
@@ -60,8 +67,6 @@ NOT_DEVICE_TESTS = {
     "test_mismatched_shapes_have_properly_initialized_weights",
     "test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist",
     "test_model_is_small",
-    "test_tf_from_pt_safetensors",
-    "test_flax_from_pt_safetensors",
     "ModelTest::test_pipeline_",  # None of the pipeline tests from PipelineTesterMixin (of which XxxModelTest inherits from) are running on device
     "ModelTester::test_pipeline_",
     "/repo_utils/",
@@ -83,6 +88,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
+    config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
+    config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
 
 
 def pytest_collection_modifyitems(items):
@@ -134,3 +141,11 @@ if is_torch_available():
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
     torch.backends.cudnn.allow_tf32 = False
+
+    # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
+    # the patched version will always run with `fullgraph=True`.
+    patch_torch_compile_force_graph()
+
+
+if os.environ.get("PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS", "").lower() in ("yes", "true", "on", "y", "1"):
+    patch_testing_methods_to_collect_info()

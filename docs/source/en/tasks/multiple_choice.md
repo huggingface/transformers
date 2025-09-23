@@ -144,8 +144,6 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -198,100 +196,12 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-If you aren't familiar with finetuning a model with Keras, take a look at the basic tutorial [here](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-To finetune a model in TensorFlow, start by setting up an optimizer function, learning rate schedule, and some training hyperparameters:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_train_epochs = 2
->>> total_train_steps = (len(tokenized_swag["train"]) // batch_size) * num_train_epochs
->>> optimizer, schedule = create_optimizer(init_lr=5e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
-```
-
-Then you can load BERT with [`TFAutoModelForMultipleChoice`]:
-
-```py
->>> from transformers import TFAutoModelForMultipleChoice
-
->>> model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
-```
-
-Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_swag["train"],
-...     shuffle=True,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_swag["validation"],
-...     shuffle=False,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-```
-
-Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
-
-```py
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-The last two things to setup before you start training is to compute the accuracy from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](../main_classes/keras_callbacks).
-
-Pass your `compute_metrics` function to [`~transformers.KerasMetricCallback`]:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
-```
-
-Specify where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-Then bundle your callbacks together:
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-Finally, you're ready to start training your model! Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) with your training and validation datasets, the number of epochs, and your callbacks to finetune the model:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=2, callbacks=callbacks)
-```
-
-Once training is completed, your model is automatically uploaded to the Hub so everyone can use it!
-</tf>
-</frameworkcontent>
 
 
 <Tip>
 
 For a more in-depth example of how to finetune a model for multiple choice, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)
-or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb).
+[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
 
 </Tip>
 
@@ -307,8 +217,6 @@ Come up with some text and two candidate answers:
 >>> candidate2 = "The law applies to baguettes."
 ```
 
-<frameworkcontent>
-<pt>
 Tokenize each prompt and candidate answer pair and return PyTorch tensors. You should also create some `labels`:
 
 ```py
@@ -336,34 +244,3 @@ Get the class with the highest probability:
 >>> predicted_class
 0
 ```
-</pt>
-<tf>
-Tokenize each prompt and candidate answer pair and return TensorFlow tensors:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_swag_model")
->>> inputs = tokenizer([[prompt, candidate1], [prompt, candidate2]], return_tensors="tf", padding=True)
-```
-
-Pass your inputs to the model and return the `logits`:
-
-```py
->>> from transformers import TFAutoModelForMultipleChoice
-
->>> model = TFAutoModelForMultipleChoice.from_pretrained("username/my_awesome_swag_model")
->>> inputs = {k: tf.expand_dims(v, 0) for k, v in inputs.items()}
->>> outputs = model(inputs)
->>> logits = outputs.logits
-```
-
-Get the class with the highest probability:
-
-```py
->>> predicted_class = int(tf.math.argmax(logits, axis=-1)[0])
->>> predicted_class
-0
-```
-</tf>
-</frameworkcontent>

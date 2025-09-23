@@ -103,9 +103,6 @@ class AudioClassificationPipeline(Pipeline):
             kwargs["top_k"] = 5
         super().__init__(*args, **kwargs)
 
-        if self.framework != "pt":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-
         self.check_model_type(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES)
 
     def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
@@ -237,8 +234,8 @@ class AudioClassificationPipeline(Pipeline):
         processed = self.feature_extractor(
             inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
-        if self.torch_dtype is not None:
-            processed = processed.to(dtype=self.torch_dtype)
+        if self.dtype is not None:
+            processed = processed.to(dtype=self.dtype)
         return processed
 
     def _forward(self, model_inputs):

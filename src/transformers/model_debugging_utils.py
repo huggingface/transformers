@@ -26,11 +26,13 @@ from .utils.import_utils import is_torch_available, requires
 
 if is_torch_available():
     import torch
-    import torch.distributed.tensor
     from safetensors.torch import save_file
 
     # Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
-    _torch_distributed_available = torch.distributed.is_available()
+    if torch.distributed.is_available():
+        import torch.distributed.tensor
+
+        _torch_distributed_available = True
 else:
     _torch_distributed_available = False
 from .utils import logging
@@ -267,8 +269,8 @@ def log_model_debug_trace(debug_path, model):
 
 def _attach_debugger_logic(
     model,
-    debug_path: Optional[str] = ".",
-    do_prune_layers: Optional[bool] = True,
+    debug_path: str = ".",
+    do_prune_layers: bool = True,
     use_repr: bool = True,
 ):
     """
@@ -397,8 +399,8 @@ def _attach_debugger_logic(
 def model_addition_debugger_context(
     model,
     debug_path: Optional[str] = None,
-    do_prune_layers: Optional[bool] = True,
-    use_repr: Optional[bool] = True,
+    do_prune_layers: bool = True,
+    use_repr: bool = True,
 ):
     """
     # Model addition debugger - context manager for model adders
@@ -406,7 +408,7 @@ def model_addition_debugger_context(
 
     It tracks all forward calls within a model forward and logs a slice of each input and output on a nested JSON file.
     If `use_repr=True` (the default), the JSON file will record a `repr()`-ized version of the tensors as a list of
-    strings. If `use_repr=False`, the full tensors will be stored in spearate SafeTensors files and the JSON file will
+    strings. If `use_repr=False`, the full tensors will be stored in separate SafeTensors files and the JSON file will
     provide a relative path to that file.
 
     To note, this context manager enforces `torch.no_grad()`.

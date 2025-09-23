@@ -102,13 +102,14 @@ GGUF_CONFIG_MAPPING = {
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
     },
-    "qwen3moe": {
+    "qwen3_moe": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
         "embedding_length": "hidden_size",
         "rope.dimension_count": None,
         "rope.freq_base": "rope_theta",
+        "attention.key_length": "head_dim",
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
@@ -247,6 +248,31 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "attention.sliding_window": "sliding_window",
+        "vocab_size": "vocab_size",
+    },
+    "umt5": {
+        "context_length": "n_positions",
+        "block_count": "num_layers",
+        "feed_forward_length": "d_ff",
+        "embedding_length": "d_model",
+        "attention.key_length": "d_kv",
+        "attention.head_count": "num_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
+        "attention.relative_buckets_count": "relative_attention_num_buckets",
+        "decoder_start_token_id": "decoder_start_token_id",
+        "vocab_size": "vocab_size",
+    },
+    "deci": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
     },
 }
@@ -715,10 +741,13 @@ GGUF_TO_FAST_CONVERTERS = {
     "nemotron": GGUFGPTConverter,
     "gemma2": GGUFGemmaConverter,
     "gemma3_text": GGUFGemmaConverter,
+    "umt5": GGUFT5Converter,
+    "deci": GGUFLlamaConverter,
+    "decilm": GGUFLlamaConverter,
 }
 
 
-def convert_gguf_tokenizer(architecture, tokenizer_dict) -> Tokenizer:
+def convert_gguf_tokenizer(architecture: str, tokenizer_dict) -> tuple[Tokenizer, dict]:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 

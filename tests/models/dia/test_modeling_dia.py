@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     is_flaky,
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -238,11 +237,8 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         skippable_tests = [
             "test_sample_generate_dict_output",  # return sequences > 1
             "test_beam",
-            "test_group_beam",
-            "test_constrained_beam",
             "test_contrastive",
             "test_assisted",
-            "test_dola",
             "test_prompt_lookup",
             "test_model_parallel_beam_search",
             "test_generate_without_input_ids",
@@ -254,7 +250,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 self.skipTest(reason="Dia only supports greedy search / sampling with one sequence.")
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        """Overriden to account for the 2D flattened structure"""
+        """Overridden to account for the 2D flattened structure"""
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
@@ -415,7 +411,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.assertEqual(len(scores), generated_length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Overwritten as it relies on hardcoded namings atm - checking for our case here specifically
@@ -522,9 +517,9 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                         )
                     )
 
-    @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
-    def test_past_key_values_format(self, custom_all_cache_shapes=None):
-        pass
+    @pytest.mark.generate
+    def test_prepare_inputs_for_generation_kwargs_forwards(self):
+        super().test_prepare_inputs_for_generation_kwargs_forwards(encoder_outputs=torch.randn(2, 2, 32))
 
     @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
     def test_hidden_states_output(self):

@@ -13,13 +13,12 @@
 # limitations under the License.
 
 import unittest
-from functools import lru_cache
+from functools import cached_property
 
 from transformers import PegasusTokenizer, PegasusTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
-from transformers.utils import cached_property
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_no_bos.model")
@@ -47,8 +46,6 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return PegasusTokenizer.from_pretrained("google/pegasus-large")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PegasusTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return PegasusTokenizer.from_pretrained(pretrained_name, **kwargs)
@@ -157,8 +154,6 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PegasusTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return PegasusTokenizer.from_pretrained(pretrained_name, **kwargs)
@@ -192,25 +187,6 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert len(batch) == 2  # input_ids, attention_mask.
 
     def test_equivalence_to_orig_tokenizer(self):
-        """
-        To run with original TF tokenizer:
-
-        !wget https://github.com/google-research/bigbird/raw/master/bigbird/vocab/pegasus.model
-        !pip install tensorflow-text
-
-        import tensorflow.compat.v2 as tf
-        import tensorflow_text as tft
-
-        VOCAB_FILE = "./pegasus.model"
-
-        tf.enable_v2_behavior()
-
-        test_str = "This is an example string that is used to test the original TF implementation against the HF implementation"
-        tokenizer = tft.SentencepieceTokenizer(model=tf.io.gfile.GFile(VOCAB_FILE, "rb").read())
-
-        tokenizer.tokenize(test_str)
-        """
-
         test_str = (
             "This is an example string that is used to test the original TF implementation against the HF"
             " implementation"

@@ -17,10 +17,11 @@
 
 import sys
 from collections import namedtuple
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import reduce
 from operator import mul
-from typing import Any, Iterable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -29,7 +30,6 @@ from torch.autograd.function import Function
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -61,13 +61,12 @@ ReformerEncoderOutput = namedtuple(
 )
 
 
-class ReformerDynamicCache(DynamicCache):
+class ReformerDynamicCache:
     """
     A dynamic cache that stores past buckets instead of key/values.
     """
 
     def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
-        super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.buckets_cache: list[torch.Tensor] = []
         self.states_cache: list[torch.Tensor] = []
@@ -79,7 +78,7 @@ class ReformerDynamicCache(DynamicCache):
 
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
+        Support for backwards-compatible `past_key_values` indexing, e.g. `past_key_values[0][0].shape[2]` to get the
         sequence length.
         """
         if layer_idx < len(self):
@@ -89,7 +88,7 @@ class ReformerDynamicCache(DynamicCache):
 
     def __iter__(self):
         """
-        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        Support for backwards-compatible `past_key_values` iteration, e.g. `for x in past_key_values:` to iterate over
         keys and values
         """
         for layer_idx in range(len(self)):
@@ -97,7 +96,7 @@ class ReformerDynamicCache(DynamicCache):
 
     def __len__(self):
         """
-        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
         to the number of layers in the model.
         """
         return len(self.states_cache)
@@ -1826,14 +1825,14 @@ class ReformerEncoder(nn.Module):
         all_attentions = []
 
         # init cached hidden states if necessary
-        return_legacy_cache = False
-        if use_cache or not isinstance(past_buckets_states, ReformerDynamicCache):
+        if use_cache and past_buckets_states is None:
+            past_buckets_states = ReformerDynamicCache()
+        elif use_cache and isinstance(past_buckets_states, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `ReformerDynamicCache` instead, e.g. "
                 "`past_key_values=ReformerDynamicCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_buckets_states = ReformerDynamicCache.from_legacy_cache(past_buckets_states)
 
         # concat same tensor for reversible ResNet
@@ -1860,8 +1859,6 @@ class ReformerEncoder(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         next_cache = past_buckets_states if use_cache else None
-        if return_legacy_cache:
-            next_cache = past_buckets_states.to_legacy_cache()
 
         return ReformerEncoderOutput(
             hidden_states=hidden_states,
@@ -1923,8 +1920,6 @@ class ReformerPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -2348,26 +2343,34 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        inputs_dict = {
+        model_inputs = {
             "input_ids": input_ids,
             "past_buckets_states": past_key_values,
             "use_cache": use_cache,
             "num_hashes": num_hashes,
         }
 
-        return inputs_dict
+        # Attention mask is computed on ReformerModel.forward()
+        kwargs.pop("attention_mask", None)
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                print(f"Warning: {key} is not a recognized input.")
+                model_inputs[key] = value
+
+        return model_inputs
 
     def _reorder_cache(self, past_key_values, beam_idx):
         reord_past_buckets_states = []
-        for layer_past in past_key_values:
+        for buckets, hidden_states in past_key_values:
             # buckets
-            if layer_past[0] is not None:
-                reord_buckets = layer_past[0].index_select(0, beam_idx.to(layer_past[0].device))
+            if buckets is not None and buckets.numel() > 0:
+                reord_buckets = buckets.index_select(0, beam_idx.to(buckets.device))
             else:
                 reord_buckets = None
 
             # hidden states
-            reord_hidden_states = layer_past[1].index_select(0, beam_idx.to(layer_past[1].device))
+            reord_hidden_states = hidden_states.index_select(0, beam_idx.to(hidden_states.device))
             reord_past_buckets_states.append((reord_buckets, reord_hidden_states))
 
         if isinstance(past_key_values, ReformerDynamicCache):

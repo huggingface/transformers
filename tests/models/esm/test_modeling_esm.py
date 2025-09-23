@@ -238,6 +238,7 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
+            config_and_inputs[0]._attn_implementation = "eager"
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
@@ -327,11 +328,11 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.float16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16, attn_implementation="eager")
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model_class.main_input_name]

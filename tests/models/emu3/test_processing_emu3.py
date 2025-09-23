@@ -35,7 +35,7 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         image_processor = Emu3ImageProcessor(min_pixels=28 * 28, max_pixels=56 * 56)
-        extra_special_tokens = extra_special_tokens = {
+        extra_special_tokens = {
             "image_token": "<image>",
             "boi_token": "<|image start|>",
             "eoi_token": "<|image end|>",

@@ -331,7 +331,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
         inputs = self.processor(images=self.image, text=self.prompt_image, return_tensors="pt").to(
@@ -363,7 +363,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
         inputs = self.processor(
@@ -389,7 +389,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
@@ -412,11 +412,11 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
-        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = (
             "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
@@ -440,26 +440,31 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#34585)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
-        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
-        prompt = (
-            "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
-        )
-        images_nested = [[self.image, image]]
-        inputs = self.processor(text=prompt, images=images_nested, return_tensors="pt").to(torch_device, torch.float16)
+        prompts = [
+            "user\nTell me about the french revolution.<|im_end|>\n<|im_start|>assistant\n",  # text-only case
+            "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n",
+            self.prompt_image,
+        ]
+        images_nested = [[], [image, self.image], [self.image]]
+        inputs = self.processor(
+            text=prompts,
+            images=images_nested,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device, torch.float16)
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = "user\n\nWhat is the difference between these images?\nassistant\nThe first image is a radar chart showing the performance of different models in a specific task, while the second image is a street scene with a stop sign in the foreground."  # fmt: skip
+        EXPECTED_DECODED_TEXT = ["user\nTell me about the french revolution.\nassistant\nThe French Revolution! A pivotal event in modern history that had a profound impact on the course of Western civilization. Here's a brief overview:\n\n**Background**\n\nIn the late 18th century,", "user\n\nWhat is the difference between these images?\nassistant\nThe first image shows a stop sign with a traditional Chinese architectural background, while the second image displays a radar chart with various algorithms and models, including BLIP-2, InstructBLIP, Q", "user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different"]  # fmt: skip
+        DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+        self.assertListEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_bitsandbytes
@@ -467,7 +472,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
@@ -489,7 +494,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -520,7 +525,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_matches_single(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 

@@ -14,8 +14,10 @@
 """Testing suite for the PyTorch Mask2Former model."""
 
 import unittest
+from functools import cached_property
 
 import numpy as np
+import pytest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import AutoModelForImageClassification, Mask2FormerConfig, is_torch_available, is_vision_available
@@ -31,7 +33,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -576,6 +577,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(outputs.loss is not None)
 
+    @pytest.mark.torch_export_test
     def test_export(self):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest(reason="This test requires torch >= 2.4 to run.")

@@ -13,12 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-08-06 and added to Hugging Face Transformers on 2021-01-27.*
 
 # ConvBERT
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
@@ -71,9 +71,6 @@ ConvBERT training tips are similar to those of BERT. For usage tips refer to [BE
 
 [[autodoc]] ConvBertTokenizerFast
 
-<frameworkcontent>
-<pt>
-
 ## ConvBertModel
 
 [[autodoc]] ConvBertModel
@@ -103,39 +100,3 @@ ConvBERT training tips are similar to those of BERT. For usage tips refer to [BE
 
 [[autodoc]] ConvBertForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFConvBertModel
-
-[[autodoc]] TFConvBertModel
-    - call
-
-## TFConvBertForMaskedLM
-
-[[autodoc]] TFConvBertForMaskedLM
-    - call
-
-## TFConvBertForSequenceClassification
-
-[[autodoc]] TFConvBertForSequenceClassification
-    - call
-
-## TFConvBertForMultipleChoice
-
-[[autodoc]] TFConvBertForMultipleChoice
-    - call
-
-## TFConvBertForTokenClassification
-
-[[autodoc]] TFConvBertForTokenClassification
-    - call
-
-## TFConvBertForQuestionAnswering
-
-[[autodoc]] TFConvBertForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

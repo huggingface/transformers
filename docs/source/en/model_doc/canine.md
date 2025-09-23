@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-03-11 and added to Hugging Face Transformers on 2021-06-30.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -41,7 +42,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="feature-extraction",
     model="google/canine-c",
-    device=0,               
+    device=0,
 )
 
 pipeline("Plant create energy through a process known as photosynthesis.")
@@ -59,7 +60,7 @@ model = AutoModel.from_pretrained("google/canine-c")
 text = "Plant create energy through a process known as photosynthesis."
 input_ids = torch.tensor([[ord(char) for char in text]])
 
-outputs = model(input_ids)  
+outputs = model(input_ids)
 pooled_output = outputs.pooler_output
 sequence_output = outputs.last_hidden_state
 ```
@@ -68,7 +69,7 @@ sequence_output = outputs.last_hidden_state
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plant create energy through a process known as photosynthesis." | transformers-cli run --task feature-extraction --model google/canine-c --device 0
+echo -e "Plant create energy through a process known as photosynthesis." | transformers run --task feature-extraction --model google/canine-c --device 0
 ```
 
 </hfoption>
@@ -80,7 +81,7 @@ echo -e "Plant create energy through a process known as photosynthesis." | trans
 
     ```py
     from transformers import AutoTokenizer, AutoModel
-    
+
     tokenizer = AutoTokenizer("google/canine-c")
     inputs = ["Life is like a box of chocolates.", "You never know what you gonna get."]
     encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt")

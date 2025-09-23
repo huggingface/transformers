@@ -24,11 +24,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    is_timm_available,
-    requires_backends,
-)
+from ...file_utils import ModelOutput, is_timm_available, requires_backends
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
@@ -865,11 +861,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -1422,8 +1413,6 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
             module.vision_param.data.fill_(1e-4)
             module.text_param.data.fill_(1e-4)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1878,7 +1867,7 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     # special_tokens_mask: batch_size, num_token. 1 for special tokens. 0 for normal tokens
     special_tokens_mask = torch.zeros((batch_size, num_token), device=input_ids.device).bool()
     for special_token in SPECIAL_TOKENS:
-        special_tokens_mask |= input_ids == special_token
+        special_tokens_mask = torch.logical_or(special_tokens_mask, input_ids == special_token)
 
     # idxs: each row is a list of indices of special tokens
     idxs = torch.nonzero(special_tokens_mask)
@@ -1980,12 +1969,6 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             self.reference_points = nn.Embedding(config.num_queries, 4)
 
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():

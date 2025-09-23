@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-31 and added to Hugging Face Transformers on 2024-11-25.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -42,10 +43,10 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMo-2-0425-1B",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0,
 )
-    
+
 result = pipe("Plants create energy through a process known as")
 print(result)
 ```
@@ -63,7 +64,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-2-0425-1B",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -77,7 +78,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model allenai/OLMo-2-0425-1B --device 0
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model allenai/OLMo-2-0425-1B --device 0
 ```
 
 </hfoption>
@@ -104,7 +105,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-2-0425-1B",
     quantization_config=torchao_config,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -120,11 +121,11 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 - OLMo2 uses RMSNorm instead of standard layer norm. The RMSNorm is applied to attention queries and keys, and it is applied after the attention and feedforward layers rather than before.
 - OLMo2 requires Transformers v4.48 or higher.
-- Load specific intermediate checkpoints by adding the `revision` parameter to [`~PreTrainedModel.from_pretrained`]. 
+- Load specific intermediate checkpoints by adding the `revision` parameter to [`~PreTrainedModel.from_pretrained`].
 
     ```py
     from transformers import AutoModelForCausalLM
-    
+
     model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B")
     ```
 

@@ -47,7 +47,7 @@ class EomtForUniversalSegmentationTester:
         num_labels=4,
         hidden_size=8,
         num_attention_heads=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -318,9 +318,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
     @require_torch_fp16
     @slow
     def test_inference_fp16(self):
-        model = EomtForUniversalSegmentation.from_pretrained(
-            self.model_id, torch_dtype=torch.float16, device_map="auto"
-        )
+        model = EomtForUniversalSegmentation.from_pretrained(self.model_id, dtype=torch.float16, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)

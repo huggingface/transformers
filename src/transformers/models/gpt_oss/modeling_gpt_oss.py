@@ -28,12 +28,17 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import (
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+    GradientCheckpointingLayer,
+)
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_gpt_oss import GptOssConfig
 
@@ -90,17 +95,24 @@ class GptOssExperts(nn.Module):
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_size)  # (num_tokens, hidden_size)
         num_experts = routing_weights.shape[1]
-        if self.training:
+        if hidden_states.device.type == "cpu" or self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
-                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
+                expert_mask = torch.nn.functional.one_hot(
+                    router_indices, num_classes=num_experts + 1
+                )  # masking is also a class
                 expert_mask = expert_mask.permute(2, 1, 0)
-                # we sum on the top_k and on the sequence lenght to get which experts
+                # we sum on the top_k and on the sequence length to get which experts
                 # are hit this time around
                 expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
             for expert_idx in expert_hit[:]:
+                # expert_idx only have 1 element, so we can use scale for fast indexing
+                expert_idx = expert_idx[0]
+                # skip masking index
+                if expert_idx == num_experts:
+                    continue
                 with torch.no_grad():
-                    _, token_idx = torch.where(expert_mask[expert_idx[0]])
+                    _, token_idx = torch.where(expert_mask[expert_idx])
                 current_state = hidden_states[token_idx]
                 gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
                 gate, up = gate_up[..., ::2], gate_up[..., 1::2]
@@ -109,7 +121,7 @@ class GptOssExperts(nn.Module):
                 glu = gate * torch.sigmoid(gate * self.alpha)
                 gated_output = (up + 1) * glu
                 out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
-                weighted_output = out[0] * routing_weights[token_idx, expert_idx, None]
+                weighted_output = out * routing_weights[token_idx, expert_idx, None]
                 next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
             next_states = next_states.view(batch_size, -1, self.hidden_size)
         else:
@@ -285,12 +297,13 @@ class GptOssAttention(nn.Module):
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -304,9 +317,9 @@ class GptOssAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -340,12 +353,13 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
@@ -358,7 +372,7 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -449,7 +463,7 @@ class GptOssModel(GptOssPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -459,7 +473,7 @@ class GptOssModel(GptOssPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -494,7 +508,7 @@ class GptOssModel(GptOssPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
@@ -607,12 +621,6 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -700,4 +708,18 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["GptOssForCausalLM", "GptOssModel", "GptOssPreTrainedModel"]
+class GptOssForSequenceClassification(GenericForSequenceClassification, GptOssPreTrainedModel):
+    pass
+
+
+class GptOssForTokenClassification(GenericForTokenClassification, GptOssPreTrainedModel):
+    pass
+
+
+__all__ = [
+    "GptOssForCausalLM",
+    "GptOssForSequenceClassification",
+    "GptOssForTokenClassification",
+    "GptOssModel",
+    "GptOssPreTrainedModel",
+]

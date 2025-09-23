@@ -115,6 +115,7 @@ class DacVectorQuantize(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
+        self.codebook_dim = config.codebook_dim
         self.in_proj = nn.Conv1d(config.hidden_size, config.codebook_dim, kernel_size=1)
         self.out_proj = nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1)
         self.codebook = nn.Embedding(config.codebook_size, config.codebook_dim)
@@ -613,6 +614,8 @@ class DacModel(DacPreTrainedModel):
             The codebook indices for each codebook, representing the quantized discrete
             representation of the input. This parameter should be provided if you want
             to decode directly from the audio codes (it will overwrite quantized_representation).
+        return_dict (`bool`, *optional*, defaults to `True`):
+            Whether to return a [`DacDecoderOutput`] instead of a plain tuple.
         """
 
         if quantized_representation is None and audio_codes is None:
@@ -667,6 +670,7 @@ class DacModel(DacPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         length = input_values.shape[-1]
+
         loss, quantized_representation, audio_codes, projected_latents = self.encode(
             input_values, n_quantizers, return_dict=False
         )

@@ -264,9 +264,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="PaliGemma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
-    )
+    @unittest.skip(reason="PaliGemma's SigLip encoder uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -378,7 +376,10 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = PaliGemmaProcessor.from_pretrained(model_id)
         prompt = "answer en There is no snowman in any of the images. Is this true or false?"
         stop_sign_image = Image.open(
-            requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
         )
         snow_image = Image.open(
             requests.get(
@@ -475,7 +476,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/paligemma-3b-pt-224"
         model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
+            model_id, revision="bfloat16", dtype=torch.bfloat16
         ).to(torch_device)
         # The first batch is longer in terms of text, the second will be padded.
         prompts = [
@@ -504,7 +505,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/paligemma-3b-pt-224"
         model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="float16", torch_dtype=torch.float16
+            model_id, revision="float16", dtype=torch.float16
         ).to(torch_device)
         # The first batch is longer in terms of text, the second will be padded.
         prompts = [
@@ -535,7 +536,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # impacted negatively segmentation generations.
         model_id = "google/paligemma-3b-pt-224"
         model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
+            model_id, revision="bfloat16", dtype=torch.bfloat16
         ).to(torch_device)
         prompt = ("detect shoe",)
 
@@ -587,7 +588,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # this is a supplementary test to ensure paligemma fine-tuning that relies on token_type_ids is robust to future changes
         model_id = "google/paligemma-3b-pt-224"
         model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
+            model_id, revision="bfloat16", dtype=torch.bfloat16
         ).to(torch_device)
         # The first batch is longer in terms of text, the second will be padded.
         prompts = [

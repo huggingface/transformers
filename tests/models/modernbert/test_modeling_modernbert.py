@@ -390,6 +390,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_flash_attn_2_conversion(self):
         self.skipTest(reason="ModernBert doesn't use the ModernBertFlashAttention2 class method.")
 
+    @pytest.mark.torch_compile_test
     def test_saved_config_excludes_reference_compile(self):
         config = ModernBertConfig(reference_compile=True)
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -401,7 +402,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
-    def test_flash_attention_dispatches_by_defaul(self):
+    def test_flash_attention_dispatches_by_default(self):
         "ModernBert should dispatch to FA2 by default, not SDPA"
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -501,6 +502,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         expected = torch.tensor([[1.6466, 4.5662]])
         torch.testing.assert_close(output, expected, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):

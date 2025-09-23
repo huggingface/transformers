@@ -38,12 +38,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Converting into FP8 weights from tf/flax weights is currently not supported, "
-                "please make sure the weights are in PyTorch format."
-            )
-
         if not (torch.cuda.is_available() or is_torch_xpu_available()):
             raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
 
@@ -59,8 +53,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
-                "You have loaded an FP8 model on CPU and have a CUDA device available, make sure to set "
-                "your model on a GPU device in order to run your model. To remove this warning, pass device_map = 'cuda'. "
+                "You have loaded an FP8 model on CPU and have a CUDA or XPU device available, make sure to set "
+                "your model on a GPU or XPU device in order to run your model. To remove this warning, "
+                "pass device_map = 'cuda' or 'xpu'. "
             )
         elif device_map is not None:
             if (
@@ -74,11 +69,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the cpu/disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            logger.info("Setting torch_dtype to torch.float32 as no torch_dtype was specified in from_pretrained")
-            torch_dtype = torch.float32
-        return torch_dtype
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            logger.info("Setting dtype to torch.float32 as no dtype was specified in from_pretrained")
+            dtype = torch.float32
+        return dtype
 
     def create_quantized_param(
         self,
@@ -227,6 +222,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
-    def get_cuda_warm_up_factor(self):
+    def get_accelerator_warm_up_factor(self):
         # Pre-processing is done cleanly, so we can allocate everything here
         return 2

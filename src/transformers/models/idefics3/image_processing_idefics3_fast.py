@@ -171,9 +171,6 @@ def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "tor
 
 class Idefics3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
     do_image_splitting (`bool`, *optional*, defaults to `True`):
         Whether to split the image into sub-images concatenated with the original image. They are split into patches
         such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
@@ -183,7 +180,6 @@ class Idefics3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         Whether to return the row and column information of the images.
     """
 
-    do_pad: Optional[bool]
     do_image_splitting: Optional[bool]
     max_image_size: Optional[dict[str, int]]
     return_row_col_info: Optional[bool]
@@ -215,7 +211,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -254,7 +250,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         self,
         images: torch.Tensor,
         max_image_size: dict[str, int],
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Split an image into squares of side max_image_size and the original image resized to max_image_size.
@@ -313,7 +309,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         vision_encoder_max_size: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Resize images to be multiples of `vision_encoder_max_size` while preserving the aspect ratio.

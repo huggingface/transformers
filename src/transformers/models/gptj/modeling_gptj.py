@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 import torch
 import torch.fx
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -216,7 +215,7 @@ class GPTJAttention(nn.Module):
             embed_positions = self._get_embed_positions(position_ids)
 
         repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
-        sincos = torch.gather(embed_positions, 1, repeated_position_ids)
+        sincos = torch.gather(embed_positions, 1, repeated_position_ids).to(key.dtype)
         sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
@@ -302,7 +301,7 @@ class GPTJFlashAttention2(GPTJAttention):
             embed_positions = self._get_embed_positions(position_ids)
 
         repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
-        sincos = torch.gather(embed_positions, 1, repeated_position_ids)
+        sincos = torch.gather(embed_positions, 1, repeated_position_ids).to(key.dtype)
         sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
@@ -481,8 +480,6 @@ class GPTJPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear,)):
-            # Slightly different from Mesh Transformer JAX which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -563,8 +560,6 @@ class GPTJModel(GPTJPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -656,12 +651,8 @@ class GPTJModel(GPTJPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
-
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         seq_length = inputs_embeds.shape[1]
         if cache_position is None:
@@ -1043,7 +1034,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
