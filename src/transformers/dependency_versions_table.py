@@ -27,6 +27,7 @@ deps = {
     "importlib_metadata": "importlib_metadata",
     "ipadic": "ipadic>=1.0.0,<2.0",
     "jinja2": "jinja2>=3.1.0",
+    "jmespath": "jmespath>=1.0.1",
     "kenlm": "kenlm",
     "kernels": "kernels>=0.6.1,<=0.9",
     "librosa": "librosa",

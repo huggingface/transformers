@@ -233,6 +233,7 @@ _kernels_available = _is_package_available("kernels")
 _matplotlib_available = _is_package_available("matplotlib")
 _mistral_common_available = _is_package_available("mistral_common")
 _triton_available, _triton_version = _is_package_available("triton", return_version=True)
+_jmespath_available = _is_package_available("jmespath")
 
 _torch_available, _torch_version = _is_package_available("torch", return_version=True)
 if _torch_available:
@@ -1547,6 +1548,10 @@ def is_matplotlib_available() -> Union[tuple[bool, str], bool]:
 
 def is_mistral_common_available() -> Union[tuple[bool, str], bool]:
     return _mistral_common_available
+
+
+def is_jmespath_available() -> Union[tuple[bool, str], bool]:
+    return _jmespath_available
 
 
 def check_torch_load_is_safe() -> None:
