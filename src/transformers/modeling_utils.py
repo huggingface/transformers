@@ -5315,7 +5315,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
-        model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
+        model._initialize_missing_keys(missing_keys + mismatched_keys, is_quantized)
 
         # Set some modules to fp32 if needed
         if keep_in_fp32_regex is not None:
@@ -5853,11 +5853,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 else:
                     hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict)
 
-    def _initialize_missing_keys(
-        self,
-        missing_keys: list[str],
-        is_quantized: bool,
-    ) -> "PreTrainedModel":
+    def _initialize_missing_keys(self, missing_keys: list[str], is_quantized: bool) -> None:
         """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
         `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
         be initialized correctly (i.e. weight initialization distribution).
