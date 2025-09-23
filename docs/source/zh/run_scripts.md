@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 使用脚本进行训练
 
-除了 🤗 Transformers [notebooks](./notebooks)，还有示例脚本演示了如何使用[PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch)、[TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow)或[JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax)训练模型以解决特定任务。
+除了 🤗 Transformers [notebooks](./notebooks)，还有示例脚本演示了如何使用[PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch)训练模型以解决特定任务。
 
 您还可以在这些示例中找到我们在[研究项目](https://github.com/huggingface/transformers-research-projects/)和[遗留示例](https://github.com/huggingface/transformers/tree/main/examples/legacy)中使用过的脚本，这些脚本主要是由社区贡献的。这些脚本已不再被积极维护，需要使用特定版本的🤗 Transformers， 可能与库的最新版本不兼容。
 
@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 如果您想在示例脚本中实现任何功能，请在[论坛](https://discuss.huggingface.co/)或[issue](https://github.com/huggingface/transformers/issues)上讨论，然后再提交Pull Request。虽然我们欢迎修复错误，但不太可能合并添加更多功能的Pull Request，因为这会降低可读性。
 
-本指南将向您展示如何在[PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization)和[TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization)中运行示例摘要训练脚本。除非另有说明，否则所有示例都可以在两个框架中工作。
+本指南将向您展示如何在[PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization)中运行示例摘要训练脚本。
 
 ## 设置
 
@@ -128,12 +128,10 @@ torchrun \
     --predict_with_generate
 ```
 
-TensorFlow脚本使用[`MirroredStrategy`](https://www.tensorflow.org/guide/distributed_training#mirroredstrategy)进行分布式训练，您无需在训练脚本中添加任何其他参数。如果可用，TensorFlow脚本将默认使用多个GPU。
-
 ## 在TPU上运行脚本
 
 
-张量处理单元（TPUs）是专门设计用于加速性能的。PyTorch使用[XLA](https://www.tensorflow.org/xla)深度学习编译器支持TPU（更多细节请参见[这里](https://github.com/pytorch/xla/blob/master/README.md)）。要使用TPU，请启动`xla_spawn.py`脚本并使用`num_cores`参数设置要使用的TPU核心数量。
+张量处理单元（TPUs）是专门设计用于加速性能的。PyTorch使用 [PyTorch/XLA](https://github.com/pytorch/xla/blob/master/README.md) 支持TPU。要使用TPU，请启动`xla_spawn.py`脚本并使用`num_cores`参数设置要使用的TPU核心数量。
 
 ```bash
 python xla_spawn.py --num_cores 8 \
