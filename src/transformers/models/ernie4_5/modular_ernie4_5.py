@@ -32,12 +32,9 @@ class Ernie4_5RotaryEmbedding(OlmoRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
-        if layer_type is not None:
-            inv_freq = getattr(self, f"{layer_type}_inv_freq")
-            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        else:
-            inv_freq = self.inv_freq
-            attention_scaling = self.attention_scaling
+        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        inv_freq = getattr(self, f"{prefix}inv_freq")
+        attention_scaling = getattr(self, f"{prefix}attention_scaling")
 
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()

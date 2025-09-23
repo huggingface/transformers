@@ -408,10 +408,10 @@ class Glm4vTextRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
 
-        layer_types = getattr(config, "layer_types", [None])
+        self.layer_types = getattr(config, "layer_types", [None])
         self.rope_type = {}
         inv_freq, attention_scaling = {}, {}
-        for layer_type in layer_types:
+        for layer_type in self.layer_types:
             rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
             if rope_params is None:
                 continue
@@ -425,13 +425,13 @@ class Glm4vTextRotaryEmbedding(nn.Module):
             inv_freq[layer_type] = curr_inv_freq
             attention_scaling[layer_type] = curr_attention_scaling
 
-        if len(layer_types) == 1:
-            self.rope_type = self.rope_type[layer_types[0]]
-            self.attention_scaling = attention_scaling[layer_types[0]]
-            self.register_buffer("inv_freq", inv_freq[layer_types[0]], persistent=False)
-            self.original_inv_freq = inv_freq[layer_types[0]]
+        if len(self.layer_types) == 1:
+            self.rope_type = self.rope_type[self.layer_types[0]]
+            self.attention_scaling = attention_scaling[self.layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[self.layer_types[0]]
         else:
-            for layer_type in layer_types:
+            for layer_type in self.layer_types:
                 if layer_type in inv_freq:
                     self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
                     setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
@@ -478,12 +478,9 @@ class Glm4vTextRotaryEmbedding(nn.Module):
 
     # Ignore copy
     def forward(self, x, position_ids, layer_type=None):
-        if layer_type is not None:
-            inv_freq = getattr(self, f"{layer_type}_inv_freq")
-            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        else:
-            inv_freq = self.inv_freq
-            attention_scaling = self.attention_scaling
+        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        inv_freq = getattr(self, f"{prefix}inv_freq")
+        attention_scaling = getattr(self, f"{prefix}attention_scaling")
 
         # In contrast to other models, Glm4vText has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
@@ -871,10 +868,10 @@ class Glm4vRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
 
-        layer_types = getattr(config, "layer_types", [None])
+        self.layer_types = getattr(config, "layer_types", [None])
         self.rope_type = {}
         inv_freq, attention_scaling = {}, {}
-        for layer_type in layer_types:
+        for layer_type in self.layer_types:
             rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
             if rope_params is None:
                 continue
@@ -888,13 +885,13 @@ class Glm4vRotaryEmbedding(nn.Module):
             inv_freq[layer_type] = curr_inv_freq
             attention_scaling[layer_type] = curr_attention_scaling
 
-        if len(layer_types) == 1:
-            self.rope_type = self.rope_type[layer_types[0]]
-            self.attention_scaling = attention_scaling[layer_types[0]]
-            self.register_buffer("inv_freq", inv_freq[layer_types[0]], persistent=False)
-            self.original_inv_freq = inv_freq[layer_types[0]]
+        if len(self.layer_types) == 1:
+            self.rope_type = self.rope_type[self.layer_types[0]]
+            self.attention_scaling = attention_scaling[self.layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[self.layer_types[0]]
         else:
-            for layer_type in layer_types:
+            for layer_type in self.layer_types:
                 if layer_type in inv_freq:
                     self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
                     setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
@@ -941,12 +938,9 @@ class Glm4vRotaryEmbedding(nn.Module):
 
     # Ignore copy
     def forward(self, x, position_ids, layer_type=None):
-        if layer_type is not None:
-            inv_freq = getattr(self, f"{layer_type}_inv_freq")
-            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        else:
-            inv_freq = self.inv_freq
-            attention_scaling = self.attention_scaling
+        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        inv_freq = getattr(self, f"{prefix}inv_freq")
+        attention_scaling = getattr(self, f"{prefix}attention_scaling")
 
         # In contrast to other models, Glm4v has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)

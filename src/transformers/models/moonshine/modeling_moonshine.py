@@ -88,10 +88,10 @@ class MoonshineRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
 
-        layer_types = getattr(config, "layer_types", [None])
+        self.layer_types = getattr(config, "layer_types", [None])
         self.rope_type = {}
         inv_freq, attention_scaling = {}, {}
-        for layer_type in layer_types:
+        for layer_type in self.layer_types:
             rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
             if rope_params is None:
                 continue
@@ -105,13 +105,13 @@ class MoonshineRotaryEmbedding(nn.Module):
             inv_freq[layer_type] = curr_inv_freq
             attention_scaling[layer_type] = curr_attention_scaling
 
-        if len(layer_types) == 1:
-            self.rope_type = self.rope_type[layer_types[0]]
-            self.attention_scaling = attention_scaling[layer_types[0]]
-            self.register_buffer("inv_freq", inv_freq[layer_types[0]], persistent=False)
-            self.original_inv_freq = inv_freq[layer_types[0]]
+        if len(self.layer_types) == 1:
+            self.rope_type = self.rope_type[self.layer_types[0]]
+            self.attention_scaling = attention_scaling[self.layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[self.layer_types[0]]
         else:
-            for layer_type in layer_types:
+            for layer_type in self.layer_types:
                 if layer_type in inv_freq:
                     self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
                     setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
@@ -159,12 +159,9 @@ class MoonshineRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
-        if layer_type is not None:
-            inv_freq = getattr(self, f"{layer_type}_inv_freq")
-            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        else:
-            inv_freq = self.inv_freq
-            attention_scaling = self.attention_scaling
+        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        inv_freq = getattr(self, f"{prefix}inv_freq")
+        attention_scaling = getattr(self, f"{prefix}attention_scaling")
 
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -574,7 +571,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             [MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)]
         )
         self.layer_norm = nn.LayerNorm(embed_dim, bias=False)
-        self.rotary_emb = MoonshineRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -626,14 +622,12 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

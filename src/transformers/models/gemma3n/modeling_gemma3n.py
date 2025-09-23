@@ -1242,7 +1242,9 @@ class Gemma3nTextAttention(nn.Module):
             else None
         )
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.is_sliding = self.layer_type == "sliding_attention"
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -1263,7 +1265,6 @@ class Gemma3nTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.sliding_window = config.sliding_window if self.is_sliding else None
-        self.is_sliding = layer_type == "sliding_attention"
 
         self.q_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
@@ -1463,7 +1464,7 @@ class Gemma3nAttention(nn.Module):
 
     def __init__(self, config: Gemma3nConfig, layer_idx: int):
         super().__init__()
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -1485,7 +1486,7 @@ class Gemma3nAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -1631,10 +1632,10 @@ class Gemma3nRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
 
-        layer_types = getattr(config, "layer_types", [None])
+        self.layer_types = getattr(config, "layer_types", [None])
         self.rope_type = {}
         inv_freq, attention_scaling = {}, {}
-        for layer_type in layer_types:
+        for layer_type in self.layer_types:
             rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
             if rope_params is None:
                 continue
@@ -1648,13 +1649,13 @@ class Gemma3nRotaryEmbedding(nn.Module):
             inv_freq[layer_type] = curr_inv_freq
             attention_scaling[layer_type] = curr_attention_scaling
 
-        if len(layer_types) == 1:
-            self.rope_type = self.rope_type[layer_types[0]]
-            self.attention_scaling = attention_scaling[layer_types[0]]
-            self.register_buffer("inv_freq", inv_freq[layer_types[0]], persistent=False)
-            self.original_inv_freq = inv_freq[layer_types[0]]
+        if len(self.layer_types) == 1:
+            self.rope_type = self.rope_type[self.layer_types[0]]
+            self.attention_scaling = attention_scaling[self.layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[self.layer_types[0]]
         else:
-            for layer_type in layer_types:
+            for layer_type in self.layer_types:
                 if layer_type in inv_freq:
                     self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
                     setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
@@ -1702,12 +1703,9 @@ class Gemma3nRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
-        if layer_type is not None:
-            inv_freq = getattr(self, f"{layer_type}_inv_freq")
-            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        else:
-            inv_freq = self.inv_freq
-            attention_scaling = self.attention_scaling
+        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        inv_freq = getattr(self, f"{prefix}inv_freq")
+        attention_scaling = getattr(self, f"{prefix}attention_scaling")
 
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()

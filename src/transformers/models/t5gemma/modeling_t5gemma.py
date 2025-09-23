@@ -99,10 +99,10 @@ class T5GemmaRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
 
-        layer_types = getattr(config, "layer_types", [None])
+        self.layer_types = getattr(config, "layer_types", [None])
         self.rope_type = {}
         inv_freq, attention_scaling = {}, {}
-        for layer_type in layer_types:
+        for layer_type in self.layer_types:
             rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
             if rope_params is None:
                 continue
@@ -116,13 +116,13 @@ class T5GemmaRotaryEmbedding(nn.Module):
             inv_freq[layer_type] = curr_inv_freq
             attention_scaling[layer_type] = curr_attention_scaling
 
-        if len(layer_types) == 1:
-            self.rope_type = self.rope_type[layer_types[0]]
-            self.attention_scaling = attention_scaling[layer_types[0]]
-            self.register_buffer("inv_freq", inv_freq[layer_types[0]], persistent=False)
-            self.original_inv_freq = inv_freq[layer_types[0]]
+        if len(self.layer_types) == 1:
+            self.rope_type = self.rope_type[self.layer_types[0]]
+            self.attention_scaling = attention_scaling[self.layer_types[0]]
+            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
+            self.original_inv_freq = inv_freq[self.layer_types[0]]
         else:
-            for layer_type in layer_types:
+            for layer_type in self.layer_types:
                 if layer_type in inv_freq:
                     self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
                     setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
@@ -170,12 +170,9 @@ class T5GemmaRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
-        if layer_type is not None:
-            inv_freq = getattr(self, f"{layer_type}_inv_freq")
-            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        else:
-            inv_freq = self.inv_freq
-            attention_scaling = self.attention_scaling
+        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        inv_freq = getattr(self, f"{prefix}inv_freq")
+        attention_scaling = getattr(self, f"{prefix}attention_scaling")
 
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -276,7 +273,7 @@ class T5GemmaSelfAttention(nn.Module):
 
     def __init__(self, config: T5GemmaModuleConfig, layer_idx: int):
         super().__init__()
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -299,7 +296,7 @@ class T5GemmaSelfAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -576,7 +573,7 @@ class T5GemmaAttention(nn.Module):
 
     def __init__(self, config: T5GemmaConfig, layer_idx: int):
         super().__init__()
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -598,7 +595,7 @@ class T5GemmaAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -766,7 +763,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
             [T5GemmaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.dropout = nn.Dropout(config.dropout_rate)
-        self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -825,12 +821,9 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         hidden_states = self.dropout(hidden_states)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
-            position_embeddings = self.rotary_emb(
-                hidden_states, position_ids=position_ids, layer_type=layer_module.attention_type
-            )
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings,
+                None,
                 self_attn_mask_mapping[layer_module.attention_type],
                 position_ids,
                 **kwargs,
@@ -925,13 +918,15 @@ class T5GemmaDecoder(T5GemmaEncoder):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
         hidden_states = self.dropout(hidden_states)
 
         for layer_module in self.layers[: self.config.num_hidden_layers]:
+            position_embeddings = self.rotary_emb(
+                hidden_states, position_ids=position_ids, layer_type=layer_module.attention_type
+            )
             hidden_states = layer_module(
                 hidden_states,
                 position_embeddings,
