@@ -946,10 +946,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
         self.language_model = Qwen2_5_VLTextModel._from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
-        print(self.visual.gradient_checkpointing, "TEST", type(config))
+
         # Initialize weights and apply final processing
         self.post_init()
-        print(self.visual.gradient_checkpointing, "TEST", type(config))
 
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
