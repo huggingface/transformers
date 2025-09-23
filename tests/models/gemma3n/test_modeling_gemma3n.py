@@ -150,7 +150,6 @@ class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
     _is_stateful = True
     main_input_name = "audio_mel"
     test_initialization = False
-    test_can_init_all_missing_weights = False
 
     def setUp(self):
         self.model_tester = Gemma3nAudioModelTester(self)
