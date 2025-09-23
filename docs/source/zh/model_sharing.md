@@ -73,28 +73,8 @@ pip install huggingface_hub
 >>> notebook_login()
 ```
 
-## 转换模型适用于所有框架
-
-为确保您的模型可以被使用不同框架的人使用，我们建议您将PyTorch和TensorFlow `checkpoints`都转换并上传。如果您跳过此步骤，用户仍然可以从其他框架加载您的模型，但速度会变慢，因为🤗 Transformers需要实时转换`checkpoints`。
-
-为另一个框架转换`checkpoints`很容易。确保您已安装PyTorch和TensorFlow（请参阅[此处](installation)的安装说明），然后在其他框架中找到适合您任务的特定模型。
-
-<frameworkcontent>
-<pt>
-
-指定`from_tf=True`将checkpoint从TensorFlow转换为PyTorch。
-
-```py
->>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
->>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
-```
-</pt>
-</frameworkcontent>
-
 ## 在训练过程中推送模型
 
-<frameworkcontent>
-<pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
 将模型分享到Hub就像添加一个额外的参数或回调函数一样简单。请记住，在[微调教程](training)中，`TrainingArguments`类是您指定超参数和附加训练选项的地方。其中一项训练选项包括直接将模型推送到Hub的能力。在您的`TrainingArguments`中设置`push_to_hub=True`：
@@ -121,8 +101,6 @@ pip install huggingface_hub
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 ## 使用`push_to_hub`功能
 
@@ -154,11 +132,6 @@ pip install huggingface_hub
 >>> tokenizer.push_to_hub("my-awesome-model")
 ```
 
-或者，您可能希望将您的微调后的PyTorch模型的TensorFlow版本添加进去：
-
-```py
->>> tf_model.push_to_hub("my-awesome-model")
-```
 现在，当您导航到您的Hugging Face个人资料时，您应该看到您新创建的模型仓库。点击**文件**选项卡将显示您已上传到仓库的所有文件。
 
 有关如何创建和上传文件到仓库的更多详细信息，请参考Hub文档[这里](https://huggingface.co/docs/hub/how-to-upstream)。

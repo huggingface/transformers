@@ -76,8 +76,6 @@ pip install -r requirements.txt
 
 ## تشغيل نص برمجي
 
-<frameworkcontent>
-<pt>
     
 - يقوم النص البرمجي التوضيحي بتنزيل مجموعة بيانات ومعالجتها مسبقًا من مكتبة 🤗 [Datasets](https://huggingface.co/docs/datasets).
 - ثم يقوم النص البرمجي بضبط نموذج بيانات دقيق باستخدام [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) على بنية تدعم الملخص. 
@@ -98,8 +96,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-</frameworkcontent>
 
 ## التدريب الموزع والدقة المختلطة
 
@@ -129,8 +125,6 @@ torchrun \
 
 ## تشغيل نص برمجي على وحدة معالجة الدقة الفائقة (TPU)
 
-<frameworkcontent>
-<pt>
     
 تُعد وحدات معالجة الدقة الفائقة (TPUs) مصممة خصيصًا لتسريع الأداء. يدعم PyTorch وحدات معالجة الدقة الفائقة (TPUs) مع [XLA](https://www.tensorflow.org/xla) مجمع الدقة الفائقة للتعلم العميق (راجع [هنا](https://github.com/pytorch/xla/blob/master/README.md) لمزيد من التفاصيل). لاستخدام وحدة معالجة الدقة الفائقة (TPU)، قم بتشغيل نص `xla_spawn.py` البرمجي واستخدم معامل `num_cores` لتعيين عدد وحدات معالجة الدقة الفائقة (TPU) التي تريد استخدامها.
 
@@ -149,8 +143,6 @@ python xla_spawn.py --num_cores 8 \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-</frameworkcontent>
 
 ## تشغيل نص برمجي باستخدام 🤗 Accelerate
 

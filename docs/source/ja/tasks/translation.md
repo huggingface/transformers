@@ -113,16 +113,12 @@ pip install transformers datasets evaluate sacrebleu
 
 次に、[`DataCollat​​orForSeq2Seq`] を使用してサンプルのバッチを作成します。データセット全体を最大長までパディングするのではなく、照合中にバッチ内の最長の長さまで文を *動的にパディング* する方が効率的です。
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -169,8 +165,6 @@ pip install transformers datasets evaluate sacrebleu
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
@@ -225,8 +219,6 @@ pip install transformers datasets evaluate sacrebleu
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -262,8 +254,6 @@ pip install transformers datasets evaluate sacrebleu
 
 必要に応じて、`pipeline`の結果を手動で複製することもできます。
 
-<frameworkcontent>
-<pt>
 
 テキストをトークン化し、`input_ids` を PyTorch テンソルとして返します。
 
@@ -292,5 +282,3 @@ pip install transformers datasets evaluate sacrebleu
 'Les lignées partagent des ressources avec des bactéries enfixant l'azote.'
 ```
 
-</pt>
-</frameworkcontent>

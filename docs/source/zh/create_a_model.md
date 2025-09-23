@@ -110,10 +110,8 @@ DistilBertConfig {
 
 ## 模型
 
-接下来，创建一个[模型](main_classes/models)。模型，也可泛指架构，定义了每一层网络的行为以及进行的操作。配置中的 `num_hidden_layers` 等属性用于定义架构。每个模型都共享基类 [`PreTrainedModel`] 和一些常用方法，例如调整输入嵌入的大小和修剪自注意力头。此外，所有模型都是 [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html)、[`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) 或 [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) 的子类。这意味着模型与各自框架的用法兼容。
+接下来，创建一个[模型](main_classes/models)。模型，也可泛指架构，定义了每一层网络的行为以及进行的操作。配置中的 `num_hidden_layers` 等属性用于定义架构。每个模型都共享基类 [`PreTrainedModel`] 和一些常用方法，例如调整输入嵌入的大小和修剪自注意力头。此外，所有模型都是 [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html) 的子类。这意味着模型与各自框架的用法兼容。
 
-<frameworkcontent>
-<pt>
 将自定义配置属性加载到模型中：
 
 ```py
@@ -136,15 +134,11 @@ DistilBertConfig {
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
-</pt>
-</frameworkcontent>
 
 ### 模型头（Model heads）
 
 此时，你已经有了一个输出*隐藏状态*的基础 DistilBERT 模型。隐藏状态作为输入传递到模型头以生成最终输出。🤗 Transformers 为每个任务提供不同的模型头，只要模型支持该任务（即，您不能使用 DistilBERT 来执行像翻译这样的序列到序列任务）。
 
-<frameworkcontent>
-<pt>
 例如，[`DistilBertForSequenceClassification`] 是一个带有序列分类头（sequence classification head）的基础 DistilBERT 模型。序列分类头是池化输出之上的线性层。
 
 ```py
@@ -160,8 +154,6 @@ DistilBertConfig {
 
 >>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
-</pt>
-</frameworkcontent>
 
 ## 分词器
 

@@ -31,14 +31,10 @@ specific language governing permissions and limitations under the License.
 
 あなたはまた、好きな機械学習フレームワークをインストールする必要があります:
 
-<frameworkcontent>
-<pt>
 
 ```bash
 pip install torch
 ```
-</pt>
-</frameworkcontent>
 
 ## Pipeline
 
@@ -137,8 +133,6 @@ label: NEGATIVE, スコア: 0.5309
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-<frameworkcontent>
-<pt>
 [`AutoModelForSequenceClassification`]と[`AutoTokenizer`]を使用して事前学習済みモデルとそれに関連するトークナイザをロードします（次のセクションで`AutoClass`について詳しく説明します）：
 
 ```python
@@ -148,8 +142,6 @@ label: NEGATIVE, スコア: 0.5309
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
-</pt>
-</frameworkcontent>
 
 指定したモデルとトークナイザを[`pipeline`]に設定し、今度はフランス語のテキストに`classifier`を適用できます：
 
@@ -206,8 +198,6 @@ Pass your text to the tokenizer:
 
 トークナイザはまた、入力のリストを受け入れ、一様な長さのバッチを返すためにテキストをパディングおよび切り詰めることができます。
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> pt_batch = tokenizer(
@@ -218,8 +208,6 @@ Pass your text to the tokenizer:
 ...     return_tensors="pt",
 ... )
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -229,8 +217,6 @@ Pass your text to the tokenizer:
 
 ### AutoModel
 
-<frameworkcontent>
-<pt>
 🤗 Transformersは事前学習済みインスタンスを簡単に統一的にロードする方法を提供します。
 これは、[`AutoTokenizer`]をロードするのと同じように[`AutoModel`]をロードできることを意味します。
 タスクに適した[`AutoModel`]を選択する以外の違いはありません。
@@ -266,8 +252,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
 
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -280,8 +264,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 ### Save a Model
 
-<frameworkcontent>
-<pt>
 モデルをファインチューニングしたら、[`PreTrainedModel.save_pretrained`]を使用してトークナイザと共に保存できます：
 
 ```py
@@ -296,13 +278,9 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
 
-</pt>
-</frameworkcontent>
 
 🤗 Transformersの特に素晴らしい機能の一つは、モデルを保存し、それをPyTorchモデルまたはTensorFlowモデルとして再ロードできることです。 `from_pt`または`from_tf`パラメータを使用してモデルをフレームワーク間で変換できます：
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import AutoModel
@@ -311,8 +289,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
 
-</pt>
-</frameworkcontent>
 
 ## Custom model builds
 
@@ -326,8 +302,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
-<frameworkcontent>
-<pt>
 [`AutoModel.from_config`]を使用してカスタム設定からモデルを作成します：
 
 ```python
@@ -336,8 +310,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> my_model = AutoModel.from_config(my_config)
 ```
 
-</pt>
-</frameworkcontent>
 
 [カスタムアーキテクチャを作成](./create_a_model)ガイドを参照して、カスタム構成の詳細情報を確認してください。
 
