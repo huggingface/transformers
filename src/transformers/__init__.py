@@ -463,7 +463,7 @@ else:
     _import_structure["pytorch_utils"] = [
         "Conv1D",
         "apply_chunking_to_forward",
-        "infer_device",
+        "prune_layer",
     ]
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
