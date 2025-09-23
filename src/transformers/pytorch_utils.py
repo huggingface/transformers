@@ -50,17 +50,6 @@ is_torch_greater_or_equal_than_1_12 = is_torch_greater_or_equal("1.12", accept_d
 _torch_distributed_available = torch.distributed.is_available()
 
 
-def softmax_backward_data(parent, grad_output, output, dim, self):
-    """
-    A function that calls the internal `_softmax_backward_data` PyTorch method and that adjusts the arguments according
-    to the torch version detected.
-    """
-
-    from torch import _softmax_backward_data
-
-    return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
-
-
 def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
     """
     Prune a linear layer to keep only entries in index.

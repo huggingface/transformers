@@ -29,7 +29,6 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import softmax_backward_data
 from ...utils import auto_docstring, logging
 from .configuration_sew_d import SEWDConfig
 
@@ -467,69 +466,6 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
-class XSoftmax(torch.autograd.Function):
-    """
-    Masked Softmax which is optimized for saving memory
-
-    Args:
-        input (`torch.tensor`): The input tensor that will apply softmax.
-        mask (`torch.IntTensor`):
-            The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
-        dim (int): The dimension that will apply softmax
-
-    Example:
-
-    ```python
-    >>> import torch
-    >>> from transformers.models.deberta_v2.modeling_deberta_v2 import XSoftmax
-
-    >>> # Make a tensor
-    >>> x = torch.randn([4, 20, 100])
-
-    >>> # Create a mask
-    >>> mask = (x > 0).int()
-
-    >>> # Specify the dimension to apply softmax
-    >>> dim = -1
-
-    >>> y = XSoftmax.apply(x, mask, dim)
-    ```"""
-
-    @staticmethod
-    def forward(ctx, input, mask, dim):
-        ctx.dim = dim
-        rmask = ~(mask.to(torch.bool))
-
-        output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
-        output = torch.softmax(output, ctx.dim)
-        output.masked_fill_(rmask, 0)
-        ctx.save_for_backward(output)
-        return output
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        (output,) = ctx.saved_tensors
-        inputGrad = softmax_backward_data(ctx, grad_output, output, ctx.dim, output)
-        return inputGrad, None, None
-
-    @staticmethod
-    def symbolic(g, self, mask, dim):
-        import torch.onnx.symbolic_helper as sym_help
-        from torch.onnx.symbolic_opset9 import masked_fill, softmax
-
-        mask_cast_value = g.op("Cast", mask, to_i=sym_help.cast_pytorch_to_onnx["Long"])
-        r_mask = g.op(
-            "Cast",
-            g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
-            to_i=sym_help.cast_pytorch_to_onnx["Bool"],
-        )
-        output = masked_fill(
-            g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
-        )
-        output = softmax(g, output, dim)
-        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.bool)))
-
-
 class DropoutContext:
     def __init__(self):
         self.dropout = 0
@@ -761,7 +697,13 @@ class DisentangledSelfAttention(nn.Module):
         )
 
         # bsz x height x length x dimension
-        attention_probs = XSoftmax.apply(attention_scores, attention_mask, -1)
+        rmask = ~(attention_mask.to(torch.bool))
+
+        attention_probs = (
+            attention_scores.masked_fill(rmask, torch.tensor(torch.finfo(attention_scores.dtype).min))
+            .softmax(dim=-1)
+            .masked_fill(rmask, 0)
+        )
         attention_probs = self.dropout(attention_probs)
         context_layer = torch.bmm(
             attention_probs.view(-1, attention_probs.size(-2), attention_probs.size(-1)), value_layer
