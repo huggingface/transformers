@@ -99,25 +99,38 @@ class DeepseekV3TopkRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
-        return scores_for_choice
+        return router_logits
 
 
 class DeepseekV3NaiveMoe(MixtralExperts, nn.Module):
     def __init__(self, config):
         nn.Module.__init__(self)
-        self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
+        for _ in range(self.num_experts):
+            self += [DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size)]
+
+class DeepseekV3MoE(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.experts = DeepseekV3NaiveMoe(config)
+        self.gate = DeepseekV3TopkRouter(config)
+        self.shared_experts = DeepseekV3MLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
         self.n_routed_experts = config.n_routed_experts
         self.n_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
         self.routed_scaling_factor = config.routed_scaling_factor
-        for _ in range(self.num_experts):
-            self += [DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size)]
+        self.top_k = config.num_experts_per_tok
 
-    def route_tokens_to_experts(self, hidden_states, router_logits):
+    def route_tokens_to_experts(self, router_logits):
+        router_logits = router_logits + self.gate.e_score_correction_bias
         group_scores = (
             router_logits.view(-1, self.n_group, self.n_routed_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
         )
@@ -139,24 +152,11 @@ class DeepseekV3NaiveMoe(MixtralExperts, nn.Module):
         return topk_indices, topk_weights
 
 
-class DeepseekV3MoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.experts = DeepseekV3NaiveMoe(config)
-        self.gate = DeepseekV3TopkRouter(config)
-        self.shared_experts = DeepseekV3MLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
-
     def forward(self, hidden_states):
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        topk_indices, topk_weights = self.gate(hidden_states)
+        router_logits =  self.gate(hidden_states)
+        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
