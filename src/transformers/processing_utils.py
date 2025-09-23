@@ -525,7 +525,7 @@ class ProcessorMixin(PushToHubMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
-    optional_attributes = ["chat_template", "audio_tokenizer"]
+    optional_attributes = ["chat_template", "audio_tokenizer", "response_schema"]
     optional_call_args: list[str] = []
     # Names need to be attr_class for attr in attributes
     feature_extractor_class = None

@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer
+from transformers import AutoProcessor, AutoTokenizer
 from transformers.testing_utils import require_jmespath
 from transformers.utils.chat_parsing_utils import recursive_parse
 
@@ -150,12 +150,21 @@ smollm_schema = {
 @require_jmespath
 class ChatSchemaParserTest(unittest.TestCase):
     def test_schema_save_load(self):
+        # Has no schema by default
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         tokenizer.response_schema = ernie_schema
         with tempfile.TemporaryDirectory() as tmpdir:
             tokenizer.save_pretrained(tmpdir)
             reloaded_tokenizer = AutoTokenizer.from_pretrained(tmpdir)
         self.assertEqual(reloaded_tokenizer.response_schema, ernie_schema)
+
+        # Has no schema by default
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration")
+        processor.response_schema = ernie_schema
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor.save_pretrained(tmpdir)
+            reloaded_processor = AutoProcessor.from_pretrained(tmpdir)
+        self.assertEqual(reloaded_processor.response_schema, ernie_schema)
 
     def test_tokenizer_method(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
