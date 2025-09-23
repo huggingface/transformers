@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Tool use
 
-Chat models are commonly trained with support for "function-calling" or "tool-use". Tools are functions supplied by the user, which the model can choose to call as part of its response. For example, models could have access to a calculator tool to perform arithmetic without having to it internally.
+Chat models are commonly trained with support for "function-calling" or "tool-use". Tools are functions supplied by the user, which the model can choose to call as part of its response. For example, models could have access to a calculator tool to perform arithmetic without having to perform the computation internally.
 
 This guide will demonstrate how to define tools, how to pass them to a chat model, and how to handle the model's output when it calls a tool.
 
@@ -34,7 +34,7 @@ docstrings. Refer to the examples below for how to format a tool-ready function.
 def get_current_temperature(location: str, unit: str):
     """
     Get the current temperature at a location.
-    
+
     Args:
         location: The location to get the temperature for, in the format "City, Country"
         unit: The unit to return the temperature in. (choices: ["celsius", "fahrenheit"])
@@ -44,7 +44,7 @@ def get_current_temperature(location: str, unit: str):
 def get_current_wind_speed(location: str):
     """
     Get the current wind speed in km/h at a given location.
-    
+
     Args:
         location: The location to get the wind speed for, in the format "City, Country"
     """
@@ -147,7 +147,7 @@ from transformers.utils import get_json_schema
 def multiply(a: float, b: float):
     """
     A function that multiplies two numbers
-    
+
     Args:
         a: The first number to multiply
         b: The second number to multiply
@@ -160,22 +160,22 @@ print(schema)
 
 ```json
 {
-  "type": "function", 
+  "type": "function",
   "function": {
-    "name": "multiply", 
-    "description": "A function that multiplies two numbers", 
+    "name": "multiply",
+    "description": "A function that multiplies two numbers",
     "parameters": {
-      "type": "object", 
+      "type": "object",
       "properties": {
         "a": {
-          "type": "number", 
+          "type": "number",
           "description": "The first number to multiply"
-        }, 
+        },
         "b": {
           "type": "number",
           "description": "The second number to multiply"
         }
-      }, 
+      },
       "required": ["a", "b"]
     }
   }
@@ -187,7 +187,7 @@ We won't go into the details of JSON schema itself here, since it's already [ver
 ```py
 # A simple function that takes no arguments
 current_time = {
-  "type": "function", 
+  "type": "function",
   "function": {
     "name": "current_time",
     "description": "Get the current local time as a string.",
@@ -203,18 +203,18 @@ multiply = {
   'type': 'function',
   'function': {
     'name': 'multiply',
-    'description': 'A function that multiplies two numbers', 
+    'description': 'A function that multiplies two numbers',
     'parameters': {
-      'type': 'object', 
+      'type': 'object',
       'properties': {
         'a': {
           'type': 'number',
           'description': 'The first number to multiply'
-        }, 
+        },
         'b': {
           'type': 'number', 'description': 'The second number to multiply'
         }
-      }, 
+      },
       'required': ['a', 'b']
     }
   }
