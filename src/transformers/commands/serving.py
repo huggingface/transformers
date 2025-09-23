@@ -178,6 +178,7 @@ if serve_dependencies_available:
         "parallel_tool_calls",
         "prediction",
         "presence_penalty",
+        "repetition_penalty",
         "reasoning_effort",
         "response_format",
         "service_tier",
