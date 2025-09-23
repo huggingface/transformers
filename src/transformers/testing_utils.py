@@ -3357,13 +3357,17 @@ def _get_test_info():
     stack_from_inspect = inspect.stack()
     # but visit from the top frame to the most recent frame
 
-    actual_test_file, actual_test_class = test_file, test_class
+    actual_test_file, _actual_test_class = test_file, test_class
     test_frame, test_obj, test_method = None, None, None
     for frame in reversed(stack_from_inspect):
         # if test_file in str(frame).replace(r"\\", "/"):
         # check frame's function + if it has `self` as locals; double check if self has the (function) name
         # TODO: Question: How about expanded?
-        if frame.function == test_name and 'self' in frame.frame.f_locals and hasattr(frame.frame.f_locals["self"], test_name):
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
             # if test_name == frame.frame.f_locals["self"]._testMethodName:
             test_frame = frame
             # The test instance
@@ -3371,7 +3375,6 @@ def _get_test_info():
             # TODO: Do we get the (relative?) path or it's just a file name?
             # TODO: Does `test_obj` always have `tearDown` object?
             actual_test_file = frame.filename
-            actual_test_class = test_obj.__class__.__name__
             # TODO: check `test_method` will work used at the several places!
             test_method = getattr(test_obj, test_name)
             break
@@ -3388,7 +3391,11 @@ def _get_test_info():
     # From the most outer (i.e. python's `runpy.py`) frame to most inner frame (i.e. the frame of this method)
     # Between `the test method being called` and `before entering `patched``.
     for frame in reversed(stack_from_inspect):
-        if frame.function == test_name and 'self' in frame.frame.f_locals and hasattr(frame.frame.f_locals["self"],                                                                          test_name):
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
             to_capture = True
         # TODO: check simply with the name is not robust.
         elif "patched" == frame.frame.f_code.co_name:
@@ -3434,9 +3441,7 @@ def _get_test_info():
         source = Source(s)
         caller_code_context = "\n".join(source.getstatement(caller_lineno - 1).lines)
 
-    test_info = (
-        f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {actual_test_file}:{test_lineno}\n\n{test_code_context}"
-    )
+    test_info = f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {actual_test_file}:{test_lineno}\n\n{test_code_context}"
     test_info = f"{test_info}\n\n{'-' * 80}\n\ncaller context: {caller_path}:{caller_lineno}\n\n{caller_code_context}"
 
     return (
