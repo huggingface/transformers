@@ -85,7 +85,7 @@ def validate_fast_preprocess_arguments(
     size: Optional[SizeDict] = None,
     interpolation: Optional["F.InterpolationMode"] = None,
     return_tensors: Optional[Union[str, TensorType]] = None,
-    data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+    data_format: ChannelDimension = ChannelDimension.FIRST,
 ):
     """
     Checks validity of typically used arguments in an `ImageProcessorFast` `preprocess` method.
@@ -131,7 +131,7 @@ def max_across_indices(values: Iterable[Any]) -> list[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int]:
+def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int, ...]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -375,9 +375,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
         A wrapper around `F.resize` so that it is compatible with torch.compile when the image is a uint8 tensor.
         """
         if image.dtype == torch.uint8:
-            image = image.float() / 255
+            # 256 is used on purpose instead of 255 to avoid numerical differences
+            # see https://github.com/huggingface/transformers/pull/38540#discussion_r2127165652
+            image = image.float() / 256
             image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
-            image = image * 255
+            image = image * 256
+            # torch.where is used on purpose instead of torch.clamp to avoid bug in torch.compile
+            # see https://github.com/huggingface/transformers/pull/38540#discussion_r2126888471
             image = torch.where(image > 255, 255, image)
             image = torch.where(image < 0, 0, image)
             image = image.round().to(torch.uint8)
