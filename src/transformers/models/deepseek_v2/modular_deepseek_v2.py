@@ -238,15 +238,26 @@ def apply_rotary_emb(
 
 
 class DeepseekV2Experts(Qwen2MoeExperts):
+    pass 
+
+
+class DeepseekV2Moe(nn.Module):
     def __init__(self, config: DeepseekV2Config):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
+        self.experts = DeepseekV2Experts(config)
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+        if config.n_shared_experts is not None:
+            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
+            self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group
+        self.top_k = config.num_experts_per_tok
         self.topk_group = config.topk_group
 
-    def route_tokens_to_experts(self, hidden_states, router_logits):
-        batch_size, seq_len, _ = hidden_states.shape
+    def route_tokens_to_experts(self, router_logits):
+        batch_size, seq_len, _ = router_logits.shape
         if self.topk_method == "greedy":
             topk_weight, topk_idx = torch.topk(router_logits, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
@@ -266,20 +277,11 @@ class DeepseekV2Experts(Qwen2MoeExperts):
         return topk_idx, topk_weight
 
 
-class DeepseekV2Moe(nn.Module):
-    def __init__(self, config: DeepseekV2Config):
-        super().__init__()
-        self.config = config
-        self.experts = DeepseekV2Experts(config)
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        if config.n_shared_experts is not None:
-            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-            self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_indices, topk_weights = self.gate(hidden_states)
+        router_logits = self.gate(hidden_states)
+        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
