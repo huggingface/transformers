@@ -3438,7 +3438,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        inputs_tensor: torch.FloatTensor = None,
+        inputs_tensor: Optional[torch.FloatTensor] = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,

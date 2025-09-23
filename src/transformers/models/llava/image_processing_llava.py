@@ -154,7 +154,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         background_color: Union[int, tuple[int, int, int]] = 0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Pads an image to a square based on the longest edge.
 
