@@ -203,7 +203,9 @@ if __name__ == "__main__":
                         files_to_check,
                     )
                 except Exception as e:
-                    console.print(f"[bold red]Failed to convert one or more files in batch: {files_to_check}[/bold red]")
+                    console.print(
+                        f"[bold red]Failed to convert one or more files in batch: {files_to_check}[/bold red]"
+                    )
                     console.print(f"[bold red]Error: {e}[/bold red]")
                     # Try to process files individually to identify which one failed
                     is_changed_flags = []

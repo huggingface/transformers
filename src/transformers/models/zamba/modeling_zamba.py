@@ -996,7 +996,6 @@ class ZambaModel(ZambaPreTrainedModel):
         )
         return output if return_dict else output.to_tuple()
 
-    # Copied from transformers.models.jamba.modeling_jamba.JambaModel._update_causal_mask
     def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
