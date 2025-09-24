@@ -86,6 +86,7 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
 
         # Rope only gets applied to full attention layers in Olmo3, so make all layers full attention.
         config.layer_types = ["full_attention"] * len(config.layer_types)
+        config.rope_scaling = {"full_attention": config.rope_scaling["sliding_attention"]}
 
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)

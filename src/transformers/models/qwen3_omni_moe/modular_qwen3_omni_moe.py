@@ -1609,9 +1609,8 @@ class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3ForCausa
         **kwargs,
     ):
         r"""
-        Args:
-            generation_steps (`int`):
-                generation step of code predictor, 0..num_code_groups-1
+        generation_steps (`int`):
+            generation step of code predictor, 0..num_code_groups-1
         """
 
         # Prefill stage
