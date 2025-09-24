@@ -292,10 +292,8 @@ def flex_attention_forward(
 
     # Validate that s_aux is not silently ignored
     if not return_lse and s_aux is not None:
-        raise ValueError(
-            "s_aux is not supported when return_lse=False (e.g., on CPU). "
-            "Attention sinks require LSE computation which is not available on this device."
-        )
+        logger.warning_once("s_aux provided with return_lse=False - forcing return_lse=True to avoid silent failure")
+        return_lse = True
 
     flex_attention_output = compile_friendly_flex_attention(
         query,
