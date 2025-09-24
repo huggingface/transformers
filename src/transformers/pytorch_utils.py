@@ -21,7 +21,13 @@ import torch
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
+from .utils import (
+    is_torch_greater_or_equal,
+    is_torch_xla_available,
+    is_torch_xpu_available,
+    is_torchdynamo_compiling,
+    logging,
+)
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -32,9 +38,9 @@ is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev
 is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
 is_torch_greater_or_equal_than_2_4 = is_torch_greater_or_equal("2.4", accept_dev=True)
 is_torch_greater_or_equal_than_2_3 = is_torch_greater_or_equal("2.3", accept_dev=True)
-is_torch_greater_or_equal_than_2_2 = is_torch_greater_or_equal("2.2", accept_dev=True)
 
 # For backwards compatibility (e.g. some remote codes on Hub using those variables).
+is_torch_greater_or_equal_than_2_2 = is_torch_greater_or_equal("2.2", accept_dev=True)
 is_torch_greater_or_equal_than_2_1 = is_torch_greater_or_equal("2.1", accept_dev=True)
 is_torch_greater_or_equal_than_2_0 = is_torch_greater_or_equal("2.0", accept_dev=True)
 is_torch_greater_or_equal_than_1_13 = is_torch_greater_or_equal("1.13", accept_dev=True)
@@ -44,7 +50,7 @@ is_torch_greater_or_equal_than_1_12 = is_torch_greater_or_equal("1.12", accept_d
 _torch_distributed_available = torch.distributed.is_available()
 
 
-def softmax_backward_data(parent, grad_output, output, dim, self):
+def softmax_backward_data(parent, grad_output, output):
     """
     A function that calls the internal `_softmax_backward_data` PyTorch method and that adjusts the arguments according
     to the torch version detected.
@@ -52,7 +58,7 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
 
     from torch import _softmax_backward_data
 
-    return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
+    return _softmax_backward_data(grad_output, output, parent.dim, output.dtype)
 
 
 def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
@@ -359,3 +365,16 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
         return wrapper
 
     return decorator
+
+
+def infer_device():
+    """
+    Infers available device.
+    """
+    torch_device = "cpu"
+    if torch.cuda.is_available():
+        torch_device = "cuda"
+    elif is_torch_xpu_available():
+        torch_device = "xpu"
+
+    return torch_device

@@ -40,7 +40,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="microsoft/swinv2-tiny-patch4-window8-256",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -81,7 +81,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 ## Notes
 
-- Swin Transformer V2 can pad the inputs for any input height and width divisible by `32`. 
+- Swin Transformer V2 can pad the inputs for any input height and width divisible by `32`.
 - Swin Transformer V2 can be used as a [backbone](../backbones). When `output_hidden_states = True`, it outputs both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
 
 ## Swinv2Config

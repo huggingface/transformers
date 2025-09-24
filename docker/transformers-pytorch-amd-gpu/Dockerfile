@@ -20,13 +20,8 @@ WORKDIR /
 ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-# On ROCm, torchcodec is required to decode audio files
-# RUN python3 -m pip install --no-cache-dir torchcodec
 # Install transformers
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video,audio]
-
-# Remove tensorflow and flax as they are no longer supported by transformers
-RUN python3 -m pip uninstall -y tensorflow flax
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
@@ -37,3 +32,6 @@ RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 
 # `kernels` may causes many failing tests
 RUN python3 -m pip uninstall -y kernels
+
+# On ROCm, torchcodec is required to decode audio files and 0.4 or 0.6 fails
+RUN python3 -m pip install --no-cache-dir "torchcodec==0.5"

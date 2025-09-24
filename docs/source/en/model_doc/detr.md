@@ -44,7 +44,7 @@ import torch
 pipeline = pipeline(
     "object-detection", 
     model="facebook/detr-resnet-50",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map=0
 )
 
@@ -113,6 +113,7 @@ DETR can be naturally extended to perform panoptic segmentation (which unifies s
 There are three other ways to instantiate a DETR model (depending on what you prefer):
 
 - Option 1: Instantiate DETR with pre-trained weights for entire model
+
 ```python
 from transformers import DetrForObjectDetection
 
@@ -120,6 +121,7 @@ model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
 ```
 
 - Option 2: Instantiate DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
+
 ```python
 from transformers import DetrConfig, DetrForObjectDetection
 
@@ -128,6 +130,7 @@ model = DetrForObjectDetection(config)
 ```
 
 - Option 3: Instantiate DETR with randomly initialized weights for backbone + Transformer
+
 ```python
 config = DetrConfig(use_pretrained_backbone=False)
 model = DetrForObjectDetection(config)
@@ -144,7 +147,7 @@ As a summary, consider the following table:
 | **Postprocessing** (i.e. converting the output of the model to Pascal VOC format) | [`~transformers.DetrImageProcessor.post_process`] | [`~transformers.DetrImageProcessor.post_process_segmentation`] | [`~transformers.DetrImageProcessor.post_process_segmentation`], [`~transformers.DetrImageProcessor.post_process_panoptic`] |
 | **evaluators** | `CocoEvaluator` with `iou_types="bbox"` | `CocoEvaluator` with `iou_types="bbox"` or `"segm"` | `CocoEvaluator` with `iou_tupes="bbox"` or `"segm"`, `PanopticEvaluator` |
 
-- In short, one should prepare the data either in COCO detection or COCO panoptic format, then use [`~transformers.DetrImageProcessor`] to create `pixel_values`, `pixel_mask` and optional `labels`, which can then be used to train (or fine-tune) a model. 
+- In short, one should prepare the data either in COCO detection or COCO panoptic format, then use [`~transformers.DetrImageProcessor`] to create `pixel_values`, `pixel_mask` and optional `labels`, which can then be used to train (or fine-tune) a model.
 - For evaluation, one should first convert the outputs of the model using one of the postprocessing methods of [`~transformers.DetrImageProcessor`]. These can be provided to either `CocoEvaluator` or `PanopticEvaluator`, which allow you to calculate metrics like mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are implemented in the [original repository](https://github.com/facebookresearch/detr). See the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR) for more info regarding evaluation.
 
 ## Resources

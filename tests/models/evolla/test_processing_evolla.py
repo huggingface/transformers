@@ -161,7 +161,7 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for key, value in expected_output.items():
             self.assertTrue(
                 torch.equal(inputs[key], value),
-                f"inputs[key] is {inputs[key]} and expected_output[key] is {expected_output[key]}",
+                f"inputs[key] is {inputs[key]} and expected_output[key] is {value}",
             )
 
     def get_tokenizer(self, **kwargs):

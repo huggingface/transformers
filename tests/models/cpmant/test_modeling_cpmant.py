@@ -192,7 +192,7 @@ class CpmAntModelIntegrationTest(unittest.TestCase):
 @require_torch
 class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
     @tooslow
-    def test_inference_casual(self):
+    def test_inference_causal(self):
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
         model = CpmAntForCausalLM.from_pretrained(model_path)

@@ -13,6 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-07-29 and added to Hugging Face Transformers on 2025-08-14.*
+
+# SAM2
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -20,8 +24,6 @@ rendered properly in your Markdown viewer.
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
 </div>
-
-# SAM2
 
 ## Overview
 
@@ -52,7 +54,7 @@ SAM2 can be used for automatic mask generation to segment all objects in an imag
 ```python
 >>> from transformers import pipeline
 
->>> generator = pipeline("mask-generation", model="yonigozlan/sam2.1_hiera_large_hf", device=0)
+>>> generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-large", device=0)
 >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
 >>> outputs = generator(image_url, points_per_batch=64)
 
@@ -67,15 +69,15 @@ SAM2 can be used for automatic mask generation to segment all objects in an imag
 You can segment objects by providing a single point click on the object you want to segment:
 
 ```python
->>> from transformers import Sam2Processor, Sam2Model
+>>> from transformers import Sam2Processor, Sam2Model, infer_device
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> device = infer_device()
 
->>> model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_large_hf").to(device)
->>> processor = Sam2Processor.from_pretrained("yonigozlan/sam2.1_hiera_large_hf")
+>>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
+>>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
 
 >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
 >>> raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
@@ -83,7 +85,7 @@ You can segment objects by providing a single point click on the object you want
 >>> input_points = [[[[500, 375]]]]  # Single point click, 4 dimensions (image_dim, object_dim, point_per_object_dim, coordinates)
 >>> input_labels = [[[1]]]  # 1 for positive click, 0 for negative click, 3 dimensions (image_dim, object_dim, point_label)
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
@@ -155,15 +157,15 @@ Generated masks for 2 objects
 Process multiple images simultaneously for improved efficiency:
 
 ```python
->>> from transformers import Sam2Processor, Sam2Model
+>>> from transformers import Sam2Processor, Sam2Model, infer_device
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> device = infer_device()
 
->>> model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_large_hf").to(device)
->>> processor = Sam2Processor.from_pretrained("yonigozlan/sam2.1_hiera_large_hf")
+>>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
+>>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
 
 >>> # Load multiple images
 >>> image_urls = [
@@ -176,7 +178,7 @@ Process multiple images simultaneously for improved efficiency:
 >>> input_points = [[[[500, 375]]], [[[770, 200]]]]  # One point for each image
 >>> input_labels = [[[1]], [[1]]]  # Positive clicks for both images
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)

@@ -32,7 +32,6 @@ from transformers import (
 from transformers.testing_utils import (
     backend_empty_cache,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -276,7 +275,6 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
-    @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
 
@@ -560,12 +558,12 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
 
     # Override as Sam2Model has different sub-modules
-    @require_torch_sdpa
+
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
         This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
 
@@ -610,10 +608,12 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     # Override as Sam2Model doesn't have hidden states
-    def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
-        This test is only for inference and runs with `torch_dtype=torch.bfloat16`.
+        This test is only for inference and runs with `dtype=torch.bfloat16`.
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -630,11 +630,11 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation=attn_implementation
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -663,7 +663,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 logits = outputs.vision_hidden_states[-1]
                 logits_fa = outputs_fa.vision_hidden_states[-1]
 
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+                assert torch.allclose(logits_fa, logits, atol=atol, rtol=rtol)
 
                 if model.config.is_encoder_decoder:
                     other_inputs = {
@@ -690,15 +690,15 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 logits_fa = outputs_fa.vision_hidden_states[-1]
 
                 if padding_side == "left":
-                    assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
+                    assert torch.allclose(logits_fa[1:], logits[1:], atol=atol, rtol=rtol)
 
                     # check with inference + dropout
                     model.train()
                     _ = model_fa(dummy_input, **other_inputs)
                 else:
-                    assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+                    assert torch.allclose(logits_fa[:-1], logits[:-1], atol=atol, rtol=rtol)
 
-    # Override as diffence slightly higher than the threshold
+    # Override as difference slightly higher than the threshold
     def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
@@ -712,11 +712,10 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "yonigozlan/sam2.1_hiera_tiny_hf"
+        model_name = "facebook/sam2.1-hiera-tiny"
         model = Sam2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM2 model can't be compiled dynamic yet")
 
@@ -749,9 +748,8 @@ def prepare_video():
 class Sam2ModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        # fill_hole area is set to 0 to avoid running the `get_connected_components` cuda kernel
-        self.model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf", fill_hole_area=0).to(torch.float32)
-        self.processor = Sam2Processor.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf")
+        self.model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-tiny").to(torch.float32)
+        self.processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-tiny")
         self.model.to(torch_device)
         self.model.eval()
 
@@ -905,7 +903,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_masks.shape, (2, 4, 1, 256, 256))
         torch.testing.assert_close(
             outputs.iou_scores,
-            torch.tensor([[[0.9873], [0.9264], [0.9496], [0.9208]], [[0.9445], [0.9496], [0.9497], [0.9481]]]).to(
+            torch.tensor([[[0.9904], [0.9689], [0.9770], [0.9079]], [[0.9739], [0.9816], [0.9838], [0.9781]]]).to(
                 torch_device
             ),
             atol=1e-4,
@@ -916,16 +914,16 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [
-                        [[[-7.6204, -11.9286], [-8.7747, -10.5662]]],
-                        [[[-17.1070, -23.4025], [-20.9608, -19.5600]]],
-                        [[[-20.5766, -29.4410], [-26.0739, -24.3225]]],
-                        [[[-19.7201, -29.0836], [-24.4915, -23.6377]]],
+                        [[[-11.1540, -18.3994], [-12.4230, -17.4403]]],
+                        [[[-19.3144, -29.3947], [-24.6341, -24.1144]]],
+                        [[[-24.2983, -37.6470], [-31.6659, -31.0893]]],
+                        [[[-25.4313, -44.0231], [-34.0903, -34.7447]]],
                     ],
                     [
-                        [[[-18.5259, -23.5202], [-25.1906, -17.2518]]],
-                        [[[-20.1214, -25.4215], [-25.7877, -19.1169]]],
-                        [[[-21.0878, -24.7938], [-27.5625, -19.2650]]],
-                        [[[-20.5210, -22.5343], [-26.0968, -17.7544]]],
+                        [[[-22.5539, -30.4633], [-32.8940, -21.6813]]],
+                        [[[-23.6637, -31.3489], [-32.5095, -22.4442]]],
+                        [[[-25.2987, -30.9999], [-34.6243, -24.1717]]],
+                        [[[-26.3150, -30.5313], [-35.0152, -24.0271]]],
                     ],
                 ]
             ).to(torch_device),
@@ -1007,7 +1005,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         )
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline("mask-generation", model="yonigozlan/sam2.1_hiera_tiny_hf", device=torch_device)
+        generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-tiny", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)

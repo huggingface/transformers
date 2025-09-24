@@ -12,23 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
-from functools import lru_cache
 
-from tests.test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
-from transformers import SplinterTokenizerFast, is_tf_available, is_torch_available
+from tests.test_tokenization_common import TokenizerTesterMixin
+from transformers import SplinterTokenizerFast
 from transformers.models.splinter import SplinterTokenizer
 from transformers.testing_utils import get_tests_dir, slow
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.txt")
-
-
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
 
 
 class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -51,15 +42,11 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> SplinterTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> SplinterTokenizerFast:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -133,7 +120,7 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             max_length=max_length,
             padding="max_length",
             truncation=True,
-            return_tensors=FRAMEWORK,
+            return_tensors="pt",
         )
         self.assertEqual(len(tokenized["input_ids"]), len(texts))
         self.assertEqual(len(tokenized["input_ids"][0]), max_length)

@@ -56,7 +56,7 @@ class HqqHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.torch_dtype = None
+        self.dtype = None
         self.using_multi_gpu = False
 
     def validate_environment(self, *args, **kwargs):
@@ -65,18 +65,12 @@ class HqqHfQuantizer(HfQuantizer):
                 "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
             )
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Converting weights from tf/flax weights is currently not supported, please make"
-                " sure the weights are in PyTorch format."
-            )
-
-        if self.torch_dtype is None:
-            if "torch_dtype" in kwargs:
-                self.torch_dtype = kwargs["torch_dtype"]
+        if self.dtype is None:
+            if "dtype" in kwargs:
+                self.dtype = kwargs["dtype"]
             else:
-                self.torch_dtype = torch.float32
-                logger.info("Setting torch_dtype to torch.float32 as the default value since it was not specified.")
+                self.dtype = torch.float32
+                logger.info("Setting dtype to torch.float32 as the default value since it was not specified.")
 
         device_map = kwargs.get("device_map")
         if isinstance(device_map, dict):
@@ -232,7 +226,7 @@ class HqqHfQuantizer(HfQuantizer):
                 hqq_layer = HQQLinear(
                     linear_layer=None,
                     quant_config=None,
-                    compute_dtype=self.torch_dtype,
+                    compute_dtype=self.dtype,
                     device=target_device,
                     del_orig=False,
                 )
@@ -276,7 +270,7 @@ class HqqHfQuantizer(HfQuantizer):
             hqq_layer = HQQLinear(
                 module,
                 quant_config=module_quant_config,
-                compute_dtype=self.torch_dtype,
+                compute_dtype=self.dtype,
                 device=target_device,
                 del_orig=True,
             )
@@ -290,7 +284,7 @@ class HqqHfQuantizer(HfQuantizer):
             setattr(parent_module, node, hqq_layer)
 
         else:
-            module = module.to(dtype=self.torch_dtype, device=target_device)
+            module = module.to(dtype=self.dtype, device=target_device)
             setattr(parent_module, node, module)
 
         torch.cuda.empty_cache()

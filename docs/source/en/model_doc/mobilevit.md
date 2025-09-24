@@ -11,34 +11,26 @@ Unless required by applicable law or agreed to in writing, software distributed 
 -->
 *This model was released on 2021-10-05 and added to Hugging Face Transformers on 2022-06-29.*
 
-
-
 # MobileViT
-
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-2">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
 [MobileViT](https://huggingface.co/papers/2110.02178) is a lightweight vision transformer for mobile devices that merges CNNs's efficiency and inductive biases with transformers global context modeling. It treats transformers as convolutions, enabling global information processing without the heavy computational cost of standard ViTs.
 
-
 <div class="flex justify-center">
    <img src = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/MobileViT.png">
 </div>
 
-
 You can find all the original MobileViT checkpoints under the [Apple](https://huggingface.co/apple/models?search=mobilevit) organization.
 
-
 > [!TIP]
-> - This model was contributed by [matthijs](https://huggingface.co/Matthijs) and the TensorFlow version was contributed by [sayakpaul](https://huggingface.co/sayakpaul).
+> - This model was contributed by [matthijs](https://huggingface.co/Matthijs).
 >
 > Click on the MobileViT models in the right sidebar for more examples of how to apply MobileViT to different vision tasks.
-
 
 The example below demonstrates how to do [Image Classification] with [`Pipeline`] and the [`AutoModel`] class.
 
@@ -53,7 +45,7 @@ from transformers import pipeline
 classifier = pipeline(
    task="image-classification",
    model="apple/mobilevit-small",
-   torch_dtype=torch.float16, device=0,
+   dtype=torch.float16, device=0,
 )
 
 preds = classifier("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -75,11 +67,11 @@ image_processor = AutoImageProcessor.from_pretrained(
    "apple/mobilevit-small",
    use_fast=True,
 )
-model = MobileViTForImageClassification.from_pretrained("apple/mobilevit-small")
+model = MobileViTForImageClassification.from_pretrained("apple/mobilevit-small", device_map="auto")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to("cuda")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     logits = model(**inputs).logits
@@ -93,9 +85,6 @@ print(f"The predicted class label is:{predicted_class_label}")
 </hfoption>
 </hfoptions>
 
-
-
-
 ## Notes
 
 - Does **not** operate on sequential data, it's purely designed for image tasks.
@@ -104,12 +93,7 @@ print(f"The predicted class label is:{predicted_class_label}")
 - If using custom preprocessing, ensure that images are in **BGR** format (not RGB), as expected by the pretrained weights.
 - The classification models are pretrained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k).
 - The segmentation models use a [DeepLabV3](https://huggingface.co/papers/1706.05587) head and are pretrained on [PASCAL VOC](http://host.robots.ox.ac.uk/pascal/VOC/).
-- TensorFlow versions are compatible with TensorFlow Lite, making them ideal for edge/mobile deployment.
 
-
-
-
-  
 ## MobileViTConfig
 
 [[autodoc]] MobileViTConfig
@@ -132,9 +116,6 @@ print(f"The predicted class label is:{predicted_class_label}")
     - preprocess
     - post_process_semantic_segmentation
 
-<frameworkcontent>
-<pt>
-
 ## MobileViTModel
 
 [[autodoc]] MobileViTModel
@@ -149,24 +130,3 @@ print(f"The predicted class label is:{predicted_class_label}")
 
 [[autodoc]] MobileViTForSemanticSegmentation
     - forward
-
-</pt>
-<tf>
-
-## TFMobileViTModel
-
-[[autodoc]] TFMobileViTModel
-    - call
-
-## TFMobileViTForImageClassification
-
-[[autodoc]] TFMobileViTForImageClassification
-    - call
-
-## TFMobileViTForSemanticSegmentation
-
-[[autodoc]] TFMobileViTForSemanticSegmentation
-    - call
-
-</tf>
-</frameworkcontent>

@@ -35,9 +35,7 @@ Several versions of the model weights are available on Hugging Face:
 
 * [**`microsoft/bitnet-b1.58-2B-4T-gguf`**](https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-gguf): Contains the model weights in GGUF format, compatible with the `bitnet.cpp` library for CPU inference.
 
-
 ### Model Details
-
 
 * **Architecture:** Transformer-based, modified with `BitLinear` layers (BitNet framework).
     * Uses Rotary Position Embeddings (RoPE).
@@ -58,9 +56,7 @@ Several versions of the model weights are available on Hugging Face:
     3.  **Direct Preference Optimization (DPO):** Aligned with human preferences using preference pairs.
 * **Tokenizer:** LLaMA 3 Tokenizer (vocab size: 128,256).
 
-
 ## Usage tips
-
 
 **VERY IMPORTANT NOTE ON EFFICIENCY**
 
@@ -90,7 +86,7 @@ model_id = "microsoft/bitnet-b1.58-2B-4T"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 # Apply the chat template
@@ -105,7 +101,6 @@ chat_outputs = model.generate(chat_input, max_new_tokens=50)
 response = tokenizer.decode(chat_outputs[0][chat_input.shape[-1]:], skip_special_tokens=True) # Decode only the response part
 print("\nAssistant Response:", response)
 ```
-
 
 ## BitNetConfig
 

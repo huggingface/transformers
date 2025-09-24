@@ -16,7 +16,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -41,7 +40,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="allenai/longformer-base-4096",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("""San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee.
@@ -86,7 +85,6 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 </hfoption>
 </hfoptions>
 
-
 ## Notes
 
 - Longformer is based on [RoBERTa](https://huggingface.co/docs/transformers/en/model_doc/roberta) and doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. You only need to separate the segments with the separation token `</s>` or `tokenizer.sep_token`.
@@ -127,20 +125,6 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 
 [[autodoc]] models.longformer.modeling_longformer.LongformerTokenClassifierOutput
 
-[[autodoc]] models.longformer.modeling_tf_longformer.TFLongformerBaseModelOutput
-
-[[autodoc]] models.longformer.modeling_tf_longformer.TFLongformerBaseModelOutputWithPooling
-
-[[autodoc]] models.longformer.modeling_tf_longformer.TFLongformerMaskedLMOutput
-
-[[autodoc]] models.longformer.modeling_tf_longformer.TFLongformerQuestionAnsweringModelOutput
-
-[[autodoc]] models.longformer.modeling_tf_longformer.TFLongformerSequenceClassifierOutput
-
-[[autodoc]] models.longformer.modeling_tf_longformer.TFLongformerMultipleChoiceModelOutput
-
-[[autodoc]] models.longformer.modeling_tf_longformer.TFLongformerTokenClassifierOutput
-
 ## LongformerModel
 
 [[autodoc]] LongformerModel
@@ -170,33 +154,3 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 
 [[autodoc]] LongformerForQuestionAnswering
     - forward
-
-## TFLongformerModel
-
-[[autodoc]] TFLongformerModel
-    - call
-
-## TFLongformerForMaskedLM
-
-[[autodoc]] TFLongformerForMaskedLM
-    - call
-
-## TFLongformerForQuestionAnswering
-
-[[autodoc]] TFLongformerForQuestionAnswering
-    - call
-
-## TFLongformerForSequenceClassification
-
-[[autodoc]] TFLongformerForSequenceClassification
-    - call
-
-## TFLongformerForTokenClassification
-
-[[autodoc]] TFLongformerForTokenClassification
-    - call
-
-## TFLongformerForMultipleChoice
-
-[[autodoc]] TFLongformerForMultipleChoice
-    - call

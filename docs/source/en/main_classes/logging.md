@@ -55,7 +55,6 @@ logger.info("INFO")
 logger.warning("WARN")
 ```
 
-
 All the methods of this logging module are documented below, the main ones are
 [`logging.get_verbosity`] to get the current level of verbosity in the logger and
 [`logging.set_verbosity`] to set the verbosity to the level of your choice. In order (from the least

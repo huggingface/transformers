@@ -31,9 +31,7 @@ You can find the original I-JEPA checkpoints under the [AI at Meta](https://hugg
 > [!TIP]
 > This model was contributed by [jmtzt](https://huggingface.co/jmtzt).
 
-
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ijepa_architecture.jpg">
-
 
 > Click on the I-JEPA models in the right sidebar for more examples of how to apply I-JEPA to different image representation and classification tasks.
 
@@ -49,7 +47,7 @@ feature_extractor = pipeline(
     task="image-feature-extraction",
     model="facebook/ijepa_vith14_1k",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 features = feature_extractor("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", return_tensors=True)  
 
@@ -73,7 +71,7 @@ image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("facebook/ijepa_vith14_1k")  
-model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", torch_dtype="auto", attn_implementation="sdpa")  
+model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", dtype="auto", attn_implementation="sdpa")  
 
 
 def infer(image):  
@@ -88,9 +86,9 @@ embed_2 = infer(image_2)
 similarity = cosine_similarity(embed_1, embed_2)  
 print(similarity)
 ```
+
 </hfoption>
 </hfoptions>
-
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
@@ -113,7 +111,7 @@ image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("facebook/ijepa_vitg16_22k")
-model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, torch_dtype="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, dtype="auto", attn_implementation="sdpa")
 
 
 def infer(image):
@@ -142,4 +140,3 @@ print(similarity)
 
 [[autodoc]] IJepaForImageClassification
     - forward
-

@@ -18,8 +18,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-</div>
     </div>
 </div>
 
@@ -32,7 +30,6 @@ The enhanced mask decoder replaces the traditional softmax decoder to make bette
 Even with less training data than RoBERTa, DeBERTa manages to outperform it on several benchmarks.
 
 You can find all the original DeBERTa checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=deberta) organization.
-
 
 > [!TIP]
 > Click on the DeBERTa models in the right sidebar for more examples of how to apply DeBERTa to different language tasks.
@@ -73,7 +70,7 @@ inputs = tokenizer(
     "A soccer game with multiple people playing.",
     "Some people are playing a sport.",
     return_tensors="pt"
-).to("cuda")
+).to(model.device)
 
 with torch.no_grad():
     logits = model(**inputs).logits
@@ -117,9 +114,6 @@ echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "S
     - build_inputs_with_special_tokens
     - create_token_type_ids_from_sequences
 
-<frameworkcontent>
-<pt>
-
 ## DebertaModel
 
 [[autodoc]] DebertaModel
@@ -148,40 +142,3 @@ echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "S
 
 [[autodoc]] DebertaForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFDebertaModel
-
-[[autodoc]] TFDebertaModel
-    - call
-
-## TFDebertaPreTrainedModel
-
-[[autodoc]] TFDebertaPreTrainedModel
-    - call
-
-## TFDebertaForMaskedLM
-
-[[autodoc]] TFDebertaForMaskedLM
-    - call
-
-## TFDebertaForSequenceClassification
-
-[[autodoc]] TFDebertaForSequenceClassification
-    - call
-
-## TFDebertaForTokenClassification
-
-[[autodoc]] TFDebertaForTokenClassification
-    - call
-
-## TFDebertaForQuestionAnswering
-
-[[autodoc]] TFDebertaForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>
-

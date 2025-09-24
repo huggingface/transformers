@@ -705,7 +705,7 @@ class BlipTextImageModelsModelTester:
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.seq_length = self.text_model_tester.seq_length  # need seq_length for pt-tf equivalence test
+        self.seq_length = self.text_model_tester.seq_length
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -1365,7 +1365,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
     @require_torch_fp16
     def test_inference_image_captioning_fp16(self):
         model = BlipForConditionalGeneration.from_pretrained(
-            "Salesforce/blip-image-captioning-base", torch_dtype=torch.float16
+            "Salesforce/blip-image-captioning-base", dtype=torch.float16
         ).to(torch_device)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         image = prepare_img()

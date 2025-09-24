@@ -21,8 +21,9 @@
 
 import math
 from collections import OrderedDict
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -30,8 +31,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
-
-from transformers.utils.generic import OutputRecorder, TransformersKwargs
 
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -44,6 +43,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
 )
+from ...utils.generic import OutputRecorder, TransformersKwargs
 from ..auto import AutoModel
 from .configuration_sam2_video import Sam2VideoConfig, Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 
@@ -117,7 +117,7 @@ class Sam2VideoInferenceSession:
             The device to store the inference state on.
         video_storage_device (`torch.device`, *optional*, defaults to `"cpu"`):
             The device to store the video on.
-        torch_dtype (`torch.dtype`, *optional*, defaults to `"float32"`):
+        dtype (`torch.dtype`, *optional*, defaults to `"float32"`):
             The dtype to use for the video.
         max_vision_features_cache_size (`int`, *optional*, defaults to 1):
             The maximum number of vision features to cache.
@@ -125,24 +125,24 @@ class Sam2VideoInferenceSession:
 
     def __init__(
         self,
-        video: torch.FloatTensor = None,
+        video: Optional[torch.FloatTensor] = None,
         video_height: Optional[int] = None,
         video_width: Optional[int] = None,
         inference_device: Union[torch.device, str] = "cpu",
         inference_state_device: Union[torch.device, str] = "cpu",
         video_storage_device: Union[torch.device, str] = "cpu",
-        torch_dtype: Union[torch.dtype, str] = "float32",
+        dtype: Union[torch.dtype, str] = "float32",
         max_vision_features_cache_size: int = 1,
     ):
         # store as a list to avoid double memory allocation with torch.cat when adding new frames
-        self.processed_frames = list(video.to(video_storage_device, dtype=torch_dtype)) if video is not None else None
+        self.processed_frames = list(video.to(video_storage_device, dtype=dtype)) if video is not None else None
         self.video_height = video_height
         self.video_width = video_width
 
         self.inference_device = inference_device
         self.inference_state_device = inference_state_device
         self.video_storage_device = video_storage_device
-        self.torch_dtype = torch_dtype
+        self.dtype = dtype
         self.max_vision_features_cache_size = max_vision_features_cache_size
 
         # Cache for computed features
@@ -221,7 +221,7 @@ class Sam2VideoInferenceSession:
     def add_mask_inputs(self, obj_idx: int, frame_idx: int, inputs: torch.Tensor):
         """Add mask inputs with automatic device placement."""
         self.mask_inputs_per_obj[obj_idx][frame_idx] = inputs.to(
-            self.inference_device, dtype=self.torch_dtype, non_blocking=True
+            self.inference_device, dtype=self.dtype, non_blocking=True
         )
 
     def remove_mask_inputs(self, obj_idx: int, frame_idx: int):
@@ -295,7 +295,7 @@ class Sam2VideoInferenceSession:
     # Video frame management
     def add_new_frame(self, pixel_values: torch.Tensor) -> int:
         """Add new frame with automatic device placement."""
-        pixel_values = pixel_values.to(self.video_storage_device, dtype=self.torch_dtype, non_blocking=True)
+        pixel_values = pixel_values.to(self.video_storage_device, dtype=self.dtype, non_blocking=True)
         if pixel_values.dim() == 4:
             pixel_values = pixel_values.squeeze(0)
 
@@ -335,34 +335,30 @@ class Sam2VideoInferenceSession:
         self.cache.clear_all()
 
 
-class Sam2VideoLayerNorm(nn.Module):
+class Sam2VideoLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
 
 
 # copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
@@ -482,7 +478,7 @@ class Sam2VideoAttention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -632,16 +628,16 @@ class Sam2VideoImageSegmentationOutput(ModelOutput):
         A tensor representing the object pointer, used for tracking in videos. Only used for Sam2VideoModel.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    object_score_logits: torch.FloatTensor = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
-    high_res_masks: torch.FloatTensor = None
-    object_pointer: torch.FloatTensor = None
+    high_res_masks: Optional[torch.FloatTensor] = None
+    object_pointer: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -654,8 +650,8 @@ class Sam2VideoSegmentationOutput(ModelOutput):
         The frame index of the video.
     """
 
-    pred_masks: torch.FloatTensor = None
-    frame_idx: int = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    frame_idx: Optional[int] = None
 
 
 @auto_docstring
@@ -986,14 +982,14 @@ class Sam2VideoMemoryFuserCXBlock(GradientCheckpointingLayer):
             padding=config.memory_fuser_padding,
             groups=config.memory_fuser_embed_dim,
         )  # depthwise conv
-        self.layer_norm = Sam2VideoLayerNorm(config.memory_fuser_embed_dim, eps=1e-6)
+        self.layer_norm = Sam2VideoLayerNorm(config.memory_fuser_embed_dim, eps=1e-6, data_format="channels_first")
         self.activation = ACT2FN[config.memory_fuser_hidden_act]
         self.pointwise_conv1 = nn.Linear(
             config.memory_fuser_embed_dim, config.memory_fuser_intermediate_dim
         )  # pointwise/1x1 convs, implemented with linear layers
         self.pointwise_conv2 = nn.Linear(config.memory_fuser_intermediate_dim, config.memory_fuser_embed_dim)
         self.scale = nn.Parameter(
-            config.memory_fuser_layer_scale_init_value * torch.ones((config.memory_fuser_embed_dim)),
+            config.memory_fuser_layer_scale_init_value * torch.ones(config.memory_fuser_embed_dim),
             requires_grad=True,
         )
 
@@ -1036,7 +1032,7 @@ class Sam2VideoMaskDownSamplerLayer(nn.Module):
             stride=config.mask_downsampler_stride,
             padding=config.mask_downsampler_padding,
         )
-        self.layer_norm = Sam2VideoLayerNorm(out_channels, eps=1e-6)
+        self.layer_norm = Sam2VideoLayerNorm(out_channels, eps=1e-6, data_format="channels_first")
         self.activation = ACT2FN[config.mask_downsampler_hidden_act]
 
     def forward(self, x):
@@ -1127,7 +1123,7 @@ class Sam2VideoVisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     fpn_hidden_states: Optional[torch.FloatTensor] = None
     fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1213,8 +1209,8 @@ class Sam2VideoPromptEncoder(nn.Module):
         # torch.where and expanding the labels tensor is required by the ONNX export
         point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
 
-        # This is required for the ONNX export. The dtype, device need to be explicitely
-        # specificed as otherwise torch.onnx.export interprets as double
+        # This is required for the ONNX export. The dtype, device need to be explicitly
+        # specified as otherwise torch.onnx.export interprets as double
         point_embedding = torch.where(
             labels[..., None] != -10,
             point_embedding,
@@ -1228,13 +1224,14 @@ class Sam2VideoPromptEncoder(nn.Module):
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
-        boxes = boxes + 0.5  # Shift to center of pixel
-        batch_size, nb_boxes = boxes.shape[:2]
-        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
-        input_shape = (self.input_image_size, self.input_image_size)
-        corner_embedding = self.shared_embedding(coords, input_shape)
+        boxes += 0.5  # Shift to center of pixel
+        coords = boxes.view(*boxes.shape[:2], 2, 2)
+        # add padding point for consistency with the original implementation
+        coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
+        corner_embedding = self.shared_embedding(coords, (self.input_image_size, self.input_image_size))
         corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
         corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
+        corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.expand_as(corner_embedding[:, :, 2, :])
         return corner_embedding
 
     def forward(
@@ -1897,7 +1894,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+            size, the number of boxes per image and the coordinates of the top left and bottom right point of the box.
             In the order (`x1`, `y1`, `x2`, `y2`):
 
             - `x1`: the x coordinate of the top left point of the input box
@@ -1928,9 +1925,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         if input_points is not None and input_boxes is not None:
             if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        input_points.shape[1], input_boxes.shape[1]
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {input_points.shape[1]} and {input_boxes.shape[1]}."
                 )
         elif input_points is not None:
             num_objects = input_points.shape[1]

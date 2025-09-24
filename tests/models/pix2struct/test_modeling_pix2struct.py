@@ -627,6 +627,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -848,9 +849,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
         image = Image.open(requests.get(image_url, stream=True).raw)
 
-        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         processor = Pix2StructProcessor.from_pretrained(model_id)
 
         # image only
@@ -876,9 +875,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
             "What is the producer in the diagram? (1) Phytoplankton (2) Zooplankton (3) Large fish (4) Small fish",
         ]
 
-        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         processor = Pix2StructProcessor.from_pretrained(model_id)
 
         inputs = processor(images=images, return_tensors="pt", text=texts).to(torch_device, torch.bfloat16)

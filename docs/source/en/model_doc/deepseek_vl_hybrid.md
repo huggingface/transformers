@@ -44,7 +44,7 @@ pipe = pipeline(
     task="image-text-to-text",
     model="deepseek-community/deepseek-vl-7b-chat",
     device=0,
-    torch_dtype=torch.float16
+    dtype=torch.float16
 )
 
 messages = [
@@ -62,6 +62,7 @@ messages = [
 
 pipe(text=messages, max_new_tokens=20, return_full_text=False)
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -72,7 +73,7 @@ from transformers import DeepseekVLHybridForConditionalGeneration, AutoProcessor
 
 model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
     "deepseek-community/deepseek-vl-7b-chat",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -114,6 +115,7 @@ output_text = processor.batch_decode(
 
 print(output_text)
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -132,21 +134,23 @@ quantization_config = TorchAoConfig(
 
 model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
     "deepseek-community/deepseek-vl-7b-chat",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
 ```
+
 ### Notes
 
 - Do inference with multiple images in a single conversation.
+
     ```py
     import torch
     from transformers import DeepseekVLHybridForConditionalGeneration, AutoProcessor
 
     model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
         "deepseek-community/deepseek-vl-7b-chat",
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
         device_map="auto",
         attn_implementation="sdpa"
     )

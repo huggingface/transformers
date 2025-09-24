@@ -7,6 +7,9 @@
 import pathlib
 from typing import Any, Optional, Union
 
+import torch
+from torchvision.io import read_image
+
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -29,27 +32,13 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    logging,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, logging
 from ...utils.import_utils import requires
 
 
-if is_torch_available():
-    import torch
-
-
 if is_torchvision_v2_available():
-    from torchvision.io import read_image
     from torchvision.transforms.v2 import functional as F
-
-elif is_torchvision_available():
-    from torchvision.io import read_image
+else:
     from torchvision.transforms import functional as F
 
 
@@ -64,23 +53,12 @@ class YolosFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         Controls whether to convert the annotations to the format expected by the YOLOS model. Converts the
         bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
         Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-        If `pad_size` is provided, the image will be padded to the specified dimensions.
-        Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-        height and width in the batch.
     return_segmentation_masks (`bool`, *optional*, defaults to `False`):
         Whether to return segmentation masks.
     """
 
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
     return_segmentation_masks: Optional[bool]
 
 
@@ -424,7 +402,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -480,7 +458,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         orig_size: tuple[int, int],
         target_size: tuple[int, int],
         threshold: float = 0.5,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Resizes an annotation to a target size.
@@ -668,7 +646,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        pad_size: Optional[dict[str, int]],
+        pad_size: Optional[SizeDict],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
@@ -737,7 +715,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
-                padded_size = (pad_size["height"], pad_size["width"])
+                padded_size = (pad_size.height, pad_size.width)
             else:
                 padded_size = get_max_height_width(images)
 

@@ -44,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="answerdotai/ModernBERT-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
@@ -62,11 +62,11 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "answerdotai/ModernBERT-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
-inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to("cuda")
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -92,9 +92,6 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ## ModernBertConfig
 
 [[autodoc]] ModernBertConfig
-
-<frameworkcontent>
-<pt>
 
 ## ModernBertModel
 
@@ -129,7 +126,3 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ### Usage tips
 
 The ModernBert model can be fine-tuned using the HuggingFace Transformers library with its [official script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/question-answering/run_qa.py) for question-answering tasks.
-
-
-</pt>
-</frameworkcontent>

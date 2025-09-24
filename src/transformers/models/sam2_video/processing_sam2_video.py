@@ -66,8 +66,8 @@ class Sam2VideoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
-        segmentation_maps: ImageInput = None,
+        images: Optional[ImageInput] = None,
+        segmentation_maps: Optional[ImageInput] = None,
         input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
         input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
         input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
@@ -121,7 +121,7 @@ class Sam2VideoProcessor(ProcessorMixin):
         else:
             raise ValueError("Either images or original_sizes must be provided")
 
-        # pop arguments that are not used in the foward but used nevertheless
+        # pop arguments that are not used in the forward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
         # Check original_sizes is of length 1 or len(images)
         if images is not None and len(original_sizes) != 1 and len(original_sizes) != len(images):
@@ -534,7 +534,7 @@ class Sam2VideoProcessor(ProcessorMixin):
         processing_device: Union[str, "torch.device"] = None,
         video_storage_device: Union[str, "torch.device"] = None,
         max_vision_features_cache_size: int = 1,
-        torch_dtype: torch.dtype = torch.float32,
+        dtype: torch.dtype = torch.float32,
     ):
         """
         Initializes a video session for inference.
@@ -553,7 +553,7 @@ class Sam2VideoProcessor(ProcessorMixin):
                 The device to store the processed video frames on.
             max_vision_features_cache_size (`int`, *optional*, defaults to 1):
                 The maximum number of vision features to cache.
-            torch_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
+            dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
                 The torch dtype to use for the whole session.
         """
         video_storage_device = video_storage_device if video_storage_device is not None else inference_device
@@ -574,7 +574,7 @@ class Sam2VideoProcessor(ProcessorMixin):
             inference_device=inference_device,
             video_storage_device=video_storage_device,
             inference_state_device=inference_state_device,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             max_vision_features_cache_size=max_vision_features_cache_size,
         )
         return inference_session
@@ -721,8 +721,7 @@ class Sam2VideoProcessor(ProcessorMixin):
                     "(please use clear_old_points=True instead)"
                 )
             box_coords = input_boxes.reshape(1, -1, 2, 2)
-            box_labels = torch.tensor([2, 3], dtype=torch.int32)
-            box_labels = box_labels.reshape(1, -1, 2)
+            box_labels = torch.tensor([2, 3], dtype=torch.int32).repeat(1, box_coords.shape[1], 1)
             input_points = torch.cat([box_coords, input_points], dim=2)
             input_labels = torch.cat([box_labels, input_labels], dim=2)
 

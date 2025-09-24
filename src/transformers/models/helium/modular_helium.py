@@ -18,7 +18,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 
 from ...utils import logging
 from ..gemma.modeling_gemma import GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification
@@ -104,7 +103,7 @@ class HeliumAttention(GraniteAttention):
 
 class HeliumDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: HeliumConfig, layer_idx: Optional[int] = None):
-        super().__init__()
+        super().__init__(config, layer_idx)
 
         self.mlp = HeliumMLP(config)
         self.input_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

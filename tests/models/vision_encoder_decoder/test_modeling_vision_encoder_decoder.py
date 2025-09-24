@@ -15,6 +15,7 @@
 import re
 import tempfile
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
@@ -26,14 +27,12 @@ from transformers.testing_utils import (
     require_nltk,
     require_sentencepiece,
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     to_2tuple,
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
@@ -393,7 +392,6 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @require_torch_sdpa
     @unittest.skip("TODO Arthur I have to skip for now because I don't understand it")
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.supports_sdpa:
@@ -908,19 +906,11 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = ViTModelTester(self, batch_size=13)
         model_tester_decoder = GPT2ModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs(extra_inputs=True)
         config, pixel_values, labels = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_head_mask,
-            decoder_token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = decoder_config_and_inputs
+        decoder_config, decoder_input_ids, decoder_attention_mask, decoder_head_mask, _, _, _, _, _ = (
+            decoder_config_and_inputs
+        )
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True
@@ -1030,19 +1020,11 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = DonutSwinModelTester(self, batch_size=13)
         model_tester_decoder = GPT2ModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs(extra_inputs=True)
         config, pixel_values, labels = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_head_mask,
-            decoder_token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = decoder_config_and_inputs
+        decoder_config, decoder_input_ids, decoder_attention_mask, decoder_head_mask, _, _, _, _, _ = (
+            decoder_config_and_inputs
+        )
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True

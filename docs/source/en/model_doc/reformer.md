@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Reformer model was proposed in the paper [Reformer: The Efficient Transformer](https://huggingface.co/papers/2001.04451.pdf) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
+The Reformer model was proposed in the paper [Reformer: The Efficient Transformer](https://huggingface.co/papers/2001.04451) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
 
 The abstract from the paper is the following:
 
@@ -89,7 +89,6 @@ equal to `config.hidden_size` and `config.axial_pos_shape` is set to a tuple \\(
 product has to be equal to `config.max_embedding_size`, which during training has to be equal to the *sequence
 length* of the `input_ids`.
 
-
 ### LSH Self Attention
 
 In Locality sensitive hashing (LSH) self attention the key and query projection weights are tied. Therefore, the key
@@ -122,7 +121,6 @@ Using LSH self attention, the memory and time complexity of the query-key matmul
 \\(\mathcal{O}(n_s \times n_s)\\) to \\(\mathcal{O}(n_s \times \log(n_s))\\), which usually represents the memory
 and time bottleneck in a transformer model, with \\(n_s\\) being the sequence length.
 
-
 ### Local Self Attention
 
 Local self attention is essentially a "normal" self attention layer with key, query and value projections, but is
@@ -133,7 +131,6 @@ previous neighboring chunks and `config.local_num_chunks_after` following neighb
 Using Local self attention, the memory and time complexity of the query-key matmul operation can be reduced from
 \\(\mathcal{O}(n_s \times n_s)\\) to \\(\mathcal{O}(n_s \times \log(n_s))\\), which usually represents the memory
 and time bottleneck in a transformer model, with \\(n_s\\) being the sequence length.
-
 
 ### Training
 

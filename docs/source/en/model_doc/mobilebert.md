@@ -15,11 +15,9 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2020-04-06 and added to Hugging Face Transformers on 2020-11-16.*
 
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -43,11 +41,12 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="google/mobilebert-uncased",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("The capital of France is [MASK].")
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -60,10 +59,10 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "google/mobilebert-uncased",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
 )
-inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt").to("cuda")
+inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -86,7 +85,6 @@ echo -e "The capital of France is [MASK]." | transformers run --task fill-mask -
 </hfoption>
 </hfoptions>
 
-
 ## Notes
 
 - Inputs should be padded on the right because BERT uses absolute position embeddings.
@@ -106,11 +104,6 @@ echo -e "The capital of France is [MASK]." | transformers run --task fill-mask -
 ## MobileBert specific outputs
 
 [[autodoc]] models.mobilebert.modeling_mobilebert.MobileBertForPreTrainingOutput
-
-[[autodoc]] models.mobilebert.modeling_tf_mobilebert.TFMobileBertForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
 
 ## MobileBertModel
 
@@ -151,49 +144,3 @@ echo -e "The capital of France is [MASK]." | transformers run --task fill-mask -
 
 [[autodoc]] MobileBertForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFMobileBertModel
-
-[[autodoc]] TFMobileBertModel
-    - call
-
-## TFMobileBertForPreTraining
-
-[[autodoc]] TFMobileBertForPreTraining
-    - call
-
-## TFMobileBertForMaskedLM
-
-[[autodoc]] TFMobileBertForMaskedLM
-    - call
-
-## TFMobileBertForNextSentencePrediction
-
-[[autodoc]] TFMobileBertForNextSentencePrediction
-    - call
-
-## TFMobileBertForSequenceClassification
-
-[[autodoc]] TFMobileBertForSequenceClassification
-    - call
-
-## TFMobileBertForMultipleChoice
-
-[[autodoc]] TFMobileBertForMultipleChoice
-    - call
-
-## TFMobileBertForTokenClassification
-
-[[autodoc]] TFMobileBertForTokenClassification
-    - call
-
-## TFMobileBertForQuestionAnswering
-
-[[autodoc]] TFMobileBertForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

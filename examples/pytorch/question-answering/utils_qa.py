@@ -185,7 +185,7 @@ def postprocess_qa_predictions(
         if len(predictions) == 0 or (len(predictions) == 1 and predictions[0]["text"] == ""):
             predictions.insert(0, {"text": "empty", "start_logit": 0.0, "end_logit": 0.0, "score": 0.0})
 
-        # Compute the softmax of all scores (we do it with numpy to stay independent from torch/tf in this file, using
+        # Compute the softmax of all scores (we do it with numpy to stay independent from torch in this file, using
         # the LogSumExp trick).
         scores = np.array([pred.pop("score") for pred in predictions])
         exp_scores = np.exp(scores - np.max(scores))
@@ -392,7 +392,7 @@ def postprocess_qa_predictions_with_beam_search(
             min_null_score = -2e-6
             predictions.insert(0, {"text": "", "start_logit": -1e-6, "end_logit": -1e-6, "score": min_null_score})
 
-        # Compute the softmax of all scores (we do it with numpy to stay independent from torch/tf in this file, using
+        # Compute the softmax of all scores (we do it with numpy to stay independent from torch in this file, using
         # the LogSumExp trick).
         scores = np.array([pred.pop("score") for pred in predictions])
         exp_scores = np.exp(scores - np.max(scores))

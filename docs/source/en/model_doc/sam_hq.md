@@ -25,7 +25,6 @@ The model is an enhancement to the original SAM model that produces significantl
 
 ![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-output.png)
 
-
 SAM-HQ introduces several key improvements over the original SAM model:
 
 1. High-Quality Output Token: A learnable token injected into SAM's mask decoder for higher quality mask prediction
@@ -57,9 +56,9 @@ Below is an example on how to run mask generation given an image and a 2D point:
 import torch
 from PIL import Image
 import requests
-from transformers import SamHQModel, SamHQProcessor
+from transformers import infer_device, SamHQModel, SamHQProcessor
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
 processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -67,7 +66,7 @@ img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 input_points = [[[450, 600]]]  # 2D location of a window in the image
 
-inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(device)
+inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(model.device)
 with torch.no_grad():
     outputs = model(**inputs)
 
@@ -83,9 +82,9 @@ You can also process your own masks alongside the input images in the processor 
 import torch
 from PIL import Image
 import requests
-from transformers import SamHQModel, SamHQProcessor
+from transformers import infer_device, SamHQModel, SamHQProcessor
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
 processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -95,7 +94,7 @@ mask_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets
 segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("1")
 input_points = [[[450, 600]]]  # 2D location of a window in the image
 
-inputs = processor(raw_image, input_points=input_points, segmentation_maps=segmentation_map, return_tensors="pt").to(device)
+inputs = processor(raw_image, input_points=input_points, segmentation_maps=segmentation_map, return_tensors="pt").to(model.device)
 with torch.no_grad():
     outputs = model(**inputs)
 
@@ -104,7 +103,6 @@ masks = processor.image_processor.post_process_masks(
 )
 scores = outputs.iou_scores
 ```
-
 
 ## Resources
 
@@ -136,7 +134,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## SamHQVisionModel
 
 [[autodoc]] SamHQVisionModel
-
 
 ## SamHQModel
 

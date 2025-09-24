@@ -15,7 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2025-04-14 and added to Hugging Face Transformers on 2025-04-18.*
 
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -32,18 +31,13 @@ The abstract from the paper is the following:
 
 *We introduce InternVL3, a significant advancement in the InternVL series featuring a native multimodal pre-training paradigm. Rather than adapting a text-only large language model (LLM) into a multimodal large language model (MLLM) that supports visual inputs, InternVL3 jointly acquires multimodal and linguistic capabilities from both diverse multimodal data and pure-text corpora during a single pre-training stage. This unified training paradigm effectively addresses the complexities and alignment challenges commonly encountered in conventional post-hoc training pipelines for MLLMs. To further improve performance and scalability, InternVL3 incorporates variable visual position encoding (V2PE) to support extended multimodal contexts, employs advanced post-training techniques such as supervised fine-tuning (SFT) and mixed preference optimization (MPO), and adopts test-time scaling strategies alongside an optimized training infrastructure. Extensive empirical evaluations demonstrate that InternVL3 delivers superior performance across a wide range of multi-modal tasks. In particular, InternVL3-78B achieves a score of 72.2 on the MMMU benchmark, setting a new state-of-the-art among open-source MLLMs. Its capabilities remain highly competitive with leading proprietary models, including ChatGPT-4o, Claude 3.5 Sonnet, and Gemini 2.5 Pro, while also maintaining strong pure-language proficiency. In pursuit of open-science principles, we will publicly release both the training data and model weights to foster further research and development in next-generation MLLMs.*
 
-
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/internvl_architecture.png" alt="drawing" width="600"/>
 
 <small> Overview of InternVL3 models architecture, which is the same as InternVL2.5. Taken from the <a href="https://huggingface.co/OpenGVLab/InternVL3-1B">original checkpoint.</a> </small>
 
-
-
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/internvl_overview_performance.png" alt="drawing" width="600"/>
 
 <small> Comparison of InternVL3 performance on OpenCompass against other SOTA VLLMs. Taken from the <a href="https://huggingface.co/OpenGVLab/InternVL3-1B">original checkpoint.</a> </small>
-
-
 
 This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan).
 The original code can be found [here](https://github.com/OpenGVLab/InternVL).
@@ -75,6 +69,7 @@ Here is how you can use the `image-text-to-text` pipeline to perform inference w
 >>> outputs[0]["generated_text"]
 'The image showcases a vibrant scene of nature, featuring several flowers and a bee. \n\n1. **Foreground Flowers**: \n   - The primary focus is on a large, pink cosmos flower with a prominent yellow center. The petals are soft and slightly r'
 ```
+
 ### Inference on a single image
 
 This example demonstrates how to perform inference on a single image with the InternVL models using chat templates.
@@ -86,10 +81,9 @@ This example demonstrates how to perform inference on a single image with the In
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 >>> import torch
 
->>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     {
@@ -113,15 +107,13 @@ This example demonstrates how to perform inference on a single image with the In
 ### Text-only generation
 This example shows how to generate text using the InternVL model without providing any image input.
 
-
 ```python
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 >>> import torch
 
->>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     {
@@ -148,10 +140,9 @@ InternVL models also support batched image and text inputs.
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 >>> import torch
 
->>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [
@@ -192,10 +183,9 @@ This implementation of the InternVL models supports batched text-images inputs w
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 >>> import torch
 
->>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [
@@ -275,10 +265,9 @@ This example showcases how to handle a batch of chat conversations with interlea
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
 >>> import torch
 
->>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [

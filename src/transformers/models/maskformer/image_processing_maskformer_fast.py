@@ -18,6 +18,9 @@ import math
 import warnings
 from typing import TYPE_CHECKING, Any, Optional, Union
 
+import torch
+from torch import nn
+
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -39,8 +42,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
@@ -52,23 +53,16 @@ from .image_processing_maskformer import (
 )
 
 
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
+
 logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
     from transformers import MaskFormerForInstanceSegmentationOutput
-
-
-if is_torch_available():
-    import torch
-    from torch import nn
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 
 def convert_segmentation_map_to_binary_masks_fast(
@@ -120,23 +114,12 @@ class MaskFormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         The background label will be replaced by `ignore_index`.
     num_labels (`int`, *optional*):
         The number of labels in the segmentation map.
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-        If `pad_size` is provided, the image will be padded to the specified dimensions.
-        Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`Dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-        height and width in the batch.
     """
 
     size_divisor: Optional[int]
     ignore_index: Optional[int]
     do_reduce_labels: Optional[bool]
     num_labels: Optional[int]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
 
 
 @auto_docstring
@@ -195,7 +178,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         size: SizeDict,
         size_divisor: int = 0,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -313,7 +296,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
-        To be overriden by subclasses when image-like inputs other than images should be processed.
+        To be overridden by subclasses when image-like inputs other than images should be processed.
         It can be used for segmentation maps, depth maps, etc.
         """
         # Prepare input images
@@ -335,8 +318,8 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps: Optional["torch.Tensor"],
         instance_id_to_semantic_id: Optional[dict[int, int]],
         do_resize: Optional[bool],
-        size: Optional[dict[str, int]],
-        pad_size: Optional[dict[str, int]],
+        size: Optional[SizeDict],
+        pad_size: Optional[SizeDict],
         size_divisor: Optional[int],
         interpolation: Optional[Union["PILImageResampling", "F.InterpolationMode"]],
         do_rescale: Optional[bool],
@@ -384,7 +367,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
                 resized_segmentation_maps_grouped, grouped_segmentation_maps_index
             )
         if pad_size is not None:
-            padded_size = (pad_size["height"], pad_size["width"])
+            padded_size = (pad_size.height, pad_size.width)
         else:
             padded_size = get_max_height_width(resized_images)
 

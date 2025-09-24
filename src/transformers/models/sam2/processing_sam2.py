@@ -62,8 +62,8 @@ class Sam2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
-        segmentation_maps: ImageInput = None,
+        images: Optional[ImageInput] = None,
+        segmentation_maps: Optional[ImageInput] = None,
         input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
         input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
         input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
@@ -117,7 +117,7 @@ class Sam2Processor(ProcessorMixin):
         else:
             raise ValueError("Either images or original_sizes must be provided")
 
-        # pop arguments that are not used in the foward but used nevertheless
+        # pop arguments that are not used in the forward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
         # Check original_sizes is of length 1 or len(images)
         if images is not None and len(original_sizes) != 1 and len(original_sizes) != len(images):

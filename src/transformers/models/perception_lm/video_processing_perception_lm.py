@@ -13,26 +13,14 @@
 # limitations under the License.
 """Video processor class for PerceptionLM."""
 
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-)
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import is_vision_available
-from ...utils.import_utils import requires
-from ...video_processing_utils import (
-    BaseVideoProcessor,
-)
-
-
-if is_vision_available():
-    from ...image_utils import PILImageResampling
+from ...video_processing_utils import BaseVideoProcessor
 
 
 class PerceptionLMFastVideoProcessorInitKwargs(VideosKwargs): ...
 
 
-@requires(backends=("torchvision",))
 class PerceptionLMVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN

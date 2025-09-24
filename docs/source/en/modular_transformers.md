@@ -21,10 +21,10 @@ Model users still import and use the single-file interface they've grown familia
 
 A linter "unravels" the modular file into a `modeling.py` file to preserve the single model, single file directory structure (modeling, processor, etc.). Inheritance is flattened to only a **single** level.
 
-Run the command below to automatically generate a `modeling.py` file from a modular file.
+Run the command below to automatically generate a `modeling.py` file from a modular file (assuming the snake lowercase name of the model you want to convert is `your_model`).
 
 ```bash
-python utils/modular_model_converter.py --files-to-parse src/transformers/models/<your_model>/modular_<your_model>.py
+python utils/modular_model_converter.py  your_model
 ```
 
 For example:
@@ -34,12 +34,6 @@ For example:
 - If a new function is defined in the modular file and used inside classes, the linter automatically infers these as well.
 
 You should be able to write everything (tokenizer, image processor, model, config, etc.) in a modular and their corresponding single-files are generated.
-
-Run the command below to ensure the generated content matches `modular_<your_model>.py`.
-
-```bash
-python utils/check_modular_conversion.py --files src/transformers/models/<your_model>/modular_<your_model>.py
-```
 
 The example below demonstrates how a model can be added with significantly fewer lines of code with Modular Transformers.
 
@@ -412,17 +406,17 @@ class MyNewDummyModel(DummyModel):
     del self.attribute
 ```
 
-## Explicit super() calls
+## Calling parent methods without unravelling their definition
 
-If you still want to inherit from `DummyModel` but don't want to remove the `self.attribute`, be explicit about which class' `super()` you're calling. The example below shows how to call the `super()` of `nn.Module` (unraveled code shown on the right)
+If you want to inherit from a module `DummyModule` and want to call `super()` WITHOUT unravelling the parent's code (that is, you want to call `super()` on the *generated* class parent), be explicit about which class' `super()` you're calling. The example below shows how to call the `super()` of `nn.Module` (unraveled code shown on the right). In this example, as `DummyModule` is itself a `nn.Module`, it makes sense to call `nn.Module.__init__(self)` as it's what was the initial intention. It's then unravelled as `super()` in `MyNewDummyModule` to follow Python's best-practices.
 
 ```py
-class MyNewDummyModel(DummyModel, nn.Module):        |     class MyNewDummyModel(nn.Module):
-                                                     |
-  def __init__(self, config: MyNewDummyConfig):      |       def __init__(self, config: MyNewDummyConfig):
-    nn.Module.__init__(config)                       |         super().__init__()
-    self.foo = config.foo                            |         self.foo = config.foo
-    ...                                              |         ...
+class MyNewDummyModule(DummyModule):                   |     class MyNewDummyModule(nn.Module):
+                                                       |
+  def __init__(self):                                  |       def __init__(self):
+    nn.Module.__init__(self)                           |         super().__init__()
+    self.foo = config.foo                              |         self.foo = config.foo
+    ...                                                |         ...
 ```
 
 ## Deleting unused methods

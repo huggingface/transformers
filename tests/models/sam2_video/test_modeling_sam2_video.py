@@ -66,11 +66,8 @@ def prepare_video():
 class Sam2VideoModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        # fill_hole area is set to 0 to avoid running the `get_connected_components` cuda kernel
-        self.video_model = Sam2VideoModel.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf", fill_hole_area=0).to(
-            torch.float32
-        )
-        self.processor = Sam2VideoProcessor.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf")
+        self.video_model = Sam2VideoModel.from_pretrained("facebook/sam2.1-hiera-tiny").to(torch.float32)
+        self.processor = Sam2VideoProcessor.from_pretrained("facebook/sam2.1-hiera-tiny")
         self.video_model.to(torch_device)
         self.video_model.eval()
 
@@ -390,6 +387,47 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
                     [[[[-12.6294, -12.6294], [-13.3659, -13.3659]]], [[[-20.3319, -20.3319], [-22.0491, -22.0491]]]],
                     [[[[-18.5249, -18.5249], [-19.5830, -19.5830]]], [[[-17.5537, -17.5537], [-19.2259, -19.2259]]]],
                     [[[[-14.2722, -14.2722], [-15.4622, -15.4622]]], [[[-18.3185, -18.3185], [-20.0314, -20.0314]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    def test_inference_mask_generation_video_batched_bb(self):
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_ids = [2, 3]  # give a unique id to each object we interact with (it can be any integers)
+
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_ids,
+            input_boxes=[[[300, 0, 500, 400], [400, 0, 600, 400]]],
+        )
+
+        frames = []
+        for sam2_video_output in self.video_model.propagate_in_video_iterator(
+            inference_session=inference_session,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            video_res_masks = self.processor.post_process_masks(
+                [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+            )[0]
+            print(video_res_masks.shape)
+            frames.append(video_res_masks)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 2, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        print(frames.shape)
+        print(frames[:3, :, :, :2, :2])
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-13.1427, -13.1427], [-13.7753, -13.7753]]], [[[-8.4576, -8.4576], [-8.7329, -8.7329]]]],
+                    [[[[-14.9998, -14.9998], [-15.7086, -15.7086]]], [[[-9.2998, -9.2998], [-9.8947, -9.8947]]]],
+                    [[[[-15.4558, -15.4558], [-16.1649, -16.1649]]], [[[-10.4880, -10.4880], [-11.2098, -11.2098]]]],
                 ]
             ).to(torch_device),
             atol=1e-4,
