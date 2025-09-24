@@ -80,7 +80,7 @@ class Qwen2VLVisionText2TextModelTester:
         max_window_layers=3,
         model_type="qwen2_vl",
         num_attention_heads=4,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_key_value_heads=2,
         rope_theta=10000,
         tie_word_embeddings=True,
@@ -238,6 +238,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             curr_input_dict = copy.deepcopy(input_dict)
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
@@ -396,10 +397,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
     def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
         pass
 
 

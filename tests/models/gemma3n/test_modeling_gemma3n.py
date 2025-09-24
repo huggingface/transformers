@@ -148,7 +148,6 @@ class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
     _is_stateful = True
     main_input_name = "audio_mel"
     test_initialization = False
-    test_can_init_all_missing_weights = False
 
     def setUp(self):
         self.model_tester = Gemma3nAudioModelTester(self)
@@ -714,9 +713,7 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="Siglip (vision backbone) uses the same initialization scheme as the Flax original implementation"
-    )
+    @unittest.skip(reason="Siglip (vision backbone) uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 

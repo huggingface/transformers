@@ -29,7 +29,7 @@ You can find all the original Aya Vision checkpoints under the [Aya Vision](http
 
 > [!TIP]
 > This model was contributed by [saurabhdash](https://huggingface.co/saurabhdash) and [yonigozlan](https://huggingface.co/yonigozlan).
-> 
+>
 > Click on the Aya Vision models in the right sidebar for more examples of how to apply Aya Vision to different image-to-text tasks.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.

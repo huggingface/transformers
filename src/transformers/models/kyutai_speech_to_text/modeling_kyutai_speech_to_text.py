@@ -1078,7 +1078,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         self.codec_model = AutoModel.from_config(config.codec_config)
 
         # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
-        # yet the codec_model needs a generation config to initalize it's cache for streaming inference
+        # yet the codec_model needs a generation config to initialize it's cache for streaming inference
         # we therefore initialize a generation config for the codec model
         self.codec_model.generation_config = GenerationConfig.from_model_config(config.codec_config)
 

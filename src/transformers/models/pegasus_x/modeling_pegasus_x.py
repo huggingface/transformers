@@ -20,7 +20,6 @@ from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -67,9 +66,6 @@ class DimensionInfo:
     num_blocks: int  # num blocks
     global_len: int  # global length
     padded_seq_len: int  # padded token seq length
-
-    # Note: Compared to the original Flax implementation, we will pad the token representations to
-    #       a multiple of block size at the start of the encoder layers, so T=P always.
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -783,7 +779,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
         inputs_embeds: torch.Tensor,
     ):
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
@@ -821,7 +817,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
                 )
             return attention_mask
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash" in self.config._attn_implementation:
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -942,7 +938,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     ):
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash" in self.config._attn_implementation:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on

@@ -24,7 +24,6 @@ from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -486,7 +485,7 @@ class IdeficsAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_cross_attention: bool = False,
-        config: PretrainedConfig = None,
+        config: Optional[PretrainedConfig] = None,
         qk_layer_norms: bool = False,
         layer_idx: Optional[int] = None,
     ):

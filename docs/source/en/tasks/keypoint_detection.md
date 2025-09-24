@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Keypoint detection identifies and locates specific points of interest within an image. These keypoints, also known as landmarks, represent meaningful features of objects, such as facial features or object parts. These models take an image input and return the following outputs: 
+Keypoint detection identifies and locates specific points of interest within an image. These keypoints, also known as landmarks, represent meaningful features of objects, such as facial features or object parts. These models take an image input and return the following outputs:
 
 - **Keypoints and Scores**: Points of interest and their confidence scores.
 - **Descriptors**: A representation of the image region surrounding each keypoint, capturing its texture, gradient, orientation and other properties.
@@ -36,14 +36,13 @@ model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/sup
 Let's test the model on the images below.
 
 <div style="display: flex; align-items: center;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" 
-         alt="Bee" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
+         alt="Bee"
          style="height: 200px; object-fit: contain; margin-right: 10px;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png" 
-         alt="Cats" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"
+         alt="Cats"
          style="height: 200px; object-fit: contain;">
 </div>
-
 
 ```python
 import torch
@@ -93,7 +92,7 @@ image_sizes = [(image.size[1], image.size[0]) for image in images]
 outputs = processor.post_process_keypoint_detection(outputs, image_sizes)
 ```
 
-The outputs are now a list of dictionaries where each dictionary is a processed output of keypoints, scores and descriptors. 
+The outputs are now a list of dictionaries where each dictionary is a processed output of keypoints, scores and descriptors.
 
 ```python
 [{'keypoints': tensor([[ 226,   57],
@@ -144,11 +143,10 @@ for i in range(len(images)):
 Below you can see the outputs.
 
 <div style="display: flex; align-items: center;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_keypoint.png" 
-         alt="Bee" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee_keypoint.png"
+         alt="Bee"
          style="height: 200px; object-fit: contain; margin-right: 10px;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats_keypoint.png" 
-         alt="Cats" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats_keypoint.png"
+         alt="Cats"
          style="height: 200px; object-fit: contain;">
 </div>
-

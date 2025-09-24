@@ -67,8 +67,6 @@ NOT_DEVICE_TESTS = {
     "test_mismatched_shapes_have_properly_initialized_weights",
     "test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist",
     "test_model_is_small",
-    "test_tf_from_pt_safetensors",
-    "test_flax_from_pt_safetensors",
     "ModelTest::test_pipeline_",  # None of the pipeline tests from PipelineTesterMixin (of which XxxModelTest inherits from) are running on device
     "ModelTester::test_pipeline_",
     "/repo_utils/",

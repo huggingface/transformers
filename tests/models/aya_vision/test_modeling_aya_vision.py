@@ -71,7 +71,7 @@ class AyaVisionVisionText2TextModelTester:
             "vocab_size": 99,
             "hidden_size": 128,
             "intermediate_size": 37,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "output_channels": 64,
             "hidden_act": "silu",
@@ -199,7 +199,7 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 

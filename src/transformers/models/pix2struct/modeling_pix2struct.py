@@ -18,7 +18,6 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -143,7 +142,6 @@ class Pix2StructVisionAttention(nn.Module):
         self.dropout = config.attention_dropout
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.key = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
@@ -388,8 +386,6 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
         elif isinstance(module, Pix2StructTextAttention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             hidden_size = (
                 self.config.text_config.hidden_size
                 if isinstance(self.config, Pix2StructConfig)
@@ -652,7 +648,6 @@ class Pix2StructTextAttention(nn.Module):
                 "when creating this class."
             )
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.key = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.hidden_size, bias=False)

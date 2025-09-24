@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -352,7 +351,7 @@ class CpmAntEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
-        cache_postion: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ):
         """
         Args:
@@ -493,16 +492,16 @@ class CpmAntSegmentPositionEmbedding(nn.Module):
         relative_position = torch.abs(relative_position)
         max_exact = num_buckets // 2
         is_small = relative_position < max_exact
-        relative_postion_if_large = max_exact + (
+        relative_position_if_large = max_exact + (
             torch.log(relative_position.float() / max_exact)
             / math.log(max_distance / max_exact)
             * (num_buckets - max_exact)
         ).to(torch.int32)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large,
-            torch.full_like(relative_postion_if_large, num_buckets - 1),
+        relative_position_if_large = torch.min(
+            relative_position_if_large,
+            torch.full_like(relative_position_if_large, num_buckets - 1),
         )
-        relative_buckets += torch.where(is_small, relative_position.to(torch.int32), relative_postion_if_large)
+        relative_buckets += torch.where(is_small, relative_position.to(torch.int32), relative_position_if_large)
         return relative_buckets
 
 

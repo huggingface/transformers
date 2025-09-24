@@ -8,16 +8,11 @@ from ..models.bert.tokenization_bert import BasicTokenizer
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,
-    is_tf_available,
     is_torch_available,
 )
 from .base import ArgumentHandler, ChunkPipeline, Dataset, build_pipeline_init_args
 
 
-if is_tf_available():
-    import tensorflow as tf
-
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 if is_torch_available():
     import torch
 
@@ -144,11 +139,7 @@ class TokenClassificationPipeline(ChunkPipeline):
     def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.check_model_type(
-            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
-            if self.framework == "tf"
-            else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES)
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser
@@ -160,7 +151,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
         offset_mapping: Optional[list[tuple[int, int]]] = None,
-        is_split_into_words: Optional[bool] = False,
+        is_split_into_words: bool = False,
         stride: Optional[int] = None,
         delimiter: Optional[str] = None,
     ):
@@ -308,7 +299,7 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         inputs = self.tokenizer(
             text_to_tokenize,
-            return_tensors=self.framework,
+            return_tensors="pt",
             truncation=truncation,
             return_special_tokens_mask=True,
             return_offsets_mapping=self.tokenizer.is_fast,
@@ -322,10 +313,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         num_chunks = len(inputs["input_ids"])
 
         for i in range(num_chunks):
-            if self.framework == "tf":
-                model_inputs = {k: tf.expand_dims(v[i], 0) for k, v in inputs.items()}
-            else:
-                model_inputs = {k: v[i].unsqueeze(0) for k, v in inputs.items()}
+            model_inputs = {k: v[i].unsqueeze(0) for k, v in inputs.items()}
             if offset_mapping is not None:
                 model_inputs["offset_mapping"] = offset_mapping
 
@@ -346,11 +334,8 @@ class TokenClassificationPipeline(ChunkPipeline):
         word_ids = model_inputs.pop("word_ids", None)
         word_to_chars_map = model_inputs.pop("word_to_chars_map", None)
 
-        if self.framework == "tf":
-            logits = self.model(**model_inputs)[0]
-        else:
-            output = self.model(**model_inputs)
-            logits = output["logits"] if isinstance(output, dict) else output[0]
+        output = self.model(**model_inputs)
+        logits = output["logits"] if isinstance(output, dict) else output[0]
 
         return {
             "logits": logits,
@@ -372,7 +357,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         word_to_chars_map = all_outputs[0].get("word_to_chars_map")
 
         for model_outputs in all_outputs:
-            if self.framework == "pt" and model_outputs["logits"][0].dtype in (torch.bfloat16, torch.float16):
+            if model_outputs["logits"][0].dtype in (torch.bfloat16, torch.float16):
                 logits = model_outputs["logits"][0].to(torch.float32).numpy()
             else:
                 logits = model_outputs["logits"][0].numpy()
@@ -388,10 +373,6 @@ class TokenClassificationPipeline(ChunkPipeline):
             maxes = np.max(logits, axis=-1, keepdims=True)
             shifted_exp = np.exp(logits - maxes)
             scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
-
-            if self.framework == "tf":
-                input_ids = input_ids.numpy()
-                offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
 
             pre_entities = self.gather_pre_entities(
                 sentence,
@@ -470,9 +451,8 @@ class TokenClassificationPipeline(ChunkPipeline):
                         end_ind += start_char
 
                 if not isinstance(start_ind, int):
-                    if self.framework == "pt":
-                        start_ind = start_ind.item()
-                        end_ind = end_ind.item()
+                    start_ind = start_ind.item()
+                    end_ind = end_ind.item()
                 word_ref = sentence[start_ind:end_ind]
                 if getattr(self.tokenizer, "_tokenizer", None) and getattr(
                     self.tokenizer._tokenizer.model, "continuing_subword_prefix", None
