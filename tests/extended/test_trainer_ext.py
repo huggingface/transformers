@@ -331,10 +331,7 @@ class TestTrainerExt(TestCasePlus):
             args += ["--predict_with_generate"]
 
         if do_train:
-            if optim == "adafactor":
-                args += ["--adafactor"]
-            else:
-                args += f"--optim {optim}".split()
+            args += f"--optim {optim}".split()
 
         if extra_args_str is not None:
             args += extra_args_str.split()
