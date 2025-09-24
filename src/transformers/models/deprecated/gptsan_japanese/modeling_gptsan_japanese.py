@@ -28,7 +28,7 @@ from ....activations import ACT2FN
 from ....cache_utils import Cache
 from ....modeling_outputs import MoECausalLMOutputWithPast, MoEModelOutputWithPastAndCrossAttentions
 from ....modeling_utils import PreTrainedModel
-from ....utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings_to_model_forward, is_torch_fx_proxy
+from ....utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring, is_torch_fx_proxy
 from ....utils.deprecation import deprecate_kwarg
 from .configuration_gptsan_japanese import GPTSanJapaneseConfig
 
@@ -647,9 +647,6 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-GPTSAN_JAPANESE_INPUTS_DOCSTRING = None  # Will be picked up by modular
-
-
 class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
@@ -680,7 +677,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
-    @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

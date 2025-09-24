@@ -24,8 +24,8 @@ from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, check_model_inputs
-from ...utils.typing_utils import TransformersKwargs
+from ...utils import auto_docstring, TransformersKwargs
+from ...utils.generic import check_model_inputs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
 from ..jetmoe.modeling_jetmoe import JetMoeParallelExperts, JetMoeTopKGating
 from ..llama.modeling_llama import LlamaAttention

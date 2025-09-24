@@ -26,7 +26,7 @@ from ....modeling_utils import PreTrainedModel
 from ....utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     is_torch_fx_proxy,
     logging,
 )
@@ -694,7 +694,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
-    @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
