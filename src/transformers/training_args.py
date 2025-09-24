@@ -1595,8 +1595,10 @@ class TrainingArguments:
                         raise ValueError(error_message)
 
         if self.half_precision_backend is not None:
-            raise ValueError("half_precision_backend is deprecated. For mixed precision, we will always use CPU/CUDA AMP from torch")
-            
+            raise ValueError(
+                "half_precision_backend is deprecated. For mixed precision, we will always use CPU/CUDA AMP from torch"
+            )
+
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
 

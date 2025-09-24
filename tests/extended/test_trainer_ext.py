@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
-    require_apex,
     require_bitsandbytes,
     require_non_xpu,
     require_torch,
@@ -106,23 +105,6 @@ class TestTrainerExt(TestCasePlus):
     @require_torch_multi_accelerator
     def test_run_seq2seq_ddp(self):
         self.run_seq2seq_quick(distributed=True)
-
-    @require_non_xpu
-    @require_apex
-    @require_torch_gpu
-    def test_run_seq2seq_apex(self):
-        # XXX: apex breaks the trainer if it's run twice e.g. run_seq2seq.main() from the same
-        # program and it breaks other tests that run from the same pytest worker, therefore until this is
-        # sorted out it must be run only in an external program, that is distributed=True in this
-        # test and only under one or more gpus - if we want cpu will need to make a special test
-        #
-        # specifically to the problem traced it to self.optimizer.step() - if it's run 2nd time via
-        # 2nd main() call it botches the future eval.
-        #
-        self.run_seq2seq_quick(distributed=True, extra_args_str="--fp16 --fp16_backend=apex")
-        # test 2nd time - was getting eval_loss': nan'
-        # to reproduce the problem set distributed=False
-        self.run_seq2seq_quick(distributed=True, extra_args_str="--fp16 --fp16_backend=apex")
 
     @parameterized.expand(["base", "low", "high", "mixed"])
     @require_torch_multi_accelerator

@@ -469,17 +469,6 @@ To configure AMP-like fp16 mixed precision, set up the config as shown below wit
 
 For additional DeepSpeed fp16 training options, take a look at the [FP16 Training Options](https://www.deepspeed.ai/docs/config-json/#fp16-training-options) reference.
 
-To configure Apex-like fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically configures `amp` based on the values of `fp16_backend` and `fp16_opt_level`. It can also be enabled from the command line when the following arguments are passed: `--fp16`, `--fp16_backend apex` or `--fp16_opt_level 01`.
-
-```yaml
-{
-    "amp": {
-        "enabled": "auto",
-        "opt_level": "auto"
-    }
-}
-```
-
 </hfoption>
 <hfoption id="bf16">
 
