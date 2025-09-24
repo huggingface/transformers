@@ -1065,6 +1065,7 @@ MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES = OrderedDict(
         ("phi4_multimodal", "Phi4MultimodalForCausalLM"),
         ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
         ("qwen2_audio", "Qwen2AudioForConditionalGeneration"),
+        ("qwen3_omni_moe", "Qwen3OmniMoeForConditionalGeneration"),
         ("voxtral", "VoxtralForConditionalGeneration"),
     ]
 )
