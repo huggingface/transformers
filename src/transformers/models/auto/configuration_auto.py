@@ -25,7 +25,6 @@ from typing import Any, TypeVar, Union
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
-from ..zagros_next.configuration_zagros_next import ZagrosNextConfig
 
 
 logger = logging.get_logger(__name__)
