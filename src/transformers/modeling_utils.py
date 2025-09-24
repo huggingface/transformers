@@ -5425,22 +5425,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         device_mesh,
                     )
 
-        # Model-specific exceptions for missing and unexpected keys (e.g. if the modeling change over time, or any other reason...)
-        # We should remove them here to avoid raising warnings if they are present in the lists
-        if cls._keys_to_ignore_on_load_missing is not None:
-            for pattern in cls._keys_to_ignore_on_load_missing:
-                missing_keys = [k for k in missing_keys if re.search(pattern, k) is None]
-
-        if cls._keys_to_ignore_on_load_unexpected is not None:
-            for pattern in cls._keys_to_ignore_on_load_unexpected:
-                unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
-
-        # Old checkpoints may have keys for rotary_emb.inv_freq for each layer, however we moved this buffer to the main model
-        # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
-        # `_keys_to_ignore_on_load_unexpected` as it touches many models
-        has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in model.named_buffers())
-        if has_inv_freq_buffers:
-            unexpected_keys = [k for k in unexpected_keys if "rotary_emb.inv_freq" not in k]
+        # Remove potential model-specific exceptions from the warnings
+        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
+            missing_keys, unexpected_keys, loading_task_model_from_base_state_dict
+        )
 
         # All potential warnings/infos
         if len(error_msgs) > 0:
@@ -5462,20 +5450,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f" {model.__class__.__name__} from the checkpoint of a model that you expect to be exactly identical"
                 " (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
-        else:
-            logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
         if len(missing_keys) > 0:
             logger.warning(
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
                 " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
-            )
-        elif len(mismatched_keys) == 0:
-            logger.info(
-                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at"
-                f" {pretrained_model_name_or_path}.\nIf your task is similar to the task the model of the checkpoint"
-                f" was trained on, you can already use {model.__class__.__name__} for predictions without further"
-                " training."
             )
         if len(mismatched_keys) > 0:
             mismatched_warning = "\n".join(
@@ -5796,6 +5775,37 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self.initialize_weights()
         else:
             self.initialize_weights()
+
+    def _adjust_missing_and_unexpected_keys(
+        self, missing_keys: list[str], unexpected_keys: list[str], loading_task_model_from_base_state_dict: bool
+    ) -> tuple[list[str], list[str]]:
+        """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
+        raising unneeded warnings/errors.
+        """
+        # Model-specific exceptions for missing and unexpected keys (e.g. if the modeling change over time, or
+        # any other reason...)
+        if self._keys_to_ignore_on_load_missing is not None:
+            for pattern in self._keys_to_ignore_on_load_missing:
+                missing_keys = [k for k in missing_keys if re.search(pattern, k) is None]
+
+        if self._keys_to_ignore_on_load_unexpected is not None:
+            for pattern in self._keys_to_ignore_on_load_unexpected:
+                unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
+
+        # Old checkpoints may have keys for rotary_emb.inv_freq for each layer, however we moved this buffer to the main model
+        # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
+        # `_keys_to_ignore_on_load_unexpected` as it touches many models
+        has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in self.named_buffers())
+        if has_inv_freq_buffers:
+            unexpected_keys = [k for k in unexpected_keys if "rotary_emb.inv_freq" not in k]
+
+        # Note: only the unexpected keys should remove the added prefix here, to correctly display the original name
+        # in the warnings. For missing keys, we should show the prefix in the warning as it's part of the final model
+        if loading_task_model_from_base_state_dict:
+            _prefix = f"{self.base_model_prefix}."
+            unexpected_keys = [k[len(_prefix) :] if k.startswith(_prefix) else k for k in unexpected_keys]
+
+        return missing_keys, unexpected_keys
 
     def get_parameter_or_buffer(self, target: str):
         """
