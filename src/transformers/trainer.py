@@ -2483,8 +2483,7 @@ class Trainer:
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                     self.model, self.optimizer, self.lr_scheduler
                 )
-        elif self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
-            # In this case we are in DDP + LOMO, which should be supported
+        else:
             self.optimizer = self.accelerator.prepare(self.optimizer)
 
         if self.is_fsdp_enabled:
@@ -3783,7 +3782,7 @@ class Trainer:
         """
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
-        if self.args.include_num_input_tokens_seen:
+        if self.args.include_num_input_tokens_seen != "no":
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
             if start_time is not None:
                 logs.update(speed_metrics("train", start_time, num_tokens=self.state.num_input_tokens_seen))
@@ -3972,10 +3971,7 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cpu_amp:
-            # TODO Matt: This syntax is deprecated and the preferred version is
-            #      torch.amp.autocast("cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
-            #      but this is unavailable on Torch 2.1 or earlier. We can change this when we stop supporting 2.1.
-            ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            ctx_manager = torch.autocast(device_type="cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
         else:
             ctx_manager = contextlib.nullcontext()
 
@@ -4116,16 +4112,27 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
 
-        if labels is not None:
+        # User-defined compute_loss function
+        if self.compute_loss_func is not None:
+            if labels is None:
+                logger.warning(
+                    "Trainer: `compute_loss_func` is defined but `labels=None`. "
+                    "Your custom loss function will still be called with labels=None. "
+                )
+            loss = self.compute_loss_func(
+                outputs,
+                labels,
+                num_items_in_batch=num_items_in_batch,
+            )
+        # Default HF loss handling (label smoothing) if no custom loss function
+        elif labels is not None:
             unwrapped_model = self.accelerator.unwrap_model(model)
-            if _is_peft_model(unwrapped_model):
-                model_name = unwrapped_model.base_model.model._get_name()
-            else:
-                model_name = unwrapped_model._get_name()
-            # User-defined compute_loss function
-            if self.compute_loss_func is not None:
-                loss = self.compute_loss_func(outputs, labels, num_items_in_batch=num_items_in_batch)
-            elif model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+            model_name = (
+                unwrapped_model.base_model.model._get_name()
+                if _is_peft_model(unwrapped_model)
+                else unwrapped_model._get_name()
+            )
+            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
                 loss = self.label_smoother(outputs, labels)
@@ -4143,7 +4150,7 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            loss *= self.accelerator.num_processes
+            loss *= self.accelerator.num_processes if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
 
@@ -5617,15 +5624,19 @@ class Trainer:
                 pass
 
         if num_items_in_batch is not None:
-            if self.args.average_tokens_across_devices:
+            if self.args.average_tokens_across_devices and self.args.world_size >= 1:
                 num_items_in_batch = self.accelerator.gather(num_items_in_batch.to(device)).sum()
+            elif self.args.n_gpu >= 1:
+                # In DP case, if we don't average, we need to divide by the number of gpu. This is the simplest approximation.
+                # Otherwise, we would have to scatter labels and calculate num_items_in_batch for each gpu.
+                num_items_in_batch = num_items_in_batch // self.args.n_gpu
 
             if torch.is_tensor(num_items_in_batch):
                 num_items_in_batch = num_items_in_batch.to(device)
 
                 if self.args.n_gpu > 1 and num_items_in_batch.dim() == 0:
-                    # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
-                    num_items_in_batch = num_items_in_batch.unsqueeze(0)
+                    # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
+                    num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
                 if pc := getattr(self.accelerator, "parallelism_config", None):
                     num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size

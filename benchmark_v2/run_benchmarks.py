@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -160,7 +161,12 @@ def run_single_benchmark(
         return None
 
 
-def generate_summary_report(output_dir: str, benchmark_results: dict[str, Any], logger: logging.Logger) -> str:
+def generate_summary_report(
+    output_dir: str,
+    benchmark_results: dict[str, Any],
+    logger: logging.Logger,
+    benchmark_run_uuid: Optional[str] = None,
+) -> str:
     """Generate a summary report of all benchmark runs."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     summary_file = os.path.join(output_dir, f"benchmark_summary_{timestamp}.json")
@@ -168,6 +174,7 @@ def generate_summary_report(output_dir: str, benchmark_results: dict[str, Any], 
     summary_data = {
         "run_metadata": {
             "timestamp": datetime.utcnow().isoformat(),
+            "benchmark_run_uuid": benchmark_run_uuid,
             "total_benchmarks": len(benchmark_results),
             "successful_benchmarks": len([r for r in benchmark_results.values() if r is not None]),
             "failed_benchmarks": len([r for r in benchmark_results.values() if r is None]),
@@ -183,9 +190,114 @@ def generate_summary_report(output_dir: str, benchmark_results: dict[str, Any], 
     return summary_file
 
 
+def upload_results_to_hf_dataset(
+    output_dir: str,
+    summary_file: str,
+    dataset_name: str,
+    run_id: Optional[str] = None,
+    token: Optional[str] = None,
+    logger: Optional[logging.Logger] = None,
+) -> Optional[str]:
+    """
+    Upload benchmark results to a HuggingFace Dataset.
+    Based on upload_collated_report() from utils/collated_reports.py
+    Args:
+        output_dir: Local output directory containing results
+        summary_file: Path to the summary file
+        dataset_name: Name of the HuggingFace dataset to upload to
+        run_id: Unique run identifier (if None, will generate one)
+        token: HuggingFace token for authentication (if None, will use environment variables)
+        logger: Logger instance
+    Returns:
+        The run_id used for the upload, None if upload failed
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    import os
+
+    from huggingface_hub import HfApi
+
+    api = HfApi()
+
+    if run_id is None:
+        github_run_number = os.getenv("GITHUB_RUN_NUMBER")
+        github_run_id = os.getenv("GITHUB_RUN_ID")
+        if github_run_number and github_run_id:
+            run_id = f"{github_run_number}-{github_run_id}"
+
+    date_folder = datetime.now().strftime("%Y-%m-%d")
+
+    github_event_name = os.getenv("GITHUB_EVENT_NAME")
+    if github_event_name != "schedule":
+        # Non-scheduled runs go under a runs subfolder
+        repo_path = f"{date_folder}/runs/{run_id}/benchmark_results"
+    else:
+        # Scheduled runs go directly under the date
+        repo_path = f"{date_folder}/{run_id}/benchmark_results"
+
+    logger.info(f"Uploading benchmark results to dataset '{dataset_name}' at path '{repo_path}'")
+
+    try:
+        # Upload all files in the output directory
+        from pathlib import Path
+
+        output_path = Path(output_dir)
+
+        for file_path in output_path.rglob("*"):
+            if file_path.is_file():
+                # Calculate relative path from output_dir
+                relative_path = file_path.relative_to(output_path)
+                path_in_repo = f"{repo_path}/{relative_path}"
+
+                logger.debug(f"Uploading {file_path} to {path_in_repo}")
+
+                api.upload_file(
+                    path_or_fileobj=str(file_path),
+                    path_in_repo=path_in_repo,
+                    repo_id=dataset_name,
+                    repo_type="dataset",
+                    token=token,
+                    commit_message=f"Upload benchmark results for run {run_id}",
+                )
+
+        logger.info(
+            f"Successfully uploaded results to: https://huggingface.co/datasets/{dataset_name}/tree/main/{repo_path}"
+        )
+
+        return run_id
+
+    except Exception as upload_error:
+        logger.error(f"Failed to upload results: {upload_error}")
+        import traceback
+
+        logger.debug(traceback.format_exc())
+        return None
+
+
 def main():
     """Main entry point for the benchmarking script."""
-    parser = argparse.ArgumentParser(description="Run all benchmarks in the ./benches directory")
+    # Generate a unique UUID for this benchmark run
+    benchmark_run_uuid = str(uuid.uuid4())[:8]
+
+    parser = argparse.ArgumentParser(
+        description="Run all benchmarks in the ./benches directory",
+        epilog="""
+Examples:
+  # Run all available benchmarks
+  python3 run_benchmarks.py
+  
+  # Run with specific model and upload to HuggingFace Dataset
+  python3 run_benchmarks.py --model-id meta-llama/Llama-2-7b-hf --upload-to-hf username/benchmark-results
+  
+  # Run with custom run ID and upload to HuggingFace Dataset
+  python3 run_benchmarks.py --run-id experiment_v1 --upload-to-hf org/benchmarks
+  
+  # Run only specific benchmarks with file logging
+  python3 run_benchmarks.py --include llama --enable-file-logging
+        """,  # noqa: W293
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
     parser.add_argument(
         "--output-dir",
@@ -228,12 +340,26 @@ def main():
 
     parser.add_argument("--exclude", type=str, nargs="*", help="Exclude benchmarks matching these names")
 
-    parser.add_argument("--enable-mock", action="store_true", help="Enable mock benchmark (skipped by default)")
-
     parser.add_argument("--enable-file-logging", action="store_true", help="Enable file logging (disabled by default)")
 
     parser.add_argument(
         "--commit-id", type=str, help="Git commit ID for metadata (if not provided, will auto-detect from git)"
+    )
+
+    parser.add_argument(
+        "--push-to-hub",
+        type=str,
+        help="Upload results to HuggingFace Dataset (provide dataset name, e.g., 'username/benchmark-results')",
+    )
+
+    parser.add_argument(
+        "--run-id", type=str, help="Custom run ID for organizing results (if not provided, will generate a unique ID)"
+    )
+
+    parser.add_argument(
+        "--token",
+        type=str,
+        help="HuggingFace token for dataset uploads (if not provided, will use HF_TOKEN environment variable)",
     )
 
     args = parser.parse_args()
@@ -242,6 +368,7 @@ def main():
     logger = setup_logging(args.log_level, args.enable_file_logging)
 
     logger.info("Starting benchmark discovery and execution")
+    logger.info(f"Benchmark run UUID: {benchmark_run_uuid}")
     logger.info(f"Output directory: {args.output_dir}")
     logger.info(f"Benches directory: {args.benches_dir}")
 
@@ -286,9 +413,6 @@ def main():
         if args.model_id:
             benchmark_kwargs["model_id"] = args.model_id
 
-        # Add enable_mock flag for mock benchmark
-        benchmark_kwargs["enable_mock"] = args.enable_mock
-
         # Add commit_id if provided
         if args.commit_id:
             benchmark_kwargs["commit_id"] = args.commit_id
@@ -306,7 +430,28 @@ def main():
                 successful_count += 1
 
         # Generate summary report
-        summary_file = generate_summary_report(args.output_dir, benchmark_results, logger)
+        summary_file = generate_summary_report(args.output_dir, benchmark_results, logger, benchmark_run_uuid)
+
+        # Upload results to HuggingFace Dataset if requested
+        upload_run_id = None
+        if args.push_to_hub:
+            logger.info("=" * 60)
+            logger.info("UPLOADING TO HUGGINGFACE DATASET")
+            logger.info("=" * 60)
+            # Use provided run_id or fallback to benchmark run UUID
+            effective_run_id = args.run_id or benchmark_run_uuid
+            upload_run_id = upload_results_to_hf_dataset(
+                output_dir=args.output_dir,
+                summary_file=summary_file,
+                dataset_name=args.push_to_hub,
+                run_id=effective_run_id,
+                token=args.token,
+                logger=logger,
+            )
+            if upload_run_id:
+                logger.info(f"Upload completed with run ID: {upload_run_id}")
+            else:
+                logger.warning("Upload failed - continuing with local results")
 
         # Final summary
         total_benchmarks = len(filtered_benchmarks)
@@ -320,6 +465,16 @@ def main():
         logger.info(f"Failed: {failed_count}")
         logger.info(f"Output directory: {args.output_dir}")
         logger.info(f"Summary report: {summary_file}")
+
+        if args.push_to_hub:
+            if upload_run_id:
+                logger.info(f"HuggingFace Dataset: {args.push_to_hub}")
+                logger.info(f"Run ID: {upload_run_id}")
+                logger.info(
+                    f"View results: https://huggingface.co/datasets/{args.push_to_hub}/tree/main/{datetime.now().strftime('%Y-%m-%d')}/runs/{upload_run_id}"
+                )
+            else:
+                logger.warning("Upload to HuggingFace Dataset failed")
 
         if failed_count > 0:
             logger.warning(f"{failed_count} benchmark(s) failed. Check logs for details.")

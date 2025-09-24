@@ -187,8 +187,6 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -211,7 +209,6 @@ At this point, only three steps remain:
 1. Define your training hyperparameters in [`TrainingArguments`]. The only required parameter is `output_dir`, which specifies where to save your model. You'll push this model to the Hub by setting `push_to_hub=True` (you need to be signed in to Hugging Face to upload your model). At the end of each epoch, the [`Trainer`] will evaluate the accuracy and save the training checkpoint.
 2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, data collator, and `compute_metrics` function.
 3. Call [`~Trainer.train`] to fine-tune your model.
-
 
 ```py
 >>> training_args = TrainingArguments(
@@ -247,8 +244,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -289,8 +284,6 @@ The simplest way to try out your fine-tuned model for inference is to use it in 
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
-<frameworkcontent>
-<pt>
 Load a feature extractor to preprocess the audio file and return the `input` as PyTorch tensors:
 
 ```py
@@ -320,5 +313,3 @@ Get the class with the highest probability, and use the model's `id2label` mappi
 >>> predicted_label
 'cash_deposit'
 ```
-</pt>
-</frameworkcontent>
