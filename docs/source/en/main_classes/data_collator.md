@@ -25,7 +25,6 @@ on the formed batch.
 
 Examples of use can be found in the [example scripts](../examples) or [example notebooks](../notebooks).
 
-
 ## Default data collator
 
 [[autodoc]] data.data_collator.default_data_collator
