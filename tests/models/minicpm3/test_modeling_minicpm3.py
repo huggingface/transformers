@@ -76,19 +76,6 @@ class MiniCPM3ModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        return True
-
     @unittest.skip("MiniCPM3's MLA attention is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search_0_random(self):
         pass
@@ -128,7 +115,7 @@ class MiniCPM3ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("MiniCPM3's MLA attention is not compatible with prompt lookup decoding")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
-    
+
     @unittest.skip("MiniCPM3's MLA attention uses custom cache format, incompatible with model compilation")
     def test_generate_compile_model_forward_fullgraph(self):
         pass
