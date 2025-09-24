@@ -13,6 +13,7 @@
 # limitations under the License.
 import argparse
 import glob
+import os
 
 import torch
 from huggingface_hub import snapshot_download
@@ -28,6 +29,11 @@ from transformers import (
     LlavaProcessor,
     CLIPImageProcessor,
 )
+
+from PIL import Image
+import requests
+
+os.environ["TIMM_FUSED_ATTN"] = "0" # needed because the original implementation uses regular atteniton (to avoid logits diverging)
 
 KEYS_TO_MODIFY_MAPPING = {
     "model.vision_tower.vision_tower.model": "model.vision_tower.timm_model",
@@ -124,7 +130,8 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     )
     config.vision_feature_select_strategy = "full"
     config.vision_feature_layer = -1
-    config.image_token_id = 151646
+    config.image_token_index = 151646
+    config.image_seq_length = 256
 
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
@@ -162,9 +169,42 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
         dim=0,
     )
 
+    conversation = [
+        {
+        "role": "user",
+        "content": "<image>\nWhat are these?"
+        }
+    ]
+    prompt = tokenizer.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
+    prompt = prompt.replace("assistant<", "assistant.<") # to make it aligned with the prompt from the old Apple repo
+
+    image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    raw_image = Image.open(requests.get(image_file, stream=True).raw)
+    inputs = processor(images=raw_image, text=prompt, return_tensors='pt').to("cuda")
+    inputs = {k: (v.to(torch.bfloat16) if v.dtype == torch.float32 else v) for k, v in inputs.items()}
+
+    model = model.cuda()
+    model.eval()
+    with torch.no_grad():
+        logits = model(**inputs).logits
+
+    expected_shape = torch.Size([1, 280, 152000])
+    # in order to get the same logits as in the Apple repo, we need to replace the original LayerNorm2D with Timm2D layer norm or vice versa
+    # otherwise numerical errors accumulate
+    if output_hub_path == "KamilaMila/FastVLM-0.5B":
+        expected_slice = torch.tensor([ 4.1250,  9.6875, 11.1875], device="cuda")
+    elif output_hub_path == "KamilaMila/FastVLM-1.5B":
+        expected_slice = torch.tensor([ 3.3750, 11.5000, 11.8125], device="cuda")
+    elif output_hub_path == "KamilaMila/FastVLM-7B":
+        expected_slice = torch.tensor([4.0312, 10.0000,  7.9062], device="cuda")
+
+    logits_slice = logits[0, -1, :3]
+    assert torch.allclose(expected_slice, logits_slice, atol=1e-8)
+    assert logits.shape == expected_shape
+
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
-
+    print("Successfully pushed to hub!")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -189,11 +229,10 @@ def main():
     parser.add_argument(
         "--old_state_dict_id",
         default="apple/FastVLM-0.5B",
-        help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
+        help="Location on the hub of the raw state dict of the original model.",
     )
     args = parser.parse_args()
     convert_fastvlm_to_hf(args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id)
-
 
 if __name__ == "__main__":
     main()
