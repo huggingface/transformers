@@ -224,4 +224,5 @@ In general, multiple regexes/parsers cannot be combined. The exception is that `
 `x-regex` is applied first, and then the output is passed to the other key, either `x-regex-iterator`, `x-parser`, or `x-regex-key-value`.
 
 Putting these ideas together, you can see that the input flows through the schema, being parsed at each level and then distributed to child nodes. Each level
-only needs to extract the input content that is relevant for that part of the schema, and can then let its child nodes handle the rest.
+only needs to extract the input content that is relevant for that part of the schema, and can then let its child nodes handle the rest. Internally, this is handled
+with a parser function that receives input, applies any regexes/parsers at the current level, then maps the result to its child nodes before recursively calling itself on each of them.
