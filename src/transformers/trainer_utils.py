@@ -224,12 +224,6 @@ class SaveStrategy(ExplicitEnum):
     BEST = "best"
 
 
-class EvaluationStrategy(ExplicitEnum):
-    NO = "no"
-    STEPS = "steps"
-    EPOCH = "epoch"
-
-
 class HubStrategy(ExplicitEnum):
     END = "end"
     EVERY_SAVE = "every_save"
