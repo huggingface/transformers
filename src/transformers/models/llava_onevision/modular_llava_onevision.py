@@ -34,7 +34,12 @@ from transformers.models.llava_next_video.modeling_llava_next_video import (
 
 from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import DefaultFastImageProcessorKwargs, group_images_by_shape, reorder_images
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -74,7 +79,7 @@ class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     image_grid_pinpoints: Optional[list[list[int]]]
 
 
-class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
+class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast, BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -143,7 +148,7 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
             batch_num_images = [1] * len(images)
         else:
             batch_num_images = [1]
-        return super().preprocess(images, batch_num_images, **kwargs)
+        return BaseImageProcessorFast.preprocess(images, batch_num_images, **kwargs)
 
     def _preprocess(
         self,
