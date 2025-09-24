@@ -718,10 +718,6 @@ class Trainer:
 
         self._signature_columns = None
 
-        # Mixed precision setup
-        self.use_apex = False
-        self.use_cpu_amp = False
-
         # Mixed precision setup for SageMaker Model Parallel
         if is_sagemaker_mp_enabled():
             # BF16 + model parallelism in SageMaker: currently not supported, raise an error
@@ -744,22 +740,8 @@ class Trainer:
                         f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
                         "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
                     )
-        if (args.fp16 or args.bf16) and args.half_precision_backend == "auto":
-            if args.device == torch.device("cpu"):
-                if args.fp16:
-                    if not is_torch_greater_or_equal_than_2_3:
-                        raise ValueError("Tried to use `fp16` but it is not supported on cpu")
-                else:
-                    args.half_precision_backend = "cpu_amp"
-            logger.info(f"Using {args.half_precision_backend} half precision backend")
-
-        if (args.fp16 or args.bf16) and not (self.is_deepspeed_enabled or is_sagemaker_mp_enabled()):
-            # deepspeed and SageMaker Model Parallel manage their own half precision
-            if args.half_precision_backend == "cpu_amp":
-                self.use_cpu_amp = True
-                self.amp_dtype = torch.bfloat16
-            elif args.half_precision_backend == "apex":
-                self.use_apex = True
+        if args.fp16 and args.device == torch.device("cpu") and not is_torch_greater_or_equal_than_2_3:
+            raise ValueError("Tried to use `fp16` but it is not supported on cpu. You need to have torch>=2.3")
 
         # Label smoothing
         if self.args.label_smoothing_factor != 0:
@@ -2067,13 +2049,7 @@ class Trainer:
         if self.accelerator.unwrap_model(model, keep_torch_compile=False) is not model:
             return model
 
-        # Mixed precision training with apex
-        if self.use_apex and training:
-            from apex import amp
-
-            model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
-
-        # Multi-gpu training (should be after apex fp16 initialization) / 8bit models does not support DDP
+        # Multi-gpu training, 8bit models does not support DP
         if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
             model = nn.DataParallel(model)
 
@@ -2087,7 +2063,6 @@ class Trainer:
         if not training:
             return model
 
-        # Distributed training (should be after apex fp16 initialization)
         # Distributed training using PyTorch FSDP
         if self.is_fsdp_xla_enabled:
             try:
@@ -2470,14 +2445,11 @@ class Trainer:
         if use_accelerator_prepare:
             self.model.train()
             if hasattr(self.lr_scheduler, "step"):
-                if self.use_apex:
-                    model = self.accelerator.prepare(self.model)
+                # We should avoid accelerate preparing the model in TP case since we dont need it as it is handled by transformers from_pretrained and also it goes into DDP based preparation.
+                if self.is_tp_enabled:
+                    self.optimizer = self.accelerator.prepare(self.optimizer)
                 else:
-                    # We should avoid accelerate preparing the model in TP case since we dont need it as it is handled by transformers from_pretrained and also it goes into DDP based preparation.
-                    if self.is_tp_enabled:
-                        self.optimizer = self.accelerator.prepare(self.optimizer)
-                    else:
-                        model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
             else:
                 # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
@@ -2697,14 +2669,6 @@ class Trainer:
                         if args.max_grad_norm is not None and args.max_grad_norm > 0:
                             if is_sagemaker_mp_enabled() and args.fp16:
                                 _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
-                            elif self.use_apex:
-                                from apex import amp
-
-                                # Revert to normal clipping otherwise, handling Apex or full precision
-                                _grad_norm = nn.utils.clip_grad_norm_(
-                                    amp.master_params(self.optimizer),
-                                    args.max_grad_norm,
-                                )
                             else:
                                 grad_norm_context = contextlib.nullcontext
                                 if self.is_tp_enabled:
@@ -4049,25 +4013,19 @@ class Trainer:
             if self.args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
-            if self.use_apex:
-                from apex import amp
+            # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
+            if (
+                not self.model_accepts_loss_kwargs or num_items_in_batch is None
+            ) and self.compute_loss_func is None:
+                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
+                loss = loss / self.current_gradient_accumulation_steps
 
-                with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                    scaled_loss.backward()
-            else:
-                # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-                if (
-                    not self.model_accepts_loss_kwargs or num_items_in_batch is None
-                ) and self.compute_loss_func is None:
-                    # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
-                    loss = loss / self.current_gradient_accumulation_steps
+            # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
+            # https://github.com/huggingface/transformers/pull/35808
+            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+                kwargs["scale_wrt_gas"] = False
 
-                # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
-                # https://github.com/huggingface/transformers/pull/35808
-                if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-                    kwargs["scale_wrt_gas"] = False
-
-                self.accelerator.backward(loss, **kwargs)
+            self.accelerator.backward(loss, **kwargs)
 
             return loss.detach()
 
