@@ -32,12 +32,9 @@ from .utils import (
     TensorType,
     copy_func,
     download_url,
-    is_flax_available,
-    is_jax_tensor,
     is_numpy_array,
     is_offline_mode,
     is_remote_url,
-    is_tf_available,
     is_torch_available,
     is_torch_device,
     is_torch_dtype,
@@ -48,13 +45,12 @@ from .utils.hub import cached_file
 
 
 if TYPE_CHECKING:
-    if is_torch_available():
-        import torch  # noqa
+    from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 
 logger = logging.get_logger(__name__)
 
-PreTrainedFeatureExtractor = Union["SequenceFeatureExtractor"]  # noqa: F821
+PreTrainedFeatureExtractor = Union["SequenceFeatureExtractor"]
 
 # type hinting: specifying the type of feature extractor class that inherits from FeatureExtractionMixin
 SpecificFeatureExtractorType = TypeVar("SpecificFeatureExtractorType", bound="FeatureExtractionMixin")
@@ -71,7 +67,7 @@ class BatchFeature(UserDict):
             Dictionary of lists/arrays/tensors returned by the __call__/pad methods ('input_values', 'attention_mask',
             etc.).
         tensor_type (`Union[None, str, TensorType]`, *optional*):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
     """
 
@@ -110,24 +106,10 @@ class BatchFeature(UserDict):
         if not isinstance(tensor_type, TensorType):
             tensor_type = TensorType(tensor_type)
 
-        # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW:
-            logger.warning_once(
-                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
-                "recommend migrating to PyTorch classes or pinning your version of Transformers."
-            )
-            if not is_tf_available():
-                raise ImportError(
-                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
-                )
-            import tensorflow as tf
-
-            as_tensor = tf.constant
-            is_tensor = tf.is_tensor
-        elif tensor_type == TensorType.PYTORCH:
+        if tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-            import torch  # noqa
+            import torch
 
             def as_tensor(value):
                 if isinstance(value, (list, tuple)) and len(value) > 0:
@@ -145,17 +127,6 @@ class BatchFeature(UserDict):
                     return torch.tensor(value)
 
             is_tensor = torch.is_tensor
-        elif tensor_type == TensorType.JAX:
-            logger.warning_once(
-                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
-                "recommend migrating to PyTorch classes or pinning your version of Transformers."
-            )
-            if not is_flax_available():
-                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
-            import jax.numpy as jnp  # noqa: F811
-
-            as_tensor = jnp.array
-            is_tensor = is_jax_tensor
         else:
 
             def as_tensor(value, dtype=None):
@@ -563,7 +534,9 @@ class FeatureExtractionMixin(PushToHubMixin):
         return feature_extractor_dict, kwargs
 
     @classmethod
-    def from_dict(cls, feature_extractor_dict: dict[str, Any], **kwargs) -> PreTrainedFeatureExtractor:
+    def from_dict(
+        cls, feature_extractor_dict: dict[str, Any], **kwargs
+    ) -> Union["FeatureExtractionMixin", tuple["FeatureExtractionMixin", dict[str, Any]]]:
         """
         Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python dictionary of
         parameters.
@@ -613,7 +586,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         return output
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> PreTrainedFeatureExtractor:
+    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> "FeatureExtractionMixin":
         """
         Instantiates a feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] from the path to
         a JSON file of parameters.

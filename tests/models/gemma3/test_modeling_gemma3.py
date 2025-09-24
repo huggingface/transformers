@@ -282,6 +282,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     test_missing_keys = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+    additional_model_inputs = ["token_type_ids"]
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
@@ -814,8 +815,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
         prompt = "What is the capital of France?"
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        foward_outputs = model(**model_inputs)
-        self.assertIn("DynamicSlidingWindowLayer", str(foward_outputs.past_key_values))
+        forward_outputs = model(**model_inputs)
+        self.assertIn("DynamicSlidingWindowLayer", str(forward_outputs.past_key_values))
 
         generate_outputs = model.generate(
             **model_inputs, max_new_tokens=2, do_sample=False, return_dict_in_generate=True

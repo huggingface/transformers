@@ -1290,7 +1290,7 @@ class ModelUtilsTest(TestCasePlus):
             BertModel.from_pretrained("hf-internal-testing/config-no-model")
 
         self.assertTrue(
-            "does not appear to have a file named pytorch_model.bin, model.safetensors,"
+            "does not appear to have a file named pytorch_model.bin or model.safetensors."
             in str(missing_model_file_error.exception)
         )
 
@@ -1302,7 +1302,7 @@ class ModelUtilsTest(TestCasePlus):
                 BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(
-            "Error no file named pytorch_model.bin, model.safetensors" in str(missing_model_file_error.exception)
+            "Error no file named model.safetensors, or pytorch_model.bin" in str(missing_model_file_error.exception)
         )
 
     @require_safetensors

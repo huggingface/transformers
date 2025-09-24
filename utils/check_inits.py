@@ -308,7 +308,6 @@ def get_transformers_submodules() -> list[str]:
 
 IGNORE_SUBMODULES = [
     "convert_pytorch_checkpoint_to_tf2",
-    "modeling_flax_pytorch_utils",
     "models.esm.openfold_utils",
     "modeling_attn_mask_utils",
     "safetensors_conversion",

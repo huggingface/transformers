@@ -765,7 +765,7 @@ class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, Pipeli
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="MetaClip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="MetaClip2 uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 

@@ -24,9 +24,7 @@ import requests
 
 from .utils import (
     ExplicitEnum,
-    is_jax_tensor,
     is_numpy_array,
-    is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
     is_torchvision_available,
@@ -107,8 +105,6 @@ class ImageType(ExplicitEnum):
     PIL = "pillow"
     TORCH = "torch"
     NUMPY = "numpy"
-    TENSORFLOW = "tensorflow"
-    JAX = "jax"
 
 
 def get_image_type(image):
@@ -118,15 +114,11 @@ def get_image_type(image):
         return ImageType.TORCH
     if is_numpy_array(image):
         return ImageType.NUMPY
-    if is_tf_tensor(image):
-        return ImageType.TENSORFLOW
-    if is_jax_tensor(image):
-        return ImageType.JAX
     raise ValueError(f"Unrecognized image type {type(image)}")
 
 
 def is_valid_image(img):
-    return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img) or is_tf_tensor(img) or is_jax_tensor(img)
+    return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img)
 
 
 def is_valid_list_of_images(images: list):
@@ -205,8 +197,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> list[ImageInput]:
             )
         return images
     raise ValueError(
-        "Invalid image type. Expected either PIL.Image.Image, numpy.ndarray, torch.Tensor, tf.Tensor or "
-        f"jax.ndarray, but got {type(images)}."
+        f"Invalid image type. Expected either PIL.Image.Image, numpy.ndarray, or torch.Tensor, but got {type(images)}."
     )
 
 
@@ -486,9 +477,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
                 raise ValueError(
                     f"Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got {image}. Failed with {e}"
                 )
-    elif isinstance(image, PIL.Image.Image):
-        image = image
-    else:
+    elif not isinstance(image, PIL.Image.Image):
         raise TypeError(
             "Incorrect format used for image. Should be an url linking to an image, a base64 string, a local path, or a PIL image."
         )
@@ -570,7 +559,6 @@ def validate_preprocess_arguments(
         raise ValueError("`size` and `resample/interpolation` must be specified if `do_resize` is `True`.")
 
 
-# In the future we can add a TF implementation here when we have TF models.
 class ImageFeatureExtractionMixin:
     """
     Mixin that contain utilities for preparing image features.
@@ -579,7 +567,7 @@ class ImageFeatureExtractionMixin:
     def _ensure_format_supported(self, image):
         if not isinstance(image, (PIL.Image.Image, np.ndarray)) and not is_torch_tensor(image):
             raise ValueError(
-                f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.array` and "
+                f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.ndarray` and "
                 "`torch.Tensor` are."
             )
 

@@ -48,7 +48,6 @@ from ..utils import (
     flatten_dict,
     is_datasets_available,
     is_pandas_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -56,8 +55,6 @@ from ..utils import (
 
 logger = logging.get_logger(__name__)
 
-if is_tf_available():
-    from .. import TFPreTrainedModel
 
 if is_torch_available():
     import torch
@@ -547,8 +544,6 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-    from ..integrations import is_wandb_available
-
     if not is_wandb_available():
         raise ImportError("This function needs wandb installed: `pip install wandb`")
     import wandb
@@ -760,12 +755,6 @@ def save_model_architecture_to_file(model: Any, output_dir: str):
     with open(f"{output_dir}/model_architecture.txt", "w+") as f:
         if isinstance(model, PreTrainedModel):
             print(model, file=f)
-        elif is_tf_available() and isinstance(model, TFPreTrainedModel):
-
-            def print_to_file(s):
-                print(s, file=f)
-
-            model.summary(print_fn=print_to_file)
         elif is_torch_available() and (
             isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model")
         ):
@@ -1225,7 +1214,7 @@ class CometCallback(TrainerCallback):
         - **COMET_PROJECT_NAME** (`str`, *optional*):
             Comet project name for experiments.
         - **COMET_LOG_ASSETS** (`str`, *optional*, defaults to `TRUE`):
-            Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be `TRUE`, or
+            Whether or not to log training assets (checkpoints, etc), to Comet. Can be `TRUE`, or
             `FALSE`.
 
         For a number of configurable items in the environment, see

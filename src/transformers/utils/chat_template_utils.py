@@ -468,9 +468,9 @@ def render_jinja_template(
     tools: Optional[list[Union[dict, Callable]]] = None,
     documents: Optional[list[dict[str, str]]] = None,
     chat_template: Optional[str] = None,
-    return_assistant_tokens_mask: Optional[bool] = False,
-    continue_final_message: Optional[bool] = False,
-    add_generation_prompt: Optional[bool] = False,
+    return_assistant_tokens_mask: bool = False,
+    continue_final_message: bool = False,
+    add_generation_prompt: bool = False,
     **kwargs,
 ) -> str:
     if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
