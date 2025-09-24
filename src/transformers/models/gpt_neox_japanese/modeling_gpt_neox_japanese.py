@@ -259,7 +259,6 @@ class GPTNeoXJapaneseAttention(nn.Module):
         key_pass = key[..., self.rotary_ndims :]
 
         cos, sin = position_embeddings
-
         query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
         query = torch.cat((query, query_pass), dim=-1).contiguous()
         key = torch.cat((key, key_pass), dim=-1).contiguous()

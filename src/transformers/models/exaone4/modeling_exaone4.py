@@ -287,7 +287,6 @@ class Exaone4Attention(nn.Module):
         key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
-
         # We use global NoPE for hybrid attention model
         if self.sliding_window is None or self.is_sliding:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)

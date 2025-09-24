@@ -21,13 +21,12 @@ import torch.nn as nn
 from transformers.utils.generic import TransformersKwargs
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import layer_type_validation
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ..olmo2.configuration_olmo2 import Olmo2Config
 from ..olmo2.modeling_olmo2 import (
     Olmo2Attention,
     Olmo2DecoderLayer,
@@ -41,7 +40,7 @@ from ..olmo2.modeling_olmo2 import (
 )
 
 
-class Olmo3Config(Olmo2Config):
+class Olmo3Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Olmo3Model`]. It is used to instantiate an OLMo3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -119,6 +118,7 @@ class Olmo3Config(Olmo2Config):
     """
 
     model_type = "olmo3"
+    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
@@ -159,26 +159,30 @@ class Olmo3Config(Olmo2Config):
         **kwargs,
     ):
         super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            use_cache=use_cache,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            rope_scaling=rope_scaling,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            rms_norm_eps=rms_norm_eps,
             **kwargs,
         )
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.rms_norm_eps = rms_norm_eps
 
         self.sliding_window = sliding_window
         self.layer_types = layer_types

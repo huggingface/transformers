@@ -387,7 +387,6 @@ class Gemma3Attention(Gemma2Attention):
         key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
-
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:

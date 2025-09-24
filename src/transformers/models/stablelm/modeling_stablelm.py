@@ -341,8 +341,6 @@ class StableLmAttention(nn.Module):
             key_states = self.k_layernorm(key_states)
 
         cos, sin = position_embeddings
-
-        # Partial rotary embedding
         query_rot, query_pass = (
             query_states[..., : self.rotary_ndims],
             query_states[..., self.rotary_ndims :],

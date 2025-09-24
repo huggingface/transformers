@@ -319,8 +319,6 @@ class PersimmonAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
 
         cos, sin = position_embeddings
-
-        # Partial rotary embedding
         query_rot, query_pass = (
             query_states[..., : self.rotary_ndims],
             query_states[..., self.rotary_ndims :],
