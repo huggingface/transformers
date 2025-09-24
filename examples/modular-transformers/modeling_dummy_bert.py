@@ -674,6 +674,7 @@ class DummyBertModel(DummyBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache

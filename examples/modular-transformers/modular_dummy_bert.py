@@ -5,6 +5,8 @@ import torch
 from transformers.models.bert.modeling_bert import BertModel
 
 from ...modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs
 
 
 class DummyBertModel(BertModel):
@@ -23,5 +25,6 @@ class DummyBertModel(BertModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-        return super().forward(input_ids)
+        return super().forward(input_ids, **kwargs)
