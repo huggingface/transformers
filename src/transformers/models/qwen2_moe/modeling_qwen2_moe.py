@@ -430,7 +430,8 @@ class Qwen2MoeAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window if self.layer_idx >= self.config.max_window_layers else None**kwargs,
+            sliding_window=self.sliding_window if self.layer_idx >= self.config.max_window_layers else None,
+            **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()

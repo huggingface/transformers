@@ -21,7 +21,7 @@
 # limitations under the License.
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
@@ -83,8 +83,6 @@ class GemmaConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
         use_bidirectional_attention (`bool`, *optional*):
             If True, the model will attend to all text tokens instead of using a causal mask.
 
@@ -136,7 +134,6 @@ class GemmaConfig(PretrainedConfig):
         rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
-        layer_types: Optional[list[str]] = None,
         use_bidirectional_attention: Optional[bool] = None,
         **kwargs,
     ):
@@ -155,11 +152,6 @@ class GemmaConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.use_bidirectional_attention = use_bidirectional_attention
-
-        self.layer_types = layer_types
-        if self.layer_types is None:
-            self.layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
