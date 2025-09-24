@@ -50,7 +50,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_nllb_moe import NllbMoeConfig
 
 
@@ -336,7 +336,7 @@ class NllbMoeDenseActDense(nn.Module):
         self.dropout = nn.Dropout(config.activation_dropout)
         self.act = ACT2FN[config.activation_function]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, _=None):
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -356,11 +356,14 @@ class NllbMoeExperts(nn.ModuleDict):
         self.num_experts = config.num_experts
         for idx in range(self.num_experts):
             self[f"expert_{idx}"] = expert_class(config, ffn_dim)
+        self.moe_token_dropout = config.moe_token_dropout
+        self.token_dropout = nn.Dropout(self.moe_token_dropout)
 
     def forward(self, hidden_states, router_mask, router_probs):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, hidden_dim)
         masked_hidden_states = torch.einsum("bm,be->ebm", hidden_states, router_mask)
-        for idx, expert in enumerate(self.experts.values()):
+        for idx, expert in enumerate(self.values()):
             token_indices = router_mask[:, idx]
             combining_weights = router_probs[token_indices, idx]
             expert_output = expert(masked_hidden_states[idx, token_indices])
@@ -418,7 +421,6 @@ class NllbMoeSparseMLP(nn.Module):
 
         top_1_mask, router_probs = self.router(hidden_states, padding_mask)
         router_mask = router_probs.bool()
-        hidden_states = hidden_states.reshape((batch_size * sequence_length), hidden_dim)
         hidden_states = self.experts(hidden_states, router_mask, router_probs)
 
         top_1_expert_index = torch.argmax(top_1_mask, dim=-1)
@@ -599,7 +601,7 @@ class NllbMoeEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        layer_head_mask: torch.Tensor,
+        layer_head_mask: torch.Tensor = None,
         output_attentions: bool = False,
         output_router_logits: bool = False,
     ) -> torch.Tensor:
@@ -760,6 +762,11 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(NllbMoeTop2Router, index=1),
+        "hidden_states": [NllbMoeEncoderLayer, NllbMoeDecoderLayer],
+        "attentions": NllbMoeAttention,
+    }
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
@@ -846,6 +853,28 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         last_hidden_state = self.layer_norm(hidden_states)
 
         return MoEModelOutput(last_hidden_state=last_hidden_state)
+
+    def _update_full_mask(
+        self,
+        attention_mask: Union[torch.Tensor, None],
+        inputs_embeds: torch.Tensor,
+    ):
+        if attention_mask is not None:
+            if "flash" in self.config._attn_implementation:
+                attention_mask = attention_mask if 0 in attention_mask else None
+            elif self.config._attn_implementation == "sdpa":
+                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
+                # the manual implementation that requires a 4D causal mask in all cases.
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
+            elif self.config._attn_implementation == "flex_attention":
+                if isinstance(attention_mask, torch.Tensor):
+                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
+            else:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+
+        return attention_mask
 
 
 class NllbMoeDecoder(NllbMoePreTrainedModel):
