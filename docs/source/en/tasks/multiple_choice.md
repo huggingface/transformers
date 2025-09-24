@@ -113,6 +113,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 ```
 
 To create a batch of examples, it's more efficient to *dynamically pad* the sentences to the longest length in a batch during collation, instead of padding the whole dataset to the maximum length. [`DataCollatorForMultipleChoice`] flattens all the model inputs, applies padding, and then unflattens the results.
+
 ```py
 >>> from transformers import DataCollatorForMultipleChoice
 >>> collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
@@ -196,7 +197,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-
 
 <Tip>
 

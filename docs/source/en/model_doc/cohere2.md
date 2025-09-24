@@ -22,7 +22,6 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-
 # Cohere 2
 
 [Cohere Command R7B](https://cohere.com/blog/command-r7b) is an open weights research release of a 7B billion parameter model. It is a multilingual model trained on 23 languages and has a context window of 128k. The model features three layers with sliding window attention and ROPE for efficient local context modeling and relative positional encoding. A fourth layer uses global attention without positional embeddings, enabling unrestricted token interactions across the entire sequence.
@@ -30,7 +29,6 @@ rendered properly in your Markdown viewer.
 This model is optimized for speed, cost-performance, and compute resources.
 
 You can find all the original Command-R checkpoints under the [Command Models](https://huggingface.co/collections/CohereForAI/command-models-67652b401665205e17b192ad) collection.
-
 
 > [!TIP]
 > Click on the Cohere models in the right sidebar for more examples of how to apply Cohere to different language tasks.
@@ -135,7 +133,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] Cohere2Model
     - forward
-
 
 ## Cohere2ForCausalLM
 

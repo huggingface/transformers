@@ -77,6 +77,7 @@ predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
 ```
+
 </hfoption>
 
 <hfoption id="transformers CLI">
@@ -84,6 +85,7 @@ print(f"The predicted token is: {predicted_token}")
 ```bash
 echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model facebook/xlm-roberta-xl --device 0
 ```
+
 </hfoption>
 </hfoptions>
 
