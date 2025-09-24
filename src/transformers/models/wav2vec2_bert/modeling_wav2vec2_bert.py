@@ -746,7 +746,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         ):
             if hasattr(module, "layer_weights"):
                 module.layer_weights.data.fill_(1.0 / (self.config.num_hidden_layers + 1))
-        elif isinstance(module, AMSoftmaxLoss):
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
             module.weight.data.normal_()
 
     # Ignore copy

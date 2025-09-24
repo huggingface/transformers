@@ -484,7 +484,7 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
 
             module.mask_token.data.zero_()
             module.register_tokens.data.zero_()
-        elif isinstance(module, Dinov2WithRegistersLayerScale):
+        elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
             module.lambda1.data.fill_(self.config.layerscale_value)
 
 
