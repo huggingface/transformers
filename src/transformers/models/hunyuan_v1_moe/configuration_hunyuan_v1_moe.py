@@ -107,7 +107,10 @@ class HunYuanMoEV1Config(PretrainedConfig):
 
     model_type = "hunyuan_v1_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
-
+    attribute_map = {
+        "num_experts_per_tok": "moe_topk",
+        "num_local_experts": "num_experts",
+    }
     def __init__(
         self,
         vocab_size=290943,
