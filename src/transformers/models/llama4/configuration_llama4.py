@@ -104,7 +104,7 @@ class Llama4VisionConfig(PretrainedConfig):
         multi_modal_projector_bias: Optional[bool] = False,
         projector_dropout: Optional[float] = 0.0,
         attention_dropout: Optional[float] = 0.0,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -293,7 +293,7 @@ class Llama4TextConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,

@@ -179,7 +179,7 @@ class MimiConfig(PretrainedConfig):
         norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = False,
         use_streaming: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         sliding_window: Optional[int] = 250,
         attention_dropout: Optional[float] = 0.0,
         layer_scale_initial_scale: Optional[float] = 0.01,

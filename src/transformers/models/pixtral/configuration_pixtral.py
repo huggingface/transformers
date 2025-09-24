@@ -86,7 +86,7 @@ class PixtralVisionConfig(PretrainedConfig):
         patch_size: Optional[int] = 16,
         hidden_act: Optional[str] = "gelu",
         attention_dropout: Optional[float] = 0.0,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):

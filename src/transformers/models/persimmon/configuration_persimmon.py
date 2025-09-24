@@ -98,7 +98,7 @@ class PersimmonConfig(PretrainedConfig):
         layer_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         qk_layernorm: Optional[bool] = True,
         hidden_dropout: Optional[float] = 0.0,
         attention_dropout: Optional[float] = 0.0,

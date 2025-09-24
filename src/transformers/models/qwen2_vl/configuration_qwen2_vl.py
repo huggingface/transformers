@@ -171,7 +171,7 @@ class Qwen2VLTextConfig(PretrainedConfig):
         max_window_layers: Optional[int] = 80,
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         image_token_id: Optional[int] = None,
         video_token_id: Optional[int] = None,
         **kwargs,

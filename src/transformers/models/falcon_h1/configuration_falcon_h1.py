@@ -164,7 +164,7 @@ class FalconH1Config(PretrainedConfig):
         mamba_norm_before_gate: Optional[bool] = True,
         mamba_rms_norm: Optional[bool] = False,
         projectors_bias: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         lm_head_multiplier: Optional[float] = 1.0,
         embedding_multiplier: Optional[float] = 1.0,
         mlp_multipliers: Optional[int] = None,

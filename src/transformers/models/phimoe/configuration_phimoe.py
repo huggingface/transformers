@@ -128,7 +128,7 @@ class PhimoeConfig(PretrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[int] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         sliding_window: Optional[int] = None,
         attention_dropout: Optional[float] = 0.0,
         num_experts_per_tok: Optional[int] = 2,

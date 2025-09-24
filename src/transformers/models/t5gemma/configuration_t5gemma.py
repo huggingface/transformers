@@ -139,7 +139,7 @@ class T5GemmaModuleConfig(PretrainedConfig):
         eos_token_id: Optional[int] = 1,
         bos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         query_pre_attn_scalar: Optional[int] = 256,

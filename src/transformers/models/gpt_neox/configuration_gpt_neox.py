@@ -131,7 +131,7 @@ class GPTNeoXConfig(PretrainedConfig):
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
         use_parallel_residual: Optional[bool] = True,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = True,
         **kwargs,
     ):

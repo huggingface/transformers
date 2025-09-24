@@ -177,7 +177,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         sliding_window: int = 512,

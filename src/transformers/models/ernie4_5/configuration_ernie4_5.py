@@ -125,7 +125,7 @@ class Ernie4_5Config(PretrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         use_bias: Optional[bool] = False,
         head_dim: Optional[int] = 128,
         **kwargs,

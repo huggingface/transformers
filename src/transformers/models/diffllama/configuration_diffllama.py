@@ -118,7 +118,7 @@ class DiffLlamaConfig(PretrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         lambda_std_dev: Optional[float] = 0.1,

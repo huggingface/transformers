@@ -195,7 +195,7 @@ class DbrxConfig(PretrainedConfig):
         use_cache: Optional[bool] = True,
         initializer_range: Optional[float] = 0.02,
         output_router_logits: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs: Any,
     ):
         if attn_config is None:

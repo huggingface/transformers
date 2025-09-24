@@ -220,7 +220,7 @@ class Glm4vTextConfig(PretrainedConfig):
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         image_token_id: Optional[int] = None,
         video_token_id: Optional[int] = None,
         **kwargs,

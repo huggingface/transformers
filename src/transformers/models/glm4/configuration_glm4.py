@@ -122,7 +122,7 @@ class Glm4Config(PretrainedConfig):
         rms_norm_eps: Optional[float] = 0.00000015625,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         pad_token_id: Optional[int] = 151329,
         eos_token_id: Optional[list[int]] = [151329, 151336, 151338],
         bos_token_id: Optional[int] = None,

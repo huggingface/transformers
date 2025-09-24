@@ -181,7 +181,7 @@ class ModernBertConfig(PretrainedConfig):
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         layer_types: Optional[list[str]] = None,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         local_attention: Optional[int] = 128,
         embedding_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,

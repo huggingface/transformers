@@ -366,7 +366,7 @@ class Phi4MultimodalConfig(PretrainedConfig):
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         partial_rotary_factor: Optional[int] = 1,
         bos_token_id: Optional[int] = 199999,
         eos_token_id: Optional[list[int]] = [199999, 200020],

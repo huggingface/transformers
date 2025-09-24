@@ -122,7 +122,7 @@ class NemotronConfig(PretrainedConfig):
         bos_token_id: Optional[int] = 2,
         eos_token_id: Optional[int] = 3,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         partial_rotary_factor: Optional[float] = 0.5,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,

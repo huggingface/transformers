@@ -129,7 +129,7 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
         num_attention_heads: Optional[int] = 32,
         num_key_value_heads: Optional[int] = None,
         max_position_embeddings: Optional[int] = 750,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         hidden_act: Optional[str] = "silu",
         head_dim: Optional[int] = None,
         initializer_range: Optional[float] = 0.02,

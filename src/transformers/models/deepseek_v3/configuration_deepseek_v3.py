@@ -183,7 +183,7 @@ class DeepseekV3Config(PretrainedConfig):
         eos_token_id: Optional[int] = 1,
         pretraining_tp: Optional[int] = 1,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         rope_interleave: Optional[bool] = True,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,

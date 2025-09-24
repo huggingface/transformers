@@ -117,7 +117,7 @@ class BitNetConfig(PretrainedConfig):
         tie_word_embeddings: Optional[bool] = False,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[str] = 0.0,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size

@@ -176,7 +176,7 @@ class DogeConfig(PretrainedConfig):
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         max_position_embeddings: Optional[int] = 2048,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         num_attention_heads: Optional[int] = 8,
         num_key_value_heads: Optional[int] = None,
         attention_bias: Optional[bool] = False,

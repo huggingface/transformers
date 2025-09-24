@@ -186,7 +186,7 @@ class Qwen3VLTextConfig(PretrainedConfig):
         rms_norm_eps: Optional[float] = 1e-6,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         **kwargs,

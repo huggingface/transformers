@@ -158,7 +158,7 @@ class SmolLM3Config(PretrainedConfig):
         pad_token_id: Optional[int] = 128004,
         bos_token_id: Optional[int] = 128000,
         eos_token_id: Optional[int] = 128001,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         use_sliding_window: Optional[bool] = False,
         sliding_window: Optional[int] = None,
         no_rope_layers: Optional[int] = None,

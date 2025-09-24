@@ -100,7 +100,7 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         use_cache: Optional[bool] = True,
         bos_token_id: Optional[int] = 31996,
         eos_token_id: Optional[int] = 31999,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_dropout: Optional[float] = 0.1,
         hidden_dropout: Optional[float] = 0.0,
         **kwargs,

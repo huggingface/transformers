@@ -165,7 +165,7 @@ class Qwen3NextConfig(PretrainedConfig):
         rms_norm_eps: Optional[float] = 1e-6,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         partial_rotary_factor: Optional[float] = 0.25,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,

@@ -146,7 +146,7 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
         num_experts: Optional[int] = 60,
         norm_topk_prob: Optional[bool] = True,
         mlp_only_layers: Optional[list[int]] = None,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         head_dim: Optional[int] = None,
         **kwargs,
     ):

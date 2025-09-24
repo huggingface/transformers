@@ -145,7 +145,7 @@ class Exaone4Config(PretrainedConfig):
         bos_token_id: Optional[int] = 0,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_dropout: Optional[float] = 0.0,
         sliding_window: Optional[int] = 4096,
         sliding_window_pattern: Optional[int] = 4,

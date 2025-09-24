@@ -151,7 +151,7 @@ class FlexOlmoConfig(OlmoeConfig):
         bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = 100257,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         num_experts_per_tok: Optional[int] = 5,

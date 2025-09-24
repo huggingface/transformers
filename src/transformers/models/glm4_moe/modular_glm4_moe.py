@@ -162,7 +162,7 @@ class Glm4MoeConfig(PretrainedConfig):
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         moe_intermediate_size: Optional[int] = 1408,

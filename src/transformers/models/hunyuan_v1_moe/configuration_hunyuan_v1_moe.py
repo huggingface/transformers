@@ -123,7 +123,7 @@ class HunYuanMoEV1Config(PretrainedConfig):
         sep_token_id: Optional[int] = 4,
         pretraining_tp: Optional[int] = 1,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         num_experts: Union[int, list] = 1,
