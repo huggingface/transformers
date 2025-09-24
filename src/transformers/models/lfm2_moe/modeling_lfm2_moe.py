@@ -941,4 +941,4 @@ class Lfm2MoeForCausalLM(Lfm2MoePreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["Lfm2MoeForCausalLM", "Lfm2MoeModel", "Lfm2MoePretrainedModel"]
+__all__ = ["Lfm2MoeForCausalLM", "Lfm2MoeModel", "Lfm2MoePreTrainedModel"]

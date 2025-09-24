@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Callable, ClassVar, Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -19,31 +19,24 @@ from torch import nn
 
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_causal_conv1d_available
-from ..bamba.modeling_bamba import apply_mask_to_padding_states
+from ..lfm2.modeling_lfm2 import (
+    Lfm2Attention,
+    Lfm2HybridConvCache,
+    Lfm2ShortConv,
+)
 from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaForCausalLM,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
-from ..mixtral.modeling_mixtral import (
-    MixtralForCausalLM,
-    MixtralModel
-)
-from ..lfm2.modeling_lfm2 import (
-    Lfm2HybridConvCache,
-    Lfm2Attention,
-    Lfm2ShortConv,
-)
+from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 from .configuration_lfm2_moe import Lfm2MoeConfig
+
 
 if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
@@ -117,9 +110,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
             routing_weights, selected_experts = torch.topk(routing_weights, k=self.top_k, dim=-1)
 
         if self.norm_topk_prob:
-            routing_weights = (
-                routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-20)
-            )
+            routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-20)
 
         if self.routed_scaling_factor:
             routing_weights = routing_weights * self.routed_scaling_factor
@@ -240,8 +231,6 @@ class Lfm2MoeModel(MixtralModel):
         del self.norm
         del self.rotary_emb
 
-    @check_model_inputs
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -317,4 +306,4 @@ class Lfm2MoeForCausalLM(MixtralForCausalLM):
         self.num_experts_per_tok = config.num_experts_per_tok
 
 
-__all__ = ["Lfm2MoeForCausalLM", "Lfm2MoeModel", "Lfm2MoePretrainedModel"]
+__all__ = ["Lfm2MoeForCausalLM", "Lfm2MoeModel", "Lfm2MoePreTrainedModel"]
