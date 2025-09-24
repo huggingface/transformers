@@ -60,48 +60,6 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
-
-    if pad_token_id is None:
-        raise ValueError("self.model.config.pad_token_id has to be defined.")
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-    return shifted_input_ids
-
-
-def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> torch.Tensor:
-    """
-    Computes auxiliary load balancing loss as in Switch Transformer.
-    """
-    num_experts = router_probs.shape[-1]
-
-    # cast the expert indices to int64, otherwise one-hot encoding will fail
-    if expert_indices.dtype != torch.int64:
-        expert_indices = expert_indices.to(torch.int64)
-
-    if len(expert_indices.shape) == 2:
-        expert_indices = expert_indices.unsqueeze(2)
-
-    expert_mask = torch.nn.functional.one_hot(expert_indices, num_experts)
-
-    # For a given token, determine if it was routed to a given expert.
-    expert_mask = torch.max(expert_mask, dim=-2).values
-
-    # cast to float32 otherwise mean will fail
-    expert_mask = expert_mask.to(torch.float32)
-    tokens_per_group_and_expert = torch.mean(expert_mask, dim=-2)
-
-    router_prob_per_group_and_expert = torch.mean(router_probs, dim=-2)
-    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
-
-
 class NllbMoeScaledWordEmbedding(nn.Embedding):
     """
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
@@ -113,17 +71,6 @@ class NllbMoeScaledWordEmbedding(nn.Embedding):
 
     def forward(self, input_ids: torch.Tensor):
         return super().forward(input_ids) * self.embed_scale
-
-
-def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
-    """
-    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
-    are ignored. This is modified from fairseq's `utils.make_positions`.
-    """
-    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
-    return incremental_indices.long() + padding_idx
 
 
 class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
@@ -210,7 +157,6 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
 
     @staticmethod
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings.create_position_ids_from_input_ids
     def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -479,7 +425,6 @@ class NllbMoeSparseMLP(nn.Module):
         return hidden_states, (router_probs, top_1_expert_index)
 
 
-# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -515,22 +460,36 @@ class NllbMoeAttention(nn.Module):
 
     def __init__(
         self,
-        config,
+        embed_dim: int,
+        num_heads: int,
+        dropout: Optional[float] = 0.0,
+        is_decoder: Optional[bool] = False,
+        bias: Optional[bool] = True,
+        is_causal: Optional[bool] = False,
+        config: Optional[NllbMoeConfig] = None,
         layer_idx: Optional[int] = None,
     ):
         super().__init__()
-        self.embed_dim = config.embed_dim
-        self.num_heads = config.num_heads
-        self.dropout = config.dropout
-        self.head_dim = self.embed_dim // self.num_heads
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.head_dim = embed_dim // num_heads
         self.config = config
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim**-0.5
+        self.is_decoder = is_decoder
+        self.is_causal = is_causal
         self.layer_idx = layer_idx
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.bias)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.bias)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -539,17 +498,27 @@ class NllbMoeAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
+        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
+        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
         is_cross_attention = key_value_states is not None
+
+        # determine input shapes
         bsz, tgt_len = hidden_states.shape[:-1]
         src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
 
         q_input_shape = (bsz, tgt_len, -1, self.head_dim)
         kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
+        # get query proj
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
         is_updated = False
@@ -596,6 +565,7 @@ class NllbMoeAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             output_attentions=output_attentions,
+            head_mask=layer_head_mask,
             **kwargs,
         )
 
@@ -893,36 +863,33 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
+        self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
-        self.d_model = config.hidden_size
-        self.num_codebooks = config.num_codebooks
-        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = NllbMoeScaledWordEmbedding(
-            config.vocab_size, config.d_model, self.padding_idx, embed_scale=self.embed_scale
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
+
+        if embed_tokens is not None:
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = NllbMoeSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
             self.padding_idx,
         )
-        self.layers = nn.ModuleList()
-
-        self.layer_norm = nn.LayerNorm(config.d_model)
-        self.attn_implementation = config._attn_implementation
-
-        self.gradient_checkpointing = False
-        self.padding_idx = config.pad_token_id
-        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         sparse_step = config.decoder_sparse_step
+        self.layers = nn.ModuleList()
         for i in range(config.decoder_layers):
             is_sparse = (i + 1) % sparse_step == 0 if sparse_step > 0 else False
             self.layers.append(NllbMoeDecoderLayer(config, is_sparse, layer_idx=i))
+
+        self.layer_norm = nn.LayerNorm(config.d_model)
+
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
         self.post_init()
 
     @auto_docstring
@@ -940,6 +907,43 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         cache_position: Optional[torch.Tensor] = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary, corresponding to the sequence of audio codes.
+
+            Indices can be obtained by encoding an audio prompt with an audio encoder model to predict audio codes,
+            such as with the [`EncodecModel`]. See [`EncodecModel.encode`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+
+            <Tip warning={true}>
+
+            The `input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
+            target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
+            you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
+            frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
+            target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
+            `input_ids`.
+
+            </Tip>
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
+            the decoder.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
+            selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder to avoid performing
+            cross-attention on hidden heads. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        """
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -1223,6 +1227,61 @@ class NllbMoeModel(NllbMoePreTrainedModel):
             encoder_router_logits=encoder_outputs.router_probs,
             decoder_router_logits=decoder_outputs.router_probs,
         )
+
+
+def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        router_probs (`torch.Tensor`):
+            Probability assigned to each expert per token. Shape: [batch_size, sequence_length, num_experts].
+        expert_indices (`torch.Tensor`):
+            Indices tensor of shape [batch_size, sequence_length] identifying the selected expert for a given token.
+
+    Returns:
+        The auxiliary loss.
+    """
+    num_experts = router_probs.shape[-1]
+
+    # cast the expert indices to int64, otherwise one-hot encoding will fail
+    if expert_indices.dtype != torch.int64:
+        expert_indices = expert_indices.to(torch.int64)
+
+    if len(expert_indices.shape) == 2:
+        expert_indices = expert_indices.unsqueeze(2)
+
+    expert_mask = torch.nn.functional.one_hot(expert_indices, num_experts)
+
+    # For a given token, determine if it was routed to a given expert.
+    expert_mask = torch.max(expert_mask, axis=-2).values
+
+    # cast to float32 otherwise mean will fail
+    expert_mask = expert_mask.to(torch.float32)
+    tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
+
+    router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
+    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
+
+
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
 
 
 @auto_docstring(

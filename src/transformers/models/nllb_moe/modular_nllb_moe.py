@@ -600,7 +600,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel, MusicgenDecoder):
     """
 
     def __init__(self, config: NllbMoeConfig, embed_tokens: Optional[nn.Embedding] = None):
-        super().__init__(config)
+        NllbMoePreTrainedModel.__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
