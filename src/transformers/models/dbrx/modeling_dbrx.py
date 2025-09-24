@@ -27,7 +27,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -166,7 +165,7 @@ class DbrxAttention(nn.Module):
         self.layer_idx = layer_idx
 
         attn_config = config.attn_config
-        self.attn_pdrop = attn_config.attn_pdrop
+        self.attention_dropout = attn_config.attn_pdrop
         self.clip_qkv = attn_config.clip_qkv
         self.num_key_value_heads = attn_config.kv_n_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
@@ -253,11 +252,11 @@ class DbrxExpertGLU(nn.Module):
     def forward(
         self, x: torch.Tensor, expert_w1: torch.Tensor, expert_v1: torch.Tensor, expert_w2: torch.Tensor
     ) -> torch.Tensor:
-        gate_proj = x.matmul(expert_w1.t())
-        up_proj = x.matmul(expert_v1.t())
+        gate_proj = x.matmul(expert_w1)
+        up_proj = x.matmul(expert_v1)
         gate_proj = self.activation_fn(gate_proj)
         intermediate_states = gate_proj * up_proj
-        down_proj = intermediate_states.matmul(expert_w2)
+        down_proj = intermediate_states.matmul(expert_w2.t())
         return down_proj
 
 
@@ -267,17 +266,7 @@ class DbrxExperts(nn.Module):
         self.mlp = DbrxExpertGLU(config)
         self.hidden_size = config.hidden_size
         self.ffn_hidden_size = config.ffn_hidden_size
-        self.moe_normalize_expert_weights = config.moe_normalize_expert_weights
-        self.top_k = config.moe_top_k
-
-    def route_tokens_to_experts(self, hidden_states, router_logits):
-        router_logits = torch.nn.functional.softmax(router_logits, dim=1, dtype=router_logits.dtype)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
-        if self.moe_normalize_expert_weights is not None:
-            router_top_value = router_top_value / torch.norm(
-                router_top_value, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True
-            )
-        return router_top_value, router_indices
+        self.num_experts = config.moe_num_experts
 
     def forward(
         self,
@@ -286,12 +275,11 @@ class DbrxExperts(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(-1, self.hidden_size)
+        hidden_states = hidden_states.reshape(-1, self.ffn_hidden_size)
 
-        num_experts = top_k_weights.shape[1]
         next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -299,23 +287,22 @@ class DbrxExperts(nn.Module):
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
             with torch.no_grad():
-                _, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
+                idx, token_idx = torch.where(expert_mask[expert_idx])
             v1 = self.mlp.v1.view(split_expert_shape)[expert_idx]
             w1 = self.mlp.w1.view(split_expert_shape)[expert_idx]
             w2 = self.mlp.w2.view(split_expert_shape)[expert_idx]
-            states = self.mlp(current_state, w1, v1, w2)
-            states = states.view(-1, self.hidden_size) * top_k_weights[token_idx, expert_idx, None]
+            states = self.mlp(hidden_states[token_idx], w1, v1, w2)
+            states = states.view(-1, self.ffn_hidden_size) * top_k_weights[token_idx, idx, None]
             next_states.index_add_(0, token_idx, states)
 
-        next_states = next_states.view(batch_size, -1, self.hidden_size)
+        next_states = next_states.view(batch_size, -1, self.ffn_hidden_size)
         return next_states
 
 
 class DbrxRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.hidden_size = config.hidden_size
+        self.hidden_size = config.ffn_hidden_size
         self.moe_jitter_eps = config.moe_jitter_eps
         self.layer = nn.Linear(self.hidden_size, config.moe_num_experts, bias=False)
 
@@ -337,9 +324,22 @@ class DbrxFFN(nn.Module):
         self.router = DbrxRouter(config.ffn_config)
         self.experts = DbrxExperts(config.ffn_config)
 
+        self.moe_normalize_expert_weights = config.ffn_config.moe_normalize_expert_weights
+        self.top_k = config.ffn_config.moe_top_k
+
+    def route_tokens_to_experts(self, router_logits):
+        router_logits = torch.nn.functional.softmax(router_logits, dim=1, dtype=router_logits.dtype)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
+        if self.moe_normalize_expert_weights is not None:
+            router_top_value = router_top_value / torch.norm(
+                router_top_value, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True
+            )
+        return router_top_value, router_indices
+
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         router_logits = self.router(hidden_states)
-        output = self.experts(hidden_states, router_logits)
+        top_k_weights, top_k_index = self.route_tokens_to_experts(router_logits)
+        output = self.experts(hidden_states, top_k_index, top_k_weights)
         return output
 
 
@@ -364,11 +364,11 @@ class DbrxNormAttentionNorm(nn.Module):
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Any,
-    ) -> tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         residual_states = hidden_states
         hidden_states = self.norm_1(hidden_states).to(hidden_states.dtype)
 
-        hidden_states, attn_weights = self.attn(
+        hidden_states, _ = self.attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
@@ -383,7 +383,7 @@ class DbrxNormAttentionNorm(nn.Module):
         residual_states = hidden_states
         hidden_states = self.norm_2(hidden_states).to(hidden_states.dtype)
 
-        return residual_states, hidden_states, attn_weights
+        return residual_states, hidden_states
 
 
 class DbrxBlock(GradientCheckpointingLayer):
@@ -408,7 +408,7 @@ class DbrxBlock(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Any,
     ):
-        resid_states, hidden_states, _ = self.norm_attn_norm(
+        resid_states, hidden_states = self.norm_attn_norm(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
@@ -417,92 +417,9 @@ class DbrxBlock(GradientCheckpointingLayer):
             **kwargs,
         )
 
-        hidden_states, _ = self.ffn(hidden_states)
+        hidden_states = self.ffn(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.resid_pdrop, training=self.training)
         hidden_states = resid_states + hidden_states
-        return hidden_states
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class DbrxRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        DbrxRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class DbrxMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-class DbrxDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: DbrxConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = DbrxAttention(config=config, layer_idx=layer_idx)
-
-        self.mlp = DbrxMLP(config)
-        self.input_layernorm = DbrxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = DbrxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
         return hidden_states
 
 
@@ -520,7 +437,7 @@ class DbrxPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": DbrxDecoderLayer,
+        "hidden_states": DbrxBlock,
         "attentions": DbrxAttention,
     }
 
