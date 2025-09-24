@@ -34,7 +34,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
-    MixtralSparseMoeBlock,
     load_balancing_loss_func,
 )
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeMLP

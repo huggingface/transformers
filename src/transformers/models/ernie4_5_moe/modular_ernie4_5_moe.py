@@ -165,7 +165,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
             if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
             else "cpu"
         )
-        
+
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
             routing_bias = self.moe_statics.e_score_correction_bias.squeeze()

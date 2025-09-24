@@ -156,7 +156,9 @@ class HunYuanMoEV1Moe(nn.Module):
         router_logits = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
         selected_experts, routing_weights = self.route_tokens_to_experts(router_logits)
-        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights).reshape(batch_size, sequence_length, hidden_dim)
+        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights).reshape(
+            batch_size, sequence_length, hidden_dim
+        )
         return final_hidden_states + hidden_states_mlp
 
 

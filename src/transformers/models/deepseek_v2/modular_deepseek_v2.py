@@ -238,7 +238,7 @@ def apply_rotary_emb(
 
 
 class DeepseekV2Experts(Qwen2MoeExperts):
-    pass 
+    pass
 
 
 class DeepseekV2Moe(nn.Module):
@@ -275,7 +275,6 @@ class DeepseekV2Moe(nn.Module):
 
         topk_weight = topk_weight * self.routed_scaling_factor
         return topk_idx, topk_weight
-
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
