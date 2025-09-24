@@ -26,10 +26,10 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_causal_conv1d_available,
-    is_mamba_ssm_available,
+
     logging,
 )
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from ...utils.generic import check_model_inputs
 from .configuration_jamba import JambaConfig
 

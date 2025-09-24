@@ -21,14 +21,14 @@ from typing_extensions import Unpack
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import check_model_inputs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
 from ..jetmoe.modeling_jetmoe import JetMoeParallelExperts, JetMoeTopKGating
-from ..llama.modeling_llama import LlamaAttention
+from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer, MixtralForCausalLM
 from .configuration_granitemoe import GraniteMoeConfig
 
@@ -135,7 +135,7 @@ class GraniteMoeDecoderLayer(MixtralDecoderLayer):
 
 
 @auto_docstring
-class GraniteMoePreTrainedModel(PreTrainedModel):
+class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     config: GraniteMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -147,7 +147,7 @@ class GraniteMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(module)
         if isinstance(module, GraniteMoeParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
@@ -209,8 +209,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
+        causal_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
