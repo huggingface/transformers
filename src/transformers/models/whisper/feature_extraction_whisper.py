@@ -32,7 +32,6 @@ if is_torch_available():
     import torch
     from torch import nn
 
-
     class _WhisperFeatureExtractorModule(nn.Module):
         def __init__(self, feature_extractor: "WhisperFeatureExtractor"):
             super().__init__()
@@ -62,6 +61,7 @@ if is_torch_available():
                 log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
             log_spec = (log_spec + 4.0) / 4.0
             return log_spec
+
 
 logger = logging.get_logger(__name__)
 
