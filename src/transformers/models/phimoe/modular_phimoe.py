@@ -22,14 +22,16 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
 )
+from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import check_model_inputs
+from ..llama.modeling_llama import LlamaAttention
 from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
     MixtralExperts,

@@ -38,7 +38,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
-from ...utils.typing_utils import TransformersKwargs
 from ..m2m_100.modeling_m2m_100 import (
     M2M100ScaledWordEmbedding,
     M2M100SinusoidalPositionalEmbedding,

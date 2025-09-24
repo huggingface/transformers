@@ -8,6 +8,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import (
@@ -19,6 +20,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
+    auto_docstring,
     is_causal_conv1d_available,
     is_mamba_ssm_available,
     logging,

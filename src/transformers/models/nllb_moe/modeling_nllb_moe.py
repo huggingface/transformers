@@ -48,8 +48,9 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import check_model_inputs
 from .configuration_nllb_moe import NllbMoeConfig
 
 
@@ -57,6 +58,48 @@ if is_torch_flex_attn_available():
     from ...integrations.flex_attention import make_flex_block_causal_mask
 
 logger = logging.get_logger(__name__)
+
+
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
+
+
+def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> torch.Tensor:
+    """
+    Computes auxiliary load balancing loss as in Switch Transformer.
+    """
+    num_experts = router_probs.shape[-1]
+
+    # cast the expert indices to int64, otherwise one-hot encoding will fail
+    if expert_indices.dtype != torch.int64:
+        expert_indices = expert_indices.to(torch.int64)
+
+    if len(expert_indices.shape) == 2:
+        expert_indices = expert_indices.unsqueeze(2)
+
+    expert_mask = torch.nn.functional.one_hot(expert_indices, num_experts)
+
+    # For a given token, determine if it was routed to a given expert.
+    expert_mask = torch.max(expert_mask, dim=-2).values
+
+    # cast to float32 otherwise mean will fail
+    expert_mask = expert_mask.to(torch.float32)
+    tokens_per_group_and_expert = torch.mean(expert_mask, dim=-2)
+
+    router_prob_per_group_and_expert = torch.mean(router_probs, dim=-2)
+    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
 class NllbMoeScaledWordEmbedding(nn.Embedding):
@@ -369,6 +412,7 @@ class NllbMoeExperts(nn.ModuleDict):
             self[f"expert_{idx}"] = expert_class(config, ffn_dim)
 
     def forward(self, hidden_states, router_mask, router_probs):
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
         masked_hidden_states = torch.einsum("bm,be->ebm", hidden_states, router_mask)
         for idx, expert in enumerate(self.experts.values()):
             token_indices = router_mask[:, idx]
@@ -854,10 +898,8 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         self.num_codebooks = config.num_codebooks
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
-        embed_dim = config.vocab_size + 1
-
         self.embed_tokens = NllbMoeScaledWordEmbedding(
-            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=self.embed_scale
         )
 
         self.embed_positions = NllbMoeSinusoidalPositionalEmbedding(
@@ -900,6 +942,8 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        input_shape = inputs_embeds.size()[:-1]
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
