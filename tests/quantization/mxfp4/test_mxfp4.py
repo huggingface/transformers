@@ -15,8 +15,8 @@
 import gc
 import tempfile
 import unittest
+from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
-from contextlib import contextmanager, ExitStack
 
 from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
 from transformers.testing_utils import (
