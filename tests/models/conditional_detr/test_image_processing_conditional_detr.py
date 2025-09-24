@@ -608,5 +608,18 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
 
     def test_deprecated_max_size(self):
         # Should not crash, but log a warning
-        processor = ConditionalDetrImageProcessor(max_size=512)
+        from transformers.utils import logging
+        from transformers.testing_utils import CaptureLogger, LoggingLevel
+        
+        logger = logging.get_logger("transformers.models.conditional_detr.image_processing_conditional_detr")
+        logger.warning_once.cache_clear()
+        
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl:
+                processor = ConditionalDetrImageProcessor(max_size=512)
+        
         self.assertIsInstance(processor, ConditionalDetrImageProcessor)
+        self.assertIn("max_size", cl.out)
+        self.assertIn("deprecated", cl.out)
+        self.assertIn("shortest_edge", cl.out)
+        self.assertIn("longest_edge", cl.out)
