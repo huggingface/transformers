@@ -87,7 +87,6 @@ from .trainer_callback import (
     TrainerState,
 )
 from .trainer_pt_utils import (
-    DistributedTensorGatherer,
     EvalLoopContainer,
     IterableDatasetShard,
     LabelSmoother,
@@ -99,9 +98,7 @@ from .trainer_pt_utils import (
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
-    nested_concat,
     nested_detach,
-    nested_numpify,
     nested_xla_mesh_reduce,
     reissue_pt_warnings,
     remove_dummy_checkpoint,
