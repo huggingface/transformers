@@ -83,7 +83,7 @@ class QuestionAnsweringTrainer(Trainer):
             # Only the main node log the results by default
             self.log(metrics)
 
-        if self.args.tpu_metrics_debug or self.args.debug:
+        if self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
