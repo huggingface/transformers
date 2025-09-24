@@ -87,9 +87,9 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     _load_feature_extractor = False
     _load_tokenizer = True
 
-    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
+    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), **kwargs):
         self._args_parser = args_parser
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         if self.entailment_id == -1:
             logger.warning(
                 "Failed to determine 'entailment' label id from the label2id mapping in the model config. Setting to "
