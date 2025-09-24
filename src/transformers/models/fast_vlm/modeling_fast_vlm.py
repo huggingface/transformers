@@ -141,6 +141,7 @@ class FastVlmModel(FastVlmPreTrainedModel):
             else self.config.vision_feature_select_strategy
         )
 
+        # only those values make sense in FastVLM
         if vision_feature_select_strategy != "full":
             raise ValueError(f"Unexpected select feature strategy: {vision_feature_select_strategy}")
 
