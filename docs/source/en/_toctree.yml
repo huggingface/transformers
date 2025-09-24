@@ -1017,6 +1017,8 @@
         title: CLIPSeg
       - local: model_doc/clvp
         title: CLVP
+      - local: model_doc/cwm
+        title: Code World Model (CWM)
       - local: model_doc/cohere2_vision
         title: Cohere2Vision
       - local: model_doc/colpali
