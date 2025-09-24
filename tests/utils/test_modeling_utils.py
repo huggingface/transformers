@@ -42,7 +42,6 @@ from transformers import (
     BartConfig,
     BartForConditionalGeneration,
     CLIPTextModelWithProjection,
-    DynamicCache,
     GPT2Config,
     GPT2LMHeadModel,
     LlavaConfig,

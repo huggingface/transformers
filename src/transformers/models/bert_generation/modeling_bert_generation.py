@@ -691,7 +691,6 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=sequence_output,
             past_key_values=encoder_outputs.past_key_values,

@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,

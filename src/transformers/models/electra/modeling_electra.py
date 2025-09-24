@@ -770,7 +770,6 @@ class ElectraModel(ElectraPreTrainedModel):
             **kwargs,
         )
 
-
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=encoder_outputs.last_hidden_state,
             past_key_values=encoder_outputs.past_key_values,

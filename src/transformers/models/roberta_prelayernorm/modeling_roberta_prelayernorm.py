@@ -807,7 +807,6 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
         sequence_output = self.LayerNorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
