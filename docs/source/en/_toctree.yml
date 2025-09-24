@@ -591,6 +591,8 @@
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/minicpm3
+        title: MiniCPM3
       - local: model_doc/minimax
         title: MiniMax
       - local: model_doc/ministral
