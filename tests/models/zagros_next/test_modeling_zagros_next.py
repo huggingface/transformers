@@ -1,6 +1,8 @@
 import unittest
 import torch
+
 from transformers import ZagrosNextConfig, ZagrosNextModel, ZagrosNextForCausalLM
+from transformers.models.zagros_next.modeling_zagros_next import ZagrosNextDynamicCache
 
 class TestZagrosNextModeling(unittest.TestCase):
     def setUp(self):
@@ -81,3 +83,4 @@ class TestZagrosNextModeling(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+    
