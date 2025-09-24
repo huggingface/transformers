@@ -33,8 +33,26 @@ class Timesfm2P5Config(PretrainedConfig):
 
     def __init__(
         self,
-        # Override defaults for 2.5
+        # TimesFM 2.5 specific parameters
+        patch_length: int = 32,
         context_length: int = 16384,
+        horizon_length: int = 128,
+        quantiles: list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        pad_val: float = -1e9,
+        freq_size: int = 10,  # Not used in 2.5, but kept for compatibility
+        hidden_size: int = 1280,
+        intermediate_size: int = 1280,
+        head_dim: int = 80,
+        num_attention_heads: int = 16,
+        num_key_value_heads: int = 16,  # Same as num_attention_heads for full attention
+        tolerance: float = 1e-5,
+        rms_norm_eps: float = 1e-5,
+        attention_dropout: float = 0.0,
+        attention_bias: bool = False,
+        initializer_range: float = 0.02,
+        min_timescale: float = 1.0,
+        max_timescale: float = 10000.0,
+        # Override defaults for 2.5
         num_hidden_layers: int = 20,
         output_quantile_len: int = 1024,
         decode_index: int = 5,
@@ -47,6 +65,8 @@ class Timesfm2P5Config(PretrainedConfig):
         # Gemma2-compatible parameters for query scaling
         query_pre_attn_scalar: float = 256.0,  # This provides the per-dim scaling
         attn_logit_softcapping: Optional[float] = None,
+        layer_types: list = None,  # All layers are the same type
+        sliding_window: int = None,  # No sliding window
         **kwargs,
     ):
         super().__init__(
@@ -80,6 +100,10 @@ class Timesfm2P5Config(PretrainedConfig):
         self.activation = activation
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.attn_logit_softcapping = attn_logit_softcapping
+        self.num_key_value_heads = num_key_value_heads
+        self.attention_bias = attention_bias
+        self.layer_types = layer_types or ["attention"] * num_hidden_layers
+        self.sliding_window = sliding_window
 
 
 __all__ = ["Timesfm2P5Config"]

@@ -460,7 +460,6 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_values_padding: torch.LongTensor,
-        freq: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ):
@@ -470,7 +469,6 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         Args:
             past_values: Input tensor of shape (batch_size, sequence_length)
             past_values_padding: Padding tensor of shape (batch_size, sequence_length)
-            freq: Frequency tensor (ignored in TimesFM 2.5 - kept for API compatibility)
             output_attentions: Whether to return attention weights
             output_hidden_states: Whether to return hidden states
         """
