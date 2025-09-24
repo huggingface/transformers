@@ -177,7 +177,6 @@ from .utils import (
     logging,
     strtobool,
 )
-from .utils.deprecation import deprecate_kwarg
 from .utils.import_utils import requires
 from .utils.quantization_config import QuantizationMethod
 
