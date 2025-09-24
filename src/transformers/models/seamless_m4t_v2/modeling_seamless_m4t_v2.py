@@ -476,8 +476,6 @@ class SeamlessM4Tv2ConformerEncoderLayer(GradientCheckpointingLayer):
         output_attentions: bool = False,
         conv_attention_mask: Optional[torch.Tensor] = None,
     ):
-        hidden_states = hidden_states
-
         # 1. Feed-Forward 1 layer
         residual = hidden_states
         hidden_states = self.ffn1_layer_norm(hidden_states)
@@ -540,7 +538,6 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
         if self.config.speech_encoder_left_chunk_num >= 0:
             start_indices = (chunk_indices - self.config.speech_encoder_left_chunk_num).clamp_(min=0)
             start_indices = start_indices * self.config.speech_encoder_chunk_size
-            start_indices = start_indices
         start_indices = start_indices.unsqueeze(1).expand(-1, sequence_len)
 
         end_indices = ((chunk_indices + 1) * self.config.speech_encoder_chunk_size).clamp_(max=sequence_len)
