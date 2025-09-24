@@ -20,7 +20,7 @@ from torch import nn
 from ...activations import ACT2CLS, ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, extract_rope_scaling_dict_from_config
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -87,23 +87,45 @@ def compute_embeddings(inv_freq: torch.Tensor, embed_height: int, embed_width: i
     return emb
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->EfficientLoFTR
 class EfficientLoFTRRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: EfficientLoFTRConfig, device=None, layer_type=None):
+    # Ignore copy
+    def __init__(self, config: EfficientLoFTRConfig, device=None):
         super().__init__()
-        self.config = config
+        self.config = standardize_rope_params(config)
 
-        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        self.rope_type = rope_scaling_dict["rope_type"]
-        self.rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        # We get one layer type per model if:
+        #   1) Model is used as backbone with several other models. E.g. Gemma which has sliding
+        #      layers with Paligemma and has only one layer type as a standalone model
+        #   2) Tiny models used for testing do not have enough layers to reach the next layer type
+        self.layer_types = getattr(config, "layer_types", [None])
+        if self.layer_types is not None and len(self.layer_types) > 1:
+            self.rope_type = {}
+            for layer_type in self.layer_types:
+                rope_type, curr_inv_freq, curr_attention_scaling = self.get_rope_frequencies(device, layer_type)
+                self.rope_type[layer_type] = rope_type
+                self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
+                setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
+                setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
+        else:
+            self.rope_type, inv_freq, self.attention_scaling = self.get_rope_frequencies(device)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)
+            self.original_inv_freq = inv_freq
 
-        inv_freq, _ = self.rope_init_fn(self.config, device)
-        inv_freq_expanded = inv_freq[None, None, None, :].float().expand(1, 1, 1, -1)
+    def get_rope_frequencies(self, device, layer_type=None):
+        # Some layer types have no RoPE, e.g. conv or mamba layers. Skip them
+        rope_params = self.config.rope_scaling[layer_type] if layer_type is not None else self.config.rope_scaling
+        if rope_params is None:
+            return None, None, None
 
-        self.register_buffer("inv_freq", inv_freq_expanded, persistent=False)
+        rope_type = rope_params["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+        inv_freq, attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+        return rope_type, inv_freq, attention_scaling
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -126,10 +148,8 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-        if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
-            rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        else:
-            rope_scaling_dict = config.rope_scaling_dict
+        config = standardize_rope_params(config)
+        rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
         base = rope_scaling_dict["rope_theta"]
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
@@ -144,16 +164,19 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         )
         return inv_freq, attention_factor
 
+    # Ignore copy
     @torch.no_grad()
     def forward(
-        self, x: torch.Tensor, position_ids: Optional[tuple[torch.LongTensor, torch.LongTensor]] = None
+        self, x: torch.Tensor, position_ids: Optional[torch.LongTensor] = None, layer_type=None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         feats_height, feats_width = x.shape[-2:]
+        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        inv_freq = getattr(self, f"{prefix}inv_freq")
         embed_height = (feats_height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         embed_width = (feats_width - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            emb = compute_embeddings(self.inv_freq, embed_height, embed_width, self.config.hidden_size)
+            emb = compute_embeddings(inv_freq, embed_height, embed_width, self.config.hidden_size)
             sin = emb.sin()
             cos = emb.cos()
 

@@ -19,8 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
 class FlexOlmoConfig(PretrainedConfig):
@@ -124,29 +126,29 @@ class FlexOlmoConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=100352,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=4096,
-        initializer_range=0.02,
-        rms_norm_eps=1e-06,
-        use_cache=True,
-        pad_token_id=100277,
-        bos_token_id=None,
-        eos_token_id=100257,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        num_experts_per_tok=5,
-        num_experts=7,
-        output_router_logits=False,
-        router_aux_loss_coef=0.01,
-        norm_topk_prob=False,
+        vocab_size: Optional[int] = 100352,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 4096,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 1e-06,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 100277,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = 100257,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        num_experts_per_tok: Optional[int] = 5,
+        num_experts: Optional[int] = 7,
+        output_router_logits: Optional[bool] = False,
+        router_aux_loss_coef: Optional[float] = 0.01,
+        norm_topk_prob: Optional[bool] = False,
         **kwargs,
     ):
         super().__init__(

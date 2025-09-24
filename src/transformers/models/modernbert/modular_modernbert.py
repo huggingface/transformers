@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import RopeParameters, extract_rope_scaling_dict_from_config, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
@@ -727,7 +727,10 @@ class ModernBertAttention(nn.Module):
             max_position_embeddings = config.max_position_embeddings
 
         if config._attn_implementation == "flash_attention_2":
-            rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            standardize_rope_params(config)
+            rope_scaling_dict = (
+                self.config.rope_scaling[layer_type] if layer_type is not None else self.config.rope_scaling
+            )
             rope_theta = rope_scaling_dict["rope_theta"]
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta

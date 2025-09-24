@@ -15,8 +15,10 @@
 
 """LongCat Flash model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
 class LongcatFlashConfig(PretrainedConfig):
@@ -69,7 +71,7 @@ class LongcatFlashConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
-        rope_scaling (`Dict`, *optional*):
+        rope_scaling (`RopeParameters`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
             strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
             `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
@@ -140,37 +142,37 @@ class LongcatFlashConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=131072,
-        hidden_size=6144,
-        num_hidden_layers=56,
-        num_layers=28,
-        num_attention_heads=64,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        ffn_hidden_size=12288,
-        q_lora_rank=1536,
-        kv_lora_rank=512,
-        qk_nope_head_dim=128,
-        qk_rope_head_dim=64,
-        head_dim=64,
-        v_head_dim=128,
-        qk_head_dim=None,
-        moe_topk=12,
-        n_routed_experts=512,
-        zero_expert_num=256,
-        expert_ffn_hidden_size=2048,
-        routed_scaling_factor=6.0,
+        vocab_size: Optional[int] = 131072,
+        hidden_size: Optional[int] = 6144,
+        num_hidden_layers: Optional[int] = 56,
+        num_layers: Optional[int] = 28,
+        num_attention_heads: Optional[int] = 64,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 131072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 1e-5,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        ffn_hidden_size: Optional[int] = 12288,
+        q_lora_rank: Optional[int] = 1536,
+        kv_lora_rank: Optional[int] = 512,
+        qk_nope_head_dim: Optional[int] = 128,
+        qk_rope_head_dim: Optional[int] = 64,
+        head_dim: Optional[int] = 64,
+        v_head_dim: Optional[int] = 128,
+        qk_head_dim: Optional[int] = None,
+        moe_topk: Optional[int] = 12,
+        n_routed_experts: Optional[int] = 512,
+        zero_expert_num: Optional[int] = 256,
+        expert_ffn_hidden_size: Optional[int] = 2048,
+        routed_scaling_factor: Optional[float] = 6.0,
         **kwargs,
     ):
         if num_key_value_heads is None:

@@ -181,11 +181,11 @@ class GotOcr2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vision_config=None,
-        text_config=None,
-        image_token_index=151859,
-        image_seq_length=576,
-        pad_token_id=-1,
+        vision_config: Optional[dict] = None,
+        text_config: Optional[dict] = None,
+        image_token_index: Optional[int] = 151859,
+        image_seq_length: Optional[int] = 576,
+        pad_token_id: Optional[int] = -1,
         **kwargs,
     ):
         self.image_token_index = image_token_index

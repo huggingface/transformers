@@ -24,7 +24,7 @@ from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_rope_utils import dynamic_rope_update, extract_rope_scaling_dict_from_config
+from ...modeling_rope_utils import dynamic_rope_update, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -61,17 +61,18 @@ class PixtralRotaryEmbedding(nn.Module):
 
     def __init__(self, config: PixtralVisionConfig, device=None, layer_type=None):
         super().__init__()
+        self.config = standardize_rope_params(config)
 
-        self.rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        self.rope_type = self.rope_scaling_dict["rope_type"]
-        self.rope_init_fn: Callable = self.compute_default_rope_parameters
+        self.rope_type = self.config.rope_scaling["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
-            raise ValueError("Pixtral doesn't support RoPE other types except for the 'default'")
+            raise ValueError(
+                f"{self.__class__.__name__} does not support non-default RoPE, but got `rope_type={self.rope_type}`"
+            )
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(config, device, layer_type=layer_type)
+        inv_freq, attention_scaling = rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-        self.config = config
+        self.original_inv_freq = inv_freq
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -94,12 +95,9 @@ class PixtralRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-        if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
-            rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        else:
-            rope_scaling_dict = config.rope_scaling_dict
+        config = standardize_rope_params(config)
 
-        base = rope_scaling_dict["rope_theta"]
+        base = config.rope_scaling["rope_theta"]
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
@@ -130,8 +128,12 @@ class PixtralRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
-        inv_freq = getattr(self, f"{layer_type}_inv_freq") if layer_type is not None else self.inv_freq
-        freqs = inv_freq[position_ids]
+        if layer_type is not None:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support layer types, but got `layer_type={layer_type}`"
+            )
+
+        freqs = self.inv_freq[position_ids]
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             emb = freqs

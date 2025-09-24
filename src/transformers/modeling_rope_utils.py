@@ -27,18 +27,22 @@ if is_torch_available():
     import torch
 
 
-def extract_rope_scaling_dict_from_config(config, layer_type=None):
-    "Helper to extract the rope type from config, while handling BC and local/global keys"
+def standardize_rope_params(config):
+    """
+    Helper to standardize the config's rope params field by ensuring the params are defined for each
+    later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
+    NOTE: It updates the config in-place and should be called after a deepcopy
+    """
 
-    # The RoPE scaling dict might be serialized differently in older versions, which we need to support.
+    # The RoPE scaling dict might be serialized differently if they were saved before/after RoPE refactor:
     # Case 1: `config.rope_scaling` is a simple dict with values to configure RoPE type. Used when the model
-    # has a single attention type, i.e. `config.layer_types = None`
+    #   has a single attention type, i.e. `config.layer_types = None` and in old-style configs
     # Case 2: `config.rope_scaling` is a dict where keys define different RoPE configurations used by the model.
-    # For example `rope_scaling={"full_attention": {}, "sliding_attentionn": {}}` to alternate between global and local attention layers.
+    #   For example `rope_scaling={"full_attention": {}, "sliding_attentionn": {}}` to alternate between global
+    #   and local attention layers. This is the how models are serialized now
     rope_scaling_dict = getattr(config, "rope_scaling", None)
 
-    # Case 1, if `config.layer_types` is defined we need to check that all layer types got their own RoPE config
-    # We need to handle BC in case users still use simple dict RoPE params and duplicate it for all layer types
+    # Standardize rope for cases when config has layer types by duplicating rope for each type
     if getattr(config, "layer_types", None) is not None:
         if rope_scaling_dict is None:
             default_rope_params = {"rope_type": "default", "rope_theta": config.rope_theta}
@@ -46,7 +50,7 @@ def extract_rope_scaling_dict_from_config(config, layer_type=None):
         elif set(config.layer_types) != set(rope_scaling_dict.keys()):
             rope_scaling_dict = dict.fromkeys(config.layer_types, rope_scaling_dict)
 
-    # Case 2, single RoPE per model, just make sure `rope_scaling_dict` has all default attributes defined
+    # If config has no layer types, simply check correctness of rope param keys
     else:
         if rope_scaling_dict is None:
             rope_scaling_dict = {"rope_type": "default", "rope_theta": config.rope_theta}
@@ -55,7 +59,8 @@ def extract_rope_scaling_dict_from_config(config, layer_type=None):
             rope_theta = config.rope_theta if hasattr(config, "rope_theta") else rope_scaling_dict["rope_theta"]
             rope_scaling_dict.update({"rope_type": rope_type, "rope_theta": rope_theta})
 
-    return rope_scaling_dict[layer_type] if layer_type is not None else rope_scaling_dict
+    config.rope_scaling = rope_scaling_dict
+    return config
 
 
 def dynamic_rope_update(rope_forward):
@@ -139,7 +144,7 @@ def dynamic_rope_update(rope_forward):
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):
-        rope_type = self.rope_type[layer_type] if layer_type is not None else self.rope_type
+        rope_type = self.rope_type if layer_type is None or len(self.layer_types) == 1 else self.rope_type[layer_type]
         if "dynamic" in rope_type:
             dynamic_frequency_update(self, position_ids, device=x.device, layer_type=layer_type)
         elif rope_type == "longrope":
@@ -182,10 +187,8 @@ def _compute_linear_scaling_rope_parameters(
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
     # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-    if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
-        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-    else:
-        rope_scaling_dict = config.rope_scaling_dict
+    config = standardize_rope_params(config)
+    rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
     factor = rope_scaling_dict["factor"]
 
     # Gets the default RoPE parameters
@@ -249,10 +252,8 @@ def _compute_dynamic_ntk_parameters(
     """
     # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
     # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-    if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
-        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-    else:
-        rope_scaling_dict = config.rope_scaling_dict
+    config = standardize_rope_params(config)
+    rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
     base = rope_scaling_dict["rope_theta"]
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
@@ -338,10 +339,8 @@ def _compute_yarn_parameters(
         post-processing scaling factor applied to the computed cos/sin.
     """
     # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-    if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
-        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-    else:
-        rope_scaling_dict = config.rope_scaling_dict
+    config = standardize_rope_params(config)
+    rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
     base = rope_scaling_dict["rope_theta"]
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
@@ -470,10 +469,8 @@ def _compute_longrope_parameters(
     """
     # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
     # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-    if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
-        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-    else:
-        rope_scaling_dict = config.rope_scaling_dict
+    config = standardize_rope_params(config)
+    rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
     base = rope_scaling_dict["rope_theta"]
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
@@ -556,10 +553,8 @@ def _compute_llama3_parameters(
         post-processing scaling factor applied to the computed cos/sin.
     """
     # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-    if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
-        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-    else:
-        rope_scaling_dict = config.rope_scaling_dict
+    config = standardize_rope_params(config)
+    rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
     # Gets the default RoPE parameters
     base = rope_scaling_dict["rope_theta"]
@@ -873,42 +868,6 @@ def rope_config_validation(config: PretrainedConfig, ignore_keys: Optional[set] 
             logger.warning(
                 f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
             )
-
-
-def compute_rope_parameters(
-    config: Optional[PretrainedConfig] = None,
-    device: Optional["torch.device"] = None,
-    rope_config_key: Optional[str] = "global",
-) -> tuple["torch.Tensor", float]:
-    """
-    Extracts requested RoPE type from the config (e.g. "dynamic") and computes inverse frequencies.
-    Args:
-        config ([`~transformers.PretrainedConfig`]):
-            The model configuration.
-        device (`torch.device`):
-            The device to use for initialization of the inverse frequencies.
-        rope_config_key (`str`, *optional*, defaults to `"global"`):
-            RoPE type key
-    Returns:
-        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-    """
-    rope_scaling_dicts = extract_rope_scaling_dict_from_config(config)
-
-    if hasattr(config, "layer_types"):
-        rope_inv_freqs = {}
-        rope_types = {}
-        for rope_key in rope_scaling_dicts:
-            rope_scaling_dict = rope_scaling_dicts[rope_key]
-            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_scaling_dict["rope_type"]]
-            inv_freq, attention_scaling = rope_init_fn(config, rope_scaling_dict=rope_scaling_dict, device=device)
-            rope_inv_freqs[rope_key] = (inv_freq, attention_scaling)
-            rope_types[rope_key] = rope_scaling_dict["rope_type"]
-        return rope_inv_freqs, rope_types
-    else:
-        rope_init_fn = ROPE_INIT_FUNCTIONS[rope_scaling_dicts["rope_type"]]
-        inv_freq, attention_scaling = rope_init_fn(config, rope_scaling_dict=rope_scaling_dicts, device=device)
-        return inv_freq, attention_scaling
 
 
 class RopeParameters(TypedDict):

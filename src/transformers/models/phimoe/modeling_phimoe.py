@@ -31,7 +31,7 @@ from ...modeling_layers import (
     GradientCheckpointingLayer,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, extract_rope_scaling_dict_from_config
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, standardize_rope_params
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -143,24 +143,22 @@ def load_balancing_loss_func(
 
 
 class PhimoeRotaryEmbedding(nn.Module):
-    def __init__(self, config: PhimoeConfig, device=None, layer_type=None):
+    def __init__(self, config: PhimoeConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+        self.config = standardize_rope_params(config)
 
-        self.rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        self.rope_type = self.rope_scaling_dict["rope_type"]
-        self.rope_init_fn: Callable = self.compute_default_rope_parameters
+        self.rope_type = self.config.rope_scaling["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
-            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        self.short_mscale = self.rope_scaling_dict.get("short_mscale", None)  # Diff with Llama
-        self.long_mscale = self.rope_scaling_dict.get("long_mscale", None)
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(config, device, layer_type=layer_type)
+        inv_freq, attention_scaling = rope_init_fn(self.config, device)
+        self.short_mscale = config.rope_scaling.get("short_mscale", None)  # Diff with Llama
+        self.long_mscale = config.rope_scaling.get("long_mscale", None)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-        self.config = config
+        self.original_inv_freq = inv_freq
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -183,10 +181,8 @@ class PhimoeRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-        if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
-            rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        else:
-            rope_scaling_dict = config.rope_scaling_dict
+        config = standardize_rope_params(config)
+        rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
         base = rope_scaling_dict["rope_theta"]
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
@@ -201,12 +197,17 @@ class PhimoeRotaryEmbedding(nn.Module):
         )
         return inv_freq, attention_factor
 
-    def forward(self, x, seq_len=None):
+    def forward(self, x, seq_len=None, layer_type=None):
+        if layer_type is not None:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support layer types, but got `layer_type={layer_type}`"
+            )
+
         mscale = None
         if self.short_mscale is not None and self.long_mscale is not None and seq_len:
             mscale = (
                 self.long_mscale
-                if seq_len > self.rope_scaling_dict["original_max_position_embeddings"]
+                if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
                 else self.short_mscale
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)

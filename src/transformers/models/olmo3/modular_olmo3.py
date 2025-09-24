@@ -24,7 +24,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, extract_rope_scaling_dict_from_config
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ..olmo2.configuration_olmo2 import Olmo2Config
@@ -136,26 +136,26 @@ class Olmo3Config(Olmo2Config):
 
     def __init__(
         self,
-        vocab_size=50304,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        use_cache=True,
-        pad_token_id=1,
-        bos_token_id=None,
-        eos_token_id=50279,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        rms_norm_eps=1e-5,
-        sliding_window=4096,
-        layer_types=None,
+        vocab_size: Optional[int] = 50304,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 1,
+        bos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = 50279,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        rms_norm_eps: Optional[float] = 1e-5,
+        sliding_window: Optional[int] = 4096,
+        layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -187,6 +187,21 @@ class Olmo3Config(Olmo2Config):
                 "sliding_attention" if (i + 1) % 4 != 0 else "full_attention" for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = getattr(self, "rope_theta", 10000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
 
 class Olmo3RMSNorm(Olmo2RMSNorm):
@@ -255,44 +270,8 @@ class Olmo3DecoderLayer(Olmo2DecoderLayer):
     pass
 
 
-# OLMo 3 RoPE is identical to OLMo 2 RoPE, except:
-# - RoPE scaling is not applied to sliding window attention layers.
 class Olmo3RotaryEmbedding(Olmo2RotaryEmbedding):
-    def __init__(self, config: Olmo3Config, device=None, rope_type: Optional[str] = None):
-        nn.Module.__init__(self)
-
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-        self.config = config
-
-        self.layer_types = getattr(config, "layer_types", [None])
-        self.rope_type = {}
-        inv_freq, attention_scaling = {}, {}
-        for layer_type in self.layer_types:
-            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-            if rope_params is None:
-                continue
-
-            curr_rope_type = rope_type or rope_params["rope_type"]
-            rope_init_fn: Callable = self.compute_default_rope_parameters
-            if curr_rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
-            self.rope_type[layer_type] = curr_rope_type
-            inv_freq[layer_type] = curr_inv_freq
-            attention_scaling[layer_type] = curr_attention_scaling
-
-        if len(self.layer_types) == 1:
-            self.rope_type = self.rope_type[self.layer_types[0]]
-            self.attention_scaling = attention_scaling[self.layer_types[0]]
-            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
-            self.original_inv_freq = inv_freq[self.layer_types[0]]
-        else:
-            for layer_type in self.layer_types:
-                if layer_type in inv_freq:
-                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
-                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
-                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
+    pass
 
 
 class Olmo3PreTrainedModel(Olmo2PreTrainedModel):

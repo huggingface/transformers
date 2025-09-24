@@ -24,7 +24,7 @@ from ...modeling_layers import (
     GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_scaling_dict_from_config
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -274,36 +274,38 @@ class MistralRotaryEmbedding(nn.Module):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-        self.config = config
+        self.config = standardize_rope_params(config)
 
+        # We get one layer type per model if:
+        #   1) Model is used as backbone with several other models. E.g. Gemma which has sliding
+        #      layers with Paligemma and has only one layer type as a standalone model
+        #   2) Tiny models used for testing do not have enough layers to reach the next layer type
         self.layer_types = getattr(config, "layer_types", [None])
-        self.rope_type = {}
-        inv_freq, attention_scaling = {}, {}
-        for layer_type in self.layer_types:
-            rope_params = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-            if rope_params is None:
-                continue
-
-            curr_rope_type = rope_params["rope_type"]
-            rope_init_fn: Callable = self.compute_default_rope_parameters
-            if curr_rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[curr_rope_type]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
-            self.rope_type[layer_type] = curr_rope_type
-            inv_freq[layer_type] = curr_inv_freq
-            attention_scaling[layer_type] = curr_attention_scaling
-
-        if len(self.layer_types) == 1:
-            self.rope_type = self.rope_type[self.layer_types[0]]
-            self.attention_scaling = attention_scaling[self.layer_types[0]]
-            self.register_buffer("inv_freq", inv_freq[self.layer_types[0]], persistent=False)
-            self.original_inv_freq = inv_freq[self.layer_types[0]]
-        else:
+        if self.layer_types is not None and len(self.layer_types) > 1:
+            self.rope_type = {}
             for layer_type in self.layer_types:
-                if layer_type in inv_freq:
-                    self.register_buffer(f"{layer_type}_inv_freq", inv_freq[layer_type], persistent=False)
-                    setattr(self, f"{layer_type}_original_inv_freq", inv_freq[layer_type])
-                    setattr(self, f"{layer_type}_attention_scaling", attention_scaling[layer_type])
+                rope_type, curr_inv_freq, curr_attention_scaling = self.get_rope_frequencies(device, layer_type)
+                self.rope_type[layer_type] = rope_type
+                self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
+                setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
+                setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
+        else:
+            self.rope_type, inv_freq, self.attention_scaling = self.get_rope_frequencies(device)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)
+            self.original_inv_freq = inv_freq
+
+    def get_rope_frequencies(self, device, layer_type=None):
+        # Some layer types have no RoPE, e.g. conv or mamba layers. Skip them
+        rope_params = self.config.rope_scaling[layer_type] if layer_type is not None else self.config.rope_scaling
+        if rope_params is None:
+            return None, None, None
+
+        rope_type = rope_params["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+        inv_freq, attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+        return rope_type, inv_freq, attention_scaling
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -326,10 +328,8 @@ class MistralRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-        if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
-            rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        else:
-            rope_scaling_dict = config.rope_scaling_dict
+        config = standardize_rope_params(config)
+        rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
         base = rope_scaling_dict["rope_theta"]
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
