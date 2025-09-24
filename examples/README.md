@@ -21,6 +21,9 @@ While we strive to present as many use cases as possible, the example scripts ar
 
 Please discuss on the [forum](https://discuss.huggingface.co/) or in an [issue](https://github.com/huggingface/transformers/issues) a feature you would like to implement in an example before submitting a PR; we welcome bug fixes, but since we want to keep the examples as simple as possible it's unlikely that we will merge a pull request adding more functionality at the cost of readability.
 
+> [!NOTE]
+> Several examples leverage the `send_example_telemetry` which allows us to identify which examples are used and which are obsolete. This method sends the example name as well as the arguments used with the script to our telemetry endpoint. This is deactivated by default in offline mode, and we recommend commenting out the line if you would like to keep this information local.
+
 ## Important note
 
 **Important**
