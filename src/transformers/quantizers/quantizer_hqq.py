@@ -141,13 +141,11 @@ class HqqHfQuantizer(HfQuantizer):
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         if is_hqq_available():
-            from hqq.core.quantize import HQQLinear
+            pass
         module, _ = get_module_from_name(model, param_name)
-
-        if self.pre_quantized:
-            return False
-        else:
-            return isinstance(module, (torch.nn.Linear, HQQLinear))
+        # Since we do not prepare the modules in advance, we need every param of the Linear layer to go through
+        # `create_quantized_param`, even when `self.is_quantized == True`
+        return isinstance(module, torch.nn.Linear)
 
     def create_quantized_param(
         self,
@@ -182,11 +180,40 @@ class HqqHfQuantizer(HfQuantizer):
         quant_config = model.config.quantization_config["quant_config"]
         skip_modules = model.config.quantization_config["skip_modules"]
 
-        # In this case we do not quantized this layer (it's explicitly skipped) -> simply load param
+        # In this case we do not quantize this layer (it's explicitly skipped) -> simply load param
         if any(skip_module in module.name for skip_module in skip_modules):
             module.load_state_dict(
                 {tensor_name: param_value.to(device=target_device, dtype=self.dtype)}, strict=False, assign=True
             )
+            return
+
+        # We need this hack as the model is not pre-prepared as an empty skeleton on meta device
+        if self.pre_quantized:
+            hqq_keys = HQQLinear(None, None).state_dict_keys() - {"bias"}
+            if hasattr(module, "hqq_params"):
+                module.hqq_params[tensor_name] = param_value
+            else:
+                module.hqq_params = {tensor_name: param_value}
+
+            # If they are all present and saved, make it a HQQLinear layer! (we cannot do it param after param...)
+            if all(k in module.hqq_params for k in hqq_keys) and ("bias" in module.hqq_params or module.bias is None):
+                print(module.hqq_params)
+                hqq_layer = HQQLinear(
+                    linear_layer=None,
+                    quant_config=None,
+                    compute_dtype=self.dtype,
+                    device=target_device,
+                    del_orig=False,
+                )
+                hqq_layer.load_state_dict(module.hqq_params)
+
+                if hqq_layer.bias is not None and isinstance(hqq_layer.bias, torch.Tensor):
+                    hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
+                if self.using_multi_gpu:
+                    hqq_layer = self._patch_layer_for_multigpu(hqq_layer)
+
+                setattr(parent_module, node, hqq_layer)
+                del module.__dict__, module
             return
 
         # Load param in the module (without caring about device or dtype, it will be changed later)
