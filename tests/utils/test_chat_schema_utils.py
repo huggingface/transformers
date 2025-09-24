@@ -146,6 +146,37 @@ smollm_schema = {
     },
 }
 
+qwen3_schema = {
+    "x-regex": r"^(?:<think>)?\s*(?P<thinking>.+?)\s*</think>\s*(?:<tool_call>(?P<tool_calls>.*?)\s*</tool_call>)?\s*(?P<content>.+?)\s*$",
+    "type": "object",
+    "properties": {
+        "role": {"const": "assistant"},
+        "content": {"type": "string"},
+        "thinking": {"type": "string"},
+        "tool_calls": {
+            "x-parser": "json",
+            "x-parser-args": {"transform": "[{type: 'function', function: @}]"},
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "function"},
+                    "function": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "arguments": {
+                                "type": "object",
+                                "additionalProperties": {"type": "any"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+
 
 @require_jmespath
 class ChatSchemaParserTest(unittest.TestCase):
