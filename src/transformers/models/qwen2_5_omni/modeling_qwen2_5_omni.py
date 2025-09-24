@@ -1252,7 +1252,8 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
                 setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
                 setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
         else:
-            self.rope_type, inv_freq, self.attention_scaling = self.get_rope_frequencies(device)
+            layer_type = None if self.layer_types is None else self.layer_types[0]
+            self.rope_type, inv_freq, self.attention_scaling = self.get_rope_frequencies(device, layer_type=layer_type)
             self.register_buffer("inv_freq", inv_freq, persistent=False)
             self.original_inv_freq = inv_freq
 
@@ -2560,7 +2561,8 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
                 setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
                 setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
         else:
-            self.rope_type, inv_freq, self.attention_scaling = self.get_rope_frequencies(device)
+            layer_type = None if self.layer_types is None else self.layer_types[0]
+            self.rope_type, inv_freq, self.attention_scaling = self.get_rope_frequencies(device, layer_type=layer_type)
             self.register_buffer("inv_freq", inv_freq, persistent=False)
             self.original_inv_freq = inv_freq
 

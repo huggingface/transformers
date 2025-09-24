@@ -154,7 +154,7 @@ class PhimoeRotaryEmbedding(nn.Module):
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
         self.short_mscale = config.rope_scaling.get("short_mscale", None)  # Diff with Llama
         self.long_mscale = config.rope_scaling.get("long_mscale", None)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -210,10 +210,9 @@ class PhimoeRotaryEmbedding(nn.Module):
                 if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
                 else self.short_mscale
             )
-        inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
-        mscale = attention_scaling if mscale is None else mscale
+        mscale = self.attention_scaling if mscale is None else mscale
         t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
-        freqs = torch.outer(t, inv_freq)
+        freqs = torch.outer(t, self.inv_freq)
 
         emb = torch.cat((freqs, freqs), dim=-1)
         return (emb.cos() * mscale).to(x.dtype), (emb.sin() * mscale).to(x.dtype)
