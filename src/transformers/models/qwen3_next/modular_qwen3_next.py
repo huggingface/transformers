@@ -768,14 +768,16 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
         linear_attn_mask = self._update_linear_attn_mask(attention_mask, cache_position)
 
         hidden_states = inputs_embeds
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             layer_mask = linear_attn_mask if decoder_layer.layer_type == "linear_attention" else causal_mask
-            position_embeddings = self.rotary_emb(hidden_states, position_ids, decoder_layer.layer_type)
 
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[decoder_layer.layer_type],
                 attention_mask=layer_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

@@ -612,18 +612,18 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
         hidden_states = self.dropout(hidden_states)
 
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+
         for layer_module in self.layers[: self.config.num_hidden_layers]:
-            position_embeddings = self.rotary_emb(
-                hidden_states, position_ids=position_ids, layer_type=layer_module.attention_type
-            )
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings,
+                position_embeddings[layer_module.attention_type],
                 self_attn_mask_mapping[layer_module.attention_type],
                 position_ids,
                 **kwargs,
@@ -718,18 +718,18 @@ class T5GemmaDecoder(T5GemmaEncoder):
             }
 
         hidden_states = inputs_embeds
-
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
         hidden_states = self.dropout(hidden_states)
 
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+
         for layer_module in self.layers[: self.config.num_hidden_layers]:
-            position_embeddings = self.rotary_emb(
-                hidden_states, position_ids=position_ids, layer_type=layer_module.attention_type
-            )
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings,
+                position_embeddings[layer_module.attention_type],
                 self_attn_mask_mapping[layer_module.attention_type],
                 position_ids,
                 past_key_values,

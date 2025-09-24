@@ -79,13 +79,20 @@ def dynamic_rope_update(rope_forward):
     def longrope_frequency_update(self, position_ids, device, layer_type=None):
         """Longrope uses long factor if sequence is larger than original pretraining length, short otherwise."""
         seq_len = torch.max(position_ids) + 1
-        if hasattr(self.config, "original_max_position_embeddings"):
-            original_max_position_embeddings = self.config.original_max_position_embeddings
+        original_max_position_embeddings = getattr(
+            self.config, "original_max_position_embeddings", self.config.max_position_embeddings
+        )
+        if layer_type is None or len(self.layer_types) == 1:
+            rope_type = self.rope_type
+            original_inv_freq = self.original_inv_freq
+            prefix = ""
         else:
-            original_max_position_embeddings = self.config.max_position_embeddings
+            rope_type = self.rope_type[layer_type]
+            original_inv_freq = getattr(self, f"{layer_type}_original_inv_freq")
+            prefix = f"{layer_type}_"
+
         if seq_len > original_max_position_embeddings:
             if not hasattr(self, f"{layer_type}_long_inv_freq"):
-                rope_type = self.rope_type[layer_type] if layer_type is not None else self.rope_type
                 rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
                 long_inv_freq, _ = rope_init_fn(
                     self.config,
@@ -93,20 +100,14 @@ def dynamic_rope_update(rope_forward):
                     seq_len=original_max_position_embeddings + 1,
                     layer_type=layer_type,
                 )
-            inv_freq_name = f"{layer_type}_inv_freq" if layer_type is not None else "inv_freq"
-            self.register_buffer(inv_freq_name, long_inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_long_inv_freq", long_inv_freq)
+            self.register_buffer(f"{prefix}inv_freq", long_inv_freq, persistent=False)
+            setattr(self, f"{prefix}long_inv_freq", long_inv_freq)
         else:
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            if layer_type is not None:
-                original_inv_freq = getattr(f"{layer_type}_original_inv_freq").to(device)
-            else:
-                original_inv_freq = self.original_inv_freq.to(device)
-            prefix = f"{layer_type}_" if layer_type else ""
-            inv_freq_name, original_freq_name = f"{prefix}inv_freq", f"{prefix}original_inv_freq"
-            self.register_buffer(inv_freq_name, original_inv_freq, persistent=False)
-            setattr(self, original_freq_name, original_inv_freq)
+            original_inv_freq = original_inv_freq.to(device)
+            self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
+            setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
 
     def dynamic_frequency_update(self, position_ids, device, layer_type=None):
         """
@@ -115,8 +116,18 @@ def dynamic_rope_update(rope_forward):
         2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
         """
         seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            rope_type = self.rope_type[layer_type] if layer_type is not None else self.rope_type
+        if layer_type is None or len(self.layer_types) == 1:
+            rope_type = self.rope_type
+            max_seq_len_cached = self.max_seq_len_cached
+            original_inv_freq = self.original_inv_freq
+            prefix = ""
+        else:
+            rope_type = self.rope_type[layer_type]
+            max_seq_len_cached = getattr(self, f"{layer_type}_max_seq_len_cached", self.max_seq_len_cached)
+            original_inv_freq = getattr(self, f"{layer_type}_original_inv_freq")
+            prefix = f"{layer_type}_"
+
+        if seq_len > max_seq_len_cached:  # growth
             rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
             inv_freq, self.attention_scaling = rope_init_fn(
                 self.config,
@@ -125,22 +136,16 @@ def dynamic_rope_update(rope_forward):
                 layer_type=layer_type,
             )
             # TODO joao: may break with compilation
-            inv_freq_name = f"{layer_type}_inv_freq" if layer_type is not None else "inv_freq"
-            self.register_buffer(inv_freq_name, inv_freq, persistent=False)
-            self.max_seq_len_cached = seq_len
+            self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
+            setattr(self, f"{layer_type}_max_seq_len_cached", seq_len)
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+        if seq_len < self.original_max_seq_len and max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            if layer_type is not None:
-                original_inv_freq = getattr(f"{layer_type}_original_inv_freq").to(device)
-            else:
-                original_inv_freq = self.original_inv_freq.to(device)
-            prefix = f"{layer_type}_" if layer_type else ""
-            inv_freq_name, original_freq_name = f"{prefix}inv_freq", f"{prefix}original_inv_freq"
-            self.register_buffer(inv_freq_name, original_inv_freq, persistent=False)
-            setattr(self, original_freq_name, original_inv_freq)
-            self.max_seq_len_cached = self.original_max_seq_len
+            original_inv_freq = original_inv_freq.to(device)
+            self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
+            setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
+            setattr(self, f"{layer_type}_max_seq_len_cached", self.original_max_seq_len)
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):

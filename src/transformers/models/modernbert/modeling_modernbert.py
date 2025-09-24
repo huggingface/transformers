@@ -931,12 +931,14 @@ class ModernBertModel(ModernBertPreTrainedModel):
             )
 
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for encoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            position_embeddings = self.rotary_emb(hidden_states, position_ids, layer_type=encoder_layer.attention_type)
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
@@ -944,7 +946,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
                 position_ids=position_ids,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[encoder_layer.attention_type],
                 output_attentions=output_attentions,
             )
             hidden_states = layer_outputs[0]

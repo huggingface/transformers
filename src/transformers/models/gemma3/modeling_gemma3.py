@@ -593,6 +593,9 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # normalized
         # Gemma3Text downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
@@ -608,13 +611,10 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            position_embeddings = self.rotary_emb(
-                hidden_states, position_ids=position_ids, layer_type=decoder_layer.attention_type
-            )
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,

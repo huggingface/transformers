@@ -1866,6 +1866,9 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             temp_hidden_states.append(current_hidden_state)
 
         hidden_states = torch.stack(temp_hidden_states, dim=0)  # [num_altup_inputs, batch, seq_len, hidden_size]
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1875,9 +1878,6 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            position_embeddings = self.rotary_emb(
-                hidden_states, position_ids=position_ids, layer_type=decoder_layer.attention_type
-            )
             causal_mask = causal_mask_mapping[decoder_layer.attention_type]
             per_layer_input = per_layer_inputs[:, :, decoder_layer.layer_idx, :]
 
@@ -1885,7 +1885,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
                 hidden_states,
                 None,
                 None,
-                position_embeddings,
+                position_embeddings[decoder_layer.attention_type],
                 per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
