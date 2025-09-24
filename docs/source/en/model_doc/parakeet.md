@@ -48,7 +48,7 @@ This model was contributed by [Nithin Rao Koluguri](https://huggingface.co/nithi
 ```py
 from transformers import pipeline
 
-pipe = pipeline("automatic-speech-recognition", model="eustlb/parakeet-ctc-1.1b")
+pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-ctc-1.1b")
 out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 print(out)
 ```
@@ -63,8 +63,8 @@ import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-processor = AutoProcessor.from_pretrained("eustlb/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("eustlb/parakeet-ctc-1.1b", dtype="auto", device_map=device)
+processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map=device)
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -90,8 +90,8 @@ import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-processor = AutoProcessor.from_pretrained("eustlb/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("eustlb/parakeet-ctc-1.1b", dtype="auto", device_map=device)
+processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map=device)
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -170,8 +170,8 @@ import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-processor = AutoProcessor.from_pretrained("eustlb/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("eustlb/parakeet-ctc-1.1b", dtype="auto", device_map=device)
+processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map=device)
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))

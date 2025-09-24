@@ -26,12 +26,12 @@ class ParakeetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = ParakeetTokenizerFast
     test_slow_tokenizer = False
     test_rust_tokenizer = True
-    from_pretrained_id = "eustlb/parakeet-ctc-1.1b"
+    from_pretrained_id = "nvidia/parakeet-ctc-1.1b"
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        tokenizer = ParakeetTokenizerFast.from_pretrained("eustlb/parakeet-ctc-1.1b")
+        tokenizer = ParakeetTokenizerFast.from_pretrained("nvidia/parakeet-ctc-1.1b")
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @unittest.skip(

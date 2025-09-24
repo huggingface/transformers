@@ -31,7 +31,7 @@ class ParakeetProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        cls.checkpoint = "eustlb/parakeet-ctc-1.1b"
+        cls.checkpoint = "nvidia/parakeet-ctc-1.1b"
         processor = ParakeetProcessor.from_pretrained(cls.checkpoint)
         processor.save_pretrained(cls.tmpdirname)
 

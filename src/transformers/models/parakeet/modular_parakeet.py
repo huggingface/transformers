@@ -406,7 +406,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         >>> from transformers import AutoProcessor, ParakeetEncoder
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "eustlb/parakeet-ctc-1.1b"
+        >>> model_id = "nvidia/parakeet-ctc-1.1b"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> encoder = ParakeetEncoder.from_pretrained(model_id)
 
@@ -513,7 +513,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         >>> from transformers import AutoProcessor, ParakeetForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "eustlb/parakeet-ctc-1.1b"
+        >>> model_id = "nvidia/parakeet-ctc-1.1b"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = ParakeetForCTC.from_pretrained(model_id)
 
@@ -584,7 +584,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         >>> from transformers import AutoProcessor, ParakeetForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "eustlb/parakeet-ctc-1.1b"
+        >>> model_id = "nvidia/parakeet-ctc-1.1b"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = ParakeetForCTC.from_pretrained(model_id)
 

@@ -306,9 +306,9 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = "eustlb/parakeet-ctc-1.1b"
+        cls.checkpoint_name = "nvidia/parakeet-ctc-1.1b"
         cls.dtype = torch.bfloat16
-        cls.processor = AutoProcessor.from_pretrained("eustlb/parakeet-ctc-1.1b")
+        cls.processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
