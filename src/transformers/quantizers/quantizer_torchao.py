@@ -229,7 +229,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             ]
         return
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",

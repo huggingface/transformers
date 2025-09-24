@@ -100,7 +100,7 @@ class EetqHfQuantizer(HfQuantizer):
             logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with EETQ.")
         return dtype
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",

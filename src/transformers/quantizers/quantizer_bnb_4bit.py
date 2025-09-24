@@ -132,7 +132,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 "calculation. You may encounter unexpected behavior, or pass your own device map"
             )
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",

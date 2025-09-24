@@ -182,7 +182,7 @@ class HfQuantizer(ABC):
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
@@ -191,9 +191,7 @@ class HfQuantizer(ABC):
         **kwargs,
     ) -> bool:
         """
-        checks if a loaded state_dict component is part of quantized param + some validation; only defined if
-        requires_parameters_quantization == True for quantization methods that require to create a new parameters
-        for quantization.
+        Check whether a given param needs quantization as defined by `create_quantized_param`.
         """
         return False
 

@@ -46,7 +46,6 @@ class HqqHfQuantizer(HfQuantizer):
     """
     HQQ quantizer base HF class.
     nn.Linear modules are first tagged with quant_config in _process_model_before_weight_loading().
-    The actual quantization and offloading to the GPU is done in check_quantized_param().
     """
 
     use_keep_in_fp32_modules = False
@@ -152,7 +151,7 @@ class HqqHfQuantizer(HfQuantizer):
 
         return list(new_keys)
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",

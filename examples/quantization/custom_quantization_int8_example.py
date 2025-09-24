@@ -159,7 +159,7 @@ class Int8SymmetricQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model,
         param_value: "torch.Tensor",
