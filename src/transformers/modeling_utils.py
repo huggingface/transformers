@@ -698,8 +698,7 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
-        QuantizationMethod.HQQ,
+    is_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
         QuantizationMethod.BITS_AND_BYTES,
         QuantizationMethod.TORCHAO,
     }
@@ -819,7 +818,7 @@ def load_shard_file(args):
         shard_file,
         state_dict,
         disk_only_shard_files,
-        is_hqq_or_bnb_or_ao,
+        is_bnb_or_ao,
         is_quantized,
         device_map,
         hf_quantizer,
@@ -840,7 +839,7 @@ def load_shard_file(args):
     map_location = "cpu"
     if (
         shard_file.endswith(".safetensors")
-        and not is_hqq_or_bnb_or_ao
+        and not is_bnb_or_ao
         and not (is_deepspeed_zero3_enabled() and not is_quantized)
     ):
         map_location = "meta"
@@ -5199,8 +5198,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
-        is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
-            QuantizationMethod.HQQ,
+        is_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.BITS_AND_BYTES,
             QuantizationMethod.TORCHAO,
         }
@@ -5336,7 +5334,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 shard_file,
                 state_dict,
                 disk_only_shard_files,
-                is_hqq_or_bnb_or_ao,
+                is_bnb_or_ao,
                 is_quantized,
                 device_map,
                 hf_quantizer,
