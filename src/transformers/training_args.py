@@ -248,6 +248,7 @@ class TrainingArguments:
                 - `"no"`: No evaluation is done during training.
                 - `"steps"`: Evaluation is done (and logged) every `eval_steps`.
                 - `"epoch"`: Evaluation is done at the end of each epoch.
+                - `"time"`: Evaluation is done at the end of each time interval specified by `eval_minutes`.
 
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
@@ -352,6 +353,7 @@ class TrainingArguments:
                 - `"epoch"`: Save is done at the end of each epoch.
                 - `"steps"`: Save is done every `save_steps`.
                 - `"best"`: Save is done whenever a new `best_metric` is achieved.
+                - `"time"`: Save is done at the end of each time interval specified by `save_minutes`.
 
                 If `"epoch"` or `"steps"` is chosen, saving will also be performed at the
                 very end of training, always.
@@ -501,6 +503,12 @@ class TrainingArguments:
             - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
               `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
+        eval_minutes (`int`, *optional*):
+            Number of minutes between two evaluations if `eval_strategy="time"`.
+        save_minutes (`int`, *optional*):
+            Number of minutes between two checkpoint saves if `save_strategy="time"`.
+        logging_minutes (`int`, *optional*):
+            Number of minutes between two logs if `logging_strategy="time"`.
         fsdp_config (`str` or `dict`, *optional*):
             Config to be used with fsdp (Pytorch Distributed Parallel Training). The value is either a location of
             fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`.
@@ -522,7 +530,7 @@ class TrainingArguments:
                       gradient
                         computation.
                     - `"backward_post"` : This prefetches the next set of parameters after the current set of
-                      parameter’s
+                      parameter's
                         gradient computation.
                 - forward_prefetch (`bool`, *optional*, defaults to `False`)
                     FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
@@ -976,6 +984,10 @@ class TrainingArguments:
             )
         },
     )
+    logging_minutes: Optional[int] = field(
+        default=None,
+        metadata={"help": "Log every X minutes if logging_strategy is 'time'."},
+    )
     logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
     save_strategy: Union[SaveStrategy, str] = field(
         default="steps",
@@ -989,6 +1001,10 @@ class TrainingArguments:
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
+    )
+    save_minutes: Optional[int] = field(
+        default=None,
+        metadata={"help": "Save checkpoint every X minutes if eval_strategy is 'time'."},
     )
     save_total_limit: Optional[int] = field(
         default=None,
@@ -1004,6 +1020,7 @@ class TrainingArguments:
             )
         },
     )
+
     save_safetensors: Optional[bool] = field(
         default=True,
         metadata={
@@ -1150,6 +1167,10 @@ class TrainingArguments:
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
+    )
+    eval_minutes: Optional[int] = field(
+        default=None,
+        metadata={"help": "Run an evaluation every X minutes if eval_strategy is 'time'."},
     )
     dataloader_num_workers: int = field(
         default=0,
@@ -1624,6 +1645,21 @@ class TrainingArguments:
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.eval_strategy != IntervalStrategy.NO:
             self.do_eval = True
+
+        # Validate time-based strategies
+        if self.eval_strategy == IntervalStrategy.TIME:
+            if self.eval_minutes is None or self.eval_minutes <= 0:
+                raise ValueError("eval_minutes must be a positive integer when using time-based evaluation strategy")
+
+        if self.save_strategy == SaveStrategy.TIME:
+            if self.save_minutes is None or self.save_minutes <= 0:
+                raise ValueError("save_minutes must be a positive integer when using time-based save strategy")
+
+        if self.logging_strategy == IntervalStrategy.TIME:
+            if self.logging_minutes is None or self.logging_minutes <= 0:
+                raise ValueError(
+                    "logging_minutes must be a positive integer when using time-based evaluation strategy"
+                )
 
         if self.torch_empty_cache_steps is not None:
             if not (isinstance(self.torch_empty_cache_steps, int) and self.torch_empty_cache_steps > 0):
@@ -2783,6 +2819,7 @@ class TrainingArguments:
                     - `"no"`: No save is done during training.
                     - `"epoch"`: Save is done at the end of each epoch.
                     - `"steps"`: Save is done every `save_steps`.
+                    - `"time"`: Save is done every `save_minute` minutess.
 
             steps (`int`, *optional*, defaults to 500):
                 Number of updates steps before two checkpoint saves if `strategy="steps"`.
@@ -2836,6 +2873,7 @@ class TrainingArguments:
                     - `"no"`: No logging is done during training.
                     - `"epoch"`: Logging is done at the end of each epoch.
                     - `"steps"`: Logging is done every `logging_steps`.
+                    - `"time"`: Logging is done every `logging_minutes` minutes.
 
             steps (`int`, *optional*, defaults to 500):
                 Number of update steps between two logs if `strategy="steps"`.
