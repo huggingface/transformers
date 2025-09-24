@@ -297,14 +297,6 @@ class FlexOlmoExperts(nn.ModuleList):
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
-    def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        if self.norm_topk_prob:
-            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        top_k_weights = top_k_weights.to(hidden_states.dtype)
-        return top_k_index, top_k_weights
-
 
 class FlexOlmoSparseMoeBlock(nn.Module):
     def __init__(self, config):
@@ -315,11 +307,20 @@ class FlexOlmoSparseMoeBlock(nn.Module):
         self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
         self.experts = FlexOlmoExperts(config)
 
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
+        if self.norm_topk_prob:
+            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
+        return top_k_index, top_k_weights
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         router_logits = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states, router_logits).reshape(
+        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
+        final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).reshape(
             batch_size, sequence_length, hidden_dim
         )
         return final_hidden_states
