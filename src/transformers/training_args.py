@@ -1344,9 +1344,6 @@ class TrainingArguments:
     skip_memory_metrics: bool = field(
         default=True, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
-    use_legacy_prediction_loop: bool = field(
-        default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}
-    )
     push_to_hub: bool = field(
         default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
     )

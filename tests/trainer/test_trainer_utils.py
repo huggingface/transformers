@@ -40,7 +40,6 @@ if is_torch_available():
         IterableDatasetShard,
         LabelSmoother,
         LengthGroupedSampler,
-        SequentialDistributedSampler,
         ShardSampler,
         get_parameter_names,
         numpy_pad_and_concatenate,
@@ -296,38 +295,6 @@ class TrainerUtilsTest(unittest.TestCase):
 
             self.assertEqual(set(total[:length]), set(dataset))
             self.assertEqual(set(total[length:]), set(total[: (len(total) - length)]))
-
-    def test_sequential_distributed_sampler(self):
-        batch_size = 16
-        for length in [23, 64, 123]:
-            dataset = list(range(length))
-            shard1 = SequentialDistributedSampler(dataset, num_replicas=2, rank=0)
-            shard2 = SequentialDistributedSampler(dataset, num_replicas=2, rank=1)
-
-            # Sample
-            samples1 = list(shard1)
-            samples2 = list(shard2)
-
-            total = samples1 + samples2
-
-            self.assertListEqual(total[:length], dataset)
-            self.assertListEqual(total[length:], dataset[: (len(total) - length)])
-
-            # With a batch_size passed
-            shard1 = SequentialDistributedSampler(dataset, num_replicas=2, rank=0, batch_size=batch_size)
-            shard2 = SequentialDistributedSampler(dataset, num_replicas=2, rank=1, batch_size=batch_size)
-
-            # Sample
-            samples1 = list(shard1)
-            samples2 = list(shard2)
-
-            self.assertTrue(len(samples1) % batch_size == 0)
-            self.assertTrue(len(samples2) % batch_size == 0)
-
-            total = samples1 + samples2
-
-            self.assertListEqual(total[:length], dataset)
-            self.assertListEqual(total[length:], dataset[: (len(total) - length)])
 
     def check_iterable_dataset_shard(self, dataset, batch_size, drop_last, num_processes=2, epoch=0):
         # Set the seed for the base dataset to get the proper reference.
