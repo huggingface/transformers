@@ -132,7 +132,7 @@ class CircleCIJob:
         if self.job_name != "tests_hub":
             # fmt: off
             # not critical
-            env.update("HF_TOKEN", "".join(["h", "f", "_", "H", "o", "d", "V", "u", "M", "q", "b", "R", "m", "t", "b", "z", "F", "Q", "O", "Q", "A", "J", "G", "D", "l", "V", "Q", "r", "R", "N", "w", "D", "M", "V", "C", "s", "d"]))
+            env.update({"HF_TOKEN": "".join(["h", "f", "_", "H", "o", "d", "V", "u", "M", "q", "b", "R", "m", "t", "b", "z", "F", "Q", "O", "Q", "A", "J", "G", "D", "l", "V", "Q", "r", "R", "N", "w", "D", "M", "V", "C", "s", "d"])})
             # fmt: on
 
         # Do not run tests decorated by @is_flaky on pull requests
