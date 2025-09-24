@@ -853,7 +853,7 @@ def load_shard_file(args):
         hf_quantizer,
         key_renaming_mapping,
         weights_only,
-        model_to_load,
+        model,
         expected_keys,
         reverse_key_renaming_mapping,
         disk_offload_folder,
@@ -906,11 +906,11 @@ def load_shard_file(args):
     error_msgs = []
 
     if is_deepspeed_zero3_enabled() and not is_quantized:
-        error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict)
+        error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
     # Skip it with fsdp on ranks other than 0
     elif not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
         disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
-            model_to_load,
+            model,
             state_dict,
             shard_file,
             expected_keys,
@@ -1396,7 +1396,7 @@ def _find_missing_and_unexpected_keys(
     """
     prefix = model.base_model_prefix
 
-    # Compute expected keys, i.e. keys that the FULL model (not model_to_load) expects
+    # Compute expected keys, i.e. keys that the full model expects
     expected_keys = list(model.state_dict().keys())
     if hf_quantizer is not None:
         expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, checkpoint_keys)
@@ -5156,6 +5156,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         prefix = self.base_model_prefix
         _prefix = f"{prefix}."
 
+        if loading_task_model_from_base_state_dict:
+            task_specific_expected_keys = [key for key in self.state_dict() if not key.startswith(_prefix)]
+
         renamed_keys = {}
         key_renaming_mapping = {}
         for key in checkpoint_keys:
@@ -5173,6 +5176,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # In this case, we need to add the prefix to the keys, to match them to the expected keys
             if loading_task_model_from_base_state_dict:
+                # small sanity check: if a key has the same name as a task-specific key, it's ambiguous and we raise
+                # (we cannot which key it refers to, the one from base model or the one from task-specific?)
+                if new_key in task_specific_expected_keys:
+                    raise ValueError(
+                        "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
+                        "properly saved?"
+                    )
                 new_key = ".".join([prefix, new_key])
             # In this case we need to remove the prefix from the key to match them to the expected keys, and use
             # only the keys starting with the prefix
@@ -5309,30 +5319,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 
-        # Make sure we are able to load base models as well as derived models (specific task models, with heads)
-        model_to_load = model
-        # In this case, we load a ForTaskModel with keys from a BaseModel -> only load keys to the BaseModel
-        if loading_task_model_from_base_state_dict:
-            model_to_load = getattr(model, prefix)
-            # Here we need to remove the prefix we added to correctly find missing/unexpected keys, as we will load
-            # in the submodule
-            key_renaming_mapping = {k: v[len(_prefix) :] for k, v in key_renaming_mapping.items()}
-            checkpoint_keys = list(key_renaming_mapping.values())
-            unexpected_keys = [k[len(_prefix) :] if k.startswith(_prefix) else k for k in unexpected_keys]
-            # We need to update the device map as well
-            if device_map is not None:
-                device_map = {k[len(_prefix) :] if k.startswith(_prefix) else k: v for k, v in device_map.items()}
-            # small sanity check: the base model should not contain task-specific head keys
-            task_specific_expected_keys = [s for s in model.state_dict() if not s.startswith(_prefix)]
-            base_model_expected_keys = list(model_to_load.state_dict().keys())
-            if any(
-                key in task_specific_expected_keys and key not in base_model_expected_keys for key in unexpected_keys
-            ):
-                raise ValueError(
-                    "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
-                    "properly saved?"
-                )
-
         # Get reverse key mapping
         reverse_key_renaming_mapping = {v: k for k, v in key_renaming_mapping.items()}
 
@@ -5395,17 +5381,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             checkpoint_files = [""]
 
         # Compute expected model keys
-        expected_keys = list(model_to_load.state_dict().keys())
+        expected_keys = list(model.state_dict().keys())
         if hf_quantizer is not None:
-            expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
+            expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, checkpoint_keys)
 
         if logger.level >= logging.WARNING:
-            verify_tp_plan(expected_keys, getattr(model_to_load, "_tp_plan", None))
+            verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
 
         # Warmup cuda to load the weights much faster on devices
         if device_map is not None and not is_hqq_or_quark:
             expanded_device_map = expand_device_map(device_map, expected_keys)
-            caching_allocator_warmup(model_to_load, expanded_device_map, hf_quantizer)
+            caching_allocator_warmup(model, expanded_device_map, hf_quantizer)
 
         # Prepare and compatabilize arguments for serial and parallel shard loading
         args_list = [
@@ -5419,7 +5405,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 hf_quantizer,
                 key_renaming_mapping,
                 weights_only,
-                model_to_load,
+                model,
                 expected_keys,
                 reverse_key_renaming_mapping,
                 disk_offload_folder,
@@ -5468,11 +5454,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # one-at-a-time param loading for the cpu offloaded params
         if offload_state_dict:
             # Load back temporarily offloaded state dict
-            load_offloaded_weights(model_to_load, cpu_offload_index, cpu_offload_folder)
+            load_offloaded_weights(model, cpu_offload_index, cpu_offload_folder)
             shutil.rmtree(cpu_offload_folder)
 
         if hf_quantizer is not None:
-            missing_keys = hf_quantizer.update_missing_keys_after_loading(model_to_load, missing_keys, prefix)
+            missing_keys = hf_quantizer.update_missing_keys_after_loading(model, missing_keys, prefix)
 
         # Post-processing for tensor parallelism
         if device_mesh is not None:
