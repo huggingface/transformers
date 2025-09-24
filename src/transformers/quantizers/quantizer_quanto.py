@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from packaging import version
 
@@ -103,25 +103,9 @@ class QuantoHfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
-    def param_needs_quantization(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ) -> bool:
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
-
-        device_map = kwargs.get("device_map")
-        param_device = kwargs.get("param_device")
-        # we don't quantize the model if the module is going to be offloaded to the cpu
-        if device_map is not None and param_device is not None:
-            device_map_values = set(device_map.values())
-            if param_device == "cpu" and len(device_map_values) > 1:
-                if not (device_map_values == {"cpu"} or device_map_values == {"cpu", "disk"}):
-                    return False
 
         module, tensor_name = get_module_from_name(model, param_name)
         # We only quantize the weights and the bias is not quantized.

@@ -229,23 +229,12 @@ class TorchAoHfQuantizer(HfQuantizer):
             ]
         return
 
-    def param_needs_quantization(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ) -> bool:
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         if self.quantization_config.quant_type == "autoquant":
             return False
 
-        param_device = kwargs.pop("param_device", None)
         # check if the param_name is not in self.modules_to_not_convert
         if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
-            return False
-        elif param_device == "cpu" and self.offload:
-            # We don't quantize weights that we offload
             return False
         else:
             # we only quantize the weight of nn.Linear and nn.Embedding

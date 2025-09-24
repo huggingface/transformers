@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ..file_utils import is_torch_available
 from .base import HfQuantizer
@@ -82,14 +82,7 @@ class QuarkHfQuantizer(HfQuantizer):
 
         return model
 
-    def param_needs_quantization(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ) -> bool:
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         return True
 
     def create_quantized_param(self, model, param, param_name, param_device, state_dict) -> "torch.nn.Parameter":

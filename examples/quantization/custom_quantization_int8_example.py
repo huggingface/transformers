@@ -159,24 +159,13 @@ class Int8SymmetricQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def param_needs_quantization(
-        self,
-        model,
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ):
+    def param_needs_quantization(self, model, param_name: str, **kwargs) -> bool:
         module, tensor_name = get_module_from_name(model, param_name)
 
         if isinstance(module, Int8SymmetricLinear):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.int8:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
-                if tensor_name == "weight_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         return False
 
@@ -191,6 +180,16 @@ class Int8SymmetricQuantizer(HfQuantizer):
         """
         Quantizes weights to INT8 symmetric format.
         """
+        # Sanity check
+        module, tensor_name = get_module_from_name(model, param_name)
+        if isinstance(module, Int8SymmetricLinear):
+            if self.pre_quantized or tensor_name == "bias":
+                if tensor_name == "weight" and param_value.dtype != torch.int8:
+                    raise ValueError("Expect quantized weights but got an unquantized weight")
+            else:
+                if tensor_name == "weight_scale":
+                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+
         abs_max_per_row = torch.max(torch.abs(param_value), dim=1, keepdim=True)[0].clamp(min=1e-5)
 
         weight_scale = abs_max_per_row / 127.0

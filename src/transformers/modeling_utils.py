@@ -726,9 +726,7 @@ def _load_state_dict_into_meta_model(
         )
 
         if device_mesh is not None:
-            if not is_quantized or not hf_quantizer.param_needs_quantization(
-                model, param, param_name, state_dict, device_map=device_map
-            ):
+            if not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
                 # In this case, the param is already on the correct device!
                 shard_and_distribute_module(
                     model,
@@ -775,9 +773,7 @@ def _load_state_dict_into_meta_model(
             if param_device == "disk":
                 if not is_safetensors:
                     disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
-            elif not is_quantized or not hf_quantizer.param_needs_quantization(
-                model, param, param_name, state_dict, param_device=param_device, device_map=device_map
-            ):
+            elif not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
@@ -5711,9 +5707,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
                 value = torch.empty_like(param, dtype=dtype, device="cpu")
-                if not is_quantized or not hf_quantizer.param_needs_quantization(
-                    self, param_value=value, param_name=key, state_dict={}
-                ):
+                if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
                 else:
                     hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict)

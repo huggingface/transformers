@@ -105,33 +105,20 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             )
         return dtype
 
-    def param_needs_quantization(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ):
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
 
         module, tensor_name = get_module_from_name(model, param_name)
 
         if isinstance(module, FbgemmFp8Linear):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
-                if tensor_name == "weight_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         if isinstance(module, FbgemmFp8Llama4TextExperts):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             else:
-                if tensor_name == "gate_up_proj_scale" or tensor_name == "down_proj_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         return False
 
@@ -147,9 +134,23 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         Quantizes weights into weight and weight_scale
         """
 
-        from ..integrations import FbgemmFp8Llama4TextExperts
+        from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
 
         module, tensor_name = get_module_from_name(model, param_name)
+
+        # Sanity checks
+        if isinstance(module, FbgemmFp8Linear):
+            if self.pre_quantized or tensor_name == "bias":
+                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
+                    raise ValueError("Expect quantized weights but got an unquantized weight")
+            else:
+                if tensor_name == "weight_scale":
+                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+        if isinstance(module, FbgemmFp8Llama4TextExperts):
+            if not (self.pre_quantized or tensor_name == "bias"):
+                if tensor_name == "gate_up_proj_scale" or tensor_name == "down_proj_scale":
+                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+
         if isinstance(module, FbgemmFp8Llama4TextExperts):
             if tensor_name == "gate_up_proj":
                 # Process each expert separately

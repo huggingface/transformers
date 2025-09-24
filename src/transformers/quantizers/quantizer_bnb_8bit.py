@@ -158,25 +158,11 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             logger.info("target_dtype {target_dtype} is replaced by `torch.int8` for 8-bit BnB quantization")
         return torch.int8
 
-    def param_needs_quantization(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ):
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs):
         import bitsandbytes as bnb
 
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Int8Params):
-            if self.pre_quantized:
-                if param_name.replace("weight", "SCB") not in state_dict:
-                    raise ValueError("Missing quantization component `SCB`")
-                if param_value.dtype != torch.int8:
-                    raise ValueError(
-                        f"Incompatible dtype `{param_value.dtype}` when loading 8-bit prequantized weight. Expected `torch.int8`."
-                    )
             return True
         return False
 
@@ -193,6 +179,17 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         needs aux items from state dicts, if found
         """
         import bitsandbytes as bnb
+
+        # Sanity check
+        module, tensor_name = get_module_from_name(model, param_name)
+        if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Int8Params):
+            if self.pre_quantized:
+                if param_name.replace("weight", "SCB") not in state_dict:
+                    raise ValueError("Missing quantization component `SCB`")
+                if param_value.dtype != torch.int8:
+                    raise ValueError(
+                        f"Incompatible dtype `{param_value.dtype}` when loading 8-bit prequantized weight. Expected `torch.int8`."
+                    )
 
         fp16_statistics_key = param_name.replace("weight", "SCB")
         fp16_statistics = state_dict.get(fp16_statistics_key)

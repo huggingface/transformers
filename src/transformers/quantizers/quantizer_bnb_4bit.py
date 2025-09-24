@@ -132,14 +132,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 "calculation. You may encounter unexpected behavior, or pass your own device map"
             )
 
-    def param_needs_quantization(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ) -> bool:
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
 
         module, tensor_name = get_module_from_name(model, param_name)
@@ -147,8 +140,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             # Add here check for loaded components' dtypes once serialization is implemented
             return True
         elif isinstance(module, bnb.nn.Linear4bit) and tensor_name == "bias":
-            # bias could be loaded by regular set_module_tensor_to_device() from accelerate,
-            # but it would wrongly use uninitialized weight there.
             return True
         else:
             return False

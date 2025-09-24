@@ -151,14 +151,7 @@ class HqqHfQuantizer(HfQuantizer):
 
         return list(new_keys)
 
-    def param_needs_quantization(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ) -> bool:
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         if is_hqq_available():
             from hqq.core.quantize import HQQLinear
         module, tensor_name = get_module_from_name(model, param_name)
