@@ -99,29 +99,29 @@ For a more detailed look at the model weights, use the [safetensors viewer](http
 
 | Tensors | Shape |	Precision |
 | ------- | ----- | --------- |
-model.layers.0.input_layernorm.weight	| [4 096]	| BF16 
-model.layers.0.mlp.down_proj.input_scale	| [1]	| BF16 
-model.layers.0.mlp.down_proj.weight	| [4 096, 14 336] |	F8_E4M3 
-model.layers.0.mlp.down_proj.weight_scale |	[1]	| BF16 
-model.layers.0.mlp.gate_proj.input_scale |	[1]	| BF16 
-model.layers.0.mlp.gate_proj.weight	| [14 336, 4 096]	| F8_E4M3 
-model.layers.0.mlp.gate_proj.weight_scale	| [1] |	BF16 
-model.layers.0.mlp.up_proj.input_scale|	[1]	|BF16 
-model.layers.0.mlp.up_proj.weight |	[14 336, 4 096]	| F8_E4M3 
-model.layers.0.mlp.up_proj.weight_scale | [1]	| BF16 
-model.layers.0.post_attention_layernorm.weight |	[4 096]	|BF16 
+model.layers.0.input_layernorm.weight	| [4 096]	| BF16
+model.layers.0.mlp.down_proj.input_scale	| [1]	| BF16
+model.layers.0.mlp.down_proj.weight	| [4 096, 14 336] |	F8_E4M3
+model.layers.0.mlp.down_proj.weight_scale |	[1]	| BF16
+model.layers.0.mlp.gate_proj.input_scale |	[1]	| BF16
+model.layers.0.mlp.gate_proj.weight	| [14 336, 4 096]	| F8_E4M3
+model.layers.0.mlp.gate_proj.weight_scale	| [1] |	BF16
+model.layers.0.mlp.up_proj.input_scale|	[1]	|BF16
+model.layers.0.mlp.up_proj.weight |	[14 336, 4 096]	| F8_E4M3
+model.layers.0.mlp.up_proj.weight_scale | [1]	| BF16
+model.layers.0.post_attention_layernorm.weight |	[4 096]	|BF16
 model.layers.0.self_attn.k_proj.input_scale |	[1]	|  BF16
 model.layers.0.self_attn.k_proj.weight |	[1 024, 4 096]|	F8_E4M3
-model.layers.0.self_attn.k_proj.weight_scale |[1]	| BF16 
+model.layers.0.self_attn.k_proj.weight_scale |[1]	| BF16
 model.layers.0.self_attn.o_proj.input_scale	| [1]	| BF16
-model.layers.0.self_attn.o_proj.weight | [4 096, 4 096]	| F8_E4M3 
-model.layers.0.self_attn.o_proj.weight_scale | [1]	| BF16 
-model.layers.0.self_attn.q_proj.input_scale	| [1]	| BF16 
-model.layers.0.self_attn.q_proj.weight | [4 096, 4 096]	| F8_E4M3 
-model.layers.0.self_attn.q_proj.weight_scale |	[1] | BF16 
-model.layers.0.self_attn.v_proj.input_scale	| [1] | BF16 
-model.layers.0.self_attn.v_proj.weight |	[1 024, 4 096]	| F8_E4M3 
-model.layers.0.self_attn.v_proj.weight_scale |	[1] |	BF16 
+model.layers.0.self_attn.o_proj.weight | [4 096, 4 096]	| F8_E4M3
+model.layers.0.self_attn.o_proj.weight_scale | [1]	| BF16
+model.layers.0.self_attn.q_proj.input_scale	| [1]	| BF16
+model.layers.0.self_attn.q_proj.weight | [4 096, 4 096]	| F8_E4M3
+model.layers.0.self_attn.q_proj.weight_scale |	[1] | BF16
+model.layers.0.self_attn.v_proj.input_scale	| [1] | BF16
+model.layers.0.self_attn.v_proj.weight |	[1 024, 4 096]	| F8_E4M3
+model.layers.0.self_attn.v_proj.weight_scale |	[1] |	BF16
 
 When loading a compressed-tensors model with the [`~quantizers.HFQuantizer`] integration, all the [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) modules specified in the quantization config are replaced by [CompressedLinear](https://github.com/neuralmagic/compressed-tensors/blob/975cb223b19fcac2b98a4271d17668462d4d6e1d/src/compressed_tensors/linear/compressed_linear.py#L30) modules that manage the compressed weights and forward pass for inference. The `lm_head` module is still kept as an unquantized nn.Linear module.
 

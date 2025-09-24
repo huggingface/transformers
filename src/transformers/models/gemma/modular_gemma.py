@@ -20,18 +20,23 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
 )
 from ..llama.tokenization_llama import LlamaTokenizer
 
@@ -55,6 +60,7 @@ class GemmaConfig(PretrainedConfig):
     e.g. [google/gemma-7b](https://huggingface.co/google/gemma-7b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the Gemma model. Defines the number of different tokens that can be represented by the
@@ -102,6 +108,11 @@ class GemmaConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
+        use_bidirectional_attention (`bool`, *optional*):
+            If True, the model will attend to all text tokens instead of using a causal mask.
+
     ```python
     >>> from transformers import GemmaModel, GemmaConfig
     >>> # Initializing a Gemma gemma-7b style configuration
@@ -150,6 +161,8 @@ class GemmaConfig(PretrainedConfig):
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,
+        layer_types=None,
+        use_bidirectional_attention=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -167,6 +180,12 @@ class GemmaConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.use_bidirectional_attention = use_bidirectional_attention
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -361,6 +380,33 @@ class GemmaMLP(LlamaMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
+class GemmaRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+
+class GemmaAttention(LlamaAttention):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: GemmaConfig, layer_idx: int):
+        super().__init__()
+        self.is_causal = not getattr(config, "use_bidirectional_attention", False)
+
+
+class GemmaDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: GemmaConfig, layer_idx: int):
+        super().__init__()
+        self.attention_type = config.layer_types[layer_idx]
+
+
+class GemmaPreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        if "RMSNorm" in module.__class__.__name__:
+            module.weight.data.zero_()
+
+
 class GemmaModel(LlamaModel):
     def forward(
         self,
@@ -391,14 +437,18 @@ class GemmaModel(LlamaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(
+                    config=self.config,
+                    input_embeds=inputs_embeds,
+                    attention_mask=attention_mask,
+                    cache_position=cache_position,
+                    past_key_values=past_key_values,
+                    position_ids=position_ids,
+                )
+            }
 
         # embed positions
         hidden_states = inputs_embeds
@@ -415,7 +465,7 @@ class GemmaModel(LlamaModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,

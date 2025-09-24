@@ -15,6 +15,7 @@
 import ast
 import collections
 import contextlib
+import copy
 import doctest
 import functools
 import gc
@@ -2752,8 +2753,6 @@ def run_test_using_subprocess(func):
         else:
             test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
             try:
-                import copy
-
                 env = copy.deepcopy(os.environ)
                 env["_INSIDE_SUB_PROCESS"] = "1"
                 # This prevents the entries in `short test summary info` given by the subprocess being truncated. so the
@@ -3358,15 +3357,27 @@ def _get_test_info():
     stack_from_inspect = inspect.stack()
     # but visit from the top frame to the most recent frame
 
+    actual_test_file, _actual_test_class = test_file, test_class
     test_frame, test_obj, test_method = None, None, None
     for frame in reversed(stack_from_inspect):
-        if test_file in str(frame).replace(r"\\", "/"):
-            if test_name == frame.frame.f_locals["self"]._testMethodName:
-                test_frame = frame
-                # The test instance
-                test_obj = frame.frame.f_locals["self"]
-                test_method = getattr(test_obj, test_name)
-                break
+        # if test_file in str(frame).replace(r"\\", "/"):
+        # check frame's function + if it has `self` as locals; double check if self has the (function) name
+        # TODO: Question: How about expanded?
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
+            # if test_name == frame.frame.f_locals["self"]._testMethodName:
+            test_frame = frame
+            # The test instance
+            test_obj = frame.frame.f_locals["self"]
+            # TODO: Do we get the (relative?) path or it's just a file name?
+            # TODO: Does `test_obj` always have `tearDown` object?
+            actual_test_file = frame.filename
+            # TODO: check `test_method` will work used at the several places!
+            test_method = getattr(test_obj, test_name)
+            break
 
     if test_frame is not None:
         line_number = test_frame.lineno
@@ -3380,9 +3391,12 @@ def _get_test_info():
     # From the most outer (i.e. python's `runpy.py`) frame to most inner frame (i.e. the frame of this method)
     # Between `the test method being called` and `before entering `patched``.
     for frame in reversed(stack_from_inspect):
-        if test_file in str(frame).replace(r"\\", "/"):
-            if "self" in frame.frame.f_locals and test_name == frame.frame.f_locals["self"]._testMethodName:
-                to_capture = True
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
+            to_capture = True
         # TODO: check simply with the name is not robust.
         elif "patched" == frame.frame.f_code.co_name:
             frame_of_patched_obj = frame
@@ -3416,7 +3430,7 @@ def _get_test_info():
     # Get the code context in the test function/method.
     from _pytest._code.source import Source
 
-    with open(test_file) as fp:
+    with open(actual_test_file) as fp:
         s = fp.read()
         source = Source(s)
         test_code_context = "\n".join(source.getstatement(test_lineno - 1).lines)
@@ -3427,9 +3441,7 @@ def _get_test_info():
         source = Source(s)
         caller_code_context = "\n".join(source.getstatement(caller_lineno - 1).lines)
 
-    test_info = (
-        f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {test_file}:{test_lineno}\n\n{test_code_context}"
-    )
+    test_info = f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {actual_test_file}:{test_lineno}\n\n{test_code_context}"
     test_info = f"{test_info}\n\n{'-' * 80}\n\ncaller context: {caller_path}:{caller_lineno}\n\n{caller_code_context}"
 
     return (
@@ -3650,6 +3662,17 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
             info = _prepare_debugging_info(test_info, info)
 
+            # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
+            # behaves as usual.
+            # On Github Actions or CircleCI, this is set automatically.
+            # When running manually, it's the user to determine if to set it.
+            # This is to avoid the patched function being called `with self.assertRaises(AssertionError):` and fails
+            # because of the missing expected `AssertionError`.
+            # TODO (ydshieh): If there is way to raise only when we are inside such context managers?
+            # TODO (ydshieh): How not to record the failure if it happens inside `self.assertRaises(AssertionError)`?
+            if os.getenv("CI") == "true":
+                raise captured_exception.with_traceback(test_traceback)
+
             # Save this, so we can raise at the end of the current test
             captured_failure = {
                 "result": "failed",
@@ -3732,6 +3755,18 @@ def patch_testing_methods_to_collect_info():
         _patch_with_call_info(torch.testing, "assert_close", _parse_call_info, target_args=("actual", "expected"))
 
     _patch_with_call_info(unittest.case.TestCase, "assertEqual", _parse_call_info, target_args=("first", "second"))
+    _patch_with_call_info(unittest.case.TestCase, "assertListEqual", _parse_call_info, target_args=("list1", "list2"))
+    _patch_with_call_info(
+        unittest.case.TestCase, "assertTupleEqual", _parse_call_info, target_args=("tuple1", "tuple2")
+    )
+    _patch_with_call_info(unittest.case.TestCase, "assertSetEqual", _parse_call_info, target_args=("set1", "set1"))
+    _patch_with_call_info(unittest.case.TestCase, "assertDictEqual", _parse_call_info, target_args=("d1", "d2"))
+    _patch_with_call_info(unittest.case.TestCase, "assertIn", _parse_call_info, target_args=("member", "container"))
+    _patch_with_call_info(unittest.case.TestCase, "assertNotIn", _parse_call_info, target_args=("member", "container"))
+    _patch_with_call_info(unittest.case.TestCase, "assertLess", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertLessEqual", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertGreater", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertGreaterEqual", _parse_call_info, target_args=("a", "b"))
 
 
 def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: Optional[dict] = None):
