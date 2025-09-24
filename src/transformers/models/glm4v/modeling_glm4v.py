@@ -398,7 +398,7 @@ class Glm4vTextRotaryEmbedding(nn.Module):
         #   1) Model is used as backbone with several other models. E.g. Gemma which has sliding
         #      layers with Paligemma and has only one layer type as a standalone model
         #   2) Tiny models used for testing do not have enough layers to reach the next layer type
-        self.layer_types = getattr(config, "layer_types", [None])
+        self.layer_types = set(config.layer_types) if hasattr(config, "layer_types") else None
         if self.layer_types is not None and len(self.layer_types) > 1:
             self.rope_type = {}
             for layer_type in self.layer_types:
@@ -858,7 +858,7 @@ class Glm4vRotaryEmbedding(nn.Module):
         #   1) Model is used as backbone with several other models. E.g. Gemma which has sliding
         #      layers with Paligemma and has only one layer type as a standalone model
         #   2) Tiny models used for testing do not have enough layers to reach the next layer type
-        self.layer_types = getattr(config, "layer_types", [None])
+        self.layer_types = set(config.layer_types) if hasattr(config, "layer_types") else None
         if self.layer_types is not None and len(self.layer_types) > 1:
             self.rope_type = {}
             for layer_type in self.layer_types:

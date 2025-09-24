@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import copy
 from functools import wraps
 from typing import Optional, TypedDict
 
@@ -31,7 +32,6 @@ def standardize_rope_params(config):
     """
     Helper to standardize the config's rope params field by ensuring the params are defined for each
     later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
-    NOTE: It updates the config in-place and should be called after a deepcopy
     """
 
     # The RoPE scaling dict might be serialized differently if they were saved before/after RoPE refactor:
@@ -40,6 +40,7 @@ def standardize_rope_params(config):
     # Case 2: `config.rope_scaling` is a dict where keys define different RoPE configurations used by the model.
     #   For example `rope_scaling={"full_attention": {}, "sliding_attentionn": {}}` to alternate between global
     #   and local attention layers. This is the how models are serialized now
+    config = copy.deepcopy(config) # don't change config in-place
     rope_scaling_dict = getattr(config, "rope_scaling", None)
 
     # Standardize rope for cases when config has layer types by duplicating rope for each type

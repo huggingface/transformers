@@ -19,6 +19,7 @@ import pytest
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, PretrainedConfig, set_seed
+from transformers.modeling_rope_utils import rope_config_validation
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
@@ -359,6 +360,40 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+
+    def test_model_rope_with_layer_types(self):
+        """
+        Tests that we can initialize a model with different RoPE scaling per each layer type
+        and run a forward pass.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        if getattr(config, "layer_types", None) is None or len(set(config.layer_types)) == 1:
+            self.skipTest("This model does not have different layer types")
+
+        dummy_input = ids_tensor([1, 10], config.vocab_size)
+
+        # Simple forward run with dummy config - should pass
+        original_model = self.model_tester_class.base_model_class(config).eval().to(torch_device)
+        _ = original_model(dummy_input)
+
+        # If the config does not have rope params defined for each layer type - it fails
+        type_to_drop = config.layer_types[0]
+        flat_rope_dict = config.rope_scaling.pop(type_to_drop) # save for later
+        with self.assertRaises(KeyError):
+            self.model_tester_class.base_model_class(config).eval().to(torch_device)
+
+        with self.assertRaises(KeyError):
+            rope_config_validation(config) # rope validation fails as well
+
+        # But using the same dict to init config from scratch will work. The missing type will
+        # be filled with default rope theta for given config class
+        self.model_tester.config_class(**config.to_dict())
+
+        # If the config is old-style and has a flat rope param dict - handles BC and passes
+        config.rope_scaling = flat_rope_dict
+        old_format_model = self.model_tester_class.base_model_class(config).eval().to(torch_device)
+        old_format_model(dummy_input)        
 
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
