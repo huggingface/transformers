@@ -21,8 +21,9 @@
 # SOFTWARE.
 
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn

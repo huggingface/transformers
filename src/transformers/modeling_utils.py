@@ -26,12 +26,13 @@ import sys
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Optional, TypeVar, Union, get_type_hints
+from typing import Any, Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
