@@ -1695,7 +1695,7 @@ class _ReversibleFunction(Function):
         # split duplicated tensor
         hidden_states, attn_output = torch.chunk(hidden_states, 2, dim=-1)
 
-        for layer_id, (layer) in enumerate(zip(layers)):
+        for layer in layers:
             if output_hidden_states is True:
                 all_hidden_states.append(hidden_states)
 

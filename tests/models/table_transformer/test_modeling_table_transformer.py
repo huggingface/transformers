@@ -442,8 +442,7 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
             arg_names = [*signature.parameters.keys()]
 
             if model.config.is_encoder_decoder:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                expected_arg_names.extend(["encoder_outputs"])
+                expected_arg_names = ["pixel_values", "pixel_mask", "decoder_attention_mask", "encoder_outputs"]
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
