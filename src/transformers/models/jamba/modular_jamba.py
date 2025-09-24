@@ -21,18 +21,19 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
-    is_causal_conv1d_available,
-    is_mamba_ssm_available,
+
     logging,
 )
+from ...utils.generic import OutputRecorder
 from ...utils.generic import check_model_inputs
-from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm, repeat_kv
+from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
+    MixtralMLP
 )
 from .configuration_jamba import JambaConfig
-
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 
 if is_flash_attn_available():
     pass
@@ -61,34 +62,6 @@ class JambaRMSNorm(LlamaRMSNorm):
     pass
 
 
-class JambaPreTrainedModel(PreTrainedModel):
-    config_class = JambaConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["JambaAttentionDecoderLayer", "JambaMambaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    # Note: only supports HybridMambaAttentionDynamicCache
-    _is_stateful = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, JambaRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, JambaMambaMixer):
-            A = torch.arange(1, module.ssm_state_size + 1)[None, :]
-            A = A.expand(module.intermediate_size, -1).contiguous()
-            module.A_log.data.copy_(torch.log(A))
-            module.D.data.fill_(1.0)
 
 
 class HybridMambaAttentionDynamicCache:
@@ -163,6 +136,13 @@ class HybridMambaAttentionDynamicCache:
             device = self.ssm_states[layer_idx].device
             self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the mask"""
+        kv_offset = 0
+        query_length = cache_position.shape[0]
+        kv_length = self.get_seq_length(layer_idx) + query_length
+        return kv_length, kv_offset
+    
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
@@ -170,32 +150,6 @@ class HybridMambaAttentionDynamicCache:
         if layer_idx is None or len(self.key_cache) <= layer_idx:
             return 0
         return self.key_cache[layer_idx].shape[-2]
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 class JambaAttention(nn.Module):
@@ -222,7 +176,7 @@ class JambaAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
-
+        self.scaling = self.head_dim**-0.5
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
@@ -250,7 +204,7 @@ class JambaAttention(nn.Module):
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(
-                key_states, value_states, self.layer_idx, cache_position=cache_position
+                key_states, value_states, self.layer_idx
             )
 
         attention_interface: Callable = eager_attention_forward
@@ -554,16 +508,12 @@ class JambaMambaMixer(nn.Module):
         return self.slow_forward(hidden_states, cache_params, attention_mask)
 
 
-class JambaMLP(LlamaMLP):
+class JambaMLP(MixtralMLP):
     pass
 
 
 class JambaExperts(MixtralExperts):
-    def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        return top_k_index, top_k_weights
-
+    pass
 
 class JambaSparseMoeBlock(nn.Module):
     """
@@ -587,13 +537,20 @@ class JambaSparseMoeBlock(nn.Module):
         self.router = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
         self.experts = JambaExperts(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def route_tokens_to_experts(self, hidden_states, router_logits):
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
+        return top_k_index, top_k_weights
+
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         router_logits = self.router(hidden_states)
-        hidden_states = self.experts(hidden_states, router_logits)
+        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states, router_logits
+        return hidden_states
 
 
 class JambaAttentionDecoderLayer(GradientCheckpointingLayer):
@@ -630,9 +587,7 @@ class JambaAttentionDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
         residual = hidden_states
         hidden_states = self.pre_ff_layernorm(hidden_states)
-        ff_outputs = self.feed_forward(hidden_states)
-        if isinstance(ff_outputs, tuple):
-            hidden_states, _ = ff_outputs
+        hidden_states = self.feed_forward(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -665,14 +620,46 @@ class JambaMambaDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
         residual = hidden_states
         hidden_states = self.pre_ff_layernorm(hidden_states)
-        ff_outputs = self.feed_forward(hidden_states)
-        if isinstance(ff_outputs, tuple):
-            hidden_states, _ = ff_outputs
+        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = residual + hidden_states
         return hidden_states
 
 
 ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": JambaMambaDecoderLayer}
 
+class JambaPreTrainedModel(PreTrainedModel):
+    config_class = JambaConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["JambaAttentionDecoderLayer", "JambaMambaDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    # Note: only supports HybridMambaAttentionDynamicCache
+    _is_stateful = True
+    _can_record_outputs = {
+        "hidden_states": [JambaAttentionDecoderLayer, JambaMambaDecoderLayer],
+        "attentions": JambaAttention,
+        "router_logits": OutputRecorder(nn.Linear, layer_name="router"),
+    }
+    
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, JambaRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, JambaMambaMixer):
+            A = torch.arange(1, module.ssm_state_size + 1)[None, :]
+            A = A.expand(module.intermediate_size, -1).contiguous()
+            module.A_log.data.copy_(torch.log(A))
+            module.D.data.fill_(1.0)
 
 class JambaModel(JambaPreTrainedModel):
     """
@@ -721,7 +708,7 @@ class JambaModel(JambaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+            past_key_values = HybridMambaAttentionDynamicCache(config=self.config, batch_size=inputs_embeds.shape[0], dtype=inputs_embeds.dtype, device=inputs_embeds.device)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -733,20 +720,17 @@ class JambaModel(JambaPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping["full_attention"] = (
-                create_causal_mask(
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(
                     config=self.config,
                     input_embeds=inputs_embeds,
                     attention_mask=attention_mask,
                     cache_position=cache_position,
                     past_key_values=past_key_values,
                     position_ids=position_ids,
-                )
-                if self.config.use_mamba_kernels
-                else attention_mask
-            )
-
-            causal_mask_mapping["mamba"] = self._update_mamba_mask(attention_mask, cache_position)
+                ),
+                "mamba": self._update_mamba_mask(attention_mask, cache_position) if self.config.use_mamba_kernels else attention_mask
+            }
 
         hidden_states = inputs_embeds
         for decoder_layer in self.layers:
@@ -770,6 +754,7 @@ class JambaModel(JambaPreTrainedModel):
 
         if past_key_values and not past_key_values.has_previous_state:
             past_key_values.has_previous_state = True
+
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
         )
