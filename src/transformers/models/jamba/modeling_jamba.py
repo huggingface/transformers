@@ -1091,3 +1091,5 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
 
 class JambaForSequenceClassification(GenericForSequenceClassification, JambaPreTrainedModel):
     pass
+
+__all__ = ["JambaForCausalLM", "JambaForSequenceClassification", "JambaModel", "JambaPreTrainedModel"]
