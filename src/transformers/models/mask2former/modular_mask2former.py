@@ -14,11 +14,13 @@
 # limitations under the License.
 from typing import Optional
 
+import torch
+from torch import nn
+
 from transformers.models.maskformer.image_processing_maskformer_fast import MaskFormerImageProcessorFast
 
 from ...utils import (
     TensorType,
-    is_torch_available,
     logging,
 )
 from .image_processing_mask2former import (
@@ -26,11 +28,6 @@ from .image_processing_mask2former import (
     convert_segmentation_to_rle,
     remove_low_and_no_objects,
 )
-
-
-if is_torch_available():
-    import torch
-    from torch import nn
 
 
 logger = logging.get_logger(__name__)

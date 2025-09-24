@@ -289,7 +289,7 @@ class ProcessorTesterMixin:
         if "videos" in inputs_dict:
             processing_kwargs["do_sample_frames"] = False
 
-        # Firts call processor with all inputs and use nested input type, which is the format supported by all multimodal processors
+        # First call processor with all inputs and use nested input type, which is the format supported by all multimodal processors
         image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
         video_inputs_nested = [[video] for video in video_inputs]
         inputs_dict_nested = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
@@ -877,7 +877,8 @@ class ProcessorTesterMixin:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(modalities="image")
@@ -1174,7 +1175,7 @@ class ProcessorTesterMixin:
         # 3 frames are inferred from input video's length and FPS, so can be hardcoded
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 3)
 
-        # Whan `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
+        # When `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
         fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,

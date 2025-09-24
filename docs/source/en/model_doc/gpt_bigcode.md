@@ -47,7 +47,6 @@ The main differences compared to GPT2.
 - Merge the key and value caches into one (this changes the format of layer_past/ present, does it risk creating problems?)
 - Use the memory layout (self.num_heads, 3, self.head_dim) instead of `(3, self.num_heads, self.head_dim)` for the QKV tensor with MHA. (prevents an overhead with the merged key and values, but makes the checkpoints incompatible with the original openai-community/gpt2 model).
 
-
 You can read more about the optimizations in the [original pull request](https://github.com/huggingface/transformers/pull/22575)
 
 > [!NOTE]
@@ -90,7 +89,6 @@ Below is a expected speedup diagram that compares pure inference time between th
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/starcoder-speedup.png">
 </div>
-
 
 ## GPTBigCodeConfig
 

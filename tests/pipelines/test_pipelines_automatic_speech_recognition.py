@@ -160,7 +160,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_pt_defaults(self):
-        pipeline("automatic-speech-recognition", framework="pt")
+        pipeline("automatic-speech-recognition")
 
     @require_torch
     def test_small_model_pt(self):
@@ -168,7 +168,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
-            framework="pt",
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -188,7 +187,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
-            framework="pt",
             dtype=torch.float16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -209,7 +207,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
-            framework="pt",
             dtype=torch.bfloat16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -239,7 +236,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_small_model_pt_seq2seq(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/tiny-random-speech-encoder-decoder",
-            framework="pt",
             max_new_tokens=19,
             num_beams=1,
         )
@@ -252,7 +248,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_small_model_pt_seq2seq_gen_kwargs(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/tiny-random-speech-encoder-decoder",
-            framework="pt",
             max_new_tokens=10,
         )
 
@@ -269,7 +264,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm",
-            framework="pt",
         )
         self.assertEqual(speech_recognizer.type, "ctc_with_lm")
 
@@ -333,7 +327,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             pipeline(
                 task="automatic-speech-recognition",
                 model="patrickvonplaten/tiny-wav2vec2-no-tokenizer",
-                framework="pt",
             )
 
     @require_torch
@@ -343,7 +336,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-base-960h",
             tokenizer="facebook/wav2vec2-base-960h",
-            framework="pt",
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -360,7 +352,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="hf-audio/wav2vec2-bert-CV16-en",
-            framework="pt",
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -600,7 +591,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
-            framework="pt",
             num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -617,7 +607,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
-            framework="pt",
             num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:2]")
@@ -913,7 +902,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-wav2vec2-large-en-de",
             feature_extractor="facebook/s2t-wav2vec2-large-en-de",
-            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -977,7 +965,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
-            framework="pt",
             num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1047,7 +1034,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-large",
-            framework="pt",
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         audio = ds[40]["audio"]
@@ -1083,7 +1069,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
-            framework="pt",
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio = ds[0]["audio"]
@@ -1107,7 +1092,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
-            framework="pt",
         )
         output = speech_recognizer(ds[0]["audio"], generate_kwargs={"language": "en"})
         self.assertEqual(
@@ -1207,7 +1191,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-xls-r-1b-21-to-en",
             feature_extractor="facebook/wav2vec2-xls-r-1b-21-to-en",
-            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -1223,7 +1206,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-xls-r-1b-en-to-15",
             feature_extractor="facebook/wav2vec2-xls-r-1b-en-to-15",
-            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -1240,7 +1222,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="patrickvonplaten/wav2vec2-2-bart-base",
             feature_extractor="patrickvonplaten/wav2vec2-2-bart-base",
             tokenizer=AutoTokenizer.from_pretrained("patrickvonplaten/wav2vec2-2-bart-base"),
-            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -1256,7 +1237,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="facebook/wav2vec2-conformer-rope-large-960h-ft",
             device=torch_device,
             dtype=torch.float16,
-            framework="pt",
         )
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1516,7 +1496,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model=model,
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
-            framework="pt",
             chunk_length_s=10.0,
         )
 

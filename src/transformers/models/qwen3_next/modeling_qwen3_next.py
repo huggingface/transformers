@@ -433,6 +433,12 @@ def torch_causal_conv1d_update(
     return out
 
 
+def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+    """This function is intended to align with the l2norm implementation in the FLA library."""
+    inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+    return x * inv_norm
+
+
 def torch_chunk_gated_delta_rule(
     query,
     key,
@@ -446,21 +452,21 @@ def torch_chunk_gated_delta_rule(
 ):
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
-        query = F.normalize(query, p=2, dim=-1)
-        key = F.normalize(key, p=2, dim=-1)
+        query = l2norm(query, dim=-1, eps=1e-6)
+        key = l2norm(key, dim=-1, eps=1e-6)
     query, key, value, beta, g = [
         x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
     ]
 
-    batch_size, sequence_length, num_heads, k_head_dim = key.shape
+    batch_size, num_heads, sequence_length, k_head_dim = key.shape
     v_head_dim = value.shape[-1]
-    pad_size = (chunk_size - num_heads % chunk_size) % chunk_size
+    pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
     query = F.pad(query, (0, 0, 0, pad_size))
     key = F.pad(key, (0, 0, 0, pad_size))
     value = F.pad(value, (0, 0, 0, pad_size))
     beta = F.pad(beta, (0, pad_size))
     g = F.pad(g, (0, pad_size))
-    tot_heads = num_heads + pad_size
+    total_sequence_length = sequence_length + pad_size
     scale = 1 / (query.shape[-1] ** 0.5)
     query = query * scale
 
@@ -485,7 +491,7 @@ def torch_chunk_gated_delta_rule(
     value = attn @ v_beta
     k_cumdecay = attn @ (k_beta * g.exp().unsqueeze(-1))
     last_recurrent_state = (
-        torch.zeros(batch_size, sequence_length, k_head_dim, v_head_dim).to(value)
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim).to(value)
         if initial_state is None
         else initial_state.to(value)
     )
@@ -493,7 +499,7 @@ def torch_chunk_gated_delta_rule(
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
 
     # for each chunk
-    for i in range(0, tot_heads // chunk_size):
+    for i in range(0, total_sequence_length // chunk_size):
         q_i, k_i, v_i = query[:, :, i], key[:, :, i], value[:, :, i]
         attn = (q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]).masked_fill_(mask, 0)
         v_prime = (k_cumdecay[:, :, i]) @ last_recurrent_state
@@ -508,7 +514,7 @@ def torch_chunk_gated_delta_rule(
     if not output_final_state:
         last_recurrent_state = None
     core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1, core_attn_out.shape[-1])
-    core_attn_out = core_attn_out[:, :, :num_heads]
+    core_attn_out = core_attn_out[:, :, :sequence_length]
     core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
     return core_attn_out, last_recurrent_state
 
@@ -518,25 +524,25 @@ def torch_recurrent_gated_delta_rule(
 ):
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
-        query = F.normalize(query, p=2, dim=-1)
-        key = F.normalize(key, p=2, dim=-1)
+        query = l2norm(query, dim=-1, eps=1e-6)
+        key = l2norm(key, dim=-1, eps=1e-6)
     query, key, value, beta, g = [
         x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
     ]
 
-    batch_size, sequence_length, num_heads, k_head_dim = key.shape
+    batch_size, num_heads, sequence_length, k_head_dim = key.shape
     v_head_dim = value.shape[-1]
     scale = 1 / (query.shape[-1] ** 0.5)
     query = query * scale
 
-    core_attn_out = torch.zeros(batch_size, sequence_length, num_heads, v_head_dim).to(value)
+    core_attn_out = torch.zeros(batch_size, num_heads, sequence_length, v_head_dim).to(value)
     last_recurrent_state = (
-        torch.zeros(batch_size, sequence_length, k_head_dim, v_head_dim).to(value)
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim).to(value)
         if initial_state is None
         else initial_state.to(value)
     )
 
-    for i in range(num_heads):
+    for i in range(sequence_length):
         q_t = query[:, :, i]
         k_t = key[:, :, i]
         v_t = value[:, :, i]
@@ -877,7 +883,7 @@ class Qwen3NextDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.FloatTensor:
@@ -895,7 +901,7 @@ class Qwen3NextDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
@@ -964,6 +970,9 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
         if isinstance(module, Qwen3NextGatedDeltaNet):
             module.dt_bias.data.fill_(1.0)
             module.A_log.data.uniform_(0, 16).log_()
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        elif isinstance(module, Qwen3NextRMSNorm):
+            module.weight.data.zero_()
 
 
 class Qwen3NextModel(Qwen3NextPreTrainedModel):

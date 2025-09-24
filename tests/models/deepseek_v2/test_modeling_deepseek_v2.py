@@ -98,7 +98,9 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -161,7 +163,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        """Needs to be overriden as deepseek has special MLA cache format (though we don't really use the MLA)"""
+        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
         self.assertIsInstance(decoder_past_key_values, Cache)
 
         # (batch, head, seq_length, head_features)

@@ -26,9 +26,7 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 # 1. Put several commands in a single `RUN` to avoid image/layer exporting issue. Could be revised in the future.
 # 2. Regarding `torch` part, We might need to specify proper versions for `torchvision` and `torchaudio`.
 #    Currently, let's not bother to specify their versions explicitly (so installed with their latest release versions).
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime] && [ ${#PYTORCH} -gt 0 -a "$PYTORCH" != "pre" ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile && echo torch=$VERSION && [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA && python3 -m pip uninstall -y tensorflow tensorflow_text tensorflow_probability
-
-RUN python3 -m pip uninstall -y flax jax
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime] && [ ${#PYTORCH} -gt 0 -a "$PYTORCH" != "pre" ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile && echo torch=$VERSION && [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
 RUN python3 -m pip install --no-cache-dir -U timm
 

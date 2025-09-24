@@ -4,12 +4,9 @@ from typing import Any, Union
 
 import numpy as np
 
-from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import ExplicitEnum, add_end_docstrings, is_torch_available
 from .base import GenericTensor, Pipeline, build_pipeline_init_args
 
-
-if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
@@ -89,11 +86,7 @@ class TextClassificationPipeline(Pipeline):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.check_model_type(
-            TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
-            if self.framework == "tf"
-            else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES)
 
     def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, top_k="", **tokenizer_kwargs):
         # Using "" as default argument because we're going to use `top_k=None` in user code to declare
@@ -175,7 +168,7 @@ class TextClassificationPipeline(Pipeline):
             return result
 
     def preprocess(self, inputs, **tokenizer_kwargs) -> dict[str, GenericTensor]:
-        return_tensors = self.framework
+        return_tensors = "pt"
         if isinstance(inputs, dict):
             return self.tokenizer(**inputs, return_tensors=return_tensors, **tokenizer_kwargs)
         elif isinstance(inputs, list) and len(inputs) == 1 and isinstance(inputs[0], list) and len(inputs[0]) == 2:
@@ -193,7 +186,7 @@ class TextClassificationPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
-        model_forward = self.model.forward if self.framework == "pt" else self.model.call
+        model_forward = self.model.forward
         if "use_cache" in inspect.signature(model_forward).parameters:
             model_inputs["use_cache"] = False
         return self.model(**model_inputs)
@@ -217,11 +210,8 @@ class TextClassificationPipeline(Pipeline):
 
         outputs = model_outputs["logits"][0]
 
-        if self.framework == "pt":
-            # To enable using fp16 and bf16
-            outputs = outputs.float().numpy()
-        else:
-            outputs = outputs.numpy()
+        # To enable using fp16 and bf16
+        outputs = outputs.float().numpy()
 
         if function_to_apply == ClassificationFunction.SIGMOID:
             scores = sigmoid(outputs)

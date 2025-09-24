@@ -18,40 +18,22 @@ import math
 from typing import Optional, Union
 
 import numpy as np
+import torch
 
-from ...image_processing_utils import (
-    BatchFeature,
-)
+from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
+    PILImageResampling,
     SizeDict,
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import (
-    TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_vision_available,
-)
-from .image_processing_glm4v import smart_resize
-
-
-if is_torch_available():
-    import torch
-
-from ...utils.import_utils import requires
-from ...video_processing_utils import (
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    BaseVideoProcessor,
-)
+from ...utils import TensorType, add_start_docstrings
+from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
-
-
-if is_vision_available():
-    from ...image_utils import PILImageResampling
+from .image_processing_glm4v import smart_resize
 
 
 class Glm4vVideoProcessorInitKwargs(VideosKwargs):
@@ -75,7 +57,6 @@ class Glm4vVideoProcessorInitKwargs(VideosKwargs):
             The merge size of the vision encoder to llm encoder.
     """,
 )
-@requires(backends=("torchvision",))
 class Glm4vVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 2 * 30000}

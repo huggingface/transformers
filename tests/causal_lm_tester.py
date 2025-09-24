@@ -18,7 +18,7 @@ from inspect import signature
 import pytest
 from parameterized import parameterized
 
-from transformers import PretrainedConfig, set_seed
+from transformers import AutoModelForCausalLM, PretrainedConfig, set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
@@ -316,6 +316,27 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
+    def test_question_answering_model(self):
+        if self.model_tester.question_answering_class is None:
+            self.skipTest("Model does not support question answering")
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        model = self.model_tester.question_answering_class(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask)
+        self.assertEqual(
+            result.start_logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
+        )
+        self.assertEqual(
+            result.end_logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
+        )
+
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         """
@@ -474,6 +495,22 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 logits_fa = outputs_fa.hidden_states[-1]
                 torch.testing.assert_close(logits_fa, logits, atol=3e-2, rtol=3e-2)
 
+    def test_causal_lm_can_accept_training_kwargs(self):
+        if not getattr(self.model_tester, "is_training", False):
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with torch.device(torch_device):
+                model_eager = AutoModelForCausalLM.from_config(config, dtype=torch.float32)
+
+            model_eager.save_pretrained(tmpdir)
+            model = AutoModelForCausalLM.from_pretrained(tmpdir, dtype=torch.float32, device_map=torch_device)
+            inputs_dict["num_items_in_batch"] = torch.tensor(inputs_dict["input_ids"].shape[0])
+            inputs_dict["labels"] = inputs_dict["input_ids"]
+            _ = model(**inputs_dict, return_dict=False)
+
 
 def _config_supports_rope_scaling(config: PretrainedConfig) -> bool:
     """Returns whether a certain model config supports RoPE scaling parameterization."""
@@ -481,7 +518,7 @@ def _config_supports_rope_scaling(config: PretrainedConfig) -> bool:
     # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
     main_config_has_rope = hasattr(config, "rope_scaling") or hasattr(config, "rope_theta")
     sub_config_has_rope = any(
-        hasattr(config[sub_config], "rope_scaling") or hasattr(config[sub_config], "rope_theta")
+        hasattr(getattr(config, sub_config), "rope_scaling") or hasattr(getattr(config, sub_config), "rope_theta")
         for sub_config in config.sub_configs.keys()
     )
     return main_config_has_rope or sub_config_has_rope

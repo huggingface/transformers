@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     nested_simplify,
     require_av,
     require_torch,
-    require_torch_or_tf,
     require_vision,
 )
 
@@ -32,7 +31,7 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 @require_vision
 @require_av
 class VideoClassificationPipelineTests(unittest.TestCase):

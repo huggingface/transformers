@@ -18,6 +18,7 @@ import inspect
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
@@ -34,7 +35,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 
 if is_torch_available():
@@ -359,10 +359,6 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="DFine does not use token embeddings")
     def test_resize_tokens_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Not relevant for the model")
-    def test_can_init_all_missing_weights(self):
         pass
 
     @unittest.skip(reason="Feed forward chunking is not implemented")

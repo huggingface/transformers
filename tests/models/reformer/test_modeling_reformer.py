@@ -83,7 +83,7 @@ class ReformerModelTester:
         axial_pos_embds=True,
         axial_pos_shape=[4, 8],
         axial_pos_embds_dim=[16, 16],
-        attn_layers=["local", "local", "local", "local"],
+        attn_layers=["local", "local"],
         pad_token_id=0,
         eos_token_id=2,
         scope=None,
@@ -620,7 +620,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
-        # NOTE (joao): this function is substancially different from the original, the attention has different
+        # NOTE (joao): this function is substantially different from the original, the attention has different
         # *number* of shapes in certain conditions
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
@@ -663,7 +663,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
-        # NOTE (joao): this function is substancially different from the original, the hidden states have different
+        # NOTE (joao): this function is substantially different from the original, the hidden states have different
         # length in certain conditions
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
@@ -798,7 +798,7 @@ class ReformerLSHAttnModelTest(
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
-        # NOTE (joao): this function is substancially different from the original, the attention has different
+        # NOTE (joao): this function is substantially different from the original, the attention has different
         # *number* of shapes in certain conditions
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
@@ -841,7 +841,7 @@ class ReformerLSHAttnModelTest(
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
-        # NOTE (joao): this function is substancially different from the original, the hidden states have different
+        # NOTE (joao): this function is substantially different from the original, the hidden states have different
         # length in certain conditions
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
