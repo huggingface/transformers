@@ -135,6 +135,7 @@ class Qwen2MoeConfig(PretrainedConfig):
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
+        layer_types (`<fill_type>`, *optional*): <fill_docstring>
     ```python
     >>> from transformers import Qwen2MoeModel, Qwen2MoeConfig
 
