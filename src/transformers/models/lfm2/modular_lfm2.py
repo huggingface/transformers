@@ -447,7 +447,7 @@ class Lfm2Model(LlamaModel):
         self.pos_emb = Lfm2RotaryEmbedding(config)
         self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         del self.norm
-        del self.rotary_emv
+        del self.rotary_emb
 
     def forward(
         self,
