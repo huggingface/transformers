@@ -119,7 +119,7 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "kenlm",
-    "kernels>=0.6.1,<=0.9",
+    "kernels>=0.10.2,<0.11",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
