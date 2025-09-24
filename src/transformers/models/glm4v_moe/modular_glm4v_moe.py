@@ -29,6 +29,7 @@ from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
+    Glm4MoeMoE,
     Glm4MoeMLP,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
@@ -412,7 +413,7 @@ class Glm4vMoeTextNaiveMoe(DeepseekV3NaiveMoe):
     pass
 
 
-class Glm4vMoeTextMoE(nn.Module):
+class Glm4vMoeTextMoE(Glm4MoeMoE):
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
         self.config = config
@@ -421,16 +422,6 @@ class Glm4vMoeTextMoE(nn.Module):
         self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
-
-    def forward(self, hidden_states):
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        topk_indices, topk_weights = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
-
 
 class Glm4vMoeTextMLP(Glm4MoeMLP):
     pass
