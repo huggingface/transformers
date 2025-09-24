@@ -22,7 +22,6 @@ import inspect
 import json
 import os
 import re
-import shutil
 import sys
 import warnings
 from abc import abstractmethod
@@ -5405,21 +5404,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 _error_msgs, disk_offload_index = load_shard_file(args)
                 error_msgs += _error_msgs
 
-        # Adjust offloaded weights name and save if needed
-        if disk_offload_index is not None and len(disk_offload_index) > 0:
-            if loading_task_model_from_base_state_dict:
-                # We need to add the prefix of the base model
-                prefix = cls.base_model_prefix
-                if not is_offloaded_safetensors:
-                    for weight_name in disk_offload_index:
-                        shutil.move(
-                            os.path.join(disk_offload_folder, f"{weight_name}.dat"),
-                            os.path.join(disk_offload_folder, f"{prefix}.{weight_name}.dat"),
-                        )
-                disk_offload_index = {f"{prefix}.{key}": value for key, value in disk_offload_index.items()}
-            if not is_offloaded_safetensors:
-                save_offload_index(disk_offload_index, disk_offload_folder)
-                disk_offload_index = None
+        # Save offloaded index if needed
+        if disk_offload_index is not None and len(disk_offload_index) > 0 and not is_offloaded_safetensors:
+            save_offload_index(disk_offload_index, disk_offload_folder)
+            disk_offload_index = None
 
         if hf_quantizer is not None:
             missing_keys = hf_quantizer.update_missing_keys_after_loading(model, missing_keys, prefix)
