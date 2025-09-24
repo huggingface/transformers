@@ -196,10 +196,10 @@ explanatory comments:
 The parser follows a few simple rules:
 
 1. Each level of the schema receives input from the level above, applies any regex or parser it has, and then passes the output to its children.
-2. The root level receives the entire model output string as input.
+2. The root level receives the entire decoded model output string as input.
 3. If a node has structured content after parsing (for example, if the regex has named groups and returns a dict, or if the parser returns a dict or list),
    then that structured content is mapped to the node's children, and each child node receives its corresponding value as input.
-4. If an `object` (dict) node has unstructured (string) output, then the entire input string is passed to all of its children. This allows child nodes
+4. If an `object` (dict) node has unstructured (string) output, then the entire string is passed to all of its children. This allows child nodes
    to handle parsing individually rather than requiring a single parent regex to extract all keys at once.
 5. If an `array` (list) node has unstructured (string) output, then this throws an error.
 
@@ -220,9 +220,10 @@ There is a small set of allowable `x-` keys that indicate how parsing should be 
   in advance. The regex must have exactly two named capturing groups, `key` and `value`, and the output is a dict mapping keys to values. This should only
   be used in `object` nodes.
 
-In general, multiple regexes/parsers cannot be combined. The exception is that `x-regex`, returning a single string, can be combined with the other keys. In this case,
-`x-regex` is applied first, and then the output is passed to the other key, either `x-regex-iterator`, `x-parser`, or `x-regex-key-value`.
+In general, multiple regexes/parsers cannot be combined at the same level. The exception is that `x-regex`, returning a single string, can be combined with the other parsers. In this case,
+`x-regex` is applied first, and then the output is passed to the other parser, either `x-regex-iterator`, `x-parser`, or `x-regex-key-value`.
 
 Putting these ideas together, you can see that the input flows through the schema, being parsed at each level and then distributed to child nodes. Each level
 only needs to extract the input content that is relevant for that part of the schema, and can then let its child nodes handle the rest. Internally, this is handled
 with a parser function that receives input, applies any regexes/parsers at the current level, then maps the result to its child nodes before recursively calling itself on each of them.
+Recursion terminates when it reaches leaf nodes, usually primitive types like `string` or `number`, which simply return the input they receive.
