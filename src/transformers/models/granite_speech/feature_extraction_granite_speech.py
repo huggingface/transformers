@@ -35,7 +35,6 @@ if is_torch_available():
 if is_torchaudio_available():
     import torchaudio
 
-
     class _GraniteSpeechFeatureExtractorModule(nn.Module):
         def __init__(self, feature_extractor: "GraniteSpeechFeatureExtractor"):
             super().__init__()
