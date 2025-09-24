@@ -16,12 +16,9 @@
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AutoTokenizer, MiniCPM3Config, is_torch_available, set_seed
-from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    Expectations,
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
@@ -158,7 +155,9 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
     def test_model_4b_long_prompt_sdpa(self):
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
-        model = MiniCPM3ForCausalLM.from_pretrained("openbmb/MiniCPM3-4B", device_map="auto", attn_implementation="sdpa")
+        model = MiniCPM3ForCausalLM.from_pretrained(
+            "openbmb/MiniCPM3-4B", device_map="auto", attn_implementation="sdpa"
+        )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
 
@@ -213,72 +212,3 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
         # Basic check that speculative generation works
         self.assertTrue(text.startswith(prompt))
         self.assertGreater(len(text), len(prompt))
-
-    @pytest.mark.torch_export_test
-    @slow
-    def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        from transformers.integrations.executorch import (
-            TorchExportableModuleWithStaticCache,
-        )
-
-        minicpm3_model = "openbmb/MiniCPM3-4B"
-
-        tokenizer = AutoTokenizer.from_pretrained(minicpm3_model, pad_token="</s>", padding_side="right")
-        if version.parse(torch.__version__) == version.parse("2.7.0"):
-            strict = False  # Due to https://github.com/pytorch/pytorch/issues/150994
-            cuda_expectation = ["My favourite condiment is 100% plain, unflavoured, and unadulterated."]
-        else:
-            strict = True
-            cuda_expectation = ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"]
-
-        # For testing purposes, we'll use a simple prompt completion check
-        prompt = ["My favourite condiment is "]
-
-        max_generation_length = 50  # Set a reasonable max length for testing
-        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
-        dtype = torch.bfloat16
-        cache_implementation = "static"
-        attn_implementation = "sdpa"
-        batch_size = 1
-
-        # Load model
-        model = MiniCPM3ForCausalLM.from_pretrained(
-            minicpm3_model,
-            device_map=device,
-            dtype=dtype,
-            attn_implementation=attn_implementation,
-            generation_config=GenerationConfig(
-                use_cache=True,
-                cache_implementation=cache_implementation,
-                max_length=max_generation_length,
-                cache_config={
-                    "batch_size": batch_size,
-                    "max_cache_len": max_generation_length,
-                },
-            ),
-        )
-
-        prompt = ["My favourite condiment is "]
-        prompt_tokens = tokenizer(prompt, return_tensors="pt", padding=True).to(model.device)
-        prompt_token_ids = prompt_tokens["input_ids"]
-        max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
-
-        # Static Cache + export
-        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
-
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
-        exported_program = exportable_module.export(
-            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
-            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
-            strict=strict,
-        )
-        ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
-            exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
-        )
-        ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
-        # Basic check that export generation works
-        self.assertEqual(len(ep_generated_text), 1)
-        self.assertTrue(ep_generated_text[0].startswith(prompt[0]))

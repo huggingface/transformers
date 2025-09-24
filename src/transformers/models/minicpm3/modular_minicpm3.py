@@ -9,8 +9,8 @@ from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
@@ -75,6 +75,7 @@ class MiniCPM3Attention(nn.Module):
             bias=config.attention_bias,
         )
         self.scaling = self.qk_head_dim ** (-0.5)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
