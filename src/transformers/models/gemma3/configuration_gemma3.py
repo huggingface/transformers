@@ -38,6 +38,7 @@ class Gemma3TextConfig(PretrainedConfig):
     e.g. [google/gemma3_text-7b](https://huggingface.co/google/gemma3_text-7b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 262208):
             Vocabulary size of the Gemma3Text model. Defines the number of different tokens that can be represented by the
@@ -98,8 +99,9 @@ class Gemma3TextConfig(PretrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
-        use_bidirectional_attention (``bool``, *optional*, defaults to `False`):
-            Whether to use bidirectional mask for image inputs or not.
+        use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
+            If True, the model will attend to all text tokens instead of using a causal mask. This does not change
+            behavior for vision tokens.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig

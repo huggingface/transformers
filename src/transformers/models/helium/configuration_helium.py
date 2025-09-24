@@ -28,6 +28,7 @@ class HeliumConfig(PretrainedConfig):
     e.g. [kyutai/helium-2b](https://huggingface.co/kyutai/helium-2b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 48000):
             Vocabulary size of the Helium model. Defines the number of different tokens that can be represented by the
@@ -79,6 +80,7 @@ class HeliumConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+
     ```python
     >>> from transformers import HeliumModel, HeliumConfig
     >>> # Initializing a Helium 2b style configuration
