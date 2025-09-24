@@ -5177,7 +5177,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # In this case, we need to add the prefix to the keys, to match them to the expected keys
             if loading_task_model_from_base_state_dict:
                 # small sanity check: if a key has the same name as a task-specific key, it's ambiguous and we raise
-                # (we cannot which key it refers to, the one from base model or the one from task-specific?)
+                # (we cannot know which key it refers to, the one from base model or the one from task-specific?)
                 if new_key in task_specific_expected_keys:
                     raise ValueError(
                         "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
