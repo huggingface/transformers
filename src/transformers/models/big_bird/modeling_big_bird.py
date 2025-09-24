@@ -2674,7 +2674,6 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             logits_mask = self.prepare_question_mask(question_lengths, seqlen)
             if token_type_ids is None:
                 token_type_ids = torch.ones(logits_mask.size(), dtype=int, device=logits_mask.device) - logits_mask
-            logits_mask = logits_mask
             logits_mask[:, 0] = False
             logits_mask.unsqueeze_(2)
 
