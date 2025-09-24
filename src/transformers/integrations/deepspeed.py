@@ -224,7 +224,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        self.fill_match("fp16.enabled",(args.fp16 or args.fp16_full_eval), "fp16|fp16_full_eval")
+        self.fill_match("fp16.enabled", (args.fp16 or args.fp16_full_eval), "fp16|fp16_full_eval")
         self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
 
         # deepspeed's default mode is fp16 unless there is a config that says differently
