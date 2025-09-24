@@ -2214,7 +2214,7 @@ class Trainer:
         self,
         resume_from_checkpoint: Optional[Union[str, bool]] = None,
         trial: Union["optuna.Trial", dict[str, Any], None] = None,
-        ignore_keys_for_eval: Optional[list[str]] = None
+        ignore_keys_for_eval: Optional[list[str]] = None,
     ):
         """
         Main training entry point.
