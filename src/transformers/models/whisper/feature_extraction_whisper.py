@@ -32,38 +32,38 @@ if is_torch_available():
     import torch
     from torch import nn
 
+
+    class _WhisperFeatureExtractorModule(nn.Module):
+        def __init__(self, feature_extractor: "WhisperFeatureExtractor"):
+            super().__init__()
+            self.n_fft = feature_extractor.n_fft
+            self.hop_length = feature_extractor.hop_length
+            self.dither = feature_extractor.dither
+            self.register_buffer("window", torch.hann_window(self.n_fft))
+            self.register_buffer("mel_filters", torch.from_numpy(feature_extractor.mel_filters).float())
+
+        def forward(self, waveform):
+            # Note: it would be better to dither the chunked waveform,
+            # so overlapping signal does not get the same dithering.
+            # But, chunking is happening inside pytorch, so it is here.
+            if self.dither != 0.0:
+                waveform += self.dither * torch.randn(waveform.shape, dtype=waveform.dtype, device=waveform.device)
+
+            stft = torch.stft(waveform, self.n_fft, self.hop_length, window=self.window, return_complex=True)
+            magnitudes = stft[..., :-1].abs() ** 2
+
+            mel_spec = self.mel_filters.T @ magnitudes
+
+            log_spec = torch.clamp(mel_spec, min=1e-10).log10()
+            if waveform.dim() == 2:
+                max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+                log_spec = torch.maximum(log_spec, max_val - 8.0)
+            else:
+                log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+            log_spec = (log_spec + 4.0) / 4.0
+            return log_spec
+
 logger = logging.get_logger(__name__)
-
-
-class _WhisperFeatureExtractorModule(nn.Module):
-    def __init__(self, feature_extractor: "WhisperFeatureExtractor"):
-        super().__init__()
-        self.n_fft = feature_extractor.n_fft
-        self.hop_length = feature_extractor.hop_length
-        self.dither = feature_extractor.dither
-        self.register_buffer("window", torch.hann_window(self.n_fft))
-        self.register_buffer("mel_filters", torch.from_numpy(feature_extractor.mel_filters).float())
-
-    def forward(self, waveform):
-        # Note: it would be better to dither the chunked waveform,
-        # so overlapping signal does not get the same dithering.
-        # But, chunking is happening inside pytorch, so it is here.
-        if self.dither != 0.0:
-            waveform += self.dither * torch.randn(waveform.shape, dtype=waveform.dtype, device=waveform.device)
-
-        stft = torch.stft(waveform, self.n_fft, self.hop_length, window=self.window, return_complex=True)
-        magnitudes = stft[..., :-1].abs() ** 2
-
-        mel_spec = self.mel_filters.T @ magnitudes
-
-        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-        if waveform.dim() == 2:
-            max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
-            log_spec = torch.maximum(log_spec, max_val - 8.0)
-        else:
-            log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
-        return log_spec
 
 
 class WhisperFeatureExtractor(SequenceFeatureExtractor):
