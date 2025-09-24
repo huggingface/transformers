@@ -5389,9 +5389,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             save_offload_index(disk_offload_index, disk_offload_folder)
             disk_offload_index = None
 
-        if hf_quantizer is not None:
-            missing_keys = hf_quantizer.update_missing_keys_after_loading(model, missing_keys, prefix)
-
         # Post-processing for tensor parallelism
         if device_mesh is not None:
             # When using TP, the device map is a single device for all parameters
