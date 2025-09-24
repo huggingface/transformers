@@ -82,22 +82,17 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
 
     # Mapping for TimesFM 2.5 specific components
     MODEL_LAYER_MAPPING = {
-        # Tokenizer (ResidualBlock mapping)
-        "tokenizer.hidden_layer.weight": "decoder.tokenizer.hidden_layer.weight",
-        "tokenizer.hidden_layer.bias": "decoder.tokenizer.hidden_layer.bias",
-        "tokenizer.output_layer.weight": "decoder.tokenizer.output_layer.weight",
-        "tokenizer.output_layer.bias": "decoder.tokenizer.output_layer.bias",
-        "tokenizer.residual_layer.weight": "decoder.tokenizer.residual_layer.weight",
-        "tokenizer.residual_layer.bias": "decoder.tokenizer.residual_layer.bias",
+        # Input projection (tokenizer) using ResidualBlock
+        "tokenizer.hidden_layer.weight": "decoder.input_ff_layer.hidden_layer.weight",
+        "tokenizer.output_layer.weight": "decoder.input_ff_layer.output_layer.weight",
+        "tokenizer.residual_layer.weight": "decoder.input_ff_layer.residual_layer.weight",
 
-        # Output projections
-        "output_projection_point.hidden_layer.weight": "output_projection_point.hidden_layer.weight",
-        "output_projection_point.output_layer.weight": "output_projection_point.output_layer.weight",
-        "output_projection_point.residual_layer.weight": "output_projection_point.residual_layer.weight",
+        # No frequency embedding in TimesFM 2.5 - removed for simplified API
 
-        "output_projection_quantiles.hidden_layer.weight": "output_projection_quantiles.hidden_layer.weight",
-        "output_projection_quantiles.output_layer.weight": "output_projection_quantiles.output_layer.weight",
-        "output_projection_quantiles.residual_layer.weight": "output_projection_quantiles.residual_layer.weight",
+        # Output projection for quantiles and mean
+        "output_projection_quantiles.hidden_layer.weight": "horizon_ff_layer.hidden_layer.weight",
+        "output_projection_quantiles.output_layer.weight": "horizon_ff_layer.output_layer.weight",
+        "output_projection_quantiles.residual_layer.weight": "horizon_ff_layer.residual_layer.weight",
     }
 
     # Transformer layers mapping for TimesFM 2.5 (20 layers)

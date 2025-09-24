@@ -43,6 +43,7 @@ class Timesfm2P5Config(PretrainedConfig):
         use_per_dim_scale: bool = True,
         use_bias: bool = False,
         activation: str = "swish",
+        use_positional_embedding: bool = False,  # TimesFM 2.5 uses rotary embeddings instead
         # Gemma2-compatible parameters for query scaling
         query_pre_attn_scalar: float = 256.0,  # This provides the per-dim scaling
         attn_logit_softcapping: Optional[float] = None,
