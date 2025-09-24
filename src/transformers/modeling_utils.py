@@ -24,7 +24,6 @@ import os
 import re
 import shutil
 import sys
-import tempfile
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
@@ -132,7 +131,6 @@ if is_accelerate_available():
         extract_model_from_parallel,
         get_balanced_memory,
         get_max_memory,
-        load_offloaded_weights,
         offload_weight,
         save_offload_index,
     )
@@ -685,8 +683,6 @@ def _load_state_dict_into_meta_model(
     device_map: Optional[dict] = None,
     disk_offload_folder: Optional[str] = None,
     disk_offload_index: Optional[dict] = None,
-    cpu_offload_folder: Optional[str] = None,
-    cpu_offload_index: Optional[dict] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
     is_safetensors: bool = False,
     keep_in_fp32_regex: Optional[re.Pattern] = None,
@@ -711,11 +707,11 @@ def _load_state_dict_into_meta_model(
         QuantizationMethod.TORCHAO,
     }
     is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb_or_ao
-    file_pointer = None
-    if is_meta_state_dict:
-        file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
+    file_pointer = safe_open(shard_file, framework="pt", device=tensor_device) if is_meta_state_dict else None
+    params_to_load = list(state_dict.keys())
 
-    for param_name, empty_param in state_dict.items():
+    for param_name in params_to_load:
+        empty_param = state_dict[param_name]
         # we need to use serialized_param_name as file pointer is untouched
         if is_meta_state_dict:
             # This is the name of the parameter as it appears on disk file
@@ -790,8 +786,6 @@ def _load_state_dict_into_meta_model(
             if param_device == "disk":
                 if not is_safetensors:
                     disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
-            elif param_device == "cpu" and cpu_offload_index is not None:
-                cpu_offload_index = offload_weight(param, param_name, cpu_offload_folder, cpu_offload_index)
             elif (
                 not is_quantized
                 or (not hf_quantizer.requires_parameters_quantization)
@@ -836,10 +830,14 @@ def _load_state_dict_into_meta_model(
                     value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                     setattr(module, param_type, value)
 
+        # Remove the param from the state dict if it was not loaded on the fly to avoid wasting memory
+        if not is_meta_state_dict:
+            del state_dict[param_name]
+
     if file_pointer is not None:
         file_pointer.__exit__(None, None, None)
 
-    return disk_offload_index, cpu_offload_index
+    return disk_offload_index
 
 
 def load_shard_file(args):
@@ -858,8 +856,6 @@ def load_shard_file(args):
         reverse_key_renaming_mapping,
         disk_offload_folder,
         disk_offload_index,
-        cpu_offload_folder,
-        cpu_offload_index,
         is_offloaded_safetensors,
         keep_in_fp32_regex,
         device_mesh,
@@ -867,7 +863,7 @@ def load_shard_file(args):
 
     # Skip the load for shards that only contain disk-offloaded weights
     if shard_file in disk_only_shard_files:
-        return [], disk_offload_index, cpu_offload_index
+        return [], disk_offload_index
 
     map_location = "cpu"
     if (
@@ -909,7 +905,7 @@ def load_shard_file(args):
         error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
     # Skip it with fsdp on ranks other than 0
     elif not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
-        disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
+        disk_offload_index = _load_state_dict_into_meta_model(
             model,
             state_dict,
             shard_file,
@@ -918,15 +914,13 @@ def load_shard_file(args):
             device_map=device_map,
             disk_offload_folder=disk_offload_folder,
             disk_offload_index=disk_offload_index,
-            cpu_offload_folder=cpu_offload_folder,
-            cpu_offload_index=cpu_offload_index,
             hf_quantizer=hf_quantizer,
             is_safetensors=is_offloaded_safetensors,
             keep_in_fp32_regex=keep_in_fp32_regex,
             device_mesh=device_mesh,
         )
 
-    return error_msgs, disk_offload_index, cpu_offload_index
+    return error_msgs, disk_offload_index
 
 
 def load_shard_files_with_threadpool(args_list):
@@ -943,18 +937,13 @@ def load_shard_files_with_threadpool(args_list):
         with logging.tqdm(total=len(args_list), desc="Loading checkpoint shards") as pbar:
             futures = [executor.submit(load_shard_file, arg) for arg in args_list]
             for future in as_completed(futures):
-                result = future.result()
-                (
-                    _error_msgs,
-                    disk_offload_index,
-                    cpu_offload_index,
-                ) = result
+                _error_msgs, disk_offload_index = future.result()
 
                 error_msgs += _error_msgs
 
                 pbar.update(1)
 
-    return error_msgs, disk_offload_index, cpu_offload_index
+    return error_msgs, disk_offload_index
 
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
@@ -4531,10 +4520,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
-            offload_state_dict (`bool`, *optional*):
-                If `True`, will temporarily offload the CPU state dict to the hard drive to avoid getting out of CPU
-                RAM if the weight of the CPU state dict + the biggest shard of the checkpoint does not fit. Defaults to
-                `True` when there is some disk offload.
             offload_buffers (`bool`, *optional*):
                 Whether or not to offload the buffers with the model parameters.
             quantization_config (`Union[QuantizationConfigMixin,Dict]`, *optional*):
@@ -4604,7 +4589,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         device_map = kwargs.pop("device_map", None)
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
-        offload_state_dict = kwargs.pop("offload_state_dict", False)
         offload_buffers = kwargs.pop("offload_buffers", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         load_in_4bit = kwargs.pop("load_in_4bit", False)
@@ -4640,6 +4624,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _ = kwargs.pop("low_cpu_mem_usage", None)
         _ = kwargs.pop("from_tf", None)
         _ = kwargs.pop("from_flax", None)
+        _ = kwargs.pop("offload_state_dict", None)
 
         # For BC on torch_dtype argument
         if torch_dtype is not None:
@@ -5004,7 +4989,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             sharded_metadata=sharded_metadata,
             device_map=device_map,
             disk_offload_folder=offload_folder,
-            offload_state_dict=offload_state_dict,
             dtype=dtype,
             hf_quantizer=hf_quantizer,
             keep_in_fp32_regex=keep_in_fp32_regex,
@@ -5236,7 +5220,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         sharded_metadata: Optional[dict] = None,
         device_map: Optional[dict] = None,
         disk_offload_folder: Optional[str] = None,
-        offload_state_dict: Optional[bool] = None,
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
         keep_in_fp32_regex: Optional[re.Pattern] = None,
@@ -5328,8 +5311,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         disk_only_shard_files = []
         # Prepare parameters offloading if needed
         if device_map is not None and "disk" in device_map.values():
-            if offload_state_dict is None:
-                offload_state_dict = True
             if disk_offload_folder is not None:
                 os.makedirs(disk_offload_folder, exist_ok=True)
             is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
@@ -5367,15 +5348,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 disk_offload_index = {}
 
-        # This offload index if for params that are supposed to be on the "cpu", either with or without a device_map
-        # It allows to load parameters one-by-one from the state dict, avoiding a memory peak of 2 x state_dict_size,
-        # i.e. 1x to load it, and 1x to copy it to model
-        cpu_offload_folder = None
-        cpu_offload_index = None
-        if offload_state_dict:
-            cpu_offload_folder = tempfile.mkdtemp()
-            cpu_offload_index = {}
-
         # To be able to iterate, even if we don't use it if the state_dict is already provided
         elif state_dict is not None:
             checkpoint_files = [""]
@@ -5410,8 +5382,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 reverse_key_renaming_mapping,
                 disk_offload_folder,
                 disk_offload_index,
-                cpu_offload_folder,
-                cpu_offload_index,
                 is_offloaded_safetensors,
                 keep_in_fp32_regex,
                 device_mesh,
@@ -5425,14 +5395,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             os.environ.get("HF_ENABLE_PARALLEL_LOADING", "").upper() in ENV_VARS_TRUE_VALUES
             and not is_deepspeed_zero3_enabled()
         ):
-            _error_msgs, disk_offload_index, cpu_offload_index = load_shard_files_with_threadpool(args_list)
+            _error_msgs, disk_offload_index = load_shard_files_with_threadpool(args_list)
             error_msgs += _error_msgs
         else:
             if len(args_list) > 1:
                 args_list = logging.tqdm(args_list, desc="Loading checkpoint shards")
 
             for args in args_list:
-                _error_msgs, disk_offload_index, cpu_offload_index = load_shard_file(args)
+                _error_msgs, disk_offload_index = load_shard_file(args)
                 error_msgs += _error_msgs
 
         # Adjust offloaded weights name and save if needed
@@ -5450,12 +5420,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if not is_offloaded_safetensors:
                 save_offload_index(disk_offload_index, disk_offload_folder)
                 disk_offload_index = None
-
-        # one-at-a-time param loading for the cpu offloaded params
-        if offload_state_dict:
-            # Load back temporarily offloaded state dict
-            load_offloaded_weights(model, cpu_offload_index, cpu_offload_folder)
-            shutil.rmtree(cpu_offload_folder)
 
         if hf_quantizer is not None:
             missing_keys = hf_quantizer.update_missing_keys_after_loading(model, missing_keys, prefix)
