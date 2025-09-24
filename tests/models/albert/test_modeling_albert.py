@@ -54,12 +54,12 @@ class AlbertModelTester:
         use_labels=True,
         vocab_size=32,
         embedding_size=8,
-        hidden_size=12,
+        hidden_size=16,
         num_hidden_layers=2,
         # this needs to be the same as `num_hidden_layers`!
         num_hidden_groups=2,
         num_attention_heads=4,
-        intermediate_size=16,
+        intermediate_size=20,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -260,7 +260,7 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False  # will not be maintained
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -311,6 +311,7 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
+            config_and_inputs[0]._attn_implementation = "eager"
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     @slow

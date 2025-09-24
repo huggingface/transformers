@@ -26,7 +26,6 @@ rendered properly in your Markdown viewer.
 
 [BERTweet](https://huggingface.co/papers/2005.10200) shares the same architecture as [BERT-base](./bert), but it’s pretrained like [RoBERTa](./roberta) on English Tweets. It performs really well on Tweet-related tasks like part-of-speech tagging, named entity recognition, and text classification.
 
-
 You can find all the original BERTweet checkpoints under the [VinAI Research](https://huggingface.co/vinai?search_models=BERTweet) organization.
 
 > [!TIP]
@@ -49,6 +48,7 @@ pipeline = pipeline(
 )
 pipeline("Plants create <mask> through a process known as photosynthesis.")
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -81,7 +81,7 @@ print(f"The predicted token is: {predicted_token}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers-cli run --task fill-mask --model vinai/bertweet-base --device 0
+echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model vinai/bertweet-base --device 0
 ```
 
 </hfoption>

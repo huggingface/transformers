@@ -30,6 +30,7 @@ class VaultGemmaConfig(PretrainedConfig):
     e.g. [google/vaultgemma-7b](https://huggingface.co/google/vaultgemma-7b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the VaultGemma model. Defines the number of different tokens that can be represented by the
@@ -176,7 +177,7 @@ class VaultGemmaConfig(PretrainedConfig):
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 __all__ = ["VaultGemmaConfig"]
