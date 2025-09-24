@@ -146,8 +146,6 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 
 [[autodoc]] CLIPProcessor
 
-<frameworkcontent>
-<pt>
 
 ## CLIPModel
 
@@ -176,5 +174,3 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 [[autodoc]] CLIPVisionModel
     - forward
 
-</pt>
-</frameworkcontent>

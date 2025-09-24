@@ -524,7 +524,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.assistant_kwargs.pop("attention_mask", None)
 
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
-        new_target_ids = self._process_assistant_outputs(input_ids, assistant_output.sequences, assistant_input_ids)
+        new_target_ids = self._process_assistant_outputs(input_ids, assistant_output.sequences)
 
         # Update state
         self.prev_target_ids_len = input_ids.shape[1]
@@ -583,7 +583,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         return assistant_input_ids, remove_from_pkv
 
     def _process_assistant_outputs(
-        self, input_ids: torch.LongTensor, assistant_sequences: torch.LongTensor, assistant_input_ids: torch.LongTensor
+        self, input_ids: torch.LongTensor, assistant_sequences: torch.LongTensor
     ) -> torch.LongTensor:
         """Processes assistant outputs to obtain target input IDs."""
         num_prev_assistant = self.prev_assistant_ids.shape[1]

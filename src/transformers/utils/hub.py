@@ -1078,7 +1078,6 @@ def get_checkpoint_shard_files(
     For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
     index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
     """
-    import json
 
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
