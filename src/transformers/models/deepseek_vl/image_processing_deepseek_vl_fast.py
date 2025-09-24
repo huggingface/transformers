@@ -20,6 +20,7 @@
 
 from typing import Optional, Union
 
+import torch
 import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
@@ -31,15 +32,7 @@ from ...image_processing_utils_fast import (
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-)
-
-
-if is_torch_available():
-    import torch
+from ...utils import TensorType, auto_docstring
 
 
 class DeepseekVLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -62,6 +55,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = True
+    do_pad = True
     valid_kwargs = DeepseekVLFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[DeepseekVLFastImageProcessorKwargs]):

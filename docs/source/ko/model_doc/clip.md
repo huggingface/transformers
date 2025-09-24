@@ -234,8 +234,6 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 
 [[autodoc]] CLIPProcessor
 
-<frameworkcontent>
-<pt>
 
 ## CLIPModel[[transformers.CLIPModel]]
 
@@ -269,50 +267,3 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 [[autodoc]] CLIPForImageClassification
     - forward
 
-</pt>
-<tf>
-
-## TFCLIPModel[[transformers.TFCLIPModel]]
-
-[[autodoc]] TFCLIPModel
-    - call
-    - get_text_features
-    - get_image_features
-
-## TFCLIPTextModel[[transformers.TFCLIPTextModel]]
-
-[[autodoc]] TFCLIPTextModel
-    - call
-
-## TFCLIPVisionModel[[transformers.TFCLIPVisionModel]]
-
-[[autodoc]] TFCLIPVisionModel
-    - call
-
-</tf>
-<jax>
-
-## FlaxCLIPModel[[transformers.FlaxCLIPModel]]
-
-[[autodoc]] FlaxCLIPModel
-    - __call__
-    - get_text_features
-    - get_image_features
-
-## FlaxCLIPTextModel[[transformers.FlaxCLIPTextModel]]
-
-[[autodoc]] FlaxCLIPTextModel
-    - __call__
-
-## FlaxCLIPTextModelWithProjection[[transformers.FlaxCLIPTextModelWithProjection]]
-
-[[autodoc]] FlaxCLIPTextModelWithProjection
-    - __call__
-
-## FlaxCLIPVisionModel[[transformers.FlaxCLIPVisionModel]]
-
-[[autodoc]] FlaxCLIPVisionModel
-    - __call__
-
-</jax>
-</frameworkcontent>

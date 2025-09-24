@@ -1103,8 +1103,6 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
                 raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")
         for name, module in model.named_modules():
             if not getattr(module, "_is_hooked", False):
-                from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
-
                 plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model_plan, is_weight=False)
                 add_tensor_parallel_hooks_to_module(
                     model=model,

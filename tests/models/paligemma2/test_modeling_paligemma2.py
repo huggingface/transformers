@@ -16,9 +16,6 @@
 import copy
 import unittest
 
-import pytest
-from parameterized import parameterized
-
 from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
@@ -192,6 +189,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
@@ -247,9 +245,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="PaliGemma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
-    )
+    @unittest.skip(reason="PaliGemma's SigLip encoder uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -271,12 +267,6 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("Paligemma2 does not seem to be compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @unittest.skip("Paligemma position ids are 1 indexed")

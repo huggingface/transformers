@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
@@ -719,6 +718,12 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
 
         model_inputs["state"] = state
         model_inputs["use_cache"] = use_cache
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
     @auto_docstring
