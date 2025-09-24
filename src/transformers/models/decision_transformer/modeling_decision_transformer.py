@@ -625,7 +625,6 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         past_key_values = past_key_values if use_cache else None
-        # no return to legacy cache
         if not return_dict:
             return tuple(
                 v

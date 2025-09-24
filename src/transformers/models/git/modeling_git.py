@@ -1087,11 +1087,7 @@ class GitModel(GitPreTrainedModel):
         # past_key_values_length
         past_key_values_length = 0
         if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values.get_seq_length()
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
+            past_key_values_length = past_key_values.get_seq_length()
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head

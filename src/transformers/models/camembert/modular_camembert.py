@@ -453,7 +453,7 @@ class CamembertForCausalLM(RobertaForCausalLM):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],

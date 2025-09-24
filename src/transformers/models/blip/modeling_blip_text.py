@@ -428,16 +428,7 @@ class BlipTextEncoder(nn.Module):
                 use_cache = False
 
         if use_cache:
-            if isinstance(past_key_values, tuple):
-                logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                    "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                    "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-                )
-                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
-            # The model acts as encoder decoder but is not an encoder decoder. So we cast all cache objects to
-            # `EncoderDecoderCache` type assuming that the incoming cache is from `self_attention`
-            elif isinstance(past_key_values, DynamicCache):
+            if isinstance(past_key_values, DynamicCache):
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
             elif past_key_values is None:
                 past_key_values = EncoderDecoderCache(
@@ -751,11 +742,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
 
         past_key_values_length = 0
         if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
+            past_key_values_length = past_key_values.get_seq_length()
 
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length + past_key_values_length)).to(device)

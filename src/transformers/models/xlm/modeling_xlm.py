@@ -826,9 +826,6 @@ class XLMModel(XLMPreTrainedModel):
         if cache is None:
             cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
-        if isinstance(cache, tuple):
-            cache = EncoderDecoderCache.from_legacy_cache(cache)
-
         if lengths is None:
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()

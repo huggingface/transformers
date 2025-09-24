@@ -1405,13 +1405,6 @@ class BigBirdEncoder(nn.Module):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -1718,11 +1711,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
         past_key_values_length = 0
         if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
+            past_key_values_length = past_key_values.get_seq_length()
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)

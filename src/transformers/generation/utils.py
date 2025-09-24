@@ -1869,9 +1869,7 @@ class GenerationMixin(ContinuousMixin):
     def _supports_default_dynamic_cache(cls) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This adds exception for some models like `Mamba` models which use their own caches
-        and do not need to initialize the Cache in advance in order to save memory (because no back and forth
-        `to_legacy_cache` and `from_legacy_cache` will be performed for mamba-based models).
+        This adds exception for some models like `Mamba` models which use their own caches.
         """
         # NOTE: remove xlnet/reformer when the models are deprecated, non-standard model architecture/cache name
         return not cls._is_stateful and all(
@@ -1905,25 +1903,13 @@ class GenerationMixin(ContinuousMixin):
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
         )
 
-        # Quick escape route 1: if the user specifies a cache, we only need to:
-        # a) check for conflicting `generate` arguments
-        # b) convert to the new cache format (if the user passes a legacy cache and model supports it)
+        # Quick escape route 1: if the user specifies a cache, we only need to check for conflicting `generate` arguments
         user_defined_cache = model_kwargs.get(cache_name)
         if user_defined_cache is not None:
             if generation_config.cache_implementation is not None:
                 raise ValueError(
                     f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
                     "Cache object) is unsupported. Please use only one of the two."
-                )
-            if isinstance(user_defined_cache, tuple) and self._supports_default_dynamic_cache():
-                logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                    "You should pass an instance of `Cache` instead."
-                )
-                model_kwargs[cache_name] = (
-                    DynamicCache.from_legacy_cache(user_defined_cache)
-                    if not requires_cross_attention_cache
-                    else EncoderDecoderCache.from_legacy_cache(user_defined_cache)
                 )
             return
 
@@ -1932,8 +1918,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.use_cache is False:
             return
 
-        # Quick escape route 3: model that only supports legacy caches or models that supply it in
-        # `prepare_inputs_for_generation` (mamba, zamba, ...)
+        # Quick escape route 3: models that supply it in `prepare_inputs_for_generation` (mamba, zamba, ...)
         if not self._supports_default_dynamic_cache():
             if generation_config.cache_implementation is not None:
                 logger.warning_once(
@@ -2009,14 +1994,6 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs, offloading=True)
             elif "dynamic" in generation_config.cache_implementation:
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
-
-        # Use DynamicCache instance by default. This will avoid back and forth from legacy format that
-        # keeps copying the cache thus using much more memory
-        # TODO (joao): remove this `else` when we remove the last traces of the legacy cache format (v4.58.0, search
-        # for `instance(past_key_values, Cache)` as well). In general, if `cache_implementation` is unset, cache
-        # initialization should happen inside the model at prefill time.
-        else:
-            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
         # TODO (joao): this logic is incomplete, e.g. `offloaded` should apply to both caches. Refactor this function
         # to correctly pass parameterization to both caches.
@@ -2553,13 +2530,6 @@ class GenerationMixin(ContinuousMixin):
             **model_kwargs,
         )
 
-        # Convert to legacy cache format if requested
-        if (
-            generation_config.return_legacy_cache is True
-            and hasattr(result, "past_key_values")
-            and getattr(result.past_key_values, "to_legacy_cache") is not None
-        ):
-            result.past_key_values = result.past_key_values.to_legacy_cache()
         return result
 
     def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:

@@ -953,7 +953,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             use_cache = False
 
         if use_cache and past_key_values is None and not self.training:
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_key_values = DynamicCache(config=self.config)
 
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
         if cache_position is None:
