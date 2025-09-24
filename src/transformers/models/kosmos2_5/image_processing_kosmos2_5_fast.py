@@ -45,7 +45,6 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
         patch_width (int):
             The width of the patches to extract.
     """
-    image_tensor = image_tensor
     patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
     patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
     patches = patches.permute(0, 4, 2, 3, 1).reshape(
