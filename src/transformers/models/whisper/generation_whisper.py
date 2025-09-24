@@ -1178,7 +1178,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 if not is_shortform:
                     # we don't save `past_key_values` as this is too costly for longform
                     return None
-                elif isinstance(values, EncoderDecoderCache):
+                else:
                     all_past_key_values = []
                     for layer_idx in range(self.config.decoder_layers):
                         layer_past_key_values = []
@@ -1187,17 +1187,6 @@ class WhisperGenerationMixin(GenerationMixin):
                                 layer_past_key_values.append(v[batch_idx][None].cpu())
                         all_past_key_values.append(tuple(layer_past_key_values))
                     return EncoderDecoderCache.from_legacy_cache(tuple(all_past_key_values))
-                else:
-                    all_past_key_values = []
-                    for v in range(len(values)):
-                        layer_past_key_values = []
-                        for w in values[v]:
-                            if len(w) != 0:
-                                layer_past_key_values.append(w[batch_idx][None].cpu())
-                            else:
-                                layer_past_key_values.append(w)
-                        all_past_key_values.append(tuple(layer_past_key_values))
-                    return tuple(all_past_key_values)
 
             return values[batch_idx].cpu()
 
