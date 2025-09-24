@@ -772,6 +772,29 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         input_padding = input_padding.to(device)
         inp_freq = inp_freq.to(device)
 
+        # Compute normalization statistics from input data for TimesFM 2.5
+        # Use unpadded regions only (where padding == 0)
+        batch_size = input_ts.shape[0]
+        loc_list, scale_list = [], []
+
+        for i in range(batch_size):
+            # Find unpadded region (where padding[i, :context_len] == 0)
+            context_padding = input_padding[i, : input_ts.shape[1]]
+            unpadded_mask = context_padding == 0.0
+            unpadded_values = input_ts[i, unpadded_mask]
+
+            if unpadded_values.numel() > 0:
+                loc = torch.mean(unpadded_values)
+                scale = torch.std(unpadded_values, unbiased=False) + 1e-8  # Add small epsilon for stability
+            else:
+                loc = torch.tensor(0.0, device=device)
+                scale = torch.tensor(1.0, device=device)
+
+            loc_list.append(loc)
+            scale_list.append(scale)
+
+        normalization_stats = (torch.stack(loc_list), torch.stack(scale_list))
+
         final_out = input_ts
         context_len = final_out.shape[1]
         full_outputs = []
@@ -801,7 +824,7 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
             # TimesFM 2.5 specific postprocessing with separate projections
             fprop_outputs = self._postprocess_output(
                 decoder_output.last_hidden_state,
-                (decoder_output.loc, decoder_output.scale),
+                normalization_stats,
             )
 
             if return_forecast_on_context and step_index == 0:

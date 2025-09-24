@@ -67,8 +67,6 @@ class Timesfm2P5Config(PretrainedConfig):
         attn_logit_softcapping: Optional[float] = None,
         layer_types: list = None,  # All layers are the same type
         sliding_window: int = None,  # No sliding window
-        max_position_embeddings: int = 16384,  # Should match context_length
-        rope_theta: float = 10000.0,  # RoPE theta parameter
         **kwargs,
     ):
         super().__init__(
@@ -101,8 +99,6 @@ class Timesfm2P5Config(PretrainedConfig):
         self.use_bias = use_bias
         self.activation = activation
         self.query_pre_attn_scalar = query_pre_attn_scalar
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
         self.attn_logit_softcapping = attn_logit_softcapping
         self.num_key_value_heads = num_key_value_heads
         self.attention_bias = attention_bias
