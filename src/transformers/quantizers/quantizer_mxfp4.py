@@ -116,7 +116,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
         elif not kernels_available:
             # we can't quantize the model in this case so we raise an error
-            raise ValueError("MXFP4 quantization requires Triton and kernels installed: CUDA requires Triton >= 3.4.0, XPU requires Triton >= 3.5.0")
+            raise ValueError(
+                "MXFP4 quantization requires Triton and kernels installed: CUDA requires Triton >= 3.4.0, XPU requires Triton >= 3.5.0"
+            )
 
         if not self.pre_quantized:
             self._lazy_import_kernels()

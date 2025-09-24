@@ -52,6 +52,7 @@ FP4_VALUES = [
 def on_device(dev):
     if is_torch_available():
         import torch
+
         if isinstance(dev, torch.Tensor):
             dev = dev.device
         elif isinstance(dev, str):
@@ -67,6 +68,7 @@ def on_device(dev):
                 return
     # other: CPU
     yield
+
 
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w, triton_kernels_hub):
