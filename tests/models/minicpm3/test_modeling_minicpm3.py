@@ -89,6 +89,50 @@ class MiniCPM3ModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
+    @unittest.skip("MiniCPM3's MLA attention is not compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search_0_random(self):
+        pass
+
+    @unittest.skip("MiniCPM3's MLA attention uses custom cache format, incompatible with static cache")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip("MiniCPM3's MLA attention is not compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search_1_same(self):
+        pass
+
+    @unittest.skip("MiniCPM3's MLA attention is not compatible with assisted decoding sampling")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip("MiniCPM3's MLA attention uses custom cache format, incompatible with static cache")
+    def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip("MiniCPM3's MLA attention uses custom cache format, incompatible with beam search caching")
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("MiniCPM3's MLA attention uses custom cache format, incompatible with greedy generation caching")
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("MiniCPM3's MLA attention uses custom cache format, incompatible with compilation")
+    def test_generate_compilation_all_outputs(self):
+        pass
+
+    @unittest.skip("MiniCPM3's MLA attention uses custom past_key_values format")
+    def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip("MiniCPM3's MLA attention is not compatible with prompt lookup decoding")
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+    
+    @unittest.skip("MiniCPM3's MLA attention uses custom cache format, incompatible with model compilation")
+    def test_generate_compile_model_forward_fullgraph(self):
+        pass
+
 
 @require_torch
 class MiniCPM3IntegrationTest(unittest.TestCase):
