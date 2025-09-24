@@ -164,6 +164,7 @@ class GemmaConfig(PretrainedConfig):
         rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
+        layer_types: Optional[list[str]] = None,
         use_bidirectional_attention: Optional[bool] = None,
         **kwargs,
     ):
