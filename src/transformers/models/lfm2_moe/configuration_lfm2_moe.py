@@ -17,12 +17,11 @@ from ...configuration_utils import PretrainedConfig
 
 
 class Lfm2MoeConfig(PretrainedConfig):
-   r"""
+    r"""
     This is the configuration class to store the configuration of a [`Lfm2MoeModel`]. It is used to instantiate a LFM2 Moe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LFM2-8B-A1B model.
-
-    e.g. [LiquidAI/LFM2-8B-A1B](https://huggingface.co/LiquidAI/LFM2-8B-A1B)
+    e.g. [LiquidAI/LFM2-8B-A1B-preview](https://huggingface.co/LiquidAI/LFM2-8B-A1B-preview)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -85,6 +84,11 @@ class Lfm2MoeConfig(PretrainedConfig):
             Function to score the routing weights.
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether or not the router logits should be returned by the model. Enabling this will also
+            allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+            The aux loss factor for the total loss.
         full_attn_idxs (`Optional`, *optional*):
             Index of the layers which use attention.
         layer_types (`Optional`, *optional*):
@@ -129,9 +133,10 @@ class Lfm2MoeConfig(PretrainedConfig):
         num_experts_per_tok: int = 4,
         num_experts: int = 32,
         use_expert_bias: bool = True,
-        router_scaling_factor: Optional[float] = None,
-        router_score_function: str = "sigmoid",
+        routed_scaling_factor: Optional[float] = None,
         norm_topk_prob: bool = True,
+        output_router_logits: bool = False,
+        router_aux_loss_coef: float = 0.001,
         full_attn_idxs: Optional[list[int]] = None,
         layer_types: Optional[list[str]] = None,
         **kwargs,
@@ -159,9 +164,10 @@ class Lfm2MoeConfig(PretrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.use_expert_bias = use_expert_bias
-        self.router_scaling_factor = router_scaling_factor
-        self.router_score_function = router_score_function
+        self.routed_scaling_factor = routed_scaling_factor
         self.norm_topk_prob = norm_topk_prob
+        self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
 
         self.layer_types = layer_types
         if self.layer_types is None:
