@@ -342,6 +342,10 @@ class HfQuantizer(ABC):
         """Get state dict and metadata. Useful when we need to modify a bit the state dict due to quantization"""
         return None, {}
 
+    def update_state_dict_with_metadata(self, state_dict, metadata):
+        """Update state dict with metadata. Default behaviour returns state_dict"""
+        return state_dict
+
     @abstractmethod
     def _process_model_before_weight_loading(self, model, **kwargs): ...
 

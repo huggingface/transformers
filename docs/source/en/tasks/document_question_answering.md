@@ -439,6 +439,7 @@ Now that you have finetuned a LayoutLMv2 model, and uploaded it to the 🤗 Hub,
 way to try out your finetuned model for inference is to use it in a [`Pipeline`].
 
 Let's take an example:
+
 ```py
 >>> example = dataset["test"][2]
 >>> question = example["query"]["en"]
