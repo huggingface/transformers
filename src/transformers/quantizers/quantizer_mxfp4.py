@@ -97,7 +97,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             # On unsupported GPUs or without kernels, we will dequantize the model to bf16
             if not gpu_is_supported:
                 logger.warning_once(
-                    "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200). "
+                    "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200) or XPUs (e.g Intel® Data Center GPU Max Series) "
                     "We will default to dequantizing the model to bf16."
                 )
                 self.quantization_config.dequantize = True
@@ -105,18 +105,18 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
             if not kernels_available:
                 logger.warning_once(
-                    "MXFP4 quantization requires triton >= 3.4.0 and kernels installed, we will default to dequantizing the model to bf16"
+                    "MXFP4 quantization requires Triton and kernels installed: CUDA requires Triton >= 3.4.0, XPU requires Triton >= 3.5.0, we will default to dequantizing the model to bf16"
                 )
                 self.quantization_config.dequantize = True
                 return
         elif not gpu_is_supported:
             # we can't quantize the model in this case so we raise an error
             raise ValueError(
-                "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200)"
+                "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200) or XPUs (e.g Intel® Data Center GPU Max Series) "
             )
         elif not kernels_available:
             # we can't quantize the model in this case so we raise an error
-            raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and kernels installed")
+            raise ValueError("MXFP4 quantization requires Triton and kernels installed: CUDA requires Triton >= 3.4.0, XPU requires Triton >= 3.5.0")
 
         if not self.pre_quantized:
             self._lazy_import_kernels()
@@ -124,8 +124,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
         device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
-                "You have loaded an FP4 model on CPU and have a CUDA device available, make sure to set "
-                "your model on a GPU device in order to run your model. To remove this warning, pass device_map = 'cuda'. "
+                "You have loaded an FP4 model on CPU and have a CUDA/XPU device available, make sure to set "
+                "your model on a GPU/XPU device in order to run your model. To remove this warning, pass device_map = 'cuda' or device_map = 'xpu'. "
             )
         elif device_map is not None:
             if (
@@ -268,6 +268,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
         # clean cache due to triton ops
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+        elif torch.xpu.is_available():
+            torch.xpu.empty_cache()
 
     def update_expected_keys(self, model: "PreTrainedModel", expected_keys: list[str], checkpoint_keys: list[str]):
         # Replace expected_keys for experts' gate_up_proj and down_proj with their _blocks and _scales variants
