@@ -2004,7 +2004,6 @@ class Trainer:
                     jit_model(**example_batch)
                     jit_model(**example_batch)
                 model = jit_model
-                self.use_cpu_amp = False
             except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
                 logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
@@ -3932,14 +3931,9 @@ class Trainer:
     def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
-        arguments, depending on the situation.
+        arguments, depending on the situation. We rely on accelerate for autocast, hence we don't need to modify this method.
         """
-        if self.use_cpu_amp:
-            ctx_manager = torch.autocast(device_type="cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
-        else:
-            ctx_manager = contextlib.nullcontext()
-
-        return ctx_manager
+        return contextlib.nullcontext()
 
     def training_step(
         self,
