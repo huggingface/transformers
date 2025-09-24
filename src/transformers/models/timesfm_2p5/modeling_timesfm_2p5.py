@@ -28,12 +28,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_timesfm_2p5 import Timesfm2P5Config
 
 
@@ -72,43 +74,84 @@ class Timesfm2P5OutputForPrediction(BaseModelOutput):
 
 
 class Timesfm2P5MLP(nn.Module):
-    """Pax MLP in pytorch."""
+    """
+    TimesFM 2.5 MLP layer with configurable activation.
+
+    This is a feedforward network with two linear layers and configurable activation.
+    """
 
     def __init__(self, config: Timesfm2P5Config):
         super().__init__()
         hidden_size = config.hidden_size
         intermediate_size = config.intermediate_size
+        use_bias = config.use_bias
 
-        self.gate_proj = nn.Linear(hidden_size, intermediate_size)
-        self.down_proj = nn.Linear(intermediate_size, hidden_size)
-        self.layer_norm = nn.LayerNorm(normalized_shape=hidden_size, eps=1e-6)
+        self.ff0 = nn.Linear(hidden_size, intermediate_size, bias=use_bias)
+        self.ff1 = nn.Linear(intermediate_size, hidden_size, bias=use_bias)
 
-    def forward(self, x, paddings=None):
-        gate_inp = self.layer_norm(x)
-        gate = self.gate_proj(gate_inp)
-        gate = F.relu(gate)
-        outputs = self.down_proj(gate)
-        if paddings is not None:
-            outputs = outputs * (1.0 - paddings[:, :, None])
-        return outputs + x
+        # Activation function
+        if config.activation == "relu":
+            self.activation = nn.ReLU()
+        elif config.activation == "swish" or config.activation == "silu":
+            self.activation = nn.SiLU()
+        elif config.activation == "none":
+            self.activation = nn.Identity()
+        else:
+            raise ValueError(f"Activation '{config.activation}' not supported.")
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        hidden = self.ff0(x)
+        hidden = self.activation(hidden)
+        output = self.ff1(hidden)
+        return output
 
 
 class Timesfm2P5ResidualBlock(nn.Module):
-    """Timesfm2P5 residual block."""
+    """
+    TimesFM 2.5 residual block with configurable activation and bias.
 
-    def __init__(self, input_dims, hidden_dims, output_dims):
+    This implements the ResidualBlock from TimesFM 2.5 which supports:
+    - Configurable activation functions (relu, swish/silu, none)
+    - Optional bias in linear layers
+    - Residual connection from input to output
+    """
+
+    def __init__(
+        self, input_dims: int, hidden_dims: int, output_dims: int, use_bias: bool = True, activation: str = "swish"
+    ):
         super().__init__()
         self.input_dims = input_dims
         self.hidden_dims = hidden_dims
         self.output_dims = output_dims
+        self.use_bias = use_bias
+        self.activation_type = activation
 
-        self.input_layer = nn.Linear(input_dims, hidden_dims)
-        self.activation = nn.SiLU()
-        self.output_layer = nn.Linear(hidden_dims, output_dims)
-        self.residual_layer = nn.Linear(input_dims, output_dims)
+        # Linear layers
+        self.hidden_layer = nn.Linear(input_dims, hidden_dims, bias=use_bias)
+        self.output_layer = nn.Linear(hidden_dims, output_dims, bias=use_bias)
+        self.residual_layer = nn.Linear(input_dims, output_dims, bias=use_bias)
 
-    def forward(self, x):
-        hidden = self.input_layer(x)
+        # Activation function
+        if activation == "relu":
+            self.activation = nn.ReLU()
+        elif activation == "swish" or activation == "silu":
+            self.activation = nn.SiLU()
+        elif activation == "none":
+            self.activation = nn.Identity()
+        else:
+            raise ValueError(f"Activation '{activation}' not supported. Choose from 'relu', 'swish', or 'none'.")
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the residual block.
+
+        Args:
+            x: Input tensor of shape (batch_size, ..., input_dims)
+
+        Returns:
+            Output tensor of shape (batch_size, ..., output_dims)
+        """
+        hidden = self.hidden_layer(x)
         hidden = self.activation(hidden)
         output = self.output_layer(hidden)
         residual = self.residual_layer(x)
@@ -181,71 +224,154 @@ class Timesfm2P5PositionalEmbedding(nn.Module):
         return signal
 
 
-def simple_eager_attention_forward(
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
     module: nn.Module,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
     dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
+    scaling: Optional[float] = None,
+    softcap: Optional[float] = None,
+    **kwargs,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    if scaling is None:
+        scaling = module.head_dim**-0.5
+
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+
+    if softcap is not None:
+        attn_weights = attn_weights / softcap
+        attn_weights = torch.tanh(attn_weights)
+        attn_weights = attn_weights * softcap
+    if attention_mask is not None:  # no matter the length, we just slice it
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+    # upcast attention to fp32
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
-
     return attn_output, attn_weights
 
 
 class Timesfm2P5Attention(nn.Module):
-    """Implements the attention used in Timesfm2P5. One key difference is that there is _per_dim_scaling of the query."""
+    """
+    TimesFM 2.5 attention inherits from Gemma2Attention which provides:
+    - Rotary position embeddings
+    - Query scaling (per-dimension scaling equivalent)
+    - Efficient attention implementation
+
+    We only add QK normalization on top of Gemma2's implementation.
+    """
 
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
         super().__init__()
         self.config = config
-        self.is_causal = True
-        self.attention_dropout = config.attention_dropout
         self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = config.query_pre_attn_scalar**-0.5
+        self.attention_dropout = self.config.attention_dropout
+        self.is_causal = not getattr(config, "use_bidirectional_attention", False)
 
-        self.num_heads = config.num_attention_heads
-        self.hidden_size = config.hidden_size
-        self.head_dim = config.head_dim
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.attn_logit_softcapping = self.config.attn_logit_softcapping
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
-        self.q_size = self.num_heads * self.head_dim
-        self.kv_size = self.num_heads * self.head_dim
-        self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
+        # Add QK normalization specific to TimesFM 2.5
+        self.use_qk_norm = getattr(config, "use_qk_norm", True)
+        if self.use_qk_norm:
+            self.query_ln = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.key_ln = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size)
-
-    def _scale_query(self, query: torch.Tensor) -> torch.Tensor:
-        scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
-        return query * scale[None, None, None, :]
-
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        query_states = self._scale_query(query_states)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = simple_eager_attention_forward
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -255,44 +381,68 @@ class Timesfm2P5Attention(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=1.0,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            softcap=self.attn_logit_softcapping,
             **kwargs,
         )
+
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
 class Timesfm2P5DecoderLayer(nn.Module):
-    """Transformer layer."""
+    """
+    TimesFM 2.5 Transformer decoder layer.
+
+    This layer consists of:
+    - Self-attention with rotary embeddings and QK normalization
+    - MLP feedforward network with configurable activation
+    - RMS normalization
+    """
 
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
         super().__init__()
 
+        # Attention layers
         self.self_attn = Timesfm2P5Attention(config, layer_idx=layer_idx)
+
+        # Normalization layers
+        self.pre_attn_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attn_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.pre_ff_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_ff_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        # MLP
         self.mlp = Timesfm2P5MLP(config)
-        self.input_layernorm = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        paddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        **kwargs,
     ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
-        # Self Attention
+        # Self-Attention with pre and post normalization
         residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = self.pre_attn_ln(hidden_states)
         hidden_states, scores = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             output_attentions=output_attentions,
+            **kwargs,
         )
-        hidden_states = residual + hidden_states
+        hidden_states = self.post_attn_ln(hidden_states) + residual
 
-        # MLP
-        hidden_states = self.mlp(hidden_states, paddings=paddings)
+        # MLP with pre and post normalization
+        residual = hidden_states
+        hidden_states = self.pre_ff_ln(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_ff_ln(hidden_states) + residual
 
         return scores, hidden_states
 
@@ -304,6 +454,7 @@ class Timesfm2P5PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Timesfm2P5DecoderLayer"]
     main_input_name = "past_values"
     _supports_sdpa = True
+    config_class = Timesfm2P5Config
 
     def _init_weights(self, module):
         super()._init_weights(module)
