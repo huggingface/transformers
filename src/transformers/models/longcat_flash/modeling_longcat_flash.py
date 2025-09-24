@@ -104,7 +104,7 @@ class LongcatFlashMLP(nn.Module):
     def __init__(self, config, hidden_size=None, intermediate_size=None):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size
+        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
         self.intermediate_size = config.ffn_hidden_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
@@ -144,6 +144,33 @@ class LongcatFlashTopkRouter(nn.Module):
         return topk_indices
 
 
+class LongcatFlashExperts(nn.ModuleList):
+    def __init__(self, config):
+        super().__init__()
+        self.intermediate_size = config.expert_ffn_hidden_size
+        self.hidden_size = config.hidden_size
+        self.num_experts = config.n_routed_experts + config.zero_expert_num
+        self.zero_expert_num = config.zero_expert_num
+
+        self.extend(
+            [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(self.num_experts)]
+            + [nn.Identity() for _ in range(self.zero_expert_num)]
+        )
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        final_hidden_states = torch.zeros_like(hidden_states)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
+            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        return final_hidden_states
+
+
+# remap config key expert_ffn_hidden_size -> moe_intermediate_size
 class LongcatFlashMoE(nn.Module):
     """
     A mixed expert module containing zero compute (identity) experts.
@@ -153,47 +180,15 @@ class LongcatFlashMoE(nn.Module):
         super().__init__()
         self.intermediate_size = config.expert_ffn_hidden_size
         self.config = config
-
-        self.experts = nn.ModuleList(
-            [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(config.n_routed_experts)]
-            + [nn.Identity() for _ in range(config.zero_expert_num)]
-        )
-        self.n_routed_experts = config.n_routed_experts
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.top_k = config.num_experts_per_tok
+        self.experts = LongcatFlashExperts(config)
 
         self.router = LongcatFlashTopkRouter(config)
-
-    def route_tokens_to_experts(self, router_logits):
-        router_logits = router_logits + self.gate.e_score_correction_bias
-        group_scores = (
-            router_logits.view(-1, self.n_group, self.n_routed_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
-        )
-        scores_for_choice = router_logits.masked_fill(~score_mask.bool(), 0.0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
         topk_indices, topk_weights = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         return hidden_states
 
 
