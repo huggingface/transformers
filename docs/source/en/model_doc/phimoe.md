@@ -51,7 +51,7 @@ The current `transformers` version can be verified with: `pip list | grep transf
 
 Examples of required packages:
 
-```
+```pip
 flash_attn==2.5.8
 torch==2.3.1
 accelerate==0.31.0

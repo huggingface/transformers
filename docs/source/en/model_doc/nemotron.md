@@ -109,7 +109,7 @@ Please refer to our [paper](https://huggingface.co/papers/2407.14679) for the fu
 
 If you find our work helpful, please consider citing our paper:
 
-```
+```bib
 @article{minitron2024,
       title={Compact Language Models via Pruning and Knowledge Distillation},
       author={Saurav Muralidharan and Sharath Turuvekere Sreenivas and Raviraj Joshi and Marcin Chochowski and Mostofa Patwary and Mohammad Shoeybi and Bryan Catanzaro and Jan Kautz and Pavlo Molchanov},

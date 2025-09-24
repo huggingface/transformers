@@ -172,7 +172,7 @@ Let's use the [`Trainer`] and train the model without using any GPU performance 
 >>> print_summary(result)
 ```
 
-```
+```text
 Time: 57.82
 Samples/second: 8.86
 GPU memory occupied: 14949 MB.
