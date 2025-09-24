@@ -68,7 +68,7 @@ Create the [`TextGenerationPipeline`] and pass `chat` to it. For large models, s
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="HuggingFaceTB/SmolLM2-1.7B-Instruct", dtype="auto", device_map="auto")
+pipe = pipeline(task="text-generation", model="HuggingFaceTB/SmolLM2-1.7B-Instruct", dtype="auto", device_map="auto")
 response = pipeline(chat, max_new_tokens=512)
 print(response[0]["generated_text"][-1]["content"])
 ```
@@ -85,7 +85,7 @@ chat = response[0]["generated_text"]
 chat.append(
     {"role": "user", "content": "Woah! But can it be reconciled with quantum mechanics?"}
 )
-response = pipeline(chat, max_new_tokens=512)
+response = pipe(chat, max_new_tokens=512)
 print(response[0]["generated_text"][-1]["content"])
 ```
 
@@ -121,7 +121,7 @@ import torch
 from transformers import pipeline
 
 pipe = pipeline("image-text-to-text", model="Qwen/Qwen2.5-VL-3B-Instruct", device_map="auto", dtype="auto")
-out = pipe(text=messages, max_new_tokens=128)
+out = pipe(messages, max_new_tokens=128)
 print(out[0]['generated_text'][-1]['content'])
 ```
 
@@ -151,7 +151,7 @@ chat = [
 
 pipe = pipeline(task="text-generation", model="HuggingFaceTB/SmolLM3-3B", dtype="auto", device_map="auto")
 # max_new_tokens should be high for reasoning models, because they need space to write their thoughts!
-out = pipe(text=messages, max_new_tokens=1024)
+out = pipe(chat, max_new_tokens=1024)
 
 print(out[0]['generated_text'][-1])
 ```

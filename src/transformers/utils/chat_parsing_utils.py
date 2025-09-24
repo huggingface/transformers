@@ -16,14 +16,14 @@ def _parse_re_match(node_match):
     # If the regex has named groups, return a dict of those groups
     if node_match.groupdict():
         return {key: val for key, val in node_match.groupdict().items() if val is not None}
-    # If the regex has unnamed groups, it MUST only have one, and we return that group
-    elif groups := list(node_match.groups()):
+    # Otherwise the regex must have exactly one unnamed group, and we return that
+    else:
+        groups = list(node_match.groups())
         if len(groups) > 1:
             raise ValueError(f"Regex has multiple unnamed groups!\nGroups: {groups}\n")
+        elif len(groups) == 0:
+            raise ValueError(f"Regex has no capture groups:\n\n{node_match.group(0)}")
         return groups[0]
-    # If no groups, use the whole match
-    else:
-        return node_match.group(0)
 
 
 def recursive_parse(
@@ -56,7 +56,7 @@ def recursive_parse(
 
     # If not, we have to do a little parsing. First, set some vars and do basic validation
     node_type = node_schema["type"]
-    has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema or "x-regex-to-dict" in node_schema
+    has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema or "x-regex-key-value" in node_schema
     if has_regex and not isinstance(node_content, str):
         raise TypeError(
             "Schema node got a non-string input, but has a regex for parsing.\n"
@@ -66,7 +66,7 @@ def recursive_parse(
 
     node_regex = node_schema.get("x-regex")
     node_regex_iterator = node_schema.get("x-regex-iterator")
-    node_regex_to_dict = node_schema.get("x-regex-to-dict")
+    node_regex_to_dict = node_schema.get("x-regex-key-value")
     if node_regex is not None:
         node_match = re.search(node_regex, node_content, flags=re.DOTALL)
         if not node_match:
@@ -84,14 +84,14 @@ def recursive_parse(
             return None
     if node_regex_to_dict is not None:
         if node_type != "object":
-            raise TypeError(f"Schema node with type {node_type} cannot use x-regex-to-dict.\nSchema: {node_schema}")
+            raise TypeError(f"Schema node with type {node_type} cannot use x-regex-key-value.\nSchema: {node_schema}")
         # Note that this can be applied after a standard node-regex search
         output_content = {}
         for node_match in re.finditer(node_regex_to_dict, node_content, flags=re.DOTALL):
             match_groups = _parse_re_match(node_match)
             if not isinstance(match_groups, dict) or "key" not in match_groups or "value" not in match_groups:
                 raise ValueError(
-                    f"Regex for x-regex-to-dict must have named groups 'key' and 'value'.\n"
+                    f"Regex for x-regex-key-value must have named groups 'key' and 'value'.\n"
                     f"Match groups: {match_groups}\n"
                     f"Schema: {node_schema}"
                 )
