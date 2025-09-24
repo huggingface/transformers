@@ -31,7 +31,6 @@ Even with less training data than RoBERTa, DeBERTa manages to outperform it on s
 
 You can find all the original DeBERTa checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=deberta) organization.
 
-
 > [!TIP]
 > Click on the DeBERTa models in the right sidebar for more examples of how to apply DeBERTa to different language tasks.
 

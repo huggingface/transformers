@@ -210,7 +210,6 @@ At this point, only three steps remain:
 2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, data collator, and `compute_metrics` function.
 3. Call [`~Trainer.train`] to fine-tune your model.
 
-
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_mind_model",

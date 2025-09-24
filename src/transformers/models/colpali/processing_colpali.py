@@ -177,7 +177,7 @@ class ColPaliProcessor(ProcessorMixin):
         )
         suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
-        return_token_type_ids = suffix is not None
+        return_token_type_ids = True
 
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
@@ -208,7 +208,7 @@ class ColPaliProcessor(ProcessorMixin):
 
             inputs = self.tokenizer(
                 input_strings,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -238,7 +238,7 @@ class ColPaliProcessor(ProcessorMixin):
 
             batch_query = self.tokenizer(
                 texts_query,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -261,6 +261,12 @@ class ColPaliProcessor(ProcessorMixin):
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids", "labels"]
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(tokenizer_input_names + image_processor_input_names)
 
     @property
     def query_augmentation_token(self) -> str:
