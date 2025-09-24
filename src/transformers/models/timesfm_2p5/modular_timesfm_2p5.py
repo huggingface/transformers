@@ -25,7 +25,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ..gemma2.modeling_gemma2 import Gemma2Attention
+from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2RotaryEmbedding
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..timesfm.modeling_timesfm import (
     TimesFmDecoderLayer,
@@ -229,6 +229,10 @@ class Timesfm2P5RMSNorm(LlamaRMSNorm):
 
 
 
+class Timesfm2P5RotaryEmbedding(Gemma2RotaryEmbedding):
+    pass
+
+
 class Timesfm2P5Attention(Gemma2Attention):
     """
     TimesFM 2.5 attention inherits from Gemma2Attention which provides:
@@ -278,6 +282,7 @@ class Timesfm2P5DecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -288,6 +293,7 @@ class Timesfm2P5DecoderLayer(nn.Module):
         hidden_states = self.pre_attn_ln(hidden_states)
         hidden_states, scores = self.self_attn(
             hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             output_attentions=output_attentions,
@@ -344,8 +350,8 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
             for layer_idx in range(config.num_hidden_layers)
         ])
 
-        # TimesFM 2.5 uses rotary embeddings in attention, not separate positional embeddings
-        # So we don't need the position_emb layer that TimesFM 2.0 uses
+        # TimesFM 2.5 uses rotary embeddings - add rotary embedding component
+        self.rotary_emb = Timesfm2P5RotaryEmbedding(config)
 
         # Initialize weights and apply final processing
         # self.post_init()  # Temporarily disabled due to initialization issue
@@ -383,8 +389,13 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         input_embeddings = self.input_ff_layer(tokenizer_inputs)
 
         # Step 4: No frequency embedding in TimesFM 2.5 - model adapts automatically
-        # freq parameter is ignored (kept only for API compatibility with parent class)
-        # Step 5: Pass through transformer layers
+
+        # Step 5: Create position embeddings for RoPE
+        sequence_length = input_embeddings.shape[1]
+        position_ids = torch.arange(sequence_length, device=input_embeddings.device).unsqueeze(0)
+        position_embeddings = self.rotary_emb(input_embeddings, position_ids)
+
+        # Step 6: Pass through transformer layers
         hidden_states = input_embeddings
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -395,8 +406,9 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
 
             layer_outputs = layer(
                 hidden_states=hidden_states,
+                position_embeddings=position_embeddings,
                 attention_mask=None,  # TimesFM 2.5 doesn't use attention mask in base forward
-                position_ids=None,
+                position_ids=position_ids,
                 output_attentions=output_attentions,
             )
 
