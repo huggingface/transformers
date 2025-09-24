@@ -174,7 +174,6 @@ jobs:
         steps:
             - checkout
             - run: uv pip install -e ".[quality]"
-            - run: uv pip install --prerelease allow "huggingface_hub==1.0.0.rc1"
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt
