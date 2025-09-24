@@ -38,7 +38,6 @@ In particular all "Please explain" questions or objectively very user-specific f
 
 * "How to train T5 on De->En translation?"
 
-
 ## The GitHub Issues
 
 Everything which hints at a bug should be opened as an [issue](https://github.com/huggingface/transformers/issues).
@@ -247,7 +246,6 @@ You are not required to read the following guidelines before opening an issue. H
 
     Try not use italics and bold text too much as these often make the text more difficult to read.
 
-
 12. If you are cross-referencing a specific comment in a given thread or another issue, always link to that specific comment, rather than using the issue link. If you do the latter it could be quite impossible to find which specific comment you're referring to.
 
     To get the link to the specific comment do not copy the url from the location bar of your browser, but instead, click the `...` icon in the upper right corner of the comment and then select "Copy Link".
@@ -256,7 +254,6 @@ You are not required to read the following guidelines before opening an issue. H
 
     1. https://github.com/huggingface/transformers/issues/9257
     2. https://github.com/huggingface/transformers/issues/9257#issuecomment-749945162
-
 
 13. If you are replying to a last comment, it's totally fine to make your reply with just your comment in it. The readers can follow the information flow here.
 
