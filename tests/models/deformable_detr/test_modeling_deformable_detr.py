@@ -506,8 +506,7 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             arg_names = [*signature.parameters.keys()]
 
             if model.config.is_encoder_decoder:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                expected_arg_names.extend(["encoder_outputs"])
+                expected_arg_names = ["pixel_values", "pixel_mask", "decoder_attention_mask"]
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
