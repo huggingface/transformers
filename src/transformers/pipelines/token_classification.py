@@ -136,8 +136,8 @@ class TokenClassificationPipeline(ChunkPipeline):
     _load_feature_extractor = False
     _load_tokenizer = True
 
-    def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, args_parser=TokenClassificationArgumentHandler(), **kwargs):
+        super().__init__(**kwargs)
 
         self.check_model_type(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES)
 
@@ -151,7 +151,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
         offset_mapping: Optional[list[tuple[int, int]]] = None,
-        is_split_into_words: Optional[bool] = False,
+        is_split_into_words: bool = False,
         stride: Optional[int] = None,
         delimiter: Optional[str] = None,
     ):

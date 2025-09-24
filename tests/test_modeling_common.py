@@ -688,6 +688,7 @@ class ModelTesterMixin:
             "Owlv2ModelTest": 12,
             "Owlv2TextModelTest": 12,
             "Owlv2ForObjectDetectionTest": 12,
+            "Qwen2_5OmniThinkerForConditionalGenerationModelTest": 4,
             "SamHQModelTest": 12,
             "Swin2SRModelTest": 3,
             "XLNetModelTest": 3,
@@ -2371,6 +2372,7 @@ class ModelTesterMixin:
                     model = model_class(config)
             else:
                 model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:

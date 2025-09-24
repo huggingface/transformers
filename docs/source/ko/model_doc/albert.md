@@ -163,8 +163,6 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
-<frameworkcontent>
-<pt>
 
 ## AlbertModel[[albertmodel]]
 
@@ -194,5 +192,3 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 [[autodoc]] AlbertForQuestionAnswering - forward
 
-</pt>
-</frameworkcontent>

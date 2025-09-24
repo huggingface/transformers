@@ -26,7 +26,6 @@ file or directory, or from a pretrained model configuration provided by the libr
 
 The other methods that are common to each model are defined in [`~modeling_utils.ModuleUtilsMixin`] and [`~generation.GenerationMixin`].
 
-
 ## PreTrainedModel
 
 [[autodoc]] PreTrainedModel

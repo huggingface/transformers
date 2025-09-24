@@ -201,6 +201,7 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             _ = model(**input_dict)  # successful forward with no modifications
             curr_input_dict = copy.deepcopy(input_dict)
 

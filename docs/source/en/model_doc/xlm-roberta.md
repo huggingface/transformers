@@ -87,6 +87,7 @@ print(f"The predicted token is: {predicted_token}")
 ```bash
 echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/xlm-roberta-base --device 0
 ```
+
 </hfoption>
 </hfoptions>
 
