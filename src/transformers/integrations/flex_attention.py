@@ -320,6 +320,7 @@ def flex_attention_forward(
             sinks = s_aux.view(1, -1, 1, 1).expand(batch_size, num_heads, seq_len_q, 1)
 
             # We need to compute the normalization that includes the sinks
+            # since log(sum(exp(scores))) = lse, exp(log(sum(exp(scores)))) = exp(lse)
             # NB: log(sum(exp(scores)) + exp(sink)) = log(exp(lse) + exp(sink))
             lse_expanded = lse.unsqueeze(-1)  # [batch, num_heads, seq_len, 1]
             combined_lse = torch.logsumexp(torch.cat([lse_expanded, sinks], dim=-1), dim=-1, keepdim=True)
