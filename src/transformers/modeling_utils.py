@@ -1389,7 +1389,6 @@ def _find_missing_and_unexpected_keys(
 
     if hf_quantizer is not None:
         missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
-        unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys, prefix)
 
     return missing_keys, unexpected_keys
 
@@ -4951,14 +4950,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             torch.set_default_dtype(dtype_orig)
 
         # Finalize model weight initialization
-        (
-            model,
-            missing_keys,
-            unexpected_keys,
-            mismatched_keys,
-            offload_index,
-            error_msgs,
-        ) = cls._load_pretrained_model(
+        model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs = cls._load_pretrained_model(
             model,
             state_dict,
             checkpoint_files,

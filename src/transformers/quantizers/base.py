@@ -128,16 +128,6 @@ class HfQuantizer(ABC):
         """
         return missing_keys
 
-    def update_unexpected_keys(self, model, unexpected_keys: list[str], prefix: str) -> list[str]:
-        """
-        Override this method if you want to adjust the `unexpected_keys`.
-
-        Args:
-            unexpected_keys (`list[str]`, *optional*):
-                The list of unexpected keys in the checkpoint compared to the state dict of the model
-        """
-        return unexpected_keys
-
     def update_expected_keys(self, model, expected_keys: list[str], loaded_keys: list[str]) -> list[str]:
         """
         Override this method if you want to adjust the `update_expected_keys`.
