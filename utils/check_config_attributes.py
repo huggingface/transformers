@@ -53,6 +53,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
+    "MiniCPM3Config": ["tie_word_embeddings"],
     "Qwen2Config": ["use_sliding_window", "max_window_layers"],
     "Qwen2MoeConfig": ["use_sliding_window"],
     "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
