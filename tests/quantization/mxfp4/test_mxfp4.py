@@ -16,13 +16,14 @@ import gc
 import tempfile
 import unittest
 from unittest.mock import patch
+from contextlib import contextmanager, ExitStack
 
 from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
 from transformers.testing_utils import (
     require_kernels,
     require_torch,
     require_torch_gpu,
-    require_torch_large_gpu,
+    require_torch_large_accelerator,
     require_triton,
     slow,
 )
@@ -33,6 +34,30 @@ from transformers.utils import (
 
 if is_torch_available():
     import torch
+
+
+if torch.cuda.is_available():
+    REQUIRE_TRITON_MXFP4 = require_triton(min_version="3.4.0")
+elif hasattr(torch, "xpu") and torch.xpu.is_available():
+    REQUIRE_TRITON_MXFP4 = require_triton(min_version="3.5.0")
+else:
+    REQUIRE_TRITON_MXFP4 = unittest.skip("test requires CUDA or XPU")
+
+
+def _empty_accelerator_cache():
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        torch.xpu.empty_cache()
+
+
+@contextmanager
+def _patch_no_accelerator():
+    with ExitStack() as stack:
+        stack.enter_context(patch("torch.cuda.is_available", return_value=False))
+        if hasattr(torch, "xpu"):
+            stack.enter_context(patch("torch.xpu.is_available", return_value=False))
+        yield
 
 
 class Mxfp4ConfigTest(unittest.TestCase):
@@ -82,8 +107,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
 
     def setUp(self):
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        _empty_accelerator_cache()
 
     def test_quantizer_validation_no_torch(self):
         """Test quantizer validation when torch is not available"""
@@ -96,9 +120,9 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             with self.assertRaises(ImportError):
                 quantizer.validate_environment()
 
-    def test_quantizer_validation_no_cuda(self):
-        """Test quantizer validation when CUDA is not available"""
-        with patch("torch.cuda.is_available", return_value=False):
+    def test_quantizer_validation_no_accelerator(self):
+        """Test quantizer validation when CUDA/XPU is not available"""
+        with _patch_no_accelerator():
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config()
@@ -108,8 +132,9 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 quantizer.validate_environment()
 
+    @require_torch_gpu
     def test_quantizer_validation_low_compute_capability(self):
-        """Test quantizer validation with low compute capability"""
+        """Test quantizer validation with CUDA low compute capability"""
         with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -120,8 +145,9 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 quantizer.validate_environment()
 
+    @require_torch_gpu
     def test_quantizer_validation_low_compute_capability_with_prequantized(self):
-        """Test quantizer validation with low compute capability"""
+        """Test quantizer validation with CUDA low compute capability"""
         with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -132,8 +158,9 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             quantizer.validate_environment()
             self.assertTrue(quantizer.quantization_config.dequantize)
 
+    @require_torch_gpu
     def test_quantizer_validation_low_compute_capability_with_dequantize(self):
-        """Test quantizer validation with low compute capability but dequantize enabled"""
+        """Test quantizer validation with CUDA low compute capability but dequantize enabled"""
         with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -147,20 +174,20 @@ class Mxfp4QuantizerTest(unittest.TestCase):
                 if "compute capability" in str(e):
                     self.fail("Should not raise compute capability error when dequantize=True")
 
-    def test_quantizer_validation_order_dequantize_before_cuda_check(self):
-        """Test that dequantize check happens before CUDA availability check"""
+    def test_quantizer_validation_order_dequantize_before_accelerator_check(self):
+        """Test that dequantize check happens before CUDA/XPU availability check"""
         # Mock torch.cuda.is_available
-        with patch("torch.cuda.is_available", return_value=False):
+        with _patch_no_accelerator():
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
-            # Test with dequantize=True - should pass even without CUDA and accelerate
+            # Test with dequantize=True - should pass even without CUDA/XPU and accelerate
             config = Mxfp4Config(dequantize=True)
             quantizer = Mxfp4HfQuantizer(config)
 
             # This should not raise any error because dequantize check comes first
             quantizer.validate_environment()
 
-            # Test with dequantize=False - should still fail due to missing CUDA
+            # Test with dequantize=False - should still fail due to missing CUDA/XPU
             config = Mxfp4Config(dequantize=False)
             quantizer = Mxfp4HfQuantizer(config)
             quantizer.pre_quantized = False
@@ -313,9 +340,8 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertEqual(result.shape, (2, 8 * 16 * 2, 4))
         self.assertEqual(result.dtype, torch.bfloat16)
 
-    @require_triton(min_version="3.4.0")
+    @REQUIRE_TRITON_MXFP4
     @require_kernels
-    @require_torch_gpu
     @require_torch
     def test_quantize_to_mxfp4(self):
         """Test quantization function"""
@@ -326,7 +352,8 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         quantizer = Mxfp4HfQuantizer(config)
 
         # Create dummy weight tensor
-        w = torch.randn(32, 64, 128, dtype=torch.bfloat16, device=torch.device("cuda"))
+        device = "xpu" if (hasattr(torch, "xpu") and torch.xpu.is_available()) else "cuda"
+        w = torch.randn(32, 64, 128, dtype=torch.bfloat16, device=torch.device(device))
 
         quantized_w, w_scale = quantize_to_mxfp4(w, quantizer._lazy_import_kernels())
 
@@ -335,8 +362,8 @@ class Mxfp4IntegrationTest(unittest.TestCase):
 
 
 @require_torch
-@require_torch_large_gpu
-@require_triton(min_version="3.4.0")
+@require_torch_large_accelerator
+@REQUIRE_TRITON_MXFP4
 @require_kernels
 @slow
 class Mxfp4ModelTest(unittest.TestCase):
@@ -353,13 +380,11 @@ class Mxfp4ModelTest(unittest.TestCase):
 
     def setUp(self):
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        _empty_accelerator_cache()
 
     def tearDown(self):
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        _empty_accelerator_cache()
 
     def check_inference_correctness_quantized(self, model, tokenizer):
         # Check that inference pass works on the model
@@ -454,7 +479,7 @@ class Mxfp4ModelTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             # Save the model in mxfp4 format
             model.save_pretrained(tmp)
-            torch.cuda.empty_cache()
+            _empty_accelerator_cache()
             gc.collect()
             # test quantized model
             loaded_model = GptOssForCausalLM.from_pretrained(
@@ -486,7 +511,7 @@ class Mxfp4ModelTest(unittest.TestCase):
         # save the quantized model
         with tempfile.TemporaryDirectory() as tmp:
             loaded_model.save_pretrained(tmp)
-            torch.cuda.empty_cache()
+            _empty_accelerator_cache()
             gc.collect()
             # load it back to check with everything works as expected
             loaded_model = GptOssForCausalLM.from_pretrained(
