@@ -49,8 +49,8 @@ class DeepseekV2Experts(nn.ModuleList):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
-        for _ in range(config.num_experts):
+        self.num_experts = config.n_routed_experts
+        for _ in range(config.n_routed_experts):
             self += [DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size)]
 
     def forward(
@@ -81,7 +81,7 @@ class DeepseekV2Moe(nn.Module):
         super().__init__()
         self.config = config
         self.experts = DeepseekV2Experts(config)
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+        self.gate = nn.Linear(config.hidden_size, config.n_routed_experts, bias=False)
         if config.n_shared_experts is not None:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
             self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
@@ -92,7 +92,9 @@ class DeepseekV2Moe(nn.Module):
         self.topk_group = config.topk_group
 
     def route_tokens_to_experts(self, router_logits):
-        batch_size, seq_len, _ = router_logits.shape
+        batch_size, seq_len, hidden_dim = router_logits.shape
+        router_logits = router_logits.view(-1, hidden_dim)
+        router_logits = router_logits.softmax(dim=-1, dtype=torch.float32)
         if self.topk_method == "greedy":
             topk_weight, topk_idx = torch.topk(router_logits, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
