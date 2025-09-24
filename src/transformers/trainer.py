@@ -3931,7 +3931,7 @@ class Trainer:
     def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
-        arguments, depending on the situation. We rely on accelerate for autocast, hence we don't need to modify this method.
+        arguments, depending on the situation. We rely on accelerate for autocast, hence we do nothing here.
         """
         return contextlib.nullcontext()
 
