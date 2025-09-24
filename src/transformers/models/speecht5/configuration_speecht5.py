@@ -333,6 +333,7 @@ class SpeechT5Config(PretrainedConfig):
             **kwargs,
         )
 
+    @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
 
