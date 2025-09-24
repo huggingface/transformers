@@ -727,18 +727,17 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in {
+    is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
         QuantizationMethod.HQQ,
         QuantizationMethod.BITS_AND_BYTES,
+        QuantizationMethod.TORCHAO,
     }
-    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb
+    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb_or_ao
     file_pointer = None
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
     for param_name, empty_param in state_dict.items():
-        if param_name not in expected_keys:  # when loading from ckpt, we skip param if doesnt exist in modeling
-            continue
         # we need to use serialized_param_name as file pointer is untouched
         if is_meta_state_dict:
             # This is the name of the parameter as it appears on disk file
@@ -873,7 +872,7 @@ def load_shard_file(args):
         shard_file,
         state_dict,
         disk_only_shard_files,
-        is_hqq_or_bnb,
+        is_hqq_or_bnb_or_ao,
         is_quantized,
         device_map,
         hf_quantizer,
@@ -899,7 +898,7 @@ def load_shard_file(args):
     map_location = "cpu"
     if (
         shard_file.endswith(".safetensors")
-        and not is_hqq_or_bnb
+        and not is_hqq_or_bnb_or_ao
         and not (is_deepspeed_zero3_enabled() and not is_quantized)
     ):
         map_location = "meta"
@@ -922,6 +921,13 @@ def load_shard_file(args):
 
     # Fix the key names
     state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
+    metadata = None
+    if shard_file.endswith(".safetensors") and is_safetensors_available():
+        with safe_open(shard_file, framework="pt") as f:
+            metadata = f.metadata()
+
+    if hf_quantizer:
+        state_dict = hf_quantizer.update_state_dict_with_metadata(state_dict, metadata)
 
     error_msgs = []
 
@@ -1406,7 +1412,6 @@ def _get_device_map(
 
 
 def _find_missing_and_unexpected_keys(
-    cls,
     model: "PreTrainedModel",
     original_checkpoint_keys: list[str],
     checkpoint_keys: list[str],
@@ -1436,12 +1441,6 @@ def _find_missing_and_unexpected_keys(
     model_buffers = {n for n, _ in model.named_buffers()}
     unexpected_keys = sorted(unexpected_keys - model_buffers)
 
-    # Old checkpoints may have keys for rotary_emb.inv_freq for each layer, however we moved this buffer to the main model
-    # (so the buffer name has changed). Remove them in such a case
-    has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer in model_buffers)
-    if has_inv_freq_buffers:
-        unexpected_keys = [k for k in unexpected_keys if "rotary_emb.inv_freq" not in k]
-
     tied_params = find_tied_parameters(model)
     for group in tied_params:
         missing_in_group = [k for k in missing_keys if k in group]
@@ -1451,15 +1450,6 @@ def _find_missing_and_unexpected_keys(
     if hf_quantizer is not None:
         missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
         unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys, prefix)
-
-    # Model-specific exceptions for missing and unexpected keys (e.g. if the modeling change over time, or any other reason...)
-    if cls._keys_to_ignore_on_load_missing is not None:
-        for pattern in cls._keys_to_ignore_on_load_missing:
-            missing_keys = [k for k in missing_keys if re.search(pattern, k) is None]
-
-    if cls._keys_to_ignore_on_load_unexpected is not None:
-        for pattern in cls._keys_to_ignore_on_load_unexpected:
-            unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
 
     return missing_keys, unexpected_keys
 
@@ -5277,9 +5267,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
-        is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in {
+        is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.BITS_AND_BYTES,
+            QuantizationMethod.TORCHAO,
         }
 
         # Get all the keys of the state dicts that we have to initialize the model
@@ -5311,12 +5302,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Find missing and unexpected keys from the state dict
         missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
-            cls,
-            model,
-            original_checkpoint_keys,
-            checkpoint_keys,
-            loading_base_model_from_task_state_dict,
-            hf_quantizer,
+            model, original_checkpoint_keys, checkpoint_keys, loading_base_model_from_task_state_dict, hf_quantizer
         )
         # Find all the keys with shape mismatch (if we ignore the mismatch, the weights need to be newly initialized the
         # same way as missing keys)
@@ -5330,8 +5316,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weights_only,
         )
 
-        # We need to update both the mapping and the list of checkpoint keys to remove the mismatched ones
-        key_renaming_mapping = {k: v for k, v in key_renaming_mapping.items() if v not in mismatched_keys}
+        # We need to update both the mapping and the list of checkpoint keys to remove the mismatched and unexpected ones
+        key_renaming_mapping = {
+            k: v for k, v in key_renaming_mapping.items() if v not in mismatched_keys and v not in unexpected_keys
+        }
         checkpoint_keys = list(key_renaming_mapping.values())
 
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
@@ -5357,6 +5345,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # in the submodule
             key_renaming_mapping = {k: v[len(_prefix) :] for k, v in key_renaming_mapping.items()}
             checkpoint_keys = list(key_renaming_mapping.values())
+            unexpected_keys = [k[len(_prefix) :] if k.startswith(_prefix) else k for k in unexpected_keys]
             # We need to update the device map as well
             if device_map is not None:
                 device_map = {k[len(_prefix) :] if k.startswith(_prefix) else k: v for k, v in device_map.items()}
@@ -5364,7 +5353,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             task_specific_expected_keys = [s for s in model.state_dict() if not s.startswith(_prefix)]
             base_model_expected_keys = list(model_to_load.state_dict().keys())
             if any(
-                key in task_specific_expected_keys and key not in base_model_expected_keys for key in checkpoint_keys
+                key in task_specific_expected_keys and key not in base_model_expected_keys for key in unexpected_keys
             ):
                 raise ValueError(
                     "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
@@ -5451,7 +5440,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 shard_file,
                 state_dict,
                 disk_only_shard_files,
-                is_hqq_or_bnb,
+                is_hqq_or_bnb_or_ao,
                 is_quantized,
                 device_map,
                 hf_quantizer,
@@ -5545,6 +5534,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         device_mesh.get_local_rank(),
                         device_mesh,
                     )
+
+        # Model-specific exceptions for missing and unexpected keys (e.g. if the modeling change over time, or any other reason...)
+        # We should remove them here to avoid raising warnings if they are present in the lists
+        if cls._keys_to_ignore_on_load_missing is not None:
+            for pattern in cls._keys_to_ignore_on_load_missing:
+                missing_keys = [k for k in missing_keys if re.search(pattern, k) is None]
+
+        if cls._keys_to_ignore_on_load_unexpected is not None:
+            for pattern in cls._keys_to_ignore_on_load_unexpected:
+                unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
+
+        # Old checkpoints may have keys for rotary_emb.inv_freq for each layer, however we moved this buffer to the main model
+        # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
+        # `_keys_to_ignore_on_load_unexpected` as it touches many models
+        has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in model.named_buffers())
+        if has_inv_freq_buffers:
+            unexpected_keys = [k for k in unexpected_keys if "rotary_emb.inv_freq" not in k]
 
         # All potential warnings/infos
         if len(error_msgs) > 0:
