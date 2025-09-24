@@ -190,12 +190,14 @@ class HqqHfQuantizer(HfQuantizer):
         # We need this hack as the model is not pre-prepared as an empty skeleton on meta device
         if self.pre_quantized:
             hqq_keys = HQQLinear(None, None).state_dict_keys() - {"bias"}
+            # Save them for later
             if hasattr(module, "hqq_params"):
                 module.hqq_params[tensor_name] = param_value
             else:
                 module.hqq_params = {tensor_name: param_value}
 
-            # If they are all present and saved, make it a HQQLinear layer! (we cannot do it param after param...)
+            # If they are all present and saved, make it a HQQLinear layer! (we cannot do it param after param because
+            # hqq does not support it...)
             if all(k in module.hqq_params for k in hqq_keys) and ("bias" in module.hqq_params or module.bias is None):
                 print(module.hqq_params)
                 hqq_layer = HQQLinear(
