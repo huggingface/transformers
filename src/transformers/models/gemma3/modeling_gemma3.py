@@ -326,8 +326,6 @@ class Gemma3Attention(nn.Module):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.is_sliding = self.layer_type == "sliding_attention"
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -349,7 +347,8 @@ class Gemma3Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.sliding_window = config.sliding_window if self.is_sliding else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.is_sliding = self.layer_type == "sliding_attention"
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
@@ -506,6 +505,19 @@ class Gemma3PreTrainedModel(PreTrainedModel):
             module.weight.data.zero_()
 
 
+def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
+    """
+    Enables a bidirectional mask within the sliding window.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        """A token can attend to any other token if their absolute distance is within
+        the (exclusive) sliding window size (distance < sliding_window)."""
+        return abs(q_idx - kv_idx) < sliding_window
+
+    return inner_mask
+
+
 @auto_docstring
 class Gemma3TextModel(Gemma3PreTrainedModel):
     config: Gemma3TextConfig
@@ -585,10 +597,16 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
+            sliding_mask_kwargs = mask_kwargs.copy()
+
+            if self.config.use_bidirectional_attention:
+                mask_kwargs["or_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
+                sliding_mask_kwargs["or_mask_function"] = _bidirectional_window_overlay(self.config.sliding_window)
+
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
             }
 
         # embed positions
@@ -596,12 +614,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         position_embeddings = {}
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
-
-        # normalized
-        # Gemma3Text downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
-        # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
-        hidden_states = hidden_states * normalizer
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
