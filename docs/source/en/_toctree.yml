@@ -1143,6 +1143,8 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
         title: Qwen2VL
+      - local: model_doc/qwen3_omni_moe
+        title: Qwen3-Omni-MoE
       - local: model_doc/qwen3_vl
         title: Qwen3VL
       - local: model_doc/qwen3_vl_moe

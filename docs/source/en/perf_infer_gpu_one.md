@@ -69,7 +69,7 @@ Learn in more detail the concepts underlying 8-bit quantization in the [Gentle I
 
 Set up a [`BitsAndBytesConfig`] and set `load_in_4bit=True` to load a model in 4-bit precision. The [`BitsAndBytesConfig`] is passed to the `quantization_config` parameter in [`~PreTrainedModel.from_pretrained`].
 
-Allow Accelerate to automatically distribute the model across your available hardware by setting `device_map=“auto”`.
+Allow Accelerate to automatically distribute the model across your available hardware by setting `device_map="auto"`.
 
 Place all inputs on the same device as the model.
 

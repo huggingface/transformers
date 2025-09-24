@@ -906,18 +906,11 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = ViTModelTester(self, batch_size=13)
         model_tester_decoder = GPT2ModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs(extra_inputs=True)
         config, pixel_values, labels = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = decoder_config_and_inputs
+        decoder_config, decoder_input_ids, decoder_attention_mask, _, _, _, _, _ = (
+            decoder_config_and_inputs
+        )
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True
@@ -1026,18 +1019,11 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = DonutSwinModelTester(self, batch_size=13)
         model_tester_decoder = GPT2ModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs(extra_inputs=True)
         config, pixel_values, labels = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = decoder_config_and_inputs
+        decoder_config, decoder_input_ids, decoder_attention_mask, _, _, _, _, _ = (
+            decoder_config_and_inputs
+        )
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True

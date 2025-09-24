@@ -113,7 +113,6 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_torchscript = False
-    test_can_init_all_missing_weights = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states

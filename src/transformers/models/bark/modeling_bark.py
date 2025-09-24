@@ -577,7 +577,7 @@ class BarkSemanticModel(BarkCausalModel):
     def generate(
         self,
         input_ids: torch.Tensor,
-        semantic_generation_config: BarkSemanticGenerationConfig = None,
+        semantic_generation_config: Optional[BarkSemanticGenerationConfig] = None,
         history_prompt: Optional[dict[str, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
@@ -762,8 +762,8 @@ class BarkCoarseModel(BarkCausalModel):
     def generate(
         self,
         semantic_output: torch.Tensor,
-        semantic_generation_config: BarkSemanticGenerationConfig = None,
-        coarse_generation_config: BarkCoarseGenerationConfig = None,
+        semantic_generation_config: Optional[BarkSemanticGenerationConfig] = None,
+        coarse_generation_config: Optional[BarkCoarseGenerationConfig] = None,
         codebook_size: int = 1024,
         history_prompt: Optional[dict[str, torch.Tensor]] = None,
         return_output_lengths: Optional[bool] = None,
@@ -1170,8 +1170,8 @@ class BarkFineModel(BarkPreTrainedModel):
     def generate(
         self,
         coarse_output: torch.Tensor,
-        semantic_generation_config: BarkSemanticGenerationConfig = None,
-        coarse_generation_config: BarkCoarseGenerationConfig = None,
+        semantic_generation_config: Optional[BarkSemanticGenerationConfig] = None,
+        coarse_generation_config: Optional[BarkCoarseGenerationConfig] = None,
         fine_generation_config: BarkFineGenerationConfig = None,
         codebook_size: int = 1024,
         history_prompt: Optional[dict[str, torch.Tensor]] = None,

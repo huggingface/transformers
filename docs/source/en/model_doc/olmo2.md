@@ -87,6 +87,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bits.
+
 ```py
 
 #pip install torchao
@@ -116,7 +117,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
 
-
 ## Notes
 
 - OLMo2 uses RMSNorm instead of standard layer norm. The RMSNorm is applied to attention queries and keys, and it is applied after the attention and feedforward layers rather than before.
@@ -128,7 +128,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
     model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B")
     ```
-
 
 ## Olmo2Config
 

@@ -134,30 +134,25 @@ print(output)
 
 [[autodoc]] BioGptConfig
 
-
 ## BioGptTokenizer
 
 [[autodoc]] BioGptTokenizer
     - save_vocabulary
-
 
 ## BioGptModel
 
 [[autodoc]] BioGptModel
     - forward
 
-
 ## BioGptForCausalLM
 
 [[autodoc]] BioGptForCausalLM
     - forward
 
-
 ## BioGptForTokenClassification
 
 [[autodoc]] BioGptForTokenClassification
     - forward
-
 
 ## BioGptForSequenceClassification
 

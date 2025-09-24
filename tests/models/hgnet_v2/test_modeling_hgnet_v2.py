@@ -188,10 +188,6 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
     def setUp(self):
         self.model_tester = HGNetV2ModelTester(self)
 
-    @unittest.skip(reason="Does not work on the tiny model.")
-    def test_model_parallelism(self):
-        super().test_model_parallelism()
-
     @unittest.skip(reason="HGNetV2 does not output attentions")
     def test_attention_outputs(self):
         pass
@@ -206,14 +202,6 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
 
     @unittest.skip(reason="HGNetV2 does not support input and output embeddings")
     def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="HGNetV2 does not have a model")
-    def test_model(self):
-        pass
-
-    @unittest.skip(reason="Not relevant for the model")
-    def test_can_init_all_missing_weights(self):
         pass
 
     def test_backbone(self):

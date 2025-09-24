@@ -173,6 +173,7 @@ class ColPaliForRetrievalModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": input_ids,
+            "token_type_ids": torch.zeros_like(input_ids),
         }
         return config, inputs_dict
 
@@ -188,6 +189,7 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = True
+    additional_model_inputs = ["token_type_ids"]
 
     def setUp(self):
         self.model_tester = ColPaliForRetrievalModelTester(self)

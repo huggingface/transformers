@@ -727,11 +727,12 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in {
+    is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
         QuantizationMethod.HQQ,
         QuantizationMethod.BITS_AND_BYTES,
+        QuantizationMethod.TORCHAO,
     }
-    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb
+    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb_or_ao
     file_pointer = None
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
@@ -873,7 +874,7 @@ def load_shard_file(args):
         shard_file,
         state_dict,
         disk_only_shard_files,
-        is_hqq_or_bnb,
+        is_hqq_or_bnb_or_ao,
         is_quantized,
         device_map,
         hf_quantizer,
@@ -899,7 +900,7 @@ def load_shard_file(args):
     map_location = "cpu"
     if (
         shard_file.endswith(".safetensors")
-        and not is_hqq_or_bnb
+        and not is_hqq_or_bnb_or_ao
         and not (is_deepspeed_zero3_enabled() and not is_quantized)
     ):
         map_location = "meta"
@@ -922,6 +923,13 @@ def load_shard_file(args):
 
     # Fix the key names
     state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
+    metadata = None
+    if shard_file.endswith(".safetensors") and is_safetensors_available():
+        with safe_open(shard_file, framework="pt") as f:
+            metadata = f.metadata()
+
+    if hf_quantizer:
+        state_dict = hf_quantizer.update_state_dict_with_metadata(state_dict, metadata)
 
     error_msgs = []
 
@@ -1412,7 +1420,6 @@ def _find_missing_and_unexpected_keys(
     checkpoint_keys: list[str],
     loading_base_model_from_task_state_dict: bool,
     hf_quantizer: Optional[HfQuantizer],
-    device_map: dict,
 ) -> tuple[list[str], list[str]]:
     """Find missing keys (keys that are part of the model parameters but were NOT found in the loaded state dict keys) and unexpected keys
     (keys found in the loaded state dict keys, but that are NOT part of the model parameters)
@@ -1644,7 +1651,7 @@ class ModuleUtilsMixin:
     def get_extended_attention_mask(
         self,
         attention_mask: Tensor,
-        input_shape: tuple[int],
+        input_shape: tuple[int, ...],
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ) -> Tensor:
@@ -2204,8 +2211,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                         flexible_matched = True
                                         break
                             if not flexible_matched:
-                                import warnings
-
                                 warnings.warn(
                                     f"Layer pattern '{layer_pattern}' does not match any parameters in the model. "
                                     f"This rule may not be applied during tensor parallelization."
@@ -2677,7 +2682,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 try:
                     self._sdpa_can_dispatch(is_init_check)
                     applicable_attn_implementation = "sdpa"
-                except (ValueError, ImportError) as e:
+                except (ValueError, ImportError):
                     applicable_attn_implementation = "eager"
         else:
             applicable_attn_implementation = self.get_correct_attn_implementation(
@@ -3430,7 +3435,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self,
         old_lm_head: nn.Linear,
         new_num_tokens: Optional[int] = None,
-        transposed: Optional[bool] = False,
+        transposed: bool = False,
         mean_resizing: bool = True,
     ) -> nn.Linear:
         """
@@ -3587,7 +3592,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         old_lm_head_dim,
         old_num_tokens,
         added_num_tokens,
-        transposed=False,
+        transposed: bool = False,
     ):
         if transposed:
             # Transpose to the desired shape for the function.
@@ -5242,9 +5247,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
-        is_hqq_or_bnb = is_quantized and hf_quantizer.quantization_config.quant_method in {
+        is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.BITS_AND_BYTES,
+            QuantizationMethod.TORCHAO,
         }
 
         # Get all the keys of the state dicts that we have to initialize the model
@@ -5282,7 +5288,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             checkpoint_keys,
             loading_base_model_from_task_state_dict,
             hf_quantizer,
-            device_map,
         )
         # Find all the keys with shape mismatch (if we ignore the mismatch, the weights need to be newly initialized the
         # same way as missing keys)
@@ -5417,7 +5422,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 shard_file,
                 state_dict,
                 disk_only_shard_files,
-                is_hqq_or_bnb,
+                is_hqq_or_bnb_or_ao,
                 is_quantized,
                 device_map,
                 hf_quantizer,
