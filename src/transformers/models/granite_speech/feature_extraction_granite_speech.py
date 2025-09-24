@@ -36,53 +36,53 @@ if is_torchaudio_available():
     import torchaudio
 
 
-class _GraniteSpeechFeatureExtractorModule(nn.Module):
-    def __init__(self, feature_extractor: "GraniteSpeechFeatureExtractor"):
-        super().__init__()
-        self.melspec_kwargs = feature_extractor.melspec_kwargs
-        self.mel_filters = torchaudio.transforms.MelSpectrogram(**self.melspec_kwargs)
-        self.projector_window_size = feature_extractor.projector_window_size
-        self.projector_downsample_rate = feature_extractor.projector_downsample_rate
+    class _GraniteSpeechFeatureExtractorModule(nn.Module):
+        def __init__(self, feature_extractor: "GraniteSpeechFeatureExtractor"):
+            super().__init__()
+            self.melspec_kwargs = feature_extractor.melspec_kwargs
+            self.mel_filters = torchaudio.transforms.MelSpectrogram(**self.melspec_kwargs)
+            self.projector_window_size = feature_extractor.projector_window_size
+            self.projector_downsample_rate = feature_extractor.projector_downsample_rate
 
-    def _get_num_audio_features(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
-        """
-        Gets the (variable length) number of features (i.e., projector output) for the sequences
-        being considered.
+        def _get_num_audio_features(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
+            """
+            Gets the (variable length) number of features (i.e., projector output) for the sequences
+            being considered.
 
-        Args:
-            audio_lengths (`torch.Tensor`):
-                Sequence of one or more raw audio lengths.
-        """
-        hop_length = self.melspec_kwargs["hop_length"]
-        effective_window_size = self.projector_window_size // self.projector_downsample_rate
+            Args:
+                audio_lengths (`torch.Tensor`):
+                    Sequence of one or more raw audio lengths.
+            """
+            hop_length = self.melspec_kwargs["hop_length"]
+            effective_window_size = self.projector_window_size // self.projector_downsample_rate
 
-        # mel sequence length computation
-        mel_length = audio_lengths // hop_length + 1
-        # encoder frame takes two mel features
-        encoder_length = mel_length // 2
-        nblocks = (encoder_length + self.projector_window_size - 1) // self.projector_window_size
-        # projector output length
-        projector_length = nblocks * effective_window_size
-        return projector_length
+            # mel sequence length computation
+            mel_length = audio_lengths // hop_length + 1
+            # encoder frame takes two mel features
+            encoder_length = mel_length // 2
+            nblocks = (encoder_length + self.projector_window_size - 1) // self.projector_window_size
+            # projector output length
+            projector_length = nblocks * effective_window_size
+            return projector_length
 
-    def forward(self, audio: "torch.Tensor"):
-        """
-        Compute the Mel features to be passed to the conformer encoder.
-        """
-        bsz = audio.shape[0]
-        # Compute mel features
-        mel = self.mel_filters(audio.float())
-        logmel = mel.transpose(-1, -2).clip_(min=1e-10).log10_()
-        mx = logmel.amax(dim=(-2, -1), keepdim=True)
-        logmel = torch.maximum(logmel, mx - 8.0).div_(4).add_(1)
-        # remove last frame if odd
-        if logmel.shape[1] % 2 == 1:
-            logmel = logmel[:, :-1]
+        def forward(self, audio: "torch.Tensor"):
+            """
+            Compute the Mel features to be passed to the conformer encoder.
+            """
+            bsz = audio.shape[0]
+            # Compute mel features
+            mel = self.mel_filters(audio.float())
+            logmel = mel.transpose(-1, -2).clip_(min=1e-10).log10_()
+            mx = logmel.amax(dim=(-2, -1), keepdim=True)
+            logmel = torch.maximum(logmel, mx - 8.0).div_(4).add_(1)
+            # remove last frame if odd
+            if logmel.shape[1] % 2 == 1:
+                logmel = logmel[:, :-1]
 
-        # stacking and skipping by 2
-        audio = logmel.reshape(bsz, -1, 2 * logmel.shape[-1])
+            # stacking and skipping by 2
+            audio = logmel.reshape(bsz, -1, 2 * logmel.shape[-1])
 
-        return audio
+            return audio
 
 
 class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
