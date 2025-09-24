@@ -472,7 +472,7 @@ class AlbertModel(AlbertPreTrainedModel):
             inner_group_idx = int(layer - group_idx * self.config.inner_group_num)
             self.encoder.albert_layer_groups[group_idx].albert_layers[inner_group_idx].attention.prune_heads(heads)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

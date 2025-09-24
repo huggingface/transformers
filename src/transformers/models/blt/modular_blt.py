@@ -534,7 +534,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -797,7 +797,7 @@ class BltModel(BltPreTrainedModel):
             self.patcher = None
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
