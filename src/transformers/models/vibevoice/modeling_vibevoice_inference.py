@@ -129,6 +129,7 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
 
     def _process_speech_inputs(self, speech_tensors, speech_masks, speech_type="audio"):
         """Process speech inputs through tokenizers and connectors."""
+        # TODO can remove unsqueeze since if we keep batch dim in processor?
         encoder_output = self.model.acoustic_tokenizer.encode(speech_tensors.unsqueeze(1))
         acoustic_latents = encoder_output.sample(dist_type=self.model.acoustic_tokenizer.std_dist_type)[0]
 
@@ -296,8 +297,8 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         logits_processor: Optional[LogitsProcessorList] = None,
         audio_streamer: Optional[Union[AudioStreamer, AsyncAudioStreamer]] = None,
         speech_tensors: Optional[torch.FloatTensor] = None,
-        speech_masks: Optional[torch.BoolTensor] = None,
-        speech_input_mask: Optional[torch.BoolTensor] = None,
+        speech_masks: Optional[torch.BoolTensor] = None,        # TODO rename, this is to ignore padded parts
+        speech_input_mask: Optional[torch.BoolTensor] = None,   # TODO rename, this is to know where is speech in script
         return_speech: bool = True,
         cfg_scale: float = 1.0,
         stop_check_fn: Optional[Callable[[], bool]] = None,

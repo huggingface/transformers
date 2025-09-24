@@ -20,17 +20,46 @@ import re
 from typing import Any, Optional, Union
 
 import numpy as np
-import torch
 
-from ...audio_utils import make_list_of_audio
-from ...processing_utils import ProcessorMixin
+from ...audio_utils import AudioInput, make_list_of_audio
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, logging
-from .feature_extraction_vibevoice import VibeVoiceFeatureExtractor, normalize_audio
+from ...utils import TensorType, logging, is_soundfile_available, is_torch_available
+from .feature_extraction_vibevoice import VibeVoiceFeatureExtractor
 from .tokenization_vibevoice_fast import VibeVoiceTextTokenizerFast
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_torch_available():
+    import torch
+
+if is_soundfile_available():
+    import soundfile as sf
+
+
+class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": True,
+            "padding_side": "right",
+            "add_special_tokens": False,
+        },
+        "audio_kwargs": {
+            "sampling_rate": 24000,
+            "padding": True,
+            "return_attention_mask": True,
+            # "eos_token_id": 1024,
+            # "pad_token_id": 1025,
+            # "bos_token_id": 1026,
+            # "delay_pattern": [0, 8, 9, 10, 11, 12, 13, 14, 15],
+            # "generation": True,
+            
+        },
+        "common_kwargs": {"return_tensors": "pt"},
+    }
 
 
 class VibeVoiceProcessor(ProcessorMixin):
@@ -160,14 +189,13 @@ class VibeVoiceProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        voice_samples: Optional[Union[list[Union[str, np.ndarray]], list[list[Union[str, np.ndarray]]]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
+        voice_samples: Optional[AudioInput] = None,
         padding: Union[bool, str, PaddingStrategy] = True,
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: bool = True,
-        **kwargs,
+        **kwargs: Unpack[VibeVoiceProcessorKwargs],
     ) -> BatchEncoding:
         """
         Main method to process one or more podcast scripts with optional voice samples.
@@ -177,8 +205,6 @@ class VibeVoiceProcessor(ProcessorMixin):
                 The input text(s) to process. Can be:
                 - A single script string
                 - A list of script strings for batch processing
-                - A path to a .json or .txt file
-                - A list of paths
             voice_samples (`List[Union[str, np.ndarray]]`, `List[List[Union[str, np.ndarray]]]`, *optional*):
                 Voice samples for each script. Can be:
                 - A list of samples for a single script
@@ -189,8 +215,6 @@ class VibeVoiceProcessor(ProcessorMixin):
                 Whether to truncate sequences
             max_length (`int`, *optional*):
                 Maximum length of the returned sequences
-            return_tensors (`str` or `TensorType`, *optional*):
-                If set, will return tensors of a particular framework
             return_attention_mask (`bool`, defaults to `True`):
                 Whether to return the attention mask
 
@@ -202,7 +226,20 @@ class VibeVoiceProcessor(ProcessorMixin):
                 - **speech_masks** -- Speech masks (if voice_samples provided)
                 - **speech_input_mask** -- Boolean masks indicating speech token positions
         """
-        # Handle single vs batch input
+        # Merge defaults with user kwargs
+        call_kwargs = self._merge_kwargs(
+            VibeVoiceProcessorKwargs,
+            **kwargs,
+        )
+
+        text_kwargs = call_kwargs["text_kwargs"]
+        audio_kwargs = call_kwargs["audio_kwargs"]
+        common_kwargs = call_kwargs["common_kwargs"]
+        return_tensors = common_kwargs.pop("return_tensors", None)
+        if return_tensors != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
+        # Handle text
         if isinstance(text, str) or (isinstance(text, list) and len(text) > 0 and not isinstance(text[0], str)):
             texts = [text]
         else:
@@ -212,14 +249,14 @@ class VibeVoiceProcessor(ProcessorMixin):
         if voice_samples is not None:
             voice_samples_list = [make_list_of_audio(_voices) for _voices in voice_samples]
             if len(texts) != len(voice_samples_list):
-                raise ValueError(f"Got {len(texts)} texts but {len(voice_samples)} audios; they must match 1:1.")
+                raise ValueError(f"Got {len(texts)} texts but {len(voice_samples)} audio lists; they must match 1:1.")
         else:
             voice_samples_list = [None] * len(texts)
 
         # Process each input
         all_encodings = []
         for text_input, voice_input in zip(texts, voice_samples_list):
-            encoding = self._process_single(text_input, voice_input)
+            encoding = self._process_single(text_input, voice_input, audio_kwargs)
             all_encodings.append(encoding)
 
         # Combine batch
@@ -238,19 +275,10 @@ class VibeVoiceProcessor(ProcessorMixin):
         self,
         text: Union[str, TextInput],
         voice_samples: Optional[list[Union[str, np.ndarray]]] = None,
+        audio_kwargs: dict[str, Any] = None,
     ) -> dict[str, Any]:
         """Process a single podcast script."""
-        # Determine if text is a file path or direct script
-        script = None
-        if isinstance(text, str):
-            # Check if it's a file path
-            if text.endswith('.json') and os.path.exists(text):
-                script = self._convert_json_to_script(text)
-            elif text.endswith('.txt') and os.path.exists(text):
-                script = self._convert_text_to_script(text)
-            else:
-                # Assume it's the script content directly
-                script = text
+        script = text
 
         if script is None:
             raise ValueError(f"Could not process input text: {text}")
@@ -259,21 +287,62 @@ class VibeVoiceProcessor(ProcessorMixin):
         parsed_lines = self._parse_script(script)
         all_speakers = list(set(speaker_id for speaker_id, _ in parsed_lines))
 
-        # Create system prompt
-        # system_tokens = self.tokenizer.encode(self.system_prompt, add_special_tokens=False)
-        system_tokens = self.tokenizer.encode(self.system_prompt)
-
         # Process voice samples if provided
         if voice_samples:
-            voice_tokens, voice_speech_inputs, voice_speech_masks = self._create_voice_prompt(voice_samples[:len(all_speakers)])
+
+            # pad and normalize audio
+            wav = self.audio_processor(
+                voice_samples[:len(all_speakers)], 
+                **audio_kwargs,
+            )
+            voice_speech_inputs = wav["audio"]
+            voice_speech_padding = wav["padding_mask"]
+
+            # prepare speech tokens
+            vae_token_id = self.tokenizer.speech_diffusion_id
+            voice_tokens = self.tokenizer.encode(' Voice input:\n', add_special_tokens=False)
+            voice_speech_masks = [False] * len(voice_tokens)
+
+            vae_tok_seqlens = []
+            for speaker_id, padding_mask in enumerate(voice_speech_padding):
+                prefix_tokens = self.tokenizer.encode(f" Speaker {speaker_id}:", add_special_tokens=False)
+
+                # Calculate token length based on compression ratio
+                vae_tok_len = math.ceil(padding_mask.sum() / self.speech_tok_compress_ratio)
+                vae_tok_seqlens.append(vae_tok_len)
+
+                # Build tokens and masks
+                speaker_tokens = (prefix_tokens +
+                                [self.tokenizer.speech_start_id] +
+                                [vae_token_id] * vae_tok_len +
+                                [self.tokenizer.speech_end_id] +
+                                self.tokenizer.encode('\n', add_special_tokens=False))
+
+                vae_input_mask = ([False] * len(prefix_tokens) +
+                                [False] +
+                                [True] * vae_tok_len +
+                                [False] +
+                                [False])
+
+                voice_tokens.extend(speaker_tokens)
+                voice_speech_masks.extend(vae_input_mask)
+
+            # Build speech masks (done in `prepare_speech_inputs` before)
+            individual_speech_masks = np.zeros((len(voice_speech_inputs), max(vae_tok_seqlens)), dtype=np.bool_)
+            for i in range(len(voice_speech_inputs)):
+                individual_speech_masks[i, :vae_tok_seqlens[i]] = True
         else:
-            voice_tokens, voice_speech_inputs, voice_speech_masks = [], [], []
+            voice_tokens, voice_speech_inputs, voice_speech_masks = [], None, []
+            individual_speech_masks = None
 
         # Build full token sequence
+        # -- Start with system prompt
+        # system_tokens = self.tokenizer.encode(self.system_prompt, add_special_tokens=False)
+        system_tokens = self.tokenizer.encode(self.system_prompt)
         full_tokens = system_tokens + voice_tokens
         speech_input_mask = [False] * len(system_tokens) + voice_speech_masks
 
-        # Add text input section
+        # -- Add text input section
         full_tokens += self.tokenizer.encode(' Text input:\n', add_special_tokens=False)
         speech_input_mask += [False] * len(self.tokenizer.encode(' Text input:\n', add_special_tokens=False))
 
@@ -282,14 +351,15 @@ class VibeVoiceProcessor(ProcessorMixin):
             full_tokens += speaker_text_tokens
             speech_input_mask += [False] * len(speaker_text_tokens)
 
-        # Add speech output section
+        # -- Add speech output section
         full_tokens += self.tokenizer.encode(' Speech output:\n', add_special_tokens=False) + [self.tokenizer.speech_start_id]
         speech_input_mask += [False] * (len(self.tokenizer.encode(' Speech output:\n', add_special_tokens=False)) + 1)
 
         return {
             "input_ids": full_tokens,
-            "speech_inputs": voice_speech_inputs if voice_speech_inputs else None,
+            "speech_inputs": voice_speech_inputs,
             "speech_input_mask": speech_input_mask,
+            "speech_individual_masks": individual_speech_masks,
             "parsed_script": parsed_lines,
             "all_speakers": all_speakers,
         }
@@ -353,14 +423,6 @@ class VibeVoiceProcessor(ProcessorMixin):
             # No padding, just create attention masks
             attention_masks = [[1] * len(ids) for ids in input_ids_list] if return_attention_mask else None
 
-        # Process speech inputs
-        all_speech_inputs = []
-        has_speech = False
-        for enc in encodings:
-            if enc["speech_inputs"] is not None:
-                all_speech_inputs.extend(enc["speech_inputs"])
-                has_speech = True
-
         # Prepare batch encoding
         batch_encoding = BatchEncoding()
 
@@ -377,13 +439,27 @@ class VibeVoiceProcessor(ProcessorMixin):
             batch_encoding["speech_input_mask"] = speech_input_masks_list
 
         # Process speech tensors if present
+        all_speech_inputs = []
+        all_speech_individual_masks = []
+        has_speech = False
+        for enc in encodings:
+            if enc["speech_inputs"] is not None:
+                # TODO this creates lists, which we want to avoid
+                all_speech_inputs.extend(enc["speech_inputs"])
+                all_speech_individual_masks.extend(enc["speech_individual_masks"])
+                has_speech = True
         if has_speech:
-            speech_dict = self.prepare_speech_inputs(
-                all_speech_inputs,
+            # TODO: should we really group add across all batch examples?
+            padded_speech = self.audio_processor.pad(
+                BatchFeature({"audio": all_speech_inputs}),
                 return_tensors=return_tensors,
             )
-            batch_encoding["speech_tensors"] = speech_dict["padded_speeches"]
-            batch_encoding["speech_masks"] = speech_dict["speech_masks"]
+            padded_speech_masks = self.audio_processor.pad(
+                BatchFeature({"audio": all_speech_individual_masks}),
+                return_tensors=return_tensors,
+            )
+            batch_encoding["speech_tensors"] = padded_speech["audio"]
+            batch_encoding["speech_masks"] = padded_speech_masks["audio"]
         else:
             batch_encoding["speech_tensors"] = None
             batch_encoding["speech_masks"] = None
@@ -393,59 +469,6 @@ class VibeVoiceProcessor(ProcessorMixin):
         batch_encoding["all_speakers_list"] = [enc["all_speakers"] for enc in encodings]
 
         return batch_encoding
-
-    def _create_voice_prompt(
-        self,
-        speaker_samples: list[Union[str, np.ndarray]]
-    ) -> tuple[list[int], list[np.ndarray], list[bool]]:
-        """
-        Create voice prompt tokens and process audio samples.
-        
-        Returns:
-            tuple: (voice_tokens, voice_speech_inputs, voice_speech_masks)
-        """
-        vae_token_id = self.tokenizer.speech_diffusion_id
-
-        voice_full_tokens = self.tokenizer.encode(' Voice input:\n', add_special_tokens=False)
-        voice_speech_inputs = []
-        voice_speech_masks = [False] * len(voice_full_tokens)
-
-        for speaker_id, speaker_audio in enumerate(speaker_samples):
-            prefix_tokens = self.tokenizer.encode(f" Speaker {speaker_id}:", add_special_tokens=False)
-
-            # Process audio
-            wav = np.array(speaker_audio, dtype=np.float32)
-
-            # Apply normalization if needed (TODO: use feature extractor)
-            if self.db_normalize:
-                wav = normalize_audio(wav)
-
-            import pudb; pudb.set_trace()  # DEBUGGING
-
-            # Calculate token length based on compression ratio
-            # if speaker_audio.endswith('.pt') or speaker_audio.endswith('.npy'):
-            #     vae_tok_len = wav.shape[0]
-            # else:
-            vae_tok_len = math.ceil(wav.shape[0] / self.speech_tok_compress_ratio)
-
-            # Build tokens and masks
-            speaker_tokens = (prefix_tokens +
-                            [self.tokenizer.speech_start_id] +
-                            [vae_token_id] * vae_tok_len +
-                            [self.tokenizer.speech_end_id] +
-                            self.tokenizer.encode('\n', add_special_tokens=False))
-
-            vae_input_mask = ([False] * len(prefix_tokens) +
-                            [False] +
-                            [True] * vae_tok_len +
-                            [False] +
-                            [False])
-
-            voice_full_tokens.extend(speaker_tokens)
-            voice_speech_masks.extend(vae_input_mask)
-            voice_speech_inputs.append(wav)
-
-        return voice_full_tokens, voice_speech_inputs, voice_speech_masks
 
     def prepare_speech_inputs(
         self,
@@ -470,19 +493,19 @@ class VibeVoiceProcessor(ProcessorMixin):
             return {"padded_speeches": None, "speech_masks": None}
 
         # Calculate sequence lengths
-        vae_tok_seqlens = [math.ceil(s.shape[0] / self.speech_tok_compress_ratio) for s in speech_inputs]
+        vae_tok_seqlens = [math.ceil(s.shape[1] / self.speech_tok_compress_ratio) for s in speech_inputs]
         # vae_tok_seqlens = [math.ceil(s.shape[0] / self.speech_tok_compress_ratio) if s.ndim == 1 else s.shape[0] for s in speech_inputs]
-        max_speech_length = max(s.shape[0] for s in speech_inputs)
+        max_speech_length = max(s.shape[1] for s in speech_inputs)
 
-        # Pad speeches
-        if speech_inputs[0].ndim == 1:
+        # Pad speeches, TODO remove as feature extractor should handle this
+        if speech_inputs[0].shape[0] == 1:
             padded_speeches = np.full((len(speech_inputs), max_speech_length), fill_value=0, dtype=np.float32)
         else:
-            padded_speeches = np.full((len(speech_inputs), max_speech_length, speech_inputs[0].shape[-1]), fill_value=0, dtype=np.float32)
+            padded_speeches = np.full((len(speech_inputs), max_speech_length, speech_inputs[0].shape[0]), fill_value=0, dtype=np.float32)
         speech_masks = np.zeros((len(speech_inputs), max(vae_tok_seqlens)), dtype=np.bool_)
 
         for i, (speech, vae_tok_length) in enumerate(zip(speech_inputs, vae_tok_seqlens)):
-            padded_speeches[i, :len(speech)] = speech
+            padded_speeches[i, :speech.shape[1]] = speech
             speech_masks[i, :vae_tok_length] = True
 
         result = {
@@ -496,90 +519,6 @@ class VibeVoiceProcessor(ProcessorMixin):
             result["speech_masks"] = torch.tensor(speech_masks, device=device, dtype=torch.bool)
 
         return result
-
-    def _convert_json_to_script(self, json_file: str) -> str:
-        """
-        Convert JSON format to script format.
-        Expected JSON format:
-        [
-            {"speaker": "1", "text": "Hello everyone..."},
-            {"speaker": "2", "text": "Great to be here..."}
-        ]
-        """
-
-        with open(json_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        if not isinstance(data, list):
-            raise ValueError("JSON file must contain a list of speaker entries")
-
-        script_lines = []
-        for item in data:
-            if not isinstance(item, dict):
-                logger.warning(f"Skipping non-dict entry: {item}")
-                continue
-
-            speaker = item.get('speaker')
-            text = item.get('text')
-
-            if speaker is None or text is None:
-                logger.warning(f"Skipping entry missing speaker or text: {item}")
-                continue
-
-            # Ensure speaker ID is valid
-            try:
-                speaker_id = int(speaker)
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid speaker ID: {speaker}, skipping entry")
-                continue
-
-            # Clean up text
-            text = text.strip()
-            if text:
-                script_lines.append(f"Speaker {speaker_id}: {text}")
-
-        if not script_lines:
-            raise ValueError("No valid entries found in JSON file")
-
-        return "\n".join(script_lines)
-
-    def _convert_text_to_script(self, text_file: str) -> str:
-        """
-        Convert text file to script format.
-        Handles multiple formats:
-        1. Already formatted as "Speaker X: text"
-        2. Plain text (assigns to Speaker 1)
-        
-        Handles edge cases like multiple colons in a line.
-        """
-        with open(text_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-
-        script_lines = []
-        current_speaker = 1
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            # Try to parse as "Speaker X: text" format
-            # Use regex to be more robust
-            speaker_match = re.match(r'^Speaker\s+(\d+)\s*:\s*(.*)$', line, re.IGNORECASE)
-
-            if speaker_match:
-                speaker_id = int(speaker_match.group(1))
-                text = speaker_match.group(2).strip()
-                if text:
-                    script_lines.append(f"Speaker {speaker_id}: {text}")
-            else:
-                # Treat as plain text - assign to current speaker
-                script_lines.append(f"Speaker {current_speaker}: {line}")
-
-        if not script_lines:
-            raise ValueError("No valid content found in text file")
-
-        return "\n".join(script_lines)
 
     def _parse_script(self, script: str) -> list[tuple[int, str]]:
         """Parse script into list of (speaker_id, text) tuples."""
@@ -654,25 +593,72 @@ class VibeVoiceProcessor(ProcessorMixin):
         audio_processor_input_names = self.audio_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + audio_processor_input_names + ["speech_inputs", "speech_input_mask"]))
 
-    def save_audio(self,
+    def save_audio(
+        self,
         audio: Union[torch.Tensor, np.ndarray, list[Union[torch.Tensor, np.ndarray]]],
         output_path: str = "output.wav",
         sampling_rate: Optional[int] = None,
-        normalize: bool = False,
-        batch_prefix: str = "audio_",
-    ) -> str:
+    ) -> list[str]:
         """
-        Save audio data to a file.
+        Save audio data to WAV file(s).
+        
         Args:
-            audio (Union[torch.Tensor, np.ndarray, List[Union[torch.Tensor, np.ndarray]]]):
-                The audio data to save. Can be a single tensor/array or a list of them.
-            output_path (str, optional): Path to save the audio file. Defaults to "output.wav".
-            sampling_rate (int, optional): Sampling rate for the audio. If None, uses the processor's default.
-            normalize (bool, optional): Whether to normalize the audio before saving. Defaults to False.
-            batch_prefix (str, optional): Prefix for batch audio files. Defaults to "audio_".
+            audio: Audio data to save (tensor, array, or list of them)
+            output_path: Output file path or directory for multiple files
+            sampling_rate: Sampling rate for the saved audio
+                
         Returns:
-            str: The path to the saved audio file.
+            List[str]: Paths to the saved audio files.
         """
-        return self.audio_processor.save_audio(audio, output_path=output_path, sampling_rate=sampling_rate, normalize=normalize, batch_prefix=batch_prefix)
+        if sampling_rate is None:
+            sampling_rate = self.audio_processor.sampling_rate
+
+        if not is_soundfile_available():
+            raise ImportError("Please install `soundfile` to save audio files.")
+
+        # Convert various audio formats to list of 1D numpy arrays
+        if isinstance(audio, list):
+            # List of tensors/arrays
+            audio_arrays = []
+            for item in audio:
+                if isinstance(item, torch.Tensor):
+                    audio_arrays.append(item.detach().cpu().numpy().squeeze())
+                else:
+                    audio_arrays.append(np.array(item).squeeze())
+        else:
+            # Single tensor or array
+            if isinstance(audio, torch.Tensor):
+                audio_np = audio.detach().cpu().numpy()
+            else:
+                audio_np = np.array(audio)
+            
+            # Handle different shapes
+            if audio_np.ndim == 1:
+                audio_arrays = [audio_np]
+            elif audio_np.ndim == 2:
+                # Could be (batch, time) or (channels, time)
+                if audio_np.shape[0] <= 2:  # Assume channels if <= 2
+                    audio_arrays = [audio_np.mean(axis=0)]  # Convert to mono
+                else:  # Assume batch dimension
+                    audio_arrays = [audio_np[i] for i in range(audio_np.shape[0])]
+            elif audio_np.ndim == 3:
+                # (batch, channels, time) - extract each item and convert to mono
+                audio_arrays = [audio_np[i].mean(axis=0) for i in range(audio_np.shape[0])]
+            else:
+                raise ValueError(f"Unsupported audio shape: {audio_np.shape}")
+        
+        # Save audio(s)
+        if len(audio_arrays) == 1:
+            # Single audio file
+            sf.write(output_path, audio_arrays[0], sampling_rate)
+        else:
+            # Multiple audio files - save to directory
+            os.makedirs(output_path, exist_ok=True)
+            saved_paths = []
+            for i, audio_array in enumerate(audio_arrays):
+                file_path = os.path.join(output_path, f"audio_{i}.wav")
+                sf.write(file_path, audio_array, sampling_rate)
+                saved_paths.append(file_path)
+
 
 __all__ = ["VibeVoiceProcessor"]
