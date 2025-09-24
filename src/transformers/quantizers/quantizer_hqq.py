@@ -30,15 +30,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Finds the parent of a node module named "name"
-def find_parent(model, name):
-    module_tree = name.split(".")[:-1]
-    parent = model
-    for m in module_tree:
-        parent = parent._modules[m]
-    return parent
-
-
 class HqqHfQuantizer(HfQuantizer):
     """
     HQQ quantizer base HF class.
