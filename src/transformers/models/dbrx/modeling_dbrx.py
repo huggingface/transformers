@@ -423,23 +423,38 @@ class DbrxBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-@auto_docstring
 class DbrxPreTrainedModel(PreTrainedModel):
     config: DbrxConfig
-    base_model_prefix = "model"
+    base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DbrxBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _can_record_outputs = {
         "hidden_states": DbrxBlock,
         "attentions": DbrxAttention,
     }
+
+    def _init_weights(self, module: nn.Module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, DbrxExpertGLU):
+            module.w1.data.normal_(mean=0.0, std=std)
+            module.v1.data.normal_(mean=0.0, std=std)
+            module.w2.data.normal_(mean=0.0, std=std)
 
 
 @auto_docstring
@@ -466,6 +481,12 @@ class DbrxModel(DbrxPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self) -> nn.Embedding:
+        return self.wte
+
+    def set_input_embeddings(self, value: nn.Embedding):
+        self.wte = value
+
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -487,6 +508,7 @@ class DbrxModel(DbrxPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
+        inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.emb_pdrop, training=self.training)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -622,10 +644,29 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         self.transformer = DbrxModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.moe_loss_weight = config.ffn_config.moe_loss_weight
+        self.router_aux_loss_coef = config.ffn_config.moe_loss_weight
         self.num_experts = config.ffn_config.moe_num_experts
         self.num_experts_per_tok = config.ffn_config.moe_top_k
         self.post_init()
+
+    def get_input_embeddings(self) -> nn.Embedding:
+        return self.transformer.get_input_embeddings()
+
+    def set_input_embeddings(self, value: nn.Embedding):
+        self.transformer.set_input_embeddings(value)
+
+    def get_output_embeddings(self) -> nn.Linear:
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings: nn.Linear):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder: DbrxModel):
+        self.transformer = decoder
+
+    def get_decoder(self) -> DbrxModel:
+        return self.transformer
+
 
     @can_return_tuple
     @auto_docstring

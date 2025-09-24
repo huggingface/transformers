@@ -323,12 +323,41 @@ class DbrxBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class DbrxPreTrainedModel(LlamaPreTrainedModel):
+class DbrxPreTrainedModel(PreTrainedModel):
+    config: DbrxConfig
+    base_model_prefix = "transformer"
+    supports_gradient_checkpointing = True
     _no_split_modules = ["DbrxBlock"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _can_record_outputs = {
         "hidden_states": DbrxBlock,
         "attentions": DbrxAttention,
     }
+
+    def _init_weights(self, module: nn.Module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, DbrxExpertGLU):
+            module.w1.data.normal_(mean=0.0, std=std)
+            module.v1.data.normal_(mean=0.0, std=std)
+            module.w2.data.normal_(mean=0.0, std=std)
+
 
 @auto_docstring
 class DbrxModel(DbrxPreTrainedModel):
@@ -353,6 +382,12 @@ class DbrxModel(DbrxPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self) -> nn.Embedding:
+        return self.wte
+
+    def set_input_embeddings(self, value: nn.Embedding):
+        self.wte = value
 
     @check_model_inputs
     @auto_docstring
