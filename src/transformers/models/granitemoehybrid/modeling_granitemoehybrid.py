@@ -283,6 +283,13 @@ class HybridMambaAttentionDynamicCache:
             device = self.ssm_states[layer_idx].device
             self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the mask"""
+        kv_offset = 0
+        query_length = cache_position.shape[0]
+        kv_length = self.get_seq_length(layer_idx) + query_length
+        return kv_length, kv_offset
+
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
@@ -1055,7 +1062,7 @@ class GraniteMoeHybridMoE(nn.Module):
     def forward(self, layer_input):
         bsz, length, emb_size = layer_input.size()
         layer_input = layer_input.reshape(-1, emb_size)
-        _, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input)
+        _, batch_index, batch_gates, expert_size, _ = self.router(layer_input)
 
         expert_inputs = layer_input[batch_index]
         hidden_states = self.input_linear(expert_inputs, expert_size)
@@ -1068,7 +1075,7 @@ class GraniteMoeHybridMoE(nn.Module):
         zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
         layer_output = zeros.index_add(0, batch_index, expert_outputs)
         layer_output = layer_output.view(bsz, length, self.input_size)
-        return layer_output, router_logits
+        return layer_output
 
 
 class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
