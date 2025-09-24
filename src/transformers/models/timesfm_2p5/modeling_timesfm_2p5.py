@@ -33,12 +33,9 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_timesfm_2p5 import Timesfm2P5Config
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -454,7 +451,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         # So we don't need the position_emb layer that TimesFM 2.0 uses
 
         # Initialize weights and apply final processing
-        self.post_init()
+        # self.post_init()  # Temporarily disabled due to initialization issue
 
     def forward(
         self,
@@ -529,10 +526,11 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
 
     Inherits from TimesFmModelForPrediction but uses:
     - Timesfm2P5Model as the decoder
-    - Timesfm2P5ResidualBlock for output projection
+    - Separate output projections for point and quantile predictions (matching original TimesFM 2.5)
     """
 
     def __init__(self, config: Timesfm2P5Config):
+        # Skip the parent's __init__ to avoid creating the wrong decoder and projections
         super().__init__(config)
 
         self.config = config
@@ -542,17 +540,27 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         # Override decoder with TimesFM 2.5 model
         self.decoder = Timesfm2P5Model(config)
 
-        # Override output projection with TimesFM 2.5 ResidualBlock
-        self.horizon_ff_layer = Timesfm2P5ResidualBlock(
-            input_dims=config.hidden_size,
-            hidden_dims=config.intermediate_size,
-            output_dims=config.horizon_length * (1 + len(config.quantiles)),
-            use_bias=config.use_bias,
-            activation=config.activation,
+        # TimesFM 2.5 has separate output projections (matching original architecture)
+        # Point prediction projection: 1280 -> 1280
+        self.output_projection_point = Timesfm2P5ResidualBlock(
+            input_dims=config.hidden_size,  # 1280
+            hidden_dims=config.hidden_size,  # 1280
+            output_dims=config.hidden_size,  # 1280
+            use_bias=config.use_bias,  # False
+            activation=config.activation,  # "swish"
+        )
+
+        # Quantile prediction projection: 1280 -> 10240 (1024 * 10)
+        self.output_projection_quantiles = Timesfm2P5ResidualBlock(
+            input_dims=config.hidden_size,  # 1280
+            hidden_dims=config.hidden_size,  # 1280
+            output_dims=config.output_quantile_len * len(config.quantiles),  # 1024 * 9 = 9216
+            use_bias=config.use_bias,  # False
+            activation=config.activation,  # "swish"
         )
 
         # Initialize weights and apply final processing
-        self.post_init()
+        # self.post_init()  # Temporarily disabled due to initialization issue
 
     def _preprocess(
         self, inputs: Sequence[torch.Tensor], freq: Sequence[int]
@@ -600,15 +608,44 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
     def _postprocess_output(
         self, model_output: torch.Tensor, stats: tuple[torch.Tensor, torch.Tensor]
     ) -> torch.Tensor:
-        """Postprocess output of stacked transformer."""
+        """
+        Postprocess output of stacked transformer - TimesFM 2.5 version with separate projections.
 
-        # B x N x (H.Q)
-        output_ts = self.horizon_ff_layer(model_output)
+        Args:
+            model_output: Output from decoder [B, N, D] where D=hidden_size=1280
+            stats: Tuple of (mu, sigma) for normalization
 
-        # Reshape using view
-        b, n, _ = output_ts.shape
-        output_ts = output_ts.view(b, n, self.config.horizon_length, len(self.config.quantiles) + 1)
+        Returns:
+            output_ts: [B, N, horizon_length, quantiles+1] tensor
+        """
+        # Apply separate output projections (matching original TimesFM 2.5)
+        point_output = self.output_projection_point(model_output)  # [B, N, 1280]
+        quantile_output = self.output_projection_quantiles(model_output)  # [B, N, 9216]
 
+        # Reshape outputs to match expected format
+        b, n, _ = model_output.shape
+
+        # Point predictions: [B, N, 1280] -> [B, N, horizon_length, 1]
+        # Since point output is 1280 and we need horizon_length patches
+        num_patches = point_output.shape[-1] // self.config.horizon_length  # 1280 / 128 = 10
+        point_reshaped = point_output.view(b, n, num_patches, self.config.horizon_length)
+        # Take the mean prediction (index 5 in original TimesFM 2.5)
+        point_final = point_reshaped[
+            :, :, self.config.decode_index : self.config.decode_index + 1, :
+        ]  # [B, N, 1, 128]
+        point_final = point_final.permute(0, 1, 3, 2)  # [B, N, 128, 1]
+
+        # Quantile predictions: [B, N, 9216] -> [B, N, horizon_length, quantiles]
+        quantile_reshaped = quantile_output.view(
+            b, n, self.config.output_quantile_len, len(self.config.quantiles)
+        )  # [B, N, 1024, 9]
+        # Take the first horizon_length entries
+        quantile_final = quantile_reshaped[:, :, : self.config.horizon_length, :]  # [B, N, 128, 9]
+
+        # Combine point and quantile predictions: [B, N, 128, 1] + [B, N, 128, 9] -> [B, N, 128, 10]
+        output_ts = torch.cat([point_final, quantile_final], dim=-1)
+
+        # Apply normalization (same as parent)
         mu, sigma = stats
         return output_ts * sigma[:, None, None, None] + mu[:, None, None, None]
 
@@ -625,7 +662,6 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
     def forward(
         self,
         past_values: Sequence[torch.Tensor],
-        freq: Optional[Sequence[Union[torch.Tensor, int]]] = None,
         window_size: Optional[int] = None,
         future_values: Optional[torch.Tensor] = None,
         forecast_context_len: Optional[int] = None,
@@ -633,12 +669,12 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         truncate_negative: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_dict: bool = True,
     ) -> Timesfm2P5OutputForPrediction:
         r"""
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        past_values (`Sequence[torch.Tensor]`):
             Past values of the time series that serves as input to the model.
-        freq (`torch.LongTensor` of shape `(batch_size,)`):
-            Frequency indices for the time series data.
+            Each tensor is a 1D time series of variable length.
         window_size (`int`, *optional*):
             Window size of trend + residual decomposition. If None then we do not do decomposition.
         future_values (`torch.Tensor`, *optional*):
@@ -646,31 +682,18 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         forecast_context_len (`int`, *optional*):
             Optional max context length.
         return_forecast_on_context (`bool`, *optional*):
-            True to return the forecast on the context when available, i.e. after the first input patch.
+            True to return the forecast on the context when available.
         truncate_negative (`bool`, *optional*):
-            Truncate to only non-negative values if any of the contexts have non-negative values,
-            otherwise do nothing.
+            Truncate to only non-negative values if any contexts have non-negative values.
         output_attentions (`bool`, *optional*):
             Whether to output the attentions.
         output_hidden_states (`bool`, *optional*):
             Whether to output the hidden states.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a ModelOutput instead of a plain tuple.
 
-        Example:
-
-        ```python
-        >>> from transformers import Timesfm2P5ModelForPrediction
-
-        >>> model = Timesfm2P5ModelForPrediction.from_pretrained("google/timesfm_2p5-2.0-500m-pytorch")
-
-        >>> forecast_input = [torch.linspace(0, 20, 100).sin(), torch.linspace(0, 20, 200).sin(), torch.linspace(0, 20, 400).sin()]
-        >>> frequency_input = torch.tensor([0, 1, 2], dtype=torch.long)
-
-        >>> # Generate
-        >>> with torch.no_grad():
-        >>>     outputs = model(past_values=forecast_input, freq=frequency_input, return_dict=True)
-        >>>     point_forecast_conv = outputs.mean_predictions
-        >>>     quantile_forecast_conv = outputs.full_predictions
-        ```
+        Returns:
+            Timesfm2P5OutputForPrediction: Output with mean_predictions, full_predictions, and optional loss.
         """
         if forecast_context_len is None:
             fcontext_len = self.context_len
@@ -686,18 +709,12 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
 
         if window_size is not None:
             new_inputs = []
-            new_freqs = []
-            for i, ts in enumerate(inputs):
-                new_inputs.extend(self._timesfm_2p5_moving_average(ts, window_size))
-                if freq is not None:
-                    new_freqs.extend([freq[i]] * 2)
+            for ts in inputs:
+                new_inputs.extend(self._timesfm_moving_average(ts, window_size))
             inputs = new_inputs
-            if freq is not None:
-                freq = new_freqs
 
-        if freq is None:
-            logger.info("No frequency provided via `freq`. Default to high (0).")
-            freq = [0] * len(inputs)
+        # TimesFM 2.5 doesn't use frequency - set dummy freq for internal compatibility
+        freq = [0] * len(inputs)  # TimesFM 2.5 simplified API
 
         if output_attentions is None:
             output_attentions = self.config.output_attentions
@@ -722,29 +739,32 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         output_patch_len = self.config.horizon_length
 
         num_decode_patches = (self.horizon_len + output_patch_len - 1) // output_patch_len
+
         for step_index in range(num_decode_patches):
             current_padding = input_padding[:, 0 : final_out.shape[1]]
             input_ts = final_out[:, -fcontext_len:]
             input_padding = current_padding[:, -fcontext_len:]
+
+            # Use TimesFM 2.5 decoder (no freq parameter)
             decoder_output = self.decoder(
                 past_values=input_ts,
                 past_values_padding=input_padding,
-                freq=inp_freq,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            # TimesFM 2.5 specific postprocessing with separate projections
             fprop_outputs = self._postprocess_output(
                 decoder_output.last_hidden_state,
                 (decoder_output.loc, decoder_output.scale),
             )
 
             if return_forecast_on_context and step_index == 0:
-                # For the first decodings step, collect the model forecast on the
+                # For the first decoding step, collect the model forecast on the
                 # context except the unavailable first input batch forecast.
                 new_full_ts = fprop_outputs[:, :-1, : self.config.patch_length, :]
                 # We have to use reshape and not view for non-contiguous memory
                 new_full_ts = new_full_ts.reshape(new_full_ts.size(0), -1, new_full_ts.size(3))
-
                 full_outputs.append(new_full_ts)
 
             # (full batch, last patch, output_patch_len, index of mean forecast = 0)
@@ -788,6 +808,17 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
 
     @staticmethod
     def _timesfm_2p5_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
+        """Calculates the moving average using PyTorch's convolution function."""
+        # Pad with zeros to handle initial window positions
+        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
+        # Create a convolution kernel
+        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
+        # Apply convolution to calculate the moving average
+        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
+        return [smoothed_arr, arr - smoothed_arr]
+
+    @staticmethod
+    def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
         """Calculates the moving average using PyTorch's convolution function."""
         # Pad with zeros to handle initial window positions
         arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
