@@ -170,7 +170,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                     f"In order to use safetensors with torchao, please use torchao version >= 0.14.0. Current version: {TORCHAO_VERSION}"
                 )
         else:
-            return super().get_state_dict_and_metadata(model)
+            return None, {}
 
     def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
@@ -321,7 +321,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         if TORCHAO_VERSION >= version.parse("0.14.0") and is_metadata_torchao(metadata):
             return unflatten_tensor_state_dict(state_dict, metadata)
         else:
-            return super().update_state_dict_with_metadata(state_dict, metadata)
+            return state_dict
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""

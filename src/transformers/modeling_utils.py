@@ -870,13 +870,12 @@ def load_shard_file(args):
 
     # Fix the key names
     state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
-    metadata = None
-    if shard_file.endswith(".safetensors") and is_safetensors_available():
-        with safe_open(shard_file, framework="pt") as f:
-            metadata = f.metadata()
 
-    if hf_quantizer:
-        state_dict = hf_quantizer.update_state_dict_with_metadata(state_dict, metadata)
+    if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO:
+        if shard_file.endswith(".safetensors") and is_safetensors_available():
+            with safe_open(shard_file, framework="pt") as f:
+                metadata = f.metadata()
+            state_dict = hf_quantizer.update_state_dict_with_metadata(state_dict, metadata)
 
     error_msgs = []
 
