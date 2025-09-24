@@ -363,7 +363,7 @@ class FlexOlmoDecoderLayer(GradientCheckpointingLayer):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states, _ = self.mlp(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
