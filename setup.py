@@ -115,7 +115,7 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub>=0.34.0,<1.0",
+    "huggingface-hub>=0.35.1,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jax>=0.4.1,<=0.4.13",
