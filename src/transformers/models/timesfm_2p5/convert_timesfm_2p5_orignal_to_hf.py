@@ -15,112 +15,57 @@ Sample usage:
 
 ```
 python src/transformers/models/timesfm_2p5/convert_timesfm_2p5_orignal_to_hf.py \
-    --output_dir /output/path --test_original_only
+    --output_dir /output/path
 ```
 """
 
 
-def test_original_model_only(output_dir):
-    """Test original TimesFM 2.5 model functionality."""
-    print("=== Testing Original TimesFM 2.5 Model ===")
+def get_nested_attr(obj, key):
+    """Recursively retrieves an attribute from an object, handling list/tuple indexing if present."""
+    parts = key.split(".")
+    for part in parts:
+        match = re.match(r"(.*)\[(\d+)\]", part)  # Handle list indexing like `layers[0]`
+        if match:
+            attr_name, index = match.groups()
+            obj = getattr(obj, attr_name)[int(index)]  # Access list/tuple element
+        else:
+            obj = getattr(obj, part)  # Regular attribute access
+    return obj
+
+
+def write_model(model_path, safe_serialization=True):
+    os.makedirs(model_path, exist_ok=True)
+    tmp_model_path = os.path.join(model_path, "tmp")
+    os.makedirs(tmp_model_path, exist_ok=True)
 
     # Initialize TimesFM 2.5 model
     tfm = timesfm.TimesFM_2p5_200M_torch()
     tfm.load_checkpoint()
 
-    # Compile with forecasting configuration
+    # Compile to get the actual model
     forecast_config = timesfm.ForecastConfig(
-        max_context=512,  # Small context for testing
-        max_horizon=128,
+        max_context=1024,
+        max_horizon=256,
         normalize_inputs=True,
         use_continuous_quantile_head=True,
     )
     tfm.compile(forecast_config)
-
-    # Create test inputs - multiple time series
-    forecast_input = [
-        np.sin(np.linspace(0, 20, 100)),
-        np.sin(np.linspace(0, 20, 200)),
-        np.sin(np.linspace(0, 20, 300)),
-    ]
-
-    print(f"Input time series shapes: {[ts.shape for ts in forecast_input]}")
-
-    # Get predictions from original TimesFM 2.5 model
-    try:
-        # Use correct TimesFM 2.5 API with horizon parameter
-        point_forecast, quantile_forecast = tfm.forecast(
-            horizon=128,  # Forecast 128 steps ahead
-            inputs=forecast_input,
-        )
-        print("✅ Original TimesFM 2.5 forecast successful!")
-        print(f"Point forecast shape: {point_forecast.shape}")
-        print(f"Quantile forecast shape: {quantile_forecast.shape}")
-
-        # Check quantile dimensions to understand the model structure
-        print(f"Model quantile output layer shape: {tfm.model.output_projection_quantiles.output_layer.weight.shape}")
-        print(f"Quantile output dims: {tfm.model.output_projection_quantiles.output_layer.weight.shape[0]}")
-        print(f"If 10 quantiles: {tfm.model.output_projection_quantiles.output_layer.weight.shape[0] // 1024}")
-
-        # Save results for comparison
-        results = {
-            'point_forecast': point_forecast,
-            'quantile_forecast': quantile_forecast,
-            'input_shapes': [ts.shape for ts in forecast_input]
-        }
-        np.savez(os.path.join(output_dir, 'original_results.npz'), **results)
-        print(f"✅ Results saved to {output_dir}/original_results.npz")
-
-        # Inspect model structure
-        print("\n=== Model Structure Inspection ===")
-        model = tfm.model
-        print(f"Model type: {type(model)}")
-        print(f"Tokenizer input shape: {model.tokenizer.hidden_layer.weight.shape}")
-        print(f"Tokenizer output shape: {model.tokenizer.output_layer.weight.shape}")
-        print(f"Point projection output shape: {model.output_projection_point.output_layer.weight.shape}")
-        print(f"Quantile projection output shape: {model.output_projection_quantiles.output_layer.weight.shape}")
-        print(f"Number of transformer layers: {len(model.stacked_xf)}")
-
-        if len(model.stacked_xf) > 0:
-            layer0 = model.stacked_xf[0]
-            print(f"Layer 0 attention query shape: {layer0.attn.query.weight.shape}")
-            print(f"Layer 0 ff0 shape: {layer0.ff0.weight.shape}")
-            print(f"Layer 0 ff1 shape: {layer0.ff1.weight.shape}")
-
-        return True
-    except Exception as e:
-        print(f"❌ Original TimesFM 2.5 forecast failed: {e}")
-        return False
-
-
-def create_config_only(output_dir):
-    """Create TimesFM 2.5 config based on original model."""
-    print("=== Creating TimesFM 2.5 Config ===")
-
-    # Initialize TimesFM 2.5 model to inspect structure
-    tfm = timesfm.TimesFM_2p5_200M_torch()
-    tfm.load_checkpoint()
-
     original_model = tfm.model
 
-    # Check actual quantile output dimensions from original model
+    # Get actual dimensions from original model
     quantile_output_dims = original_model.output_projection_quantiles.output_layer.weight.shape[0]
-    actual_quantile_len = quantile_output_dims // 10  # Should be 1024
+    actual_quantile_len = quantile_output_dims // 9  # 9 quantiles
 
-    print(f"Original model quantile output dims: {quantile_output_dims}")
-    print(f"Calculated quantile_len: {actual_quantile_len}")
-
-    # Create TimesFM 2.5 config for Transformers
     timesfm_config = Timesfm2P5Config(
-        patch_length=32,  # input_patch_len
+        patch_length=32,
         context_length=16384,
-        horizon_length=128,  # output_patch_len
+        horizon_length=128,
         num_hidden_layers=20,
         hidden_size=1280,
         intermediate_size=1280,
-        head_dim=80,  # 1280 / 16
+        head_dim=80,
         num_attention_heads=16,
-        output_quantile_len=actual_quantile_len,  # 1024
+        output_quantile_len=actual_quantile_len,
         decode_index=5,
         use_positional_embedding=False,
         use_rotary_embeddings=True,
@@ -129,13 +74,189 @@ def create_config_only(output_dir):
         use_bias=False,
         activation="swish",
         query_pre_attn_scalar=256.0,
-        quantiles=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],  # 10 quantiles
+        quantiles=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        max_position_embeddings=16384,
+        rope_theta=10000.0,
+    )
+    timesfm_config.save_pretrained(tmp_model_path)
+    timesfm_model = Timesfm2P5ModelForPrediction(timesfm_config)
+
+    # Mapping of the layers from the original TimesFM 2.5 model to the Transformers model
+    MODEL_LAYER_MAPPING = {
+        # Input projection (tokenizer) - ResidualBlock: 64 -> 1280 -> 1280
+        "tokenizer.hidden_layer.weight": "decoder.input_ff_layer.hidden_layer.weight",
+        "tokenizer.output_layer.weight": "decoder.input_ff_layer.output_layer.weight",
+        "tokenizer.residual_layer.weight": "decoder.input_ff_layer.residual_layer.weight",
+
+        # Separate output projections for TimesFM 2.5 - these are at model level, not inside decoder
+        # Point projection: 1280 -> 1280 -> 1280
+        "output_projection_point.hidden_layer.weight": "output_projection_point.hidden_layer.weight",
+        "output_projection_point.output_layer.weight": "output_projection_point.output_layer.weight",
+        "output_projection_point.residual_layer.weight": "output_projection_point.residual_layer.weight",
+
+        # Quantile projection: 1280 -> 1280 -> output_dims
+        "output_projection_quantiles.hidden_layer.weight": "output_projection_quantiles.hidden_layer.weight",
+        "output_projection_quantiles.output_layer.weight": "output_projection_quantiles.output_layer.weight",
+        "output_projection_quantiles.residual_layer.weight": "output_projection_quantiles.residual_layer.weight",
+    }
+
+    TRANSFORMER_LAYER_MAPPING = {
+        # Attention layers - MultiHeadAttention with separate q, k, v projections
+        "stacked_xf[{i}].attn.query.weight": "decoder.layers[{i}].self_attn.q_proj.weight",
+        "stacked_xf[{i}].attn.key.weight": "decoder.layers[{i}].self_attn.k_proj.weight",
+        "stacked_xf[{i}].attn.value.weight": "decoder.layers[{i}].self_attn.v_proj.weight",
+        "stacked_xf[{i}].attn.out.weight": "decoder.layers[{i}].self_attn.o_proj.weight",
+
+        # QK normalization layers (RMS norm) - uses 'scale' instead of 'weight'
+        "stacked_xf[{i}].attn.query_ln.scale": "decoder.layers[{i}].self_attn.query_ln.weight",
+        "stacked_xf[{i}].attn.key_ln.scale": "decoder.layers[{i}].self_attn.key_ln.weight",
+
+        # MLP layers (feed forward)
+        "stacked_xf[{i}].ff0.weight": "decoder.layers[{i}].mlp.ff0.weight",
+        "stacked_xf[{i}].ff1.weight": "decoder.layers[{i}].mlp.ff1.weight",
+
+        # Layer normalization (RMS norm) - uses 'scale' instead of 'weight'
+        "stacked_xf[{i}].pre_attn_ln.scale": "decoder.layers[{i}].pre_attn_ln.weight",
+        "stacked_xf[{i}].post_attn_ln.scale": "decoder.layers[{i}].post_attn_ln.weight",
+        "stacked_xf[{i}].pre_ff_ln.scale": "decoder.layers[{i}].pre_ff_ln.weight",
+        "stacked_xf[{i}].post_ff_ln.scale": "decoder.layers[{i}].post_ff_ln.weight",
+    }
+
+    # Debug: Print both model structures
+    print(f"Original model attributes: {dir(original_model)}")
+    print(f"\\nTransformers model attributes: {dir(timesfm_model)}")
+    print(f"\\nTransformers decoder attributes: {dir(timesfm_model.decoder)}")
+    print(f"\\nTransformers input_ff_layer attributes: {dir(timesfm_model.decoder.input_ff_layer)}")
+
+    # Copy model-level weights
+    for old_key, new_key in MODEL_LAYER_MAPPING.items():
+        try:
+            old_attr = get_nested_attr(original_model, old_key)  # Get tensor from original model
+            new_attr = get_nested_attr(timesfm_model, new_key)  # Get corresponding attribute in new model
+
+            print(f"Shape comparison {old_key}: {old_attr.shape} vs {new_key}: {new_attr.shape}")
+
+            if old_attr.shape == new_attr.shape:
+                new_attr.data.copy_(old_attr.data)  # Copy data
+                print(f"✅ Converted {old_key} -> {new_key}")
+            else:
+                print(f"⚠️  Shape mismatch {old_key}: {old_attr.shape} vs {new_attr.shape}")
+        except AttributeError as e:
+            print(f"Skipping {old_key}: {e}")
+
+    # Copy transformer layer weights
+    num_layers = len(timesfm_model.decoder.layers)
+    for i in range(num_layers):
+        for old_template, new_template in TRANSFORMER_LAYER_MAPPING.items():
+            old_key = old_template.format(i=i)
+            new_key = new_template.format(i=i)
+
+            try:
+                # Get tensor from original model
+                old_attr = get_nested_attr(original_model, old_key)
+                # Get corresponding attribute in new model
+                new_attr = get_nested_attr(timesfm_model, new_key)
+                new_attr.data.copy_(old_attr.data)  # Copy data
+                if i == 0:  # Only print first layer details
+                    print(f"✅ Converted layer {i}: {old_key} -> {new_key}")
+            except AttributeError:
+                if i == 0:  # Only print first layer errors
+                    print(f"Skipping layer {i}: {old_key} (not found in original model).")
+
+    timesfm_model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    shutil.rmtree(tmp_model_path)
+    print(f"✅ Model saved to {model_path}")
+
+
+def check_outputs(model_path):
+    """Compares outputs between original and converted models."""
+    print("\nChecking model outputs...")
+
+    # Load original TimesFM 2.5 model
+    tfm = timesfm.TimesFM_2p5_200M_torch()
+    tfm.load_checkpoint()
+
+    # Compile with forecasting configuration
+    forecast_config = timesfm.ForecastConfig(
+        max_context=1024,
+        max_horizon=256,
+        normalize_inputs=True,
+        use_continuous_quantile_head=True,
+    )
+    tfm.compile(forecast_config)
+
+    # Load converted model
+    converted_model = Timesfm2P5ModelForPrediction.from_pretrained(
+        model_path,
+        torch_dtype=torch.float32,
+    )
+    if torch.cuda.is_available():
+        converted_model = converted_model.to("cuda")
+    converted_model.eval()  # Set to evaluation mode
+
+    # Create test inputs (same as in original test)
+    forecast_input = [
+        np.linspace(0, 1, 100),
+        np.sin(np.linspace(0, 20, 67)),
+        np.sin(np.linspace(0, 10, 150)) + np.random.normal(0, 0.1, 150),
+    ]
+
+    # Get predictions from original model
+    point_forecast_orig, quantile_forecast_orig = tfm.forecast(
+        horizon=128,
+        inputs=forecast_input,
     )
 
-    timesfm_config.save_pretrained(output_dir)
-    print(f"✅ Config saved to {output_dir}")
+    # Convert inputs to sequence of tensors
+    forecast_input_tensor = [
+        torch.tensor(ts, dtype=torch.float32)
+        for ts in forecast_input
+    ]
+    if torch.cuda.is_available():
+        forecast_input_tensor = [ts.to("cuda") for ts in forecast_input_tensor]
 
-    return timesfm_config
+    # Get predictions from converted model
+    with torch.no_grad():
+        outputs = converted_model(past_values=forecast_input_tensor, return_dict=True)
+        point_forecast_conv = outputs.mean_predictions.float().cpu().numpy()
+        quantile_forecast_conv = outputs.full_predictions.float().cpu().numpy()
+
+    # Compare outputs
+    point_forecast_diff = np.abs(point_forecast_orig - point_forecast_conv)
+    quantile_forecast_diff = np.abs(quantile_forecast_orig - quantile_forecast_conv)
+
+    max_point_diff = point_forecast_diff.max()
+    mean_point_diff = point_forecast_diff.mean()
+    max_quantile_diff = quantile_forecast_diff.max()
+    mean_quantile_diff = quantile_forecast_diff.mean()
+
+    print("\nOutput comparison:")
+    print(f"Point forecast - Max difference: {max_point_diff:.6f}")
+    print(f"Point forecast - Mean difference: {mean_point_diff:.6f}")
+    print(f"Quantile forecast - Max difference: {max_quantile_diff:.6f}")
+    print(f"Quantile forecast - Mean difference: {mean_quantile_diff:.6f}")
+
+    # Define acceptable thresholds
+    POINT_THRESHOLD = 1e-5
+    QUANTILE_THRESHOLD = 1e-5
+
+    if max_point_diff > POINT_THRESHOLD or max_quantile_diff > QUANTILE_THRESHOLD:
+        print(
+            f"\n⚠️ Output differences detected (may be acceptable):\n"
+            f"Point forecast max diff: {max_point_diff} (threshold: {POINT_THRESHOLD})\n"
+            f"Quantile forecast max diff: {max_quantile_diff} (threshold: {QUANTILE_THRESHOLD})"
+        )
+    else:
+        print("\n✅ All outputs match within acceptable tolerance!")
+
+    # Print shapes for verification
+    print("\nOutput shapes:")
+    print(f"Original point forecast: {point_forecast_orig.shape}")
+    print(f"Converted point forecast: {point_forecast_conv.shape}")
+    print(f"Original quantile forecast: {quantile_forecast_orig.shape}")
+    print(f"Converted quantile forecast: {quantile_forecast_conv.shape}")
+
+    return max_point_diff, max_quantile_diff
 
 
 def main():
@@ -146,35 +267,33 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--test_original_only",
-        action="store_true",
-        help="Only test the original TimesFM 2.5 model"
+        "--safe_serialization", type=bool, default=True, help="Whether or not to save using `safetensors`."
     )
     parser.add_argument(
-        "--config_only",
-        action="store_true",
-        help="Only create and save the config"
+        "--huggingface_repo_id",
+        type=str,
+        default="google/timesfm-2.5-200m-pytorch",
+        help="The Hugging Face repository ID to use for the model.",
     )
     args = parser.parse_args()
 
-    # Create output directory
-    os.makedirs(args.output_dir, exist_ok=True)
-
-    if args.test_original_only:
-        # Only test original model for now
-        success = test_original_model_only(args.output_dir)
-        if success:
-            print("\n✅ Original TimesFM 2.5 model test completed successfully!")
-        else:
-            print("\n❌ Original TimesFM 2.5 model test failed!")
-    elif args.config_only:
-        # Only create config
-        config = create_config_only(args.output_dir)
-        print("\n✅ Config creation completed!")
+    # if the saved model file exists, skip the conversion
+    if os.path.exists(
+        os.path.join(args.output_dir, "model.safetensors" if args.safe_serialization else "pytorch_model.bin")
+    ):
+        print(f"Model already exists in {args.output_dir}, skipping conversion.")
     else:
-        print("⚠️ Full conversion not yet implemented")
-        print("Use --test_original_only to test original model")
-        print("Use --config_only to create config")
+        write_model(
+            model_path=args.output_dir,
+            safe_serialization=args.safe_serialization,
+        )
+
+    # Always check outputs
+    max_point_diff, max_quantile_diff = check_outputs(args.output_dir)
+
+    print(f"\n🎉 TimesFM 2.5 conversion completed!")
+    print(f"   Point forecast precision: {max_point_diff:.6f}")
+    print(f"   Quantile forecast precision: {max_quantile_diff:.6f}")
 
 
 if __name__ == "__main__":

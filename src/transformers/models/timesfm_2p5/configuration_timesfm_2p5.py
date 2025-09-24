@@ -54,7 +54,7 @@ class Timesfm2P5Config(PretrainedConfig):
         max_timescale: float = 10000.0,
         # Override defaults for 2.5
         num_hidden_layers: int = 20,
-        output_quantile_len: int = 1024,
+        output_quantile_len: int = 1024,  # From original TimesFM 2.5 config
         decode_index: int = 5,
         use_rotary_embeddings: bool = True,
         use_qk_norm: bool = True,
@@ -67,6 +67,8 @@ class Timesfm2P5Config(PretrainedConfig):
         attn_logit_softcapping: Optional[float] = None,
         layer_types: list = None,  # All layers are the same type
         sliding_window: int = None,  # No sliding window
+        max_position_embeddings: int = 16384,  # Should match context_length
+        rope_theta: float = 10000.0,  # RoPE theta parameter
         **kwargs,
     ):
         super().__init__(
@@ -104,6 +106,8 @@ class Timesfm2P5Config(PretrainedConfig):
         self.attention_bias = attention_bias
         self.layer_types = layer_types or ["attention"] * num_hidden_layers
         self.sliding_window = sliding_window
+        self.max_position_embeddings = max_position_embeddings
+        self.rope_theta = rope_theta
 
 
 __all__ = ["Timesfm2P5Config"]

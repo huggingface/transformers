@@ -447,10 +447,12 @@ class Timesfm2P5PreTrainedModel(PreTrainedModel):
     config_class = Timesfm2P5Config
 
     def _init_weights(self, module):
+        """Initialize the weights - TimesFM 2.5 version"""
+        # Call the base PreTrainedModel._init_weights (skip TimesFm parent to avoid scaling tensor init)
         super()._init_weights(module)
-        if isinstance(module, Timesfm2P5Attention):
-            # Initialize scaling parameter
-            nn.init.ones_(module.scaling)
+
+        # TimesFM 2.5 attention uses float scaling, not tensor parameter
+        # No additional initialization needed for Timesfm2P5Attention
 
 
 class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
@@ -575,9 +577,9 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
     """
 
     def __init__(self, config: Timesfm2P5Config):
-        # Skip the parent's __init__ to avoid creating the wrong decoder and projections
         super().__init__(config)
 
+        # Now override with TimesFM 2.5 specific components
         self.config = config
         self.context_len = config.context_length
         self.horizon_len = config.horizon_length
@@ -585,7 +587,14 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         # Override decoder with TimesFM 2.5 model
         self.decoder = Timesfm2P5Model(config)
 
-        # TimesFM 2.5 has separate output projections (matching original architecture)
+        # quantile and mean output
+        self.horizon_ff_layer = Timesfm2P5ResidualBlock(
+            input_dims=config.hidden_size,
+            output_dims=config.horizon_length * (1 + len(config.quantiles)),
+            hidden_dims=config.intermediate_size,
+        )
+
+        # Replace the parent's horizon_ff_layer with TimesFM 2.5 separate output projections
         # Point prediction projection: 1280 -> 1280
         self.output_projection_point = Timesfm2P5ResidualBlock(
             input_dims=config.hidden_size,  # 1280
@@ -595,17 +604,17 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
             activation=config.activation,  # "swish"
         )
 
-        # Quantile prediction projection: 1280 -> 10240 (1024 * 10)
+        # Quantile prediction projection: 1280 -> 10240 (matching original exactly)
         self.output_projection_quantiles = Timesfm2P5ResidualBlock(
             input_dims=config.hidden_size,  # 1280
             hidden_dims=config.hidden_size,  # 1280
-            output_dims=config.output_quantile_len * len(config.quantiles),  # 1024 * 9 = 9216
+            output_dims=10240,  # Exact match to original model
             use_bias=config.use_bias,  # False
             activation=config.activation,  # "swish"
         )
 
         # Initialize weights and apply final processing
-        # self.post_init()  # Temporarily disabled due to initialization issue
+        self.post_init()
 
     def _preprocess(
         self, inputs: Sequence[torch.Tensor], freq: Sequence[int]
@@ -680,12 +689,17 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         ]  # [B, N, 1, 128]
         point_final = point_final.permute(0, 1, 3, 2)  # [B, N, 128, 1]
 
-        # Quantile predictions: [B, N, 9216] -> [B, N, horizon_length, quantiles]
+        # Quantile predictions: [B, N, 10240] -> [B, N, horizon_length, quantiles]
         quantile_reshaped = quantile_output.view(
-            b, n, self.config.output_quantile_len, len(self.config.quantiles)
-        )  # [B, N, 1024, 9]
-        # Take the first horizon_length entries
-        quantile_final = quantile_reshaped[:, :, : self.config.horizon_length, :]  # [B, N, 128, 9]
+            b,
+            n,
+            1024,
+            10,  # 10240 = 1024 * 10, but we only use first 9 quantiles
+        )  # [B, N, 1024, 10]
+        # Take the first horizon_length entries and only the quantiles we want
+        quantile_final = quantile_reshaped[
+            :, :, : self.config.horizon_length, : len(self.config.quantiles)
+        ]  # [B, N, 128, 9]
 
         # Combine point and quantile predictions: [B, N, 128, 1] + [B, N, 128, 9] -> [B, N, 128, 10]
         output_ts = torch.cat([point_final, quantile_final], dim=-1)
@@ -785,7 +799,9 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
 
             if unpadded_values.numel() > 0:
                 loc = torch.mean(unpadded_values)
-                scale = torch.std(unpadded_values, unbiased=False) + 1e-8  # Add small epsilon for stability
+                scale = torch.std(unpadded_values, unbiased=False)
+                # Match original TimesFM 2.5 tolerance handling
+                scale = torch.where(scale < 1e-6, torch.tensor(1.0, device=device), scale)
             else:
                 loc = torch.tensor(0.0, device=device)
                 scale = torch.tensor(1.0, device=device)
