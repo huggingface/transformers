@@ -152,6 +152,8 @@ class TextGenerationPipeline(Pipeline):
         continue_final_message=None,
         skip_special_tokens=None,
         tokenizer_encode_kwargs=None,
+        tools=None,
+        documents=None,
         **generate_kwargs,
     ):
         # preprocess kwargs
@@ -169,6 +171,11 @@ class TextGenerationPipeline(Pipeline):
         if max_length is not None:
             preprocess_params["max_length"] = max_length
             generate_kwargs["max_length"] = max_length
+
+        if tools is not None:
+            preprocess_params["tools"] = tools
+        if documents is not None:
+            preprocess_params["documents"] = documents
 
         if prefix is not None:
             preprocess_params["prefix"] = prefix
@@ -335,6 +342,8 @@ class TextGenerationPipeline(Pipeline):
         max_length=None,
         continue_final_message=None,
         tokenizer_encode_kwargs=None,
+        tools=None,
+        documents=None,
         **generate_kwargs,
     ):
         # Only set non-None tokenizer kwargs, so as to rely on the tokenizer's defaults
@@ -359,6 +368,8 @@ class TextGenerationPipeline(Pipeline):
                 continue_final_message=continue_final_message,
                 return_dict=True,
                 return_tensors="pt",
+                tools=tools,
+                documents=documents,
                 **tokenizer_kwargs,
             )
         else:
