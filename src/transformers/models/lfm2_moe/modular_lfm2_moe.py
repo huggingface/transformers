@@ -34,6 +34,10 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
+from ..mixtral.modeling_mixtral import (
+    MixtralForCausalLM,
+    MixtralModel
+)
 from ..lfm2.modeling_lfm2 import (
     Lfm2HybridConvCache,
     Lfm2Attention,
@@ -82,8 +86,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         super().__init__()
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
-        self.scaling_factor = config.router_scaling_factor
-        self.score_function = config.router_score_function
+        self.routed_scaling_factor = config.routed_scaling_factor
         self.norm_topk_prob = config.norm_topk_prob
 
         if config.use_expert_bias:
@@ -104,11 +107,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
 
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
-
-        if self.score_function == "sigmoid":
-            routing_weights = torch.sigmoid(router_logits)
-        else:
-            raise ValueError(f"Unsupported router score function: {self.score_function}")
+        routing_weights = router_logits.sigmoid()
 
         if self.expert_bias is not None:
             scores_for_routing = routing_weights + self.expert_bias
@@ -122,8 +121,8 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
                 routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-20)
             )
 
-        if self.scaling_factor:
-            routing_weights = routing_weights * self.scaling_factor
+        if self.routed_scaling_factor:
+            routing_weights = routing_weights * self.routed_scaling_factor
 
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
@@ -234,10 +233,10 @@ class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
 
 
 class Lfm2MoeModel(MixtralModel):
-    def __init__(self, config: Lfm2Config):
+    def __init__(self, config: Lfm2MoeConfig):
         super().__init__(config)
-        self.pos_emb = Lfm2RotaryEmbedding(config)
-        self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.pos_emb = Lfm2MoeRotaryEmbedding(config)
+        self.embedding_norm = Lfm2MoeRMSNorm(config.hidden_size, eps=config.norm_eps)
         del self.norm
         del self.rotary_emb
 
@@ -308,7 +307,14 @@ class Lfm2MoeModel(MixtralModel):
 
 
 class Lfm2MoeForCausalLM(MixtralForCausalLM):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = Lfm2MoeModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
 
 __all__ = ["Lfm2MoeForCausalLM", "Lfm2MoeModel", "Lfm2MoePretrainedModel"]

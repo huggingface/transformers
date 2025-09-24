@@ -23,13 +23,16 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...cache_utils import Cache
+from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ...utils.import_utils import is_causal_conv1d_available
@@ -119,8 +122,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         super().__init__()
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
-        self.scaling_factor = config.router_scaling_factor
-        self.score_function = config.router_score_function
+        self.routed_scaling_factor = config.routed_scaling_factor
         self.norm_topk_prob = config.norm_topk_prob
 
         if config.use_expert_bias:
@@ -141,11 +143,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
 
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
-
-        if self.score_function == "sigmoid":
-            routing_weights = torch.sigmoid(router_logits)
-        else:
-            raise ValueError(f"Unsupported router score function: {self.score_function}")
+        routing_weights = router_logits.sigmoid()
 
         if self.expert_bias is not None:
             scores_for_routing = routing_weights + self.expert_bias
@@ -157,8 +155,8 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         if self.norm_topk_prob:
             routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-20)
 
-        if self.scaling_factor:
-            routing_weights = routing_weights * self.scaling_factor
+        if self.routed_scaling_factor:
+            routing_weights = routing_weights * self.routed_scaling_factor
 
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
@@ -672,13 +670,23 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
     }
 
 
-class Lfm2MoeModel(MixtralModel):
-    def __init__(self, config: Lfm2Config):
+@auto_docstring
+class Lfm2MoeModel(Lfm2MoePreTrainedModel):
+    def __init__(self, config: Lfm2MoeConfig):
         super().__init__(config)
-        self.pos_emb = Lfm2RotaryEmbedding(config)
-        self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
-        del self.norm
-        del self.rotary_emb
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [Lfm2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.gradient_checkpointing = False
+        self.pos_emb = Lfm2MoeRotaryEmbedding(config)
+        self.embedding_norm = Lfm2MoeRMSNorm(config.hidden_size, eps=config.norm_eps)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @check_model_inputs
     @auto_docstring
@@ -746,8 +754,191 @@ class Lfm2MoeModel(MixtralModel):
         )
 
 
-class Lfm2MoeForCausalLM(MixtralForCausalLM):
-    pass
+def load_balancing_loss_func(
+    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
+    num_experts: Optional[int] = None,
+    top_k=2,
+    attention_mask: Optional[torch.Tensor] = None,
+) -> Union[torch.Tensor, int]:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
+
+
+@auto_docstring
+class Lfm2MoeForCausalLM(Lfm2MoePreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = Lfm2MoeModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Lfm2MoeForCausalLM
+
+        >>> model = Lfm2MoeForCausalLM.from_pretrained("mistralai/Lfm2Moe-8x7B-v0.1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Lfm2Moe-8x7B-v0.1")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs: MoeModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_router_logits=output_router_logits,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        return MoeCausalLMOutputWithPast(
+            loss=loss,
+            aux_loss=aux_loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
 
 
 __all__ = ["Lfm2MoeForCausalLM", "Lfm2MoeModel", "Lfm2MoePretrainedModel"]

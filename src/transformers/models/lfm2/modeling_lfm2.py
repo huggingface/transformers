@@ -601,7 +601,6 @@ class Lfm2Model(Lfm2PreTrainedModel):
         self.layers = nn.ModuleList(
             [Lfm2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.rotary_emb = Lfm2RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.pos_emb = Lfm2RotaryEmbedding(config)
         self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
