@@ -120,8 +120,8 @@ class MiniMaxConfig(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
         layer_types (`list`, *optional*):

@@ -72,43 +72,10 @@ class DiffLlamaConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'diffllama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'diffllama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'diffllama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'diffllama3'. Scaling factor applied to high frequency components of the RoPE
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):

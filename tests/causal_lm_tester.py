@@ -379,12 +379,12 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # If the config does not have rope params defined for each layer type - it fails
         type_to_drop = config.layer_types[0]
-        flat_rope_dict = config.rope_scaling.pop(type_to_drop) # save for later
+        flat_rope_dict = config.rope_scaling.pop(type_to_drop)  # save for later
         with self.assertRaises(KeyError):
             self.model_tester_class.base_model_class(config).eval().to(torch_device)
 
         with self.assertRaises(KeyError):
-            rope_config_validation(config) # rope validation fails as well
+            rope_config_validation(config)  # rope validation fails as well
 
         # But using the same dict to init config from scratch will work. The missing type will
         # be filled with default rope theta for given config class
@@ -393,7 +393,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # If the config is old-style and has a flat rope param dict - handles BC and passes
         config.rope_scaling = flat_rope_dict
         old_format_model = self.model_tester_class.base_model_class(config).eval().to(torch_device)
-        old_format_model(dummy_input)        
+        old_format_model(dummy_input)
 
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""

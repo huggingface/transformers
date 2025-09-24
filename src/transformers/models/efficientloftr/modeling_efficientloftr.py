@@ -100,7 +100,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         #   1) Model is used as backbone with several other models. E.g. Gemma which has sliding
         #      layers with Paligemma and has only one layer type as a standalone model
         #   2) Tiny models used for testing do not have enough layers to reach the next layer type
-        self.layer_types = set(config.layer_types) if hasattr(config, "layer_types") else None
+        self.layer_types = list(set(config.layer_types)) if hasattr(config, "layer_types") else None
         if self.layer_types is not None and len(self.layer_types) > 1:
             self.rope_type = {}
             for layer_type in self.layer_types:
@@ -171,7 +171,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         self, x: torch.Tensor, position_ids: Optional[torch.LongTensor] = None, layer_type=None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         feats_height, feats_width = x.shape[-2:]
-        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        prefix = "" if layer_type is None or len(self.layer_types) == 1 else f"{layer_type}_"
         inv_freq = getattr(self, f"{prefix}inv_freq")
         embed_height = (feats_height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         embed_width = (feats_width - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1

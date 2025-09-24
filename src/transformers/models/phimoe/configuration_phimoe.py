@@ -72,12 +72,10 @@ class PhimoeConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_scaling (`dict`, *optional*):
-            The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor`, `long_factor`, `short_mscale`, `long_mscale` and
-            `original_max_position_embeddings`. The `type` must be `longrope`, the `short_mscale` and `long_scale` must
-            be numbers, the `short_factor` and `long_factor` must be lists of numbers with the same length as half of
-            the attention head size and the `original_max_position_embeddings` must be an integer.
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `262144`.
         attention_dropout (`float`, *optional*, defaults to 0.0):

@@ -83,8 +83,10 @@ class DeepseekV2Config(LlamaConfig):
             End-of-sequence token ID.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Configuration for scaling RoPE embeddings. Supports `linear` and `dynamic` scaling strategies.
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value, and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):

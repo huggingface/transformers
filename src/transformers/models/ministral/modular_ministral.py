@@ -7,6 +7,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_rope_utils import rope_config_validation
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import check_model_inputs
@@ -80,8 +81,10 @@ class MinistralConfig(MistralConfig, PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -122,7 +125,7 @@ class MinistralConfig(MistralConfig, PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
+        rope_scaling=None,
         sliding_window=4096,
         attention_dropout=0.0,
         layer_types=None,
@@ -154,7 +157,6 @@ class MinistralConfig(MistralConfig, PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.layer_types = layer_types
 
@@ -162,6 +164,21 @@ class MinistralConfig(MistralConfig, PretrainedConfig):
             self.layer_types = [
                 "sliding_attention" if self.sliding_window is not None else "full_attention"
             ] * num_hidden_layers
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = getattr(self, "rope_theta", 10000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
 
 class MinistralMLP(Qwen2MLP):

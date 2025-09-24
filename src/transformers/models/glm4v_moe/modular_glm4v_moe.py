@@ -93,25 +93,10 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
         attention_bias (`bool`, defaults to `True`, *optional*, defaults to `True`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):

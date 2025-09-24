@@ -108,11 +108,10 @@ class DeepseekV3Config(PretrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum.
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         rope_interleave (`bool`, *optional*, defaults to `True`):
             Whether to interleave the rotary position embeddings.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):

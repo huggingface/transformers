@@ -78,14 +78,10 @@ class GraniteMoeSharedConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
-            these scaling strategies behave:
-            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
-            experimental feature, subject to breaking API changes in future versions.
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):

@@ -327,11 +327,10 @@ class Phi4MultimodalConfig(Phi3Config):
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`dict`, *optional*):
-            The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
-            the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
-            divided by the number of attention heads divided by 2.
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         partial_rotary_factor (`float`, *optional*, defaults to `1.0`):
             Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
         bos_token_id (`int`, *optional*, defaults to 199999):

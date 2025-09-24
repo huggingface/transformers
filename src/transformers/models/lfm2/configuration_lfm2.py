@@ -66,8 +66,10 @@ class Lfm2Config(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_scaling (`dict`, *optional*):
-            RoPE scaling dict
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         conv_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the conv layers.
         conv_L_cache (`int`, *optional*, defaults to 3):

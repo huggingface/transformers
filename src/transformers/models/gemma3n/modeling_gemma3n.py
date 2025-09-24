@@ -1637,7 +1637,7 @@ class Gemma3nRotaryEmbedding(nn.Module):
         #   1) Model is used as backbone with several other models. E.g. Gemma3n which has sliding
         #      layers with Paligemma and has only one layer type as a standalone model
         #   2) Tiny models used for testing do not have enough layers to reach the next layer type
-        self.layer_types = set(config.layer_types) if hasattr(config, "layer_types") else None
+        self.layer_types = list(set(config.layer_types)) if hasattr(config, "layer_types") else None
         if self.layer_types is not None and len(self.layer_types) > 1:
             self.rope_type = {}
             for layer_type in self.layer_types:
@@ -1705,7 +1705,7 @@ class Gemma3nRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
-        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        prefix = "" if layer_type is None or len(self.layer_types) == 1 else f"{layer_type}_"
         inv_freq = getattr(self, f"{prefix}inv_freq")
         attention_scaling = getattr(self, f"{prefix}attention_scaling")
 

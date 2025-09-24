@@ -174,7 +174,7 @@ class GptOssRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
-        prefix = "" if len(self.layer_types) == 1 or layer_type is None else f"{layer_type}_"
+        prefix = "" if layer_type is None or len(self.layer_types) == 1 else f"{layer_type}_"
         inv_freq = getattr(self, f"{prefix}inv_freq")
         attention_scaling = getattr(self, f"{prefix}attention_scaling")
 
