@@ -53,7 +53,7 @@ class JanusFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         falls below this value after resizing.
     """
 
-    min_size: int
+    min_size: Optional[int]
 
 
 @auto_docstring

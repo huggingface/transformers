@@ -752,11 +752,11 @@ class DeepseekVLHybridFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
     """
 
-    min_size: int
-    high_res_size: dict
-    high_res_resample: "PILImageResampling"
-    high_res_image_mean: list[float]
-    high_res_image_std: list[float]
+    min_size: Optional[int]
+    high_res_size: Optional[dict[str, int]]
+    high_res_resample: Optional[Union["PILImageResampling", "F.InterpolationMode", int]]
+    high_res_image_mean: Optional[Union[float, list[float], tuple[float, float, float]]]
+    high_res_image_std: Optional[Union[float, list[float], tuple[float, float, float]]]
 
 
 class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):

@@ -193,9 +193,9 @@ class ImagesKwargs(TypedDict, total=False):
             Scale factor to use if rescaling the image.
         do_normalize (`bool`, *optional*):
             Whether to normalize the image.
-        image_mean (`float` or `list[float]`, *optional*):
+        image_mean (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Mean to use if normalizing the image.
-        image_std (`float` or `list[float]`, *optional*):
+        image_std (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Standard deviation to use if normalizing the image.
         do_pad (`bool`, *optional*):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
@@ -219,8 +219,8 @@ class ImagesKwargs(TypedDict, total=False):
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
     do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
+    image_mean: Optional[Union[float, list[float], tuple[float, float, float]]]
+    image_std: Optional[Union[float, list[float], tuple[float, float, float]]]
     do_pad: Optional[bool]
     pad_size: Annotated[Optional[dict[str, int]], image_size_validator()]
     do_center_crop: Optional[bool]
@@ -251,9 +251,9 @@ class VideosKwargs(TypedDict, total=False):
             Scale factor to use if rescaling the video.
         do_normalize (`bool`, *optional*):
             Whether to normalize the video.
-        image_mean (`float` or `list[float]`, *optional*):
+        image_mean (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Mean to use if normalizing the video.
-        image_std (`float` or `list[float]`, *optional*):
+        image_std (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Standard deviation to use if normalizing the video.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the video.
@@ -283,8 +283,8 @@ class VideosKwargs(TypedDict, total=False):
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
     do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
+    image_mean: Optional[Union[float, list[float], tuple[float, float, float]]]
+    image_std: Optional[Union[float, list[float], tuple[float, float, float]]]
     do_center_crop: Optional[bool]
     crop_size: Annotated[Optional[dict[str, int]], image_size_validator()]
     data_format: Optional[ChannelDimension]

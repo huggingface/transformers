@@ -92,8 +92,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             batch_num_images = [1] * len(images)
         else:
             batch_num_images = [1]
-        kwargs["batch_num_images"] = batch_num_images
-        return super().preprocess(images, **kwargs)
+        return super().preprocess(images, batch_num_images, **kwargs)
 
     def _resize_for_patching(
         self,
@@ -218,6 +217,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
+        batch_num_images: list[int],
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
@@ -230,7 +230,6 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        batch_num_images: list[int],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,

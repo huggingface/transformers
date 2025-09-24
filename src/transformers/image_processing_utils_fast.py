@@ -51,6 +51,7 @@ from .utils import (
     logging,
 )
 from .utils.import_utils import is_rocm_platform
+from .utils.type_validators import TypedDictAdapter
 
 
 if is_vision_available():
@@ -169,21 +170,21 @@ class DefaultFastImageProcessorKwargs(TypedDict, total=False):
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
     default_to_square: Optional[bool]
-    resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]]
+    resample: Optional[Union["PILImageResampling", "F.InterpolationMode", int]]
     do_center_crop: Optional[bool]
     crop_size: Optional[dict[str, int]]
     do_rescale: Optional[bool]
     rescale_factor: Optional[Union[int, float]]
     do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
+    image_mean: Optional[Union[float, list[float], tuple[float, float, float]]]
+    image_std: Optional[Union[float, list[float], tuple[float, float, float]]]
     do_pad: Optional[bool]
     pad_size: Optional[dict[str, int]]
     do_convert_rgb: Optional[bool]
     return_tensors: Optional[Union[str, TensorType]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional["torch.device"]
+    device: Optional[Union[str, "torch.device"]]
     disable_grouping: Optional[bool]
 
 
@@ -737,6 +738,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
         # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
+
+        # Perform type validation on received kwargs
+        type_validator = TypedDictAdapter(self.valid_kwargs)
+        type_validator.validate_fields(**kwargs)
+
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self._valid_kwargs_names:
