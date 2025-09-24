@@ -100,7 +100,7 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "{{'<|im_start|>assistant\n' }}"
             "{% endif %}"
         )
-        return {"chat_template": chat_template, "use_image_special_tokens": True}
+        return {"chat_template": chat_template}
 
     # Override as Lfm2VL needs images/video to be an explicitly nested batch
     def prepare_image_inputs(self, batch_size=None):

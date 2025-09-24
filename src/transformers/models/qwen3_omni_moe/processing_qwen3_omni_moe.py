@@ -33,10 +33,10 @@ from ...video_utils import VideoInput, make_batched_videos
 
 
 class Qwen3OmniMoeVideosKwargs(VideosKwargs):
-    fps: Optional[list[Union[int, float]]]
+    fps: Optional[Union[list[Union[int, float]], int, float]]
     use_audio_in_video: Optional[bool]
     seconds_per_chunk: Optional[float]
-    position_id_per_seconds: Optional[int]
+    position_id_per_seconds: Optional[Union[int, float]]
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]

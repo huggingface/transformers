@@ -21,6 +21,7 @@ from ...processing_utils import (
     ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
+    TextKwargs,
     Unpack,
 )
 from ...tokenization_utils_base import BatchEncoding, TextInput
@@ -46,8 +47,13 @@ class Lfm2VlImagesKwargs(ImagesKwargs, total=False):
     return_row_col_info: Optional[bool]
 
 
+class Lfm2VlTextKwargs(TextKwargs, total=False):
+    use_image_special_tokens: Optional[bool]
+
+
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Lfm2VlImagesKwargs
+    text_kwargs: Lfm2VlTextKwargs
 
     _defaults = {
         "images_kwargs": {
@@ -88,12 +94,10 @@ class Lfm2VlProcessor(ProcessorMixin):
         image_processor,
         tokenizer,
         chat_template: Optional[str] = None,
-        use_image_special_tokens: Optional[bool] = True,
         **kwargs,
     ):
         self.image_token = tokenizer.image_token
         self.image_token_id = tokenizer.image_token_id
-        self.use_image_special_tokens = use_image_special_tokens
         self.image_start_token = tokenizer.image_start_token
         self.image_end_token = tokenizer.image_end_token
         self.image_thumbnail_token = tokenizer.image_thumbnail
