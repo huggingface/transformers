@@ -762,7 +762,7 @@ def is_torch_npu_available(check_device=False) -> bool:
 
 
 @lru_cache
-def is_torch_mlu_available(check_device=False) -> bool:
+def is_torch_mlu_available() -> bool:
     """
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
     uninitialized.
