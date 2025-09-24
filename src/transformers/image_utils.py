@@ -76,7 +76,7 @@ logger = logging.get_logger(__name__)
 
 ImageInput = Union[
     "PIL.Image.Image", np.ndarray, "torch.Tensor", list["PIL.Image.Image"], list[np.ndarray], list["torch.Tensor"]
-]  # noqa
+]
 
 
 class ChannelDimension(ExplicitEnum):
