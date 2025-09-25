@@ -27,7 +27,7 @@ import os
 import time
 
 from create_dummy_models import COMPOSITE_MODELS, create_tiny_models
-from huggingface_hub import ModelFilter, hf_api
+from huggingface_hub import HfApi
 
 import transformers
 from transformers import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer
@@ -65,15 +65,12 @@ def get_tiny_model_names_from_repo():
 
 
 def get_tiny_model_summary_from_hub(output_path):
+    api = HfApi()
     special_models = COMPOSITE_MODELS.values()
 
     # All tiny model base names on Hub
     model_names = get_all_model_names()
-    models = hf_api.list_models(
-        filter=ModelFilter(
-            author="hf-internal-testing",
-        )
-    )
+    models = api.list_models(author="hf-internal-testing")
     _models = set()
     for x in models:
         model = x.id
@@ -94,7 +91,7 @@ def get_tiny_model_summary_from_hub(output_path):
         repo_id = f"hf-internal-testing/tiny-random-{model}"
         model = model.split("-")[0]
         try:
-            repo_info = hf_api.repo_info(repo_id)
+            repo_info = api.repo_info(repo_id)
             content = {
                 "tokenizer_classes": set(),
                 "processor_classes": set(),
