@@ -34,29 +34,22 @@ class LlamaTokenizationRefactorTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # Fast tokenizer from pretrained
-        cls.auto_tok = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
+        tok_auto = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
 
         # Build backend for slow tokenizer from the fast tokenizer's SentencePiece model
-        vocab_file = getattr(cls.auto_tok, "vocab_file", None)
+        vocab_file = getattr(tok_auto, "vocab_file", None)
 
         extractor = SentencePieceExtractor(vocab_file)
         vocab, merges = extractor.extract()
 
-        cls.merges_tok = LlamaTokenizer(vocab=vocab, merges=merges)
+        tok_from_vocab = LlamaTokenizer(vocab=vocab, merges=merges)
 
-    def test_llama_tokenizers_produce_identical_tokens(self):
-        tokens_fast = self.auto_tok.tokenize(input_string)
-        tokens_merges = self.merges_tok.tokenize(input_string)
-        self.assertEqual(tokens_fast, tokens_merges)
+        cls.tokenizers = [tok_auto, tok_from_vocab]
 
-    def test_llama_tokenizers_produce_identical_ids(self):
-        ids_fast = self.auto_tok.encode(input_string)
-        ids_merges = self.merges_tok.encode(input_string)
-        self.assertEqual(ids_fast, ids_merges)
+    def test_llama_tokenizers_match_expected_tokens(self):
+        for tok in self.tokenizers:
+            self.assertEqual(tok.tokenize(input_string), expected_tokens)
 
-    def test_llama_tokenization_matches_expected_tokens_and_ids(self):
-        tokens = self.auto_tok.tokenize(input_string)
-        ids = self.auto_tok.encode(input_string)
-        self.assertEqual(tokens, expected_tokens)
-        self.assertEqual(ids, expected_token_ids)
+    def test_llama_tokenizers_match_expected_ids(self):
+        for tok in self.tokenizers:
+            self.assertEqual(tok.encode(input_string), expected_token_ids)
