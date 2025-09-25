@@ -208,6 +208,7 @@ else:
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
+
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 
 
@@ -3509,8 +3510,10 @@ class Trainer:
                 self.lr_scheduler.load_state_dict(lr_scheduler_state)
             else:
                 if is_sagemaker_mp_enabled():
+
                     def opt_load_hook(mod, opt):
                         opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
+
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:
                     # We use the CPU when training on one GPU to avoid OOM for GPU RAM when training big models.
