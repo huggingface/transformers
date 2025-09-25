@@ -58,7 +58,7 @@ The model can generate an audio sample conditioned on a text and an audio prompt
 
 In the following examples, we load an audio file using the 🤗 Datasets library, which can be pip installed through the command below:
 
-```
+```bash
 pip install --upgrade pip
 pip install datasets[audio]
 ```
