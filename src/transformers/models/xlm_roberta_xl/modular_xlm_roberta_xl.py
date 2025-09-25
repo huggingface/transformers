@@ -102,11 +102,10 @@ class XLMRobertaXLEmbeddings(RobertaEmbeddings):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings = embeddings + position_embeddings
 
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -135,9 +134,9 @@ class XLMRobertaXLSelfOutput(nn.Module):
 
 class XLMRobertaXLAttention(BertAttention):
     def __init__(
-        self, config, position_embedding_type=None, is_causal=False, layer_idx=None, is_cross_attention=False
+        self, config, is_causal=False, layer_idx=None, is_cross_attention=False
     ):
-        super().__init__(config, position_embedding_type, is_causal, layer_idx, is_cross_attention)
+        super().__init__(config, is_causal, layer_idx, is_cross_attention)
         del self.LayerNorm
 
         self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
