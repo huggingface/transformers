@@ -49,7 +49,7 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import ModelCard, create_repo, upload_folder
+from huggingface_hub import CommitInfo, ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
@@ -5117,7 +5117,7 @@ class Trainer:
         token: Optional[str] = None,
         revision: Optional[str] = None,
         **kwargs,
-    ) -> str:
+    ) -> CommitInfo:
         """
         Upload `self.model` and `self.processing_class` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 

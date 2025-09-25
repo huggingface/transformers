@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import inspect
+import io
 import json
 import os
 import pathlib
@@ -22,9 +22,9 @@ import unittest
 import warnings
 from copy import deepcopy
 
+import httpx
 import numpy as np
 import pytest
-import requests
 from packaging import version
 
 from transformers import AutoImageProcessor, BatchFeature
@@ -182,7 +182,9 @@ class ImageProcessingTestMixin:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
         dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+            io.BytesIO(
+                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
+            )
         )
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)

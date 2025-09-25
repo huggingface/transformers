@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import requests
+import httpx
 import yaml
 from huggingface_hub import model_info
 from huggingface_hub.errors import OfflineModeIsEnabled
@@ -380,12 +380,7 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except (
-                requests.exceptions.HTTPError,
-                requests.exceptions.ConnectionError,
-                HFValidationError,
-                OfflineModeIsEnabled,
-            ):
+            except (httpx.HTTPError, HFValidationError, OfflineModeIsEnabled):
                 pass
 
     def create_model_index(self, metric_mapping):
