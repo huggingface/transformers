@@ -126,7 +126,7 @@ class DeepseekV3NaiveMoe(nn.ModuleList):
     """
 
     def __init__(self, config):
-        nn.ModuleList.__init__(self)
+        super().__init__()
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
             self += [DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size)]

@@ -270,7 +270,7 @@ class Glm4MoeNaiveMoe(nn.ModuleList):
     """
 
     def __init__(self, config):
-        nn.Module.__init__(self)
+        super().__init__()
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
             self += [Glm4MoeMLP(config, intermediate_size=config.moe_intermediate_size)]
