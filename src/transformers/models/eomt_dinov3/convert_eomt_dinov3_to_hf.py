@@ -261,6 +261,8 @@ TIMM_KEY_MAPPINGS = {
     r"blocks.(\d+).attn.proj":      r"layer.\1.attention.o_proj",
     r"blocks.(\d+).attn.":          r"layer.\1.attention.",
     r"blocks.(\d+).ls(\d+).gamma":  r"layer.\1.layer_scale\2.lambda1",
+    r"blocks.(\d+).gamma_1":        r"layer.\1.layer_scale1.lambda1",
+    r"blocks.(\d+).gamma_2":        r"layer.\1.layer_scale2.lambda1",
     r"blocks.(\d+).mlp.fc1":        r"layer.\1.mlp.up_proj",
     r"blocks.(\d+).mlp.fc2":        r"layer.\1.mlp.down_proj",
     r"blocks.(\d+).mlp":            r"layer.\1.mlp",
@@ -317,7 +319,7 @@ def convert_base_state_dict(base_state_dict: dict[str, torch.Tensor]) -> dict[st
             continue
 
         new_key = key
-        new_key = re.sub(r"^layer\\.", "layers.", new_key)
+        new_key = re.sub(r"^layer\.", "layers.", new_key)
         new_key = re.sub(r"^norm", "layernorm", new_key)
         converted[new_key] = value
 
