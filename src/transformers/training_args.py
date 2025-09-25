@@ -846,6 +846,30 @@ class TrainingArguments:
         default=8, metadata={"help": "Batch size per device accelerator core/CPU for evaluation."}
     )
 
+    total_train_batch_size_mode: str = field(
+        default="nearly",
+        metadata={
+            "help": (
+                "The mode to keep total_train_batch_size the same in distributed training. "
+                "If mode is strict, The integer parameter gradient_accumulation_steps must be found "
+                "such that gradient_accumulation_steps*per_device_train_batch_size*world_size equals "
+                "total_train_batch_size. If mode is nearly, gradient_accumulation_steps will be selected "
+                "so that gradient_accumulation_steps*per_device_train_batch_size*world_size is closest "
+                "to total_train_batch_size"
+            ),
+            "choices": ["strict", "nearly"],
+        },
+    )
+    total_train_batch_size: int = field(
+        default=-1,
+        metadata={
+            "help": (
+                "Number of samples to accumulate before performing a backward/update pass. "
+                "If total_train_batch_size is positive, gradient_accumulation_steps will be ignored."
+            )
+        },
+    )
+
     gradient_accumulation_steps: int = field(
         default=1,
         metadata={"help": "Number of updates steps to accumulate before performing a backward/update pass."},
