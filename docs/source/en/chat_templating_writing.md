@@ -188,7 +188,7 @@ The example below shows how a tool is defined in JSON schema format.
 
 An example of handling tool definitions in a chat template is shown below. The specific tokens and layouts should be changed to match the ones the model was trained with.
 
-```text
+```jinja
 {%- if tools %}
     {%- for tool in tools %}
         {{- '<tool>' + tool['function']['name'] + '\n' }}
