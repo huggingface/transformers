@@ -1268,6 +1268,8 @@ class GenerationMixin(ContinuousMixin):
             # all samplers can be found in `generation_utils_samplers.py`
             if generation_config.temperature is not None and generation_config.temperature != 1.0:
                 processors.append(TemperatureLogitsWarper(generation_config.temperature))
+            if generation_config.top_h is not None:
+                processors.append(TopHLogitsWarper(top_h=generation_config.top_h))
             if generation_config.top_k is not None and generation_config.top_k != 0:
                 processors.append(
                     TopKLogitsWarper(top_k=generation_config.top_k, min_tokens_to_keep=min_tokens_to_keep)
@@ -1281,8 +1283,7 @@ class GenerationMixin(ContinuousMixin):
                 processors.append(
                     MinPLogitsWarper(min_p=generation_config.min_p, min_tokens_to_keep=min_tokens_to_keep)
                 )
-            if generation_config.top_h is not None:
-                processors.append(TopHLogitsWarper(top_h=generation_config.top_h))
+
             if generation_config.typical_p is not None and generation_config.typical_p < 1.0:
                 processors.append(
                     TypicalLogitsWarper(mass=generation_config.typical_p, min_tokens_to_keep=min_tokens_to_keep)

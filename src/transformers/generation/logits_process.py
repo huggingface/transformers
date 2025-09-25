@@ -623,22 +623,6 @@ class TopHLogitsWarper(LogitsProcessor):
         self.top_h = top_h
         self.filter_value = filter_value
 
-    @staticmethod
-    def calculate_entropy(probs):
-        """
-        Computes Shannon entropy of a probability distribution.
-
-        Args:
-            probs (`torch.FloatTensor`):
-                Probability distribution over tokens.
-
-        Return:
-            `torch.FloatTensor`: Scalar entropy value.
-        """
-        probs = probs[probs > 0]
-        probs = probs / torch.sum(probs)
-        return -torch.sum(probs * torch.log2(probs))
-
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         """
         Filters logits using Top-H sampling.
@@ -656,25 +640,20 @@ class TopHLogitsWarper(LogitsProcessor):
         batch_size, vocab_size = scores.shape
         device = scores.device
 
-        # compute probabilities
-        scaled_logits = scores
-        probs = torch.softmax(scaled_logits, dim=-1)
-
         keep_mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
 
         top_n = min(self.top_n, vocab_size)
 
         for b in range(batch_size):
             # top-k for this example
-            top_probs, top_idx = torch.topk(probs[b], top_n, largest=True, sorted=True)
+            top_probs, top_idx = torch.topk(scores[b], top_n, largest=True, sorted=True)
+            distribution = torch.distributions.Categorical(logits=top_probs)
 
             # entropy-based threshold tau (computed on the top-k distribution)
-            alpha_sum = top_probs.sum()
-            tau = (self.calculate_entropy(top_probs) - torch.log2(alpha_sum)) * alpha_sum * self.top_h
+            tau = distribution.entropy() * self.top_h
 
             # grow the kept set until the stopping rule triggers
-            sigma = top_probs[0]
-            cumulative_entropy = -top_probs[0] * torch.log2(top_probs[0])
+            cumulative_entropy = - distribution.probs[torch.tensor([0], device=top_probs.device)] * distribution.log_prob(torch.tensor([0], device=top_probs.device)) # -top_probs[0] * torch.log2(top_probs[0])
             chosen = []
             ind = 0
             for idx, p in zip(top_idx, top_probs):
@@ -683,13 +662,11 @@ class TopHLogitsWarper(LogitsProcessor):
                 if ind == len(top_probs):
                     break
                 # update running sums for current prefix
-                sigma = sigma + top_probs[ind]
-                cumulative_entropy = cumulative_entropy + (-top_probs[ind] * torch.log2(top_probs[ind]))
-                # entropy difference term
-                entropy_diff = (cumulative_entropy / sigma) + torch.log2(sigma)
-                if entropy_diff > (tau / sigma + torch.log2(sigma)):
-                    break
+                cumulative_entropy = cumulative_entropy - distribution.probs[torch.tensor([ind], device=top_probs.device)] * distribution.log_prob(torch.tensor([ind], device=top_probs.device))
 
+                # entropy difference term
+                if cumulative_entropy > tau:
+                    break
             keep_mask[b, torch.stack(chosen)] = True
 
         # apply filtering
