@@ -1874,20 +1874,21 @@ class Trainer:
             return len(dataloader) * self.args.per_device_train_batch_size
 
     @staticmethod
-    def num_tokens(train_dl: DataLoader, max_steps: Optional[int] = None) -> int:
+    def num_tokens(dataloader: DataLoader, pad_token_id: int, max_steps: Optional[int] = None) -> int:
         """
         Helper to get number of tokens in a [`~torch.utils.data.DataLoader`] by enumerating dataloader.
         """
-        train_tokens = 0
+        all_tokens = 0
         try:
-            for batch in train_dl:
-                tokens = batch["input_ids"].numel()
-                if max_steps is not None:
-                    return tokens * max_steps
-                train_tokens += tokens
-        except KeyError:
-            logger.warning("Cannot get num_tokens from dataloader")
-        return train_tokens
+            for batch in dataloader:
+                tokens = (batch["input_ids"] != pad_token_id).sum().item()
+                all_tokens += tokens
+        except KeyError as e:
+            logger.error(f"Dataloader: {dataloader} does not have 'input_ids' attribute. Can not compute num_tokens!")
+            raise e
+        if max_steps is not None:
+            all_tokens = min(all_tokens, max_steps)
+        return all_tokens
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", dict[str, Any]]):
         """HP search setup code"""
@@ -2394,7 +2395,7 @@ class Trainer:
 
         num_train_tokens = None
         if self.args.include_tokens_per_second:
-            num_train_tokens = self.num_tokens(train_dataloader, None if epoch_based else max_steps)
+            num_train_tokens = self.num_tokens(train_dataloader, self.tokenizer.pad_token_id, None if epoch_based else max_steps)
             # If going by epochs, multiply tokens linearly
             if len_dataloader is not None and epoch_based:
                 num_train_tokens *= args.num_train_epochs
