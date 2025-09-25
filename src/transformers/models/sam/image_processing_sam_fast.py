@@ -21,13 +21,13 @@ from typing import Any, Optional, Union
 
 import numpy as np
 import torch
+from torch.nn import functional as F
+from torchvision.ops.boxes import batched_nms
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
 )
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -39,35 +39,17 @@ from ...image_utils import (
     pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-)
+from ...utils import auto_docstring, is_torchvision_v2_available
 
-
-if is_torch_available():
-    import torch
-    from torch.nn import functional as F
 
 if is_torchvision_v2_available():
-    from torchvision.ops.boxes import batched_nms
     from torchvision.transforms.v2 import functional as F_t
-elif is_torchvision_available():
-    from torchvision.ops.boxes import batched_nms
+else:
     from torchvision.transforms import functional as F_t
 
 
 class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     r"""
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-    pad_size (`dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing.
     mask_size (`dict[str, int]`, *optional*):
         The size `{"longest_edge": int}` to resize the segmentation maps to.
     mask_pad_size (`dict[str, int]`, *optional*):
@@ -76,8 +58,6 @@ class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
 
     mask_size: Optional[dict[str, int]]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
     mask_pad_size: Optional[dict[str, int]]
 
 
@@ -101,15 +81,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[SamFastImageProcessorKwargs]):
         super().__init__(**kwargs)
-
-    def pad_image(self, images: "torch.Tensor", pad_size: SizeDict):
-        """Pad images to the specified size."""
-        output_height, output_width = pad_size.height, pad_size.width
-        input_height, input_width = images.shape[-2:]
-        pad_width = output_width - input_width
-        pad_height = output_height - input_height
-        padding = (0, 0, pad_width, pad_height)
-        return F_t.pad(images, padding)
 
     def _get_preprocess_shape(self, old_shape: tuple[int, int], longest_edge: int):
         """
@@ -231,7 +202,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         )
         original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
-        pixel_values = self._preprocess(images, **images_kwargs)
+        pixel_values = self._preprocess(images, **images_kwargs)["pixel_values"]
         reshaped_input_sizes = [image.shape[-2:] for image in images]
         data = {
             "pixel_values": pixel_values,
@@ -262,53 +233,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
             )
-            data["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
+            data["labels"] = processed_segmentation_maps["pixel_values"].squeeze(1).to(torch.int64)
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional["F_t.InterpolationMode"],
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: bool,
-        pad_size: SizeDict,
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> Union["torch.Tensor", list["torch.Tensor"]]:
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            if do_pad:
-                stacked_images = self.pad_image(stacked_images, pad_size)
-            processed_images_grouped[shape] = stacked_images
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-
-        return processed_images
 
     def generate_crop_boxes(
         self,
@@ -343,7 +270,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
             return_tensors (`str`, *optional*, defaults to `pt`):
-                If `pt`, returns `torch.Tensor`. If `tf`, returns `tf.Tensor`.
+                If `pt`, returns `torch.Tensor`.
         """
         image = self._process_image(image)
         crop_boxes, points_per_crop, cropped_images, input_labels = _generate_crop_boxes(

@@ -1920,8 +1920,6 @@ class ReformerPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -2345,14 +2343,22 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        inputs_dict = {
+        model_inputs = {
             "input_ids": input_ids,
             "past_buckets_states": past_key_values,
             "use_cache": use_cache,
             "num_hashes": num_hashes,
         }
 
-        return inputs_dict
+        # Attention mask is computed on ReformerModel.forward()
+        kwargs.pop("attention_mask", None)
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                print(f"Warning: {key} is not a recognized input.")
+                model_inputs[key] = value
+
+        return model_inputs
 
     def _reorder_cache(self, past_key_values, beam_idx):
         reord_past_buckets_states = []

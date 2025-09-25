@@ -27,28 +27,38 @@ import uuid
 import warnings
 from pathlib import Path
 
+import httpx
 import pytest
-import requests
-from huggingface_hub import HfApi, HfFolder
+from huggingface_hub import HfApi, split_torch_state_dict_into_shards
 from parameterized import parameterized
 from pytest import mark
-from requests.exceptions import HTTPError
 
 from transformers import (
     AutoConfig,
     AutoModel,
     AutoModelForImageClassification,
     AutoModelForSequenceClassification,
+    BartConfig,
+    BartForConditionalGeneration,
     CLIPTextModelWithProjection,
     DynamicCache,
+    GPT2Config,
+    GPT2LMHeadModel,
+    LlavaConfig,
     LlavaForConditionalGeneration,
+    MistralConfig,
     MistralForCausalLM,
+    OPTConfig,
+    OPTForCausalLM,
     OwlViTForObjectDetection,
     PretrainedConfig,
+    T5Config,
+    T5ForConditionalGeneration,
     is_torch_available,
     logging,
 )
 from transformers.modeling_flash_attention_utils import is_flash_attn_available
+from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
     TOKEN,
     CaptureLogger,
@@ -124,6 +134,32 @@ if is_torch_available():
             super().__init__(config)
             self.linear = nn.Linear(5, 5)
             self.linear_2 = nn.Linear(5, 5)
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+    class BaseModelWithUnexpectedKeys(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+        _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(50, 50)
+            self.linear_2 = nn.Linear(50, 50)
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+    class BaseModelWithMissingKeys(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+        _keys_to_ignore_on_load_missing = [r"^linear"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(50, 50)
+            self.linear_2 = nn.Linear(50, 50)
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
@@ -382,7 +418,7 @@ class ModelUtilsTest(TestCasePlus):
             # First attempt will fail with a connection error
             if not hasattr(test_func, "attempt"):
                 test_func.attempt = 1
-                raise requests.exceptions.ConnectionError("Connection failed")
+                raise httpx.ConnectError("Connection failed")
             # Second attempt will succeed
             return True
 
@@ -1135,14 +1171,16 @@ class ModelUtilsTest(TestCasePlus):
         response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = {}
-        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "failed", request=mock.Mock(), response=mock.Mock()
+        )
         response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -1279,7 +1317,7 @@ class ModelUtilsTest(TestCasePlus):
             BertModel.from_pretrained("hf-internal-testing/config-no-model")
 
         self.assertTrue(
-            "does not appear to have a file named pytorch_model.bin, model.safetensors,"
+            "does not appear to have a file named pytorch_model.bin or model.safetensors."
             in str(missing_model_file_error.exception)
         )
 
@@ -1291,7 +1329,7 @@ class ModelUtilsTest(TestCasePlus):
                 BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(
-            "Error no file named pytorch_model.bin, model.safetensors" in str(missing_model_file_error.exception)
+            "Error no file named model.safetensors, or pytorch_model.bin" in str(missing_model_file_error.exception)
         )
 
     @require_safetensors
@@ -2017,6 +2055,92 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(MyModelC.config_class, MyConfigC)
         self.assertIs(MyModelD.config_class, MyConfigA)
 
+    def test_ignore_missing_key_works(self):
+        """Test that if a parameter (not buffer) is specified in `_keys_to_ignore_on_load_missing` and is actually
+        missing from the checkpoint, it will still be moved to cpu and initialized"""
+        temp = tempfile.TemporaryDirectory()
+        # Create dummy model
+        model = BaseModelWithMissingKeys(PretrainedConfig())
+
+        # Save the config
+        model.config.save_pretrained(temp.name)
+        # Get the state dict to save
+        state_dict = model.state_dict()
+        # Remove the layer that we should ignore if missing
+        del state_dict["linear.weight"], state_dict["linear.bias"]
+        # Save the state dict as a single shard
+        safe_save_file(state_dict, Path(temp.name) / "model.safetensors", metadata={"format": "pt"})
+
+        # Try loading back, with the missing key not present in the state_dict
+        model = BaseModelWithMissingKeys.from_pretrained(temp.name)
+
+        # Make sure the skipped missing key is not still on meta device!
+        for k, v in model.state_dict().items():
+            self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
+
+    def test_device_map_works_with_unexpected_keys(self):
+        """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
+        present in the checkpoint, it will correctly be removed from the weights we load, especially those
+        we use if the device map has offloading"""
+        temp = tempfile.TemporaryDirectory()
+
+        # Create dummy model
+        model = BaseModelWithUnexpectedKeys(PretrainedConfig())
+
+        # Save the config
+        model.config.save_pretrained(temp.name)
+
+        # Get the state dict to save
+        state_dict = model.state_dict()
+        # Add a layer that is in the "_keys_to_ignore_on_load_unexpected" list to ignore
+        state_dict["mtp"] = torch.randn(12, 12)
+        # Save the state dict as a single shard
+        safe_save_file(state_dict, Path(temp.name) / "model.safetensors", metadata={"format": "pt"})
+
+        # Load the model with entire shards placed on disk in order to trigger `get_disk_only_shard_files`.
+        # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
+        BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
+
+    def test_device_map_works_with_unexpected_keys_sharded(self):
+        """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
+        present in the checkpoint, it will correctly be removed from the weights we load, especially those
+        we use if the device map has offloading"""
+        temp = tempfile.TemporaryDirectory()
+
+        # Create dummy model
+        model = BaseModelWithUnexpectedKeys(PretrainedConfig())
+
+        # Save the config
+        model.config.save_pretrained(temp.name)
+
+        # Get the state dict to save
+        state_dict = model.state_dict()
+
+        # Add a layer that is in the "_keys_to_ignore_on_load_unexpected" list to ignore
+        state_dict["mtp"] = torch.randn(50, 50)
+
+        # Split the state dict in shards, save the index and the shards
+        shards = split_torch_state_dict_into_shards(state_dict, max_shard_size="1kb")
+        index = {
+            "metadata": {"total_parameters": model.num_parameters(), **shards.metadata},
+            "weight_map": shards.tensor_to_filename,
+        }
+        with open(Path(temp.name) / SAFE_WEIGHTS_INDEX_NAME, "w", encoding="utf-8") as f:
+            content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+            f.write(content)
+
+        # Save each shard
+        filename_to_tensors = shards.filename_to_tensors.items()
+        for shard_file, tensors in filename_to_tensors:
+            shard = {}
+            for tensor in tensors:
+                shard[tensor] = state_dict[tensor].contiguous()
+            safe_save_file(shard, Path(temp.name) / shard_file, metadata={"format": "pt"})
+
+        # Load the model with entire shards placed on disk in order to trigger `get_disk_only_shard_files`.
+        # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
+        BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
+
 
 @slow
 @require_torch
@@ -2082,10 +2206,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         initial_model = BertModel(config)
 
         initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
-        headers = {"Authorization": f"Bearer {self.token}"}
-        requests.put(
-            f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
-        )
+        self.api.update_repo_settings(self.repo_name, gated="auto")
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
 
         with self.subTest("Initial and converted models are equal"):
@@ -2146,7 +2267,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
 
         initial_model.push_to_hub(self.repo_name, token=self.token, max_shard_size="200kb", safe_serialization=False)
         headers = {"Authorization": f"Bearer {self.token}"}
-        requests.put(
+        httpx.put(
             f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
         )
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
@@ -2245,7 +2366,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
 
     @mock.patch("transformers.safetensors_conversion.spawn_conversion")
     def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
-        spawn_conversion_mock.side_effect = HTTPError()
+        spawn_conversion_mock.side_effect = httpx.HTTPError("failed")
 
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2265,7 +2386,6 @@ class ModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub(self):
@@ -2871,3 +2991,170 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
             model.save_pretrained(tmpdirname)
             model = MyModel.from_pretrained(tmpdirname)
             self.assertEqual(model.my_layer.some_counter, 42)
+
+
+class TestGetDecoder(unittest.TestCase):
+    def test_causal_lm_get_decoder_returns_underlying_model(self):
+        cfg = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+        model = MistralForCausalLM(cfg)
+        dec = model.get_decoder()
+
+        assert dec is model.model, f"Expected get_decoder() to return model.model, got {type(dec)}"
+
+    def test_seq2seq_get_decoder_still_returns_decoder_module(self):
+        cfg = BartConfig(
+            vocab_size=128,
+            d_model=32,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=4,
+            decoder_attention_heads=4,
+            encoder_ffn_dim=64,
+            decoder_ffn_dim=64,
+        )
+        model = BartForConditionalGeneration(cfg)
+        dec = model.get_decoder()
+
+        assert dec is model.model.decoder, "Seq2seq get_decoder() should return the decoder submodule"
+
+    def test_base_model_returns_self(self):
+        """Test that base transformer models (no decoder/model attributes) return self."""
+        cfg = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+        base_model = MistralModel(cfg)
+        dec = base_model.get_decoder()
+
+        assert dec is base_model, f"Base model get_decoder() should return self, got {type(dec)}"
+
+    def test_explicit_decoder_attribute_opt(self):
+        """Test models with explicit decoder attribute (OPT style)."""
+        cfg = OPTConfig(
+            vocab_size=128,
+            hidden_size=32,
+            ffn_dim=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            max_position_embeddings=512,
+        )
+        model = OPTForCausalLM(cfg)
+        dec = model.get_decoder()
+
+        assert dec is model.model.decoder, f"OPT get_decoder() should return model.decoder, got {type(dec)}"
+
+    def test_explicit_decoder_attribute_t5(self):
+        """Test encoder-decoder models with explicit decoder attribute."""
+        cfg = T5Config(
+            vocab_size=128,
+            d_model=32,
+            d_ff=64,
+            num_layers=2,
+            num_heads=4,
+        )
+        model = T5ForConditionalGeneration(cfg)
+        dec = model.get_decoder()
+
+        assert dec is model.decoder, f"T5 get_decoder() should return decoder attribute, got {type(dec)}"
+
+    def test_same_type_recursion_prevention(self):
+        """Test that same-type recursion is prevented (see issue #40815)."""
+        cfg = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+        model = MistralForCausalLM(cfg)
+
+        assert type(model) is not type(model.model), "Types should be different to prevent recursion"
+
+        dec = model.get_decoder()
+        assert dec is model.model, f"Should return model.model without infinite recursion, got {type(dec)}"
+
+        inner_dec = model.model.get_decoder()
+        assert inner_dec is model.model, f"Inner model should return itself, got {type(inner_dec)}"
+
+    def test_nested_wrapper_recursion(self):
+        """Test models that don't have model/decoder attributes return self."""
+        cfg = GPT2Config(
+            vocab_size=128,
+            n_embd=32,
+            n_layer=2,
+            n_head=4,
+            n_positions=512,
+        )
+        model = GPT2LMHeadModel(cfg)
+        dec = model.get_decoder()
+
+        assert dec is model, f"GPT2 get_decoder() should return self (fallback), got {type(dec)}"
+
+    def test_model_without_get_decoder(self):
+        """Test edge case where model has model attribute but no get_decoder method."""
+
+        class MockInnerModel:
+            """Mock model without get_decoder method."""
+
+            pass
+
+        class MockWrapperModel:
+            """Mock wrapper with model attribute but inner has no get_decoder."""
+
+            def __init__(self):
+                self.model = MockInnerModel()
+
+            def get_decoder(self):
+                if hasattr(self, "decoder"):
+                    return self.decoder
+                if hasattr(self, "model"):
+                    inner = self.model
+                    if hasattr(inner, "get_decoder") and type(inner) is not type(self):
+                        return inner.get_decoder()
+                    return inner
+                return self
+
+        wrapper = MockWrapperModel()
+        dec = wrapper.get_decoder()
+
+        assert dec is wrapper.model, f"Should return inner model when no get_decoder, got {type(dec)}"
+
+    def test_vision_language_model(self):
+        """Test vision-language models like LLaVA that delegate to language_model."""
+        text_config = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+
+        vision_config = {
+            "hidden_size": 32,
+            "intermediate_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_channels": 3,
+            "image_size": 224,
+            "patch_size": 16,
+        }
+
+        cfg = LlavaConfig(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config,
+            vocab_size=128,
+        )
+
+        model = LlavaForConditionalGeneration(cfg)
+        dec = model.get_decoder()
+
+        assert dec is model.language_model, f"LLaVA get_decoder() should return language_model, got {type(dec)}"

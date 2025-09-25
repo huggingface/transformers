@@ -214,7 +214,7 @@ class Sam2VisionConfig(PretrainedConfig):
             backbone_config["model_type"] = backbone_config.get("model_type", "sam2_hiera_det_model")
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
         elif isinstance(backbone_config, Sam2HieraDetConfig):
-            backbone_config = backbone_config
+            pass
         elif backbone_config is None:
             backbone_config = Sam2HieraDetConfig()
 
@@ -432,8 +432,6 @@ class Sam2Config(PretrainedConfig):
         if isinstance(vision_config, dict):
             vision_config["model_type"] = vision_config.get("model_type", "sam2_vision_model")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif isinstance(vision_config, PretrainedConfig):
-            vision_config = vision_config
         if isinstance(prompt_encoder_config, Sam2PromptEncoderConfig):
             prompt_encoder_config = prompt_encoder_config.to_dict()
         if isinstance(mask_decoder_config, Sam2MaskDecoderConfig):

@@ -629,54 +629,30 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+        # Overwrite -- Moshi needs to prepare the audio codes, and they must be padded accordingly
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        input_ids = inputs_dict["input_ids"]
+        moshi_audio_codes = inputs_dict["moshi_audio_codes"]
+        user_audio_codes = inputs_dict["user_audio_codes"]
 
-        # Then, test left-padding
+        pad_size = (input_ids.shape[0], 32)
+        padding = (
+            torch.ones((pad_size[0], self.model_tester.num_codebooks, 32), dtype=input_ids.dtype, device=torch_device)
+            * config.audio_vocab_size
+        )
+        padded_moshi_audio_codes = torch.cat((padding, moshi_audio_codes), dim=2)
+        padded_user_audio_codes = torch.cat((padding, user_audio_codes), dim=2)
 
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, input_dict = self._get_input_ids_and_config()
-            model = model_class(config).to(torch_device).eval()
-
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            next_logits_wo_padding = model(input_ids=input_ids, attention_mask=attention_mask, **input_dict).logits[
-                :, -1, :
-            ]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
-            )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-
-            padding = (
-                torch.ones(
-                    (pad_size[0], self.model_tester.num_codebooks, 32), dtype=input_ids.dtype, device=torch_device
-                )
-                * config.audio_vocab_size
-            )
-            padded_moshi_audio_codes = torch.cat((padding, input_dict["moshi_audio_codes"]), dim=2)
-            padded_user_audio_codes = torch.cat((padding, input_dict["user_audio_codes"]), dim=2)
-
-            model_kwargs = {
-                "input_ids": padded_input_ids,
-                "attention_mask": padded_attention_mask,
-                "moshi_audio_codes": padded_moshi_audio_codes,
-                "user_audio_codes": padded_user_audio_codes,
-            }
-
-            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
+        # the audio codes are randomly generated in `prepare_config_and_inputs_for_generate`, and they must match
+        # their padded version for the test to be valid -- we need to pass both
+        unpadded_custom_inputs = {"moshi_audio_codes": moshi_audio_codes, "user_audio_codes": user_audio_codes}
+        padded_custom_inputs = {
+            "moshi_audio_codes": padded_moshi_audio_codes,
+            "user_audio_codes": padded_user_audio_codes,
+        }
+        super().test_left_padding_compatibility(
+            unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
+        )
 
     @slow
     @is_flaky(max_attempts=5, description="flaky on some models.")
@@ -867,6 +843,14 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @is_flaky(max_attempts=5, description="flaky on some models.")
     def test_save_load(self):
         super().test_save_load()
+
+    @pytest.mark.generate
+    @unittest.skip(reason="Moshi requires setting `model.generated_audio_codes` in generate() before preparing inputs")
+    def test_prepare_inputs_for_generation_kwargs_forwards(self):
+        # If in the future `model.generated_audio_codes` is not required, this test can be re-enabled
+        super().test_prepare_inputs_for_generation_kwargs_forwards(
+            last_hidden_state=torch.randn(2, 3, 32), kwargs_depth_decoder={}
+        )
 
 
 def place_dict_on_device(dict_to_place, device):
