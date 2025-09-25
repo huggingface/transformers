@@ -83,7 +83,6 @@ print(tokenizer.decode(generated_ids[0]))
 This model was contributed by [itazap](https://huggingface.co/<itazap>).
 The original code can be found [here](<https://github.com/facebookresearch/blt>).
 
-
 ## BltConfig
 
 [[autodoc]] BltConfig

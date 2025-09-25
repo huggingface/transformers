@@ -74,7 +74,6 @@ mask = image_processor.post_process_semantic_segmentation(outputs, target_sizes,
 This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco).
 The original code can be found [here]([(https://github.com/baaivision/Painter/tree/main)).
 
-
 ## SegGptConfig
 
 [[autodoc]] SegGptConfig
