@@ -317,11 +317,11 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
+        shared_expert_output = self.shared_expert(hidden_states_reshaped)
         router_logits = self.gate(hidden_states_reshaped)
         selected_experts, routing_weights = self.route_tokens_to_experts(hidden_states_reshaped, router_logits)
         expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
 
-        shared_expert_output = self.shared_expert(hidden_states_reshaped)
         shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
 
         expert_output += shared_expert_output
