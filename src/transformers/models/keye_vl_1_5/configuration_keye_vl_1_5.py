@@ -345,8 +345,6 @@ class KeyeVL1_5Config(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
-        image_token_id=151655,
-        video_token_id=151656,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -362,10 +360,10 @@ class KeyeVL1_5Config(PretrainedConfig):
             self.text_config = self.sub_configs["text_config"](**kwargs)
             self.sliding_window = kwargs.get("sliding_window")
 
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
+        self.image_token_id = self.text_config.image_token_id
+        self.video_token_id = self.text_config.video_token_id
 
         super().__init__(**kwargs)
 
 
-__all__ = ["KeyeVL1_5Config", "KeyeVL1_5TextConfig"]
+__all__ = ["KeyeVL1_5Config", "KeyeVL1_5VisionConfig", "KeyeVL1_5TextConfig"]

@@ -25,39 +25,20 @@
 # limitations under the License.
 
 
-import os
+from copy import deepcopy
 from typing import Optional, Union
 
-import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from numpy.typing import NDArray
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput
+from ...image_utils import ImageInput
 from ...models.qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import add_start_docstrings, logging
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
 from ...video_utils import VideoInput
 from .image_processing_keye_vl_1_5 import KeyeVL1_5ImageProcessor
-
-
-logger = logging.get_logger(__name__)
-
-try:
-    from keye_vl_utils import BicubicVideoProcessor
-except:
-    BicubicVideoProcessor = None
-    bicubic = None
-
-if BicubicVideoProcessor is not None:
-    try:
-        bicubic = BicubicVideoProcessor()
-    except:
-        bicubic = None
+from .video_processing_keye_vl_1_5 import KeyeVL1_5VideoProcessor
 
 
 class KeyeVL1_5VideosProcessorKwargs(VideosKwargs, total=False):
@@ -99,33 +80,6 @@ class KeyeVL1_5ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "videos_kwargs": {"fps": 2.0},
     }
-
-
-def select_slow_fast_frames(
-    frames: torch.FloatTensor, frame_types: torch.LongTensor
-) -> tuple[torch.FloatTensor, torch.FloatTensor]:
-    """
-    Selects frames from a tensor based on a mask list.
-
-    Args:
-        frames (torch.FloatTensor): A tensor of shape (nframes, channel, height, width).
-        frame_types (torch.LongTensor): A int tensor of shape (nframes, ), 1 for fast frames and 0 for slow frames.
-
-    Returns:
-        Tuple[torch.FloatTensor, torch.FloatTensor]: A tuple containing two tensors:
-            - slow_frames: Frames which the type is 0.
-            - fast_frames: Frames where the type is 1.
-    """
-    nframes, _, _, _ = frames.shape
-    if frame_types.shape[-1] != nframes:
-        raise ValueError("Length of mask must be equal to the number of frames.")
-
-    mask = frame_types == 0
-
-    slow_frames = frames[mask]
-    fast_frames = frames[~mask]
-
-    return slow_frames, fast_frames
 
 
 def split_thw(thw: torch.LongTensor) -> torch.LongTensor:
@@ -173,8 +127,11 @@ def merge_thw(
     if isinstance(thw, list):
         thw = torch.stack(thw, dim=0)
 
-    assert thw.dim() == 2, thw.shape
-    assert torch.all(thw[:, 0] == 1), thw
+    if thw.dim() != 2:
+        raise ValueError(f"`thw` must be a tensor with dim 2, but got shape {thw.shape}")
+
+    if not torch.all(thw[:, 0] == 1):
+        raise ValueError("`thw` must be a tensor where the first value in each row is 1.")
 
     if num_frames is None:
         mask = (thw[:-1] != thw[1:]).any(1)
@@ -185,31 +142,14 @@ def merge_thw(
         count = torch.diff(indices, append=append).unsqueeze(-1)
         return torch.concat([count, thw[indices][:, 1:]], dim=1)
 
-    assert thw.shape[0] == sum(num_frames), (thw.shape, num_frames)
+    if thw.shape[0] != sum(num_frames):
+        raise ValueError(
+            f"The length of `thw` must equals to sum of `num_frames`, but the shape of `thw` is {thw.shape}, `num_frames` = {num_frames}."
+        )
 
     return torch.concat([merge_thw(part) for part in thw.split(num_frames, dim=0)], dim=0)
 
 
-@add_start_docstrings(
-    "Constructs a fast Keye-VL-1.5 image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 1):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-        min_frames (`int`, *optional*, defaults to 4):
-            The minimum number of frames that can be sampled.
-        max_frames (`int`, *optional*, defaults to 768):
-            The maximum number of frames that can be sampled.
-    """,
-)
 class KeyeVL1_5Processor(ProcessorMixin):
     r"""
     [`KeyeVL1_5Processor`] offers all the functionalities of [`KeyeVL1_5ImageProcessor`] and [`Qwen2TokenizerFast`]. See the
@@ -219,62 +159,33 @@ class KeyeVL1_5Processor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
+        video_processor ([`KeyeVL1_5VideoProcessor`], *optional*):
+            The video processor is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "image_std",
-        "min_pixels",
-        "image_mean",
-        "merge_size",
-        "image_processor_type",
-        "temporal_patch_size",
-        "patch_size",
-        "max_pixels",
-    ]
+    attributes = ["image_processor", "tokenizer", "video_processor"]
 
     image_processor_class = "AutoImageProcessor"
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
+    video_processor_class = "AutoVideoProcessor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
         image_processor: Optional[KeyeVL1_5ImageProcessor] = None,
         tokenizer: Optional[Qwen2TokenizerFast] = None,
+        video_processor: Optional[KeyeVL1_5VideoProcessor] = None,
         chat_template: Optional[str] = None,
         **kwargs,
     ):
-        self.image_token = getattr(tokenizer, "image_token", "<|image_pad|>")
-        self.video_token = getattr(tokenizer, "video_token", "<|video_pad|>")
-        self.frame_token = getattr(tokenizer, "frame_token", "<|frame|>")
-        self.fast_start = getattr(tokenizer, "fast_start", "<|fast_start|>")
-        self.fast_end = getattr(tokenizer, "fast_end", "<|fast_end|>")
+        self.image_token = tokenizer.image_token
+        self.video_token = tokenizer.video_token
+        self.frame_token = tokenizer.frame_token
+        self.fast_start = tokenizer.fast_start
+        self.fast_end = tokenizer.fast_end
 
-        self.merge_size = getattr(image_processor, "merge_size", 2)
-        self.patch_size = getattr(image_processor, "patch_size", 14)
-        self.min_pixels = getattr(image_processor, "min_pixels", 28 * 28 * 4)
-        self.max_pixels = getattr(image_processor, "max_pixels", 28 * 28 * 1280)
-        self.scale = (
-            255 if not hasattr(image_processor, "rescale_factor") else int(round(1.0 / image_processor.rescale_factor))
-        )
-        self.image_mean = getattr(image_processor, "image_mean", OPENAI_CLIP_MEAN)
-        self.image_std = getattr(image_processor, "image_std", OPENAI_CLIP_STD)
-
-        if not isinstance(self.image_mean, (list, tuple)):
-            self.image_mean = [self.image_mean] * 3
-        if not isinstance(self.image_std, (list, tuple)):
-            self.image_std = [self.image_std] * 3
-        self.factor = self.merge_size * self.patch_size
-
-        self.enable_fusion_op = bool(int(os.environ.get("ENABLE_FUSION_PROCESSOR_OP", 1))) and (bicubic is not None)
-
-        if self.enable_fusion_op:
-            logger.warning_once("Fusion op is enabled to processing videos.")
-        else:
-            logger.warning_once("Fusion op is not enabled to processing videos.")
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def __call__(
         self,
@@ -334,161 +245,41 @@ class KeyeVL1_5Processor(ProcessorMixin):
             image_inputs = dict()
             image_grid_thw = None
 
-        num_frames = list()
         if videos is not None:
-            batch_slow_frames = list()
-            batch_fast_frames = list()
-
-            videos_kwargs = output_kwargs["videos_kwargs"]
             num_videos = len(videos)
+            videos_kwargs = output_kwargs["videos_kwargs"]
             batch_frame_types = videos_kwargs.get("frame_types", [None] * num_videos)
             batch_timestamps = videos_kwargs.get("timestamps", [None] * num_videos)
-            batch_width = videos_kwargs.get("width", [None] * num_videos)
-            batch_height = videos_kwargs.get("height", [None] * num_videos)
-            batch_fast_width = videos_kwargs.get("fast_width", [None] * num_videos)
-            batch_fast_height = videos_kwargs.get("fast_height", [None] * num_videos)
 
-            for index, frames in enumerate(videos):
-                if isinstance(frames, np.ndarray):
-                    frames = torch.from_numpy(frames)
-                nframes, channel, ori_height, ori_width = frames.shape
-                num_frames.append(nframes)
-                assert nframes > 0, "No frames in video"
-                if batch_frame_types[index] is None:
-                    # default to all slow frames
-                    batch_frame_types[index] = torch.zeros((nframes,), dtype=torch.long)
-                frame_types = batch_frame_types[index]
-                if not self.enable_fusion_op:
-                    slow_frames, fast_frames = select_slow_fast_frames(frames, frame_types)
-                    has_fast_frames = fast_frames.shape[0] > 0
-                    # resize slow frames
-                    resized_width = batch_width[index]
-                    resized_height = batch_height[index]
-                    if resized_width is not None and resized_height is not None:
-                        slow_frames = nn.functional.interpolate(
-                            slow_frames,
-                            [resized_height, resized_width],
-                            mode="bilinear",
-                            antialias=True,
-                        ).float()
-                        do_resize = False
-                    else:
-                        slow_frames = slow_frames.float()
-                        do_resize = True
+            video_inputs = self.video_processor(videos=videos, return_tensors="pt", videos_kwargs=videos_kwargs)
+            slow_video_grid_thw = video_inputs["video_grid_thw"]
+            fast_video_grid_thw = video_inputs["fast_video_grid_thw"]
+            slow_video_grid_thw = slow_video_grid_thw if slow_video_grid_thw.numel() > 0 else None
+            fast_video_grid_thw = fast_video_grid_thw if fast_video_grid_thw.numel() > 0 else None
 
-                    slow_video_inputs = self.image_processor(
-                        images=None, videos=[slow_frames], **output_kwargs["images_kwargs"], do_resize=do_resize
-                    )
-                    slow_video_grid_thw = slow_video_inputs["video_grid_thw"]
-                    batch_slow_frames.append(slow_video_inputs)
+            slow_pixel_values_videos = video_inputs["pixel_values_videos"]
+            fast_pixel_values_videos = video_inputs["fast_pixel_values_videos"]
+            slow_pixel_values_videos = slow_pixel_values_videos if slow_pixel_values_videos.numel() > 0 else None
+            fast_pixel_values_videos = fast_pixel_values_videos if fast_pixel_values_videos.numel() > 0 else None
 
-                    if has_fast_frames:
-                        # TODO: shrink fast_frames
-                        fast_resized_width = batch_fast_width[index]
-                        fast_resized_height = batch_fast_height[index]
-                        if fast_resized_width is not None and fast_resized_height is not None:
-                            fast_frames = nn.functional.interpolate(
-                                fast_frames,
-                                [fast_resized_height, fast_resized_width],
-                                mode="bilinear",
-                                antialias=True,
-                            ).float()
-                            do_fast_resize = False
-                        else:
-                            fast_frames = fast_frames.float()
-                            do_fast_resize = True
-
-                        fast_video_inputs = self.image_processor(
-                            images=None,
-                            videos=[fast_frames],
-                            **output_kwargs["images_kwargs"],
-                            do_resize=do_fast_resize,
-                        )
-                        fast_video_grid_thw = fast_video_inputs["video_grid_thw"]
-                        batch_fast_frames.append(fast_video_inputs)
-                else:
-                    slow_indices = (frame_types == 0).nonzero().flatten().tolist()
-                    fast_indices = (frame_types == 1).nonzero().flatten().tolist()
-                    has_fast_frames = len(fast_indices) > 0
-                    resized_width = batch_width[index] or 0
-                    resized_height = batch_height[index] or 0
-                    fast_width = batch_fast_width[index] or 0
-                    fast_height = batch_fast_height[index] or 0
-
-                    slow_inputs = bicubic.interp(
-                        frames,
-                        nframes,
-                        slow_indices,
-                        ori_height,
-                        ori_width,
-                        resized_height,
-                        resized_width,
-                        patch=self.patch_size,
-                        factor=self.factor,
-                        min_pixels=self.min_pixels,
-                        max_pixels=self.max_pixels,
-                        scale=self.scale,
-                        image_mean=self.image_mean,
-                        image_std=self.image_std,
-                    )
-                    batch_slow_frames.append(slow_inputs)
-
-                    if has_fast_frames:
-                        fast_inputs = bicubic.interp(
-                            frames,
-                            nframes,
-                            fast_indices,
-                            ori_height,
-                            ori_width,
-                            fast_height,
-                            fast_width,
-                            patch=self.patch_size,
-                            factor=self.factor,
-                            min_pixels=self.min_pixels,
-                            max_pixels=self.max_pixels,
-                            scale=self.scale,
-                            image_mean=self.image_mean,
-                            image_std=self.image_std,
-                        )
-                        batch_fast_frames.append(fast_inputs)
-
-            assert len(batch_slow_frames) > 0, "Slow frames should not be empty."
-            slow_pixel_values_videos_list = [
-                video["pixel_values_videos"] for video in batch_slow_frames if video is not None
-            ]
-            slow_video_grid_thw_list = [video["video_grid_thw"] for video in batch_slow_frames if video is not None]
-
-            slow_pixel_values_videos = torch.concat(slow_pixel_values_videos_list, dim=0)
-            slow_video_grid_thw = torch.concat(slow_video_grid_thw_list, dim=0)
-
-            if has_fast_frames:
-                fast_pixel_values_videos_list = [
-                    video["pixel_values_videos"] for video in batch_fast_frames if video is not None
-                ]
-                fast_video_grid_thw_list = [
-                    video["video_grid_thw"] for video in batch_fast_frames if video is not None
-                ]
-
-                fast_pixel_values_videos = torch.concat(fast_pixel_values_videos_list, dim=0)
-                fast_video_grid_thw = torch.concat(fast_video_grid_thw_list, dim=0)
-            else:
-                fast_video_grid_thw = None
+            num_frames = video_inputs["num_frames"]
         else:
             slow_video_grid_thw = None
             fast_video_grid_thw = None
 
         if not isinstance(text, list):
             text = [text]
+        text = deepcopy(text)
         if image_grid_thw is not None:
             index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
-                    image_place_holder_tempale = "<|placeholder|>" * (
+                    image_place_holder_template = "<|placeholder|>" * (
                         image_grid_thw[index].prod() // self.image_processor.merge_size**2
                     )
                     text[i] = text[i].replace(
                         self.image_token,
-                        image_place_holder_tempale,
+                        image_place_holder_template,
                         1,
                     )
                     index += 1
@@ -508,18 +299,18 @@ class KeyeVL1_5Processor(ProcessorMixin):
             fast_pixels_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    video_place_holder_tempale = ""
+                    video_place_holder_template = ""
 
                     for j in range(batch_frame_types[index].shape[-1]):
                         if batch_timestamps[index] is not None:  # If has timestamps
-                            video_place_holder_tempale += self.frame_token + format(batch_timestamps[index][j], ".1f")
+                            video_place_holder_template += self.frame_token + format(batch_timestamps[index][j], ".1f")
                         else:
-                            video_place_holder_tempale += self.frame_token
+                            video_place_holder_template += self.frame_token
 
                         # Current frame is slow frame
                         if batch_frame_types[index][j] == 0:
                             num_patches = int(slow_video_grid_thw[slow_index].prod())
-                            video_place_holder_tempale += "<|placeholder|>" * (
+                            video_place_holder_template += "<|placeholder|>" * (
                                 num_patches // self.image_processor.merge_size**2
                             )
                             pixel_values_videos.append(
@@ -532,7 +323,7 @@ class KeyeVL1_5Processor(ProcessorMixin):
                         # Current frame is fast frame
                         elif batch_frame_types[index][j] == 1:
                             num_patches = int(fast_video_grid_thw[fast_index].prod())
-                            video_place_holder_tempale += (
+                            video_place_holder_template += (
                                 self.fast_start
                                 + "<|placeholder|>" * (num_patches // self.image_processor.merge_size**2)
                                 + self.fast_end
@@ -545,7 +336,7 @@ class KeyeVL1_5Processor(ProcessorMixin):
                             fast_index += 1
                     text[i] = text[i].replace(
                         self.video_token,
-                        video_place_holder_tempale,
+                        video_place_holder_template,
                         1,
                     )
                     index += 1
@@ -558,58 +349,6 @@ class KeyeVL1_5Processor(ProcessorMixin):
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    def post_process_image_text_to_text(
-        self,
-        generated_outputs: Union[torch.LongTensor, NDArray[np.long]],
-        skip_special_tokens: bool = True,
-        clean_up_tokenization_spaces: bool = False,
-        **kwargs,
-    ) -> list[str]:
-        """
-        Post-process the output of the model to decode the text.
-
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length, )`.
-            skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            Clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
-            **kwargs:
-                Additional arguments to be passed to the tokenizer's `batch_decode method`.
-
-        Returns:
-            `List[str]`: The decoded text.
-        """
-        return self.tokenizer.batch_decode(
-            generated_outputs,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            **kwargs,
-        )
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        names_from_processor = list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-        return names_from_processor
 
 
 __all__ = ["KeyeVL1_5Processor"]

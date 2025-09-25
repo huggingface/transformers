@@ -38,10 +38,11 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    SizeDict,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_valid_image,
+    make_flat_list_of_images,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -53,29 +54,6 @@ from ...video_utils import VideoInput, make_batched_videos
 
 
 logger = logging.get_logger(__name__)
-
-
-def make_batched_images(images: Union[list[list[ImageInput]], list[ImageInput], ImageInput]) -> list[list[ImageInput]]:
-    """
-    Accepts images in list or nested list format, and makes a list of images for preprocessing.
-
-    Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
-            The input image.
-
-    Returns:
-        list: A list of images.
-    """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-        return images
-
-    elif is_valid_image(images):
-        return [images]
-
-    raise ValueError(f"Could not make batched images from {images}")
 
 
 class KeyeVL1_5ImageProcessor(BaseImageProcessor):
@@ -99,12 +77,12 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        min_pixels (`int`, *optional*, defaults to `28 * 28 * 4`):
             The min pixels of the image to resize the image.
         max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
             The max pixels of the image to resize the image.
         patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
+            The spatial patch size of the vision encoder.
         temporal_patch_size (`int`, *optional*, defaults to 1):
             The temporal patch size of the vision encoder.
         merge_size (`int`, *optional*, defaults to 2):
@@ -123,7 +101,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
-        min_pixels: int = 56 * 56,
+        min_pixels: int = 28 * 28 * 4,
         max_pixels: int = 28 * 28 * 1280,
         patch_size: int = 14,
         temporal_patch_size: int = 1,
@@ -145,13 +123,14 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         self.merge_size = merge_size
         self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
-        assert self.temporal_patch_size == 1, "temporal_patch_size != 1 is not supported yet."
+        if self.temporal_patch_size != 1:
+            raise ValueError("temporal_patch_size != 1 is not supported yet.")
 
     def _preprocess(
         self,
         images: Union[ImageInput, VideoInput],
         do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
+        size: Optional[SizeDict] = None,
         resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -170,7 +149,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
                 Image/Video or batch of images/videos to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`SizeDict`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
@@ -273,7 +252,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         images: Optional[ImageInput] = None,
         videos: Optional[VideoInput] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
+        size: Optional[SizeDict] = None,
         resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -295,7 +274,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
                 passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`SizeDict`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
@@ -345,7 +324,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         if images is not None:
-            images = make_batched_images(images)
+            images = make_flat_list_of_images(images)
         if videos is not None:
             videos = make_batched_videos(videos)
 

@@ -54,7 +54,6 @@ from ...models.siglip.modeling_siglip import SiglipMLP, SiglipVisionModelOutput
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
-    add_start_docstrings_to_model_forward,
     auto_docstring,
     can_return_tuple,
     is_flash_attn_2_available,
@@ -63,7 +62,6 @@ from ...utils import (
     replace_return_docstrings,
     torch_int,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_keye_vl_1_5 import KeyeVL1_5Config, KeyeVL1_5TextConfig, KeyeVL1_5VisionConfig
 
 
@@ -75,7 +73,6 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
     apply_rotary_emb = None
-
 
 logger = logging.get_logger(__name__)
 
@@ -126,17 +123,17 @@ class KeyeVL1_5VisionEmbeddings(nn.Module):
         self,
         pixel_values: torch.FloatTensor,
         position_ids: Optional[torch.LongTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
+        grid_thw: Optional[torch.LongTensor] = None,
     ) -> torch.FloatTensor:
         """
         Args:
             pixel_values: (batch, length, channel, height, width)  batch * length = sum(t * h * w for all images in batch)
-            image_grid_thw: torch.LongTensor  (nimages, 3), nimages represents number of images, 3 represents (t, h, w)
+            grid_thw: torch.LongTensor  (nimages, 3), nimages represents number of images, 3 represents (t, h, w)
         Returns:
             (batch, length, dim)
         """
+
         if pixel_values.dim() == 6:
-            assert pixel_values.shape[0] == 1
             pixel_values = pixel_values.squeeze(0)
 
         if pixel_values.dim() != 5:
@@ -145,38 +142,46 @@ class KeyeVL1_5VisionEmbeddings(nn.Module):
             )
 
         batch, length, channel, height, width = pixel_values.shape
-        assert image_grid_thw is not None
-
-        tokens_per_img = torch.prod(image_grid_thw, dim=1).tolist()
+        tokens_per_img = torch.prod(grid_thw, dim=1).tolist()
         total_tokens = sum(tokens_per_img)
-        assert total_tokens == batch * length, f"token mismatch: {total_tokens} vs {length}"
 
-        embeddings = pixel_values.view(batch * length, channel, height, width)
+        if total_tokens != batch * length:
+            raise ValueError(f"Token length mismatch: {total_tokens} vs {length}")
+
+        pixel_values = pixel_values.view(batch * length, channel, height, width)
 
         target_dtype = self.patch_embedding.weight.dtype
-        embeddings = embeddings.to(dtype=target_dtype)
-        embeddings = self.patch_embedding(embeddings)  # (batch * length, dim, gh=1, gw=1)
-        embeddings = embeddings.flatten(2).transpose(1, 2)  # (batch * length, 1, dim)
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+        embeddings = patch_embeds.flatten(1)
 
-        dim = embeddings.size(-1)
+        dim = embeddings.shape[-1]
 
-        token_embed_list = torch.split(embeddings.view(-1, dim), tokens_per_img, dim=0)
+        token_embed_list = torch.split(embeddings, tokens_per_img, dim=0)
 
         hw_pos_dict = dict()
         outs = list()
-        for img_embeds, (t, h, w) in zip(token_embed_list, image_grid_thw.tolist()):
-            img_embeds = img_embeds.view(t, h * w, -1)  # (t, h * w, dim)
-            if (h, w) not in hw_pos_dict:
-                pos = self.interpolate_pos_encoding(h, w, dim)  # (1, h * w, dim)
-                hw_pos_dict[(h, w)] = pos
-            else:
-                pos = hw_pos_dict[(h, w)]
-            img_embeds = img_embeds + pos.expand(t, -1, -1)
-            outs.append(img_embeds.view(-1, dim))  # (t * h * w, dim)
+        for img_embeds, (t, h, w) in zip(token_embed_list, grid_thw.tolist()):
+            img_embeds = img_embeds.view(t, h * w, -1)
+            hw_pair = (h, w)
+            if hw_pair not in hw_pos_dict:
+                hw_pos_dict[hw_pair] = self.interpolate_pos_encoding(h, w, dim)
 
-        embeddings = torch.cat(outs, dim=0)  # (batch * length, dim)
+            img_embeds = img_embeds + hw_pos_dict[hw_pair]
+            outs.append(img_embeds.view(-1, dim))
+
+        embeddings = torch.cat(outs, dim=0)
         embeddings = embeddings.view(batch, length, -1)
         return embeddings
+
+
+def apply_rotary_pos_emb_flashatt(
+    q: torch.FloatTensor, k: torch.FloatTensor, cos: torch.FloatTensor, sin: torch.FloatTensor
+) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+    cos = cos.chunk(2, dim=-1)[0].contiguous()
+    sin = sin.chunk(2, dim=-1)[0].contiguous()
+    q_embed = apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
+    k_embed = apply_rotary_emb(k.float(), cos.float(), sin.float()).type_as(k)
+    return q_embed, k_embed
 
 
 def eager_attention_forward(
@@ -200,16 +205,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def apply_rotary_pos_emb_flashatt(
-    q: torch.FloatTensor, k: torch.FloatTensor, cos: torch.FloatTensor, sin: torch.FloatTensor
-) -> tuple[torch.FloatTensor, torch.FloatTensor]:
-    cos = cos.chunk(2, dim=-1)[0].contiguous()
-    sin = sin.chunk(2, dim=-1)[0].contiguous()
-    q_embed = apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
-    k_embed = apply_rotary_emb(k.float(), cos.float(), sin.float()).type_as(k)
-    return q_embed, k_embed
 
 
 class KeyeVL1_5VisionAttention(nn.Module):
@@ -322,59 +317,7 @@ class KeyeVL1_5VisionMLP(SiglipMLP):
     pass
 
 
-class KeyeVL1_5VisionBlock(GradientCheckpointingLayer):
-    def __init__(self, config: KeyeVL1_5VisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.self_attn = KeyeVL1_5VisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = KeyeVL1_5VisionMLP(config)
-
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: torch.FloatTensor,
-        output_attentions: bool = False,
-        cu_seqlens: Optional[torch.IntTensor] = None,
-        rope_emb: Optional[tuple[torch.FloatTensor, torch.FloatTensor]] = None,
-    ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(batch, seq_len, embed_dim)`.
-            attention_mask (`torch.FloatTensor`):
-                Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            cu_seqlens=cu_seqlens,
-            rope_emb=rope_emb,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-class KeyeVL1_5VisionEncoderLayer(nn.Module):
+class KeyeVL1_5VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: KeyeVL1_5VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -429,7 +372,7 @@ class KeyeVL1_5VisionEncoderLayer(nn.Module):
 class KeyeVL1_5VisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`KeyeVL1_5VisionBlock`].
+    [`KeyeVL1_5VisionEncoderLayer`].
 
     Args:
         config: KeyeVL1_5VisionConfig
@@ -447,18 +390,18 @@ class KeyeVL1_5VisionEncoder(nn.Module):
 
     def forward(
         self,
-        inputs_embeds: torch.FloatTensor,
+        pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cu_seqlens: Optional[torch.IntTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
+        grid_thw: Optional[torch.LongTensor] = None,
         height_position_ids: Optional[torch.LongTensor] = None,
         width_position_ids: Optional[torch.LongTensor] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
@@ -486,9 +429,7 @@ class KeyeVL1_5VisionEncoder(nn.Module):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        device = inputs_embeds.device
-        hidden_states = inputs_embeds
-        attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
+        hidden_states = pixel_values
 
         pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
         max_grid_size = pids.max() + 1
@@ -505,23 +446,13 @@ class KeyeVL1_5VisionEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                    cu_seqlens,
-                    rope_emb,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions=output_attentions,
-                    cu_seqlens=cu_seqlens,
-                    rope_emb=rope_emb,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                output_attentions=output_attentions,
+                cu_seqlens=cu_seqlens,
+                rope_emb=rope_emb,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -542,22 +473,6 @@ class KeyeVL1_5VisionModelOutput(SiglipVisionModelOutput):
     pass
 
 
-KEYE_VL_1_5_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 class KeyeVL1_5VisionTransformer(nn.Module):
     def __init__(self, config: KeyeVL1_5VisionConfig):
         super().__init__()
@@ -568,8 +483,7 @@ class KeyeVL1_5VisionTransformer(nn.Module):
         self.encoder = KeyeVL1_5VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(KEYE_VL_1_5_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVL1_5VisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -580,7 +494,7 @@ class KeyeVL1_5VisionTransformer(nn.Module):
         height_position_ids: Optional[torch.LongTensor] = None,
         width_position_ids: Optional[torch.LongTensor] = None,
         cu_seqlens: Optional[torch.IntTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
+        grid_thw: Optional[torch.LongTensor] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -594,16 +508,16 @@ class KeyeVL1_5VisionTransformer(nn.Module):
         hidden_states = self.embeddings(
             pixel_values,
             position_ids=position_ids,
-            image_grid_thw=image_grid_thw,
+            grid_thw=grid_thw,
         )
 
         encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
+            pixel_values=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
-            image_grid_thw=image_grid_thw,
+            grid_thw=grid_thw,
             height_position_ids=height_position_ids,
             width_position_ids=width_position_ids,
         )
@@ -611,16 +525,11 @@ class KeyeVL1_5VisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-        hidden_state = last_hidden_state.squeeze(0)
-        assert hidden_state.shape[0] == cu_seqlens[-1].item()
-
-        sample_hidden_state_list = list(torch.split(hidden_state, lengths, dim=0))
+        if last_hidden_state.squeeze(0).shape[0] != cu_seqlens[-1].item():
+            raise ValueError("Number of tokens in `hidden_state` does not match the last element of `cu_seqlens`.")
 
         return KeyeVL1_5VisionModelOutput(
-            last_hidden_state=sample_hidden_state_list,
-            image_embeds=None,
-            hidden_states=None,
+            last_hidden_state=last_hidden_state,
             attentions=encoder_outputs.attentions,
         )
 
@@ -651,7 +560,7 @@ class KeyeVL1_5PreTrainedModel(PreTrainedModel):
     config_class: KeyeVL1_5Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionBlock"]
+    _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionEncoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -717,7 +626,6 @@ class KeyeVL1_5PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-@auto_docstring
 class KeyeVL1_5VisionModel(KeyeVL1_5PreTrainedModel):
     config_class = KeyeVL1_5VisionConfig
     main_input_name = "pixel_values"
@@ -733,33 +641,56 @@ class KeyeVL1_5VisionModel(KeyeVL1_5PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(KEYE_VL_1_5_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVL1_5VisionConfig)
+    def _extract_required_argus(
+        self,
+        pixel_values: torch.FloatTensor,
+        grid_thw: torch.LongTensor,
+    ) -> dict[str, torch.Tensor]:
+        device = pixel_values.device
+        total_patches = grid_thw.prod(dim=1)
+        width = torch.repeat_interleave(grid_thw[:, 2], total_patches)
+        cu_seqlens = total_patches.cumsum(0)
+
+        arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
+        position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
+
+        width_position_ids = torch.remainder(position_ids, width)
+        height_position_ids = torch.div(position_ids, width, rounding_mode="floor")
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
+        width_position_ids = width_position_ids.to(device)
+        height_position_ids = height_position_ids.to(device)
+
+        return {
+            "width_position_ids": width_position_ids,
+            "height_position_ids": height_position_ids,
+            "cu_seqlens": cu_seqlens,
+            "position_ids": position_ids,
+        }
+
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        grid_thw: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        cu_seqlens: Optional[torch.IntTensor] = None,
-        height_position_ids: Optional[torch.LongTensor] = None,
-        width_position_ids: Optional[torch.LongTensor] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
             keye_vl_1_5_vision_model_output (`KeyeVL1_5VisionModelOutput` see class KeyeVL1_5VisionModelOutput for details.)
         ```"""
 
+        argus_dict = self._extract_required_argus(
+            pixel_values=pixel_values,
+            grid_thw=grid_thw,
+        )
+
         return self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            position_ids=position_ids,
-            image_grid_thw=image_grid_thw,
-            cu_seqlens=cu_seqlens,
-            height_position_ids=height_position_ids,
-            width_position_ids=width_position_ids,
+            grid_thw=grid_thw,
+            **argus_dict,
         )
 
 
@@ -907,7 +838,6 @@ class KeyeVL1_5Attention(nn.Module):
 
         self.rotary_emb = KeyeVL1_5RotaryEmbedding(config=config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -993,7 +923,6 @@ class KeyeVL1_5FlashAttention2(KeyeVL1_5Attention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -1118,7 +1047,6 @@ class KeyeVL1_5SdpaAttention(KeyeVL1_5Attention):
     SDPA API.
     """
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -1242,7 +1170,6 @@ class KeyeVL1_5DecoderLayer(Qwen2_5_VLDecoderLayer):
         self.input_layernorm = KeyeVL1_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = KeyeVL1_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -1308,12 +1235,6 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     def forward(
         self,
@@ -1383,31 +1304,17 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                    **kwargs,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_values=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1609,27 +1516,34 @@ class KeyeVL1_5Projector(nn.Module):
 
     def forward(
         self,
-        image_features: list[torch.FloatTensor],
-        image_grid_thw: torch.LongTensor,
+        hidden_states: torch.FloatTensor,
+        grid_thw: torch.LongTensor,
     ) -> torch.FloatTensor:
+        hidden_states = hidden_states.squeeze(0)
+        lengths = grid_thw.prod(-1).tolist()
+
+        if hidden_states.shape[0] != sum(lengths):
+            raise ValueError("Number of tokens in `hidden_states` does not match the sum of `lengths`.")
+
+        hidden_states_list = torch.split(hidden_states, lengths, dim=0)
         h_kernel, w_kernel = self.merge_kernel_size
-        processed_features = list()
-        for image_feature, (temporal, height, width) in zip(image_features, image_grid_thw.tolist()):
-            image_feature = (
-                image_feature.view(temporal, height // h_kernel, h_kernel, width // w_kernel, w_kernel, -1)
+        merged_hidden_states = list()
+        for hidden, (temporal, height, width) in zip(hidden_states_list, grid_thw.tolist()):
+            hidden = (
+                hidden.view(temporal, height // h_kernel, h_kernel, width // w_kernel, w_kernel, -1)
                 .permute(0, 1, 3, 2, 4, 5)
                 .flatten(0, 2)  # temporal * height * width
                 .flatten(1, 3)  # h_kernel * w_kernel * dim
             )
 
-            image_feature = self.pre_norm(image_feature)
-            hidden_states = self.linear_1(image_feature)
-            hidden_states = self.act(hidden_states)
-            hidden_states = self.linear_2(hidden_states)
-            processed_features.append(hidden_states)
+            hidden = self.pre_norm(hidden)
+            hidden = self.linear_1(hidden)
+            hidden = self.act(hidden)
+            hidden = self.linear_2(hidden)
+            merged_hidden_states.append(hidden)
 
-        processed_features = torch.concat(processed_features, dim=0)
-        return processed_features
+        merged_hidden_states = torch.concat(merged_hidden_states, dim=0)
+        return merged_hidden_states
 
 
 def split_thw(thw: torch.LongTensor) -> torch.LongTensor:
@@ -1653,7 +1567,7 @@ def split_thw(thw: torch.LongTensor) -> torch.LongTensor:
 class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
     config: KeyeVL1_5Config
     base_model_prefix = ""
-    _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionBlock"]
+    _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionEncoderLayer"]
 
     def __init__(self, config: KeyeVL1_5Config):
         super().__init__(config)
@@ -1688,6 +1602,8 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
     ) -> tuple[torch.LongTensor, torch.LongTensor]:
         """
         Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
+        Our approach differs from previous Qwen2.5-VL series models in that the temporal dimension
+        **relative** position id is always 0, because the "t" value in grid_thw is fixed at 1.
 
         Explanation:
             Each embedding sequence contains vision embedding and text embedding or just contains text embedding.
@@ -1876,27 +1792,12 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         pixel_values_videos = pixel_values_videos.unsqueeze(0)
 
-        assert torch.all(video_grid_thw[:, 0] == 1)
-
-        total_patches = video_grid_thw.prod(dim=1)
-        width = torch.repeat_interleave(video_grid_thw[:, 2], total_patches)
-        cu_seqlens = total_patches.cumsum(0)
-        arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-        video_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
-
-        width_position_ids = torch.remainder(video_position_ids, width)
-        height_position_ids = torch.div(video_position_ids, width, rounding_mode="floor")
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
-        width_position_ids = width_position_ids.to(device)
-        height_position_ids = height_position_ids.to(device)
+        if not torch.all(video_grid_thw[:, 0] == 1):
+            raise ValueError("`video_grid_thw` must be a tensor where the first value in each row is 1.")
 
         vision_outputs = self.visual(
             pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            position_ids=video_position_ids,
-            cu_seqlens=cu_seqlens,
-            width_position_ids=width_position_ids,
-            height_position_ids=height_position_ids,
+            grid_thw=video_grid_thw,
         )
 
         video_embeds = vision_outputs.last_hidden_state
@@ -1917,33 +1818,55 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
         device = pixel_values.device
         pixel_values = pixel_values.type(self.visual.dtype)
         pixel_values = pixel_values.unsqueeze(0)
-        # assert torch.all(image_grid_thw[:, 0] == 1)
-        # image_grid_thw = image_grid_thw.to(device)
-
-        total_patches = image_grid_thw.prod(dim=1)
-        width = torch.repeat_interleave(image_grid_thw[:, 2], total_patches)
-        cu_seqlens = total_patches.cumsum(0)
-
-        arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-        image_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
-
-        width_position_ids = torch.remainder(image_position_ids, width)
-        height_position_ids = torch.div(image_position_ids, width, rounding_mode="floor")
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
-        width_position_ids = width_position_ids.to(device)
-        height_position_ids = height_position_ids.to(device)
+        image_grid_thw = image_grid_thw.to(device)
 
         vision_outputs = self.visual(
             pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
-            position_ids=image_position_ids,
-            cu_seqlens=cu_seqlens,
-            width_position_ids=width_position_ids,
-            height_position_ids=height_position_ids,
+            grid_thw=image_grid_thw,
         )
 
         image_embeds = vision_outputs.last_hidden_state
         return image_embeds
+
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: Optional[torch.FloatTensor] = None,
+        video_features: Optional[torch.FloatTensor] = None,
+    ) -> tuple[torch.BoolTensor, torch.BoolTensor]:
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
+            raise ValueError(
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+            )
+
+        return special_image_mask, special_video_mask
 
     @auto_docstring
     def forward(
@@ -1989,113 +1912,25 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
         device = inputs_embeds.device
 
         if pixel_values is not None:
-            # device = pixel_values.device
-            # pixel_values = pixel_values.type(self.visual.dtype)
-            # pixel_values = pixel_values.unsqueeze(0)
-            # assert torch.all(image_grid_thw[:, 0] == 1)
-            # image_grid_thw = image_grid_thw.to(device)
-
-            # total_patches = image_grid_thw.prod(dim=1)
-            # width = torch.repeat_interleave(image_grid_thw[:, 2], total_patches)
-            # cu_seqlens = total_patches.cumsum(0)
-
-            # arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-            # image_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
-
-            # width_position_ids = torch.remainder(image_position_ids, width)
-            # height_position_ids = torch.div(image_position_ids, width, rounding_mode="floor")
-            # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
-            # width_position_ids = width_position_ids.to(device)
-            # height_position_ids = height_position_ids.to(device)
-
-            # vision_outputs = self.visual(
-            #     pixel_values=pixel_values,
-            #     image_grid_thw=image_grid_thw,
-            #     position_ids=image_position_ids,
-            #     cu_seqlens=cu_seqlens,
-            #     width_position_ids=width_position_ids,
-            #     height_position_ids=height_position_ids,
-            # )
-
-            # image_embeds = vision_outputs.last_hidden_state
-
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
             image_embeds = self.mm_projector(image_embeds, image_grid_thw)
-
-            if input_ids is None:
-                image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=device)
-                )
-                image_mask = image_mask.all(-1)
-            else:
-                image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = image_mask.sum().item()
-
-            n_image_features = image_embeds.shape[0]
-            if n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-
-            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(device)
-
-            image_embeds = image_embeds.to(device, inputs_embeds.dtype)
-
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+        else:
+            image_embeds = None
 
         if pixel_values_videos is not None:
-            # device = pixel_values_videos.device
-            # pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-            # pixel_values_videos = pixel_values_videos.unsqueeze(0)
-            # video_grid_thw = split_thw(video_grid_thw.squeeze(0)).to(device)
-
-            # assert torch.all(video_grid_thw[:, 0] == 1)
-
-            # total_patches = video_grid_thw.prod(dim=1)
-            # width = torch.repeat_interleave(video_grid_thw[:, 2], total_patches)
-            # cu_seqlens = total_patches.cumsum(0)
-            # arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-            # video_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
-
-            # width_position_ids = torch.remainder(video_position_ids, width)
-            # height_position_ids = torch.div(video_position_ids, width, rounding_mode="floor")
-            # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
-            # width_position_ids = width_position_ids.to(device)
-            # height_position_ids = height_position_ids.to(device)
-
-            # vision_outputs = self.visual(
-            #     pixel_values=pixel_values_videos,
-            #     image_grid_thw=video_grid_thw,
-            #     position_ids=video_position_ids,
-            #     cu_seqlens=cu_seqlens,
-            #     width_position_ids=width_position_ids,
-            #     height_position_ids=height_position_ids,
-            # )
-
-            # video_embeds = vision_outputs.last_hidden_state
             video_grid_thw = split_thw(video_grid_thw.squeeze(0)).to(device)
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
             video_embeds = self.mm_projector(video_embeds, video_grid_thw)
+        else:
+            video_embeds = None
 
-            if input_ids is None:
-                video_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=device)
-                )
-                video_mask = video_mask.all(-1)
-            else:
-                video_mask = input_ids == self.config.video_token_id
+        image_mask, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_embeds, video_embeds)
 
-            n_video_tokens = video_mask.sum().item()
+        if image_embeds is not None:
+            image_embeds = image_embeds.to(device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-            n_video_features = video_embeds.shape[0]
-            if n_video_tokens != n_video_features:
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-
-            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(device)
-
+        if video_embeds is not None:
             video_embeds = video_embeds.to(device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
@@ -2482,9 +2317,9 @@ class KeyeVL1_5ForConditionalGeneration(KeyeVL1_5PreTrainedModel, GenerationMixi
 
 
 __all__ = [
-    "KeyeVL1_5ForConditionalGeneration",
-    "KeyeVL1_5VisionModel",
-    "KeyeVL1_5Model",
     "KeyeVL1_5PreTrainedModel",
+    "KeyeVL1_5VisionModel",
     "KeyeVL1_5TextModel",
+    "KeyeVL1_5Model",
+    "KeyeVL1_5ForConditionalGeneration",
 ]

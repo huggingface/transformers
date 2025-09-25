@@ -21,11 +21,12 @@
 
 import os
 import math
+from copy import deepcopy
+from collections import namedtuple
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union, List, Tuple, Dict
 
 import numpy as np
-from numpy.typing import NDArray
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -63,6 +64,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...image_processing_utils import BatchFeature, BaseImageProcessor
+from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...image_utils import (
@@ -80,6 +82,7 @@ from ...image_utils import (
     is_valid_image,
     valid_images,
     validate_preprocess_arguments,
+    make_flat_list_of_images
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -110,72 +113,28 @@ from ...utils import (
 )
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import requires
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
+from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata, group_videos_by_shape, reorder_videos, make_batched_videos
 from ...models.qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_varlen_func
+    from flash_attn.layers.rotary import apply_rotary_emb
+    from ...modeling_flash_attention_utils import _flash_attention_forward
+else:
+    flash_attn_varlen_func = None
+    apply_rotary_emb = None
 
 logger = logging.get_logger(__name__)
 
 try:
-    from keye_vl_utils import BicubicVideoProcessor
-except:
-    BicubicVideoProcessor = None
-    bicubic = None
-
-if BicubicVideoProcessor is not None:
-    try:
-        bicubic = BicubicVideoProcessor()
-    except:
-        bicubic = None
-
-
-def eager_attention_forward(
-        module: nn.Module,
-        query: torch.FloatTensor,
-        key: torch.FloatTensor,
-        value: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor],
-        scaling: float,
-        dropout: float = 0.0,
-        **kwargs,
-) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-def make_batched_images(
-        images: Union[List[List[ImageInput]], List[ImageInput], ImageInput]
-) -> List[List[ImageInput]]:
-    """
-    Accepts images in list or nested list format, and makes a list of images for preprocessing.
-
-    Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
-            The input image.
-
-    Returns:
-        list: A list of images.
-    """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-        return images
-
-    elif is_valid_image(images):
-        return [images]
-
-    raise ValueError(f"Could not make batched images from {images}")
+    from keye_vl_utils import BicubicVideoFusionOpProcessor
+except Exception as err:
+    logger.warning_once(
+        f"Failed to import BicubicVideoFusionOpProcessor from keye_vl_utils."
+        f"Error info {str(err)}."
+    )
+    BicubicVideoFusionOpProcessor = None
 
 
 class KeyeVL1_5VideosProcessorKwargs(VideosKwargs, total=False):
@@ -218,6 +177,14 @@ class KeyeVL1_5ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "videos_kwargs": {"fps": 2.0},
     }
+
+
+class KeyeVL1_5VideoProcessorInitKwargs(VideosKwargs):
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
 
 
 def select_slow_fast_frames(
@@ -266,8 +233,8 @@ def split_thw(thw: torch.LongTensor) -> torch.LongTensor:
 
 
 def merge_thw(
-        thw: Union[torch.LongTensor, List[torch.LongTensor]],
-        num_frames: Optional[List[int]] = None,
+    thw: Union[torch.LongTensor, List[torch.LongTensor]],
+    num_frames: Optional[List[int]] = None,
 ) -> torch.LongTensor:
     """
     Merge same grid_thw in t dimension, if num_frames is provided, may split adjacent identical values.
@@ -293,8 +260,11 @@ def merge_thw(
     if isinstance(thw, list):
         thw = torch.stack(thw, dim=0)
 
-    assert thw.dim() == 2, thw.shape
-    assert torch.all(thw[:, 0] == 1), thw
+    if thw.dim() != 2:
+        raise ValueError(f"`thw` must be a tensor with dim 2, but got shape {thw.shape}")
+    
+    if not torch.all(thw[:, 0] == 1):
+        raise ValueError(f"`thw` must be a tensor where the first value in each row is 1.")
 
     if num_frames is None:
         mask = (thw[:-1] != thw[1:]).any(1)
@@ -305,7 +275,8 @@ def merge_thw(
         count = torch.diff(indices, append=append).unsqueeze(-1)
         return torch.concat([count, thw[indices][:, 1:]], dim=1)
 
-    assert thw.shape[0] == sum(num_frames), (thw.shape, num_frames)
+    if thw.shape[0] != sum(num_frames):
+        raise ValueError(f"The length of `thw` must equals to sum of `num_frames`, but the shape of `thw` is {thw.shape}, `num_frames` = {num_frames}.")
 
     return torch.concat(
         [
@@ -390,21 +361,21 @@ class KeyeVL1_5VisionConfig(SiglipVisionConfig):
     base_config_key = "vision_config"
 
     def __init__(
-            self,
-            hidden_size: int = 768,
-            intermediate_size: int = 3072,
-            num_hidden_layers: int = 12,
-            num_attention_heads: int = 12,
-            num_channels: int = 3,
-            image_size: int = 224,
-            patch_size: int = 14,
-            hidden_act: Union[str, Callable] = "gelu_pytorch_tanh",
-            layer_norm_eps: float = 1e-6,
-            attention_dropout: float = 0.0,
-            spatial_merge_size: int = 2,
-            tokens_per_second: int = 2,
-            initializer_range: float = 0.02,
-            **kwargs,
+        self,
+        hidden_size: int = 768,
+        intermediate_size: int = 3072,
+        num_hidden_layers: int = 12,
+        num_attention_heads: int = 12,
+        num_channels: int = 3,
+        image_size: int = 224,
+        patch_size: int = 14,
+        hidden_act: Union[str, Callable] = "gelu_pytorch_tanh",
+        layer_norm_eps: float = 1e-6,
+        attention_dropout: float = 0.0,
+        spatial_merge_size: int = 2,
+        tokens_per_second: int = 2,
+        initializer_range: float = 0.02,
+        **kwargs,
     ):
         super().__init__(
             hidden_size=hidden_size,
@@ -537,29 +508,29 @@ class KeyeVL1_5TextConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
-            self,
-            vocab_size: int = 152064,
-            hidden_size: int = 8192,
-            intermediate_size: int = 29568,
-            num_hidden_layers: int = 80,
-            num_attention_heads: int = 64,
-            num_key_value_heads: int = 8,
-            hidden_act: Union[str, Callable] = "silu",
-            max_position_embeddings: int = 32768,
-            initializer_range: float = 0.02,
-            rms_norm_eps: float = 1e-05,
-            use_cache: bool = True,
-            tie_word_embeddings: bool = False,
-            rope_theta: float = 1000000.0,
-            use_sliding_window: bool = False,
-            sliding_window: int = 4096,
-            layer_types: Optional[List[str]] = None,
-            attention_dropout: float = 0.0,
-            rope_scaling: Optional[Dict[str, Any]] = None,
-            image_token_id: int = None,
-            video_token_id: int = None,
-            attention_bias: bool = False,
-            **kwargs,
+        self,
+        vocab_size: int = 152064,
+        hidden_size: int = 8192,
+        intermediate_size: int = 29568,
+        num_hidden_layers: int = 80,
+        num_attention_heads: int = 64,
+        num_key_value_heads: int = 8,
+        hidden_act: Union[str, Callable] = "silu",
+        max_position_embeddings: int = 32768,
+        initializer_range: float = 0.02,
+        rms_norm_eps: float = 1e-05,
+        use_cache: bool = True,
+        tie_word_embeddings: bool = False,
+        rope_theta: float = 1000000.0,
+        use_sliding_window: bool = False,
+        sliding_window: int = 4096,
+        layer_types: Optional[List[str]] = None,
+        attention_dropout: float = 0.0,
+        rope_scaling: Optional[Dict[str, Any]] = None,
+        image_token_id: int = None,
+        video_token_id: int = None,
+        attention_bias: bool = False,
+        **kwargs,
     ):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
         self.vocab_size = vocab_size
@@ -644,8 +615,6 @@ class KeyeVL1_5Config(PretrainedConfig):
             self,
             text_config=None,
             vision_config=None,
-            image_token_id=151655,
-            video_token_id=151656,
             **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -661,8 +630,8 @@ class KeyeVL1_5Config(PretrainedConfig):
             self.text_config = self.sub_configs["text_config"](**kwargs)
             self.sliding_window = kwargs.get("sliding_window", None)
 
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
+        self.image_token_id = self.text_config.image_token_id
+        self.video_token_id = self.text_config.video_token_id
 
         super().__init__(**kwargs)
 
@@ -688,12 +657,12 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        min_pixels (`int`, *optional*, defaults to `28 * 28 * 4`):
             The min pixels of the image to resize the image.
         max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
             The max pixels of the image to resize the image.
         patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
+            The spatial patch size of the vision encoder.
         temporal_patch_size (`int`, *optional*, defaults to 1):
             The temporal patch size of the vision encoder.
         merge_size (`int`, *optional*, defaults to 2):
@@ -703,21 +672,21 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
     def __init__(
-            self,
-            do_resize: bool = True,
-            resample: PILImageResampling = PILImageResampling.BILINEAR,
-            do_rescale: bool = True,
-            rescale_factor: Union[int, float] = 1 / 255,
-            do_normalize: bool = True,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            do_convert_rgb: bool = True,
-            min_pixels: int = 56 * 56,
-            max_pixels: int = 28 * 28 * 1280,
-            patch_size: int = 14,
-            temporal_patch_size: int = 1,
-            merge_size: int = 2,
-            **kwargs,
+        self,
+        do_resize: bool = True,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: bool = True,
+        min_pixels: int = 28 * 28 * 4,
+        max_pixels: int = 28 * 28 * 1280,
+        patch_size: int = 14,
+        temporal_patch_size: int = 1,
+        merge_size: int = 2,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.do_resize = do_resize
@@ -734,22 +703,23 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         self.merge_size = merge_size
         self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
-        assert self.temporal_patch_size == 1, "temporal_patch_size != 1 is not supported yet."
+        if self.temporal_patch_size != 1:
+            raise ValueError("temporal_patch_size != 1 is not supported yet.")
 
     def _preprocess(
-            self,
-            images: Union[ImageInput, VideoInput],
-            do_resize: Optional[bool] = None,
-            size: Optional[Dict[str, int]] = None,
-            resample: Optional[PILImageResampling] = None,
-            do_rescale: Optional[bool] = None,
-            rescale_factor: Optional[float] = None,
-            do_normalize: Optional[bool] = None,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            do_convert_rgb: Optional[bool] = None,
-            data_format: ChannelDimension = ChannelDimension.FIRST,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        self,
+        images: Union[ImageInput, VideoInput],
+        do_resize: Optional[bool] = None,
+        size: Optional[SizeDict] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: Optional[bool] = None,
+        data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Tuple[torch.FloatTensor, Tuple[int, int, int]]:
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
@@ -759,7 +729,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
                 Image/Video or batch of images/videos to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`SizeDict`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
@@ -860,21 +830,21 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         return flatten_patches, (grid_t, grid_h, grid_w)
 
     def preprocess(
-            self,
-            images: Optional[ImageInput] = None,
-            videos: Optional[VideoInput] = None,
-            do_resize: Optional[bool] = None,
-            size: Optional[Dict[str, int]] = None,
-            resample: Optional[PILImageResampling] = None,
-            do_rescale: Optional[bool] = None,
-            rescale_factor: Optional[float] = None,
-            do_normalize: Optional[bool] = None,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            do_convert_rgb: Optional[bool] = None,
-            return_tensors: Optional[Union[str, TensorType]] = None,
-            data_format: ChannelDimension = ChannelDimension.FIRST,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        self,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[SizeDict] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """
         Args:
@@ -886,7 +856,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
                 passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`SizeDict`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
@@ -936,7 +906,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         if images is not None:
-            images = make_batched_images(images)
+            images = make_flat_list_of_images(images)
         if videos is not None:
             videos = make_batched_videos(videos)
 
@@ -962,7 +932,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
                 patches, image_grid_thw = self._preprocess(
                     image,
                     do_resize=do_resize,
-                    size = size,
+                    size=size,
                     resample=resample,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
@@ -985,7 +955,7 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
                 patches, video_grid_thw = self._preprocess(
                     images,
                     do_resize=do_resize,
-                    size = size,
+                    size=size,
                     resample=resample,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
@@ -1006,10 +976,52 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
 
 
 @add_start_docstrings(
-    "Constructs a fast Keye-VL-1.5 image processor that dynamically resizes videos based on the original videos.",
+    "Constructs a fast KeyeVl1_5 image processor.",
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+)
+class KeyeVL1_5ImageProcessorFast(BaseImageProcessorFast):
+
+    def __init__(
+        self,
+        do_resize: bool = True,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: bool = True,
+        min_pixels: int = 28 * 28 * 4,
+        max_pixels: int = 28 * 28 * 1280,
+        patch_size: int = 14,
+        temporal_patch_size: int = 1,
+        merge_size: int = 2,
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.do_resize = do_resize
+        self.resample = resample
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
+        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
+        self.min_pixels = min_pixels
+        self.max_pixels = max_pixels
+        self.patch_size = patch_size
+        self.temporal_patch_size = temporal_patch_size
+        self.merge_size = merge_size
+        self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
+        self.do_convert_rgb = do_convert_rgb
+        if self.temporal_patch_size != 1:
+            raise ValueError("temporal_patch_size != 1 is not supported yet.")
+
+
+@add_start_docstrings(
+    "Constructs a fast Keye-VL-1.5 video processor that dynamically resizes videos based on the original videos.",
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     """
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        min_pixels (`int`, *optional*, defaults to `28 * 28 * 4`):
             The min pixels of the image to resize the image.
         max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
             The max pixels of the image to resize the image.
@@ -1019,12 +1031,482 @@ class KeyeVL1_5ImageProcessor(BaseImageProcessor):
             The temporal patch size of the vision encoder.
         merge_size (`int`, *optional*, defaults to 2):
             The merge size of the vision encoder to llm encoder.
-        min_frames (`int`, *optional*, defaults to 4):
-            The minimum number of frames that can be sampled.
-        max_frames (`int`, *optional*, defaults to 768):
-            The maximum number of frames that can be sampled.
     """,
 )
+@requires(backends=("torchvision",))
+class KeyeVL1_5VideoProcessor(BaseVideoProcessor):
+    resample = PILImageResampling.BILINEAR
+    size = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
+    min_pixels = 128 * 28 * 28
+    max_pixels = 28 * 28 * 768
+    patch_size = 14
+    temporal_patch_size = 2
+    merge_size = 2
+    model_input_names = [
+        "pixel_values_videos", 
+        "video_grid_thw",
+        "fast_pixel_values_videos",
+        "fast_video_grid_thw",
+        "num_frames",
+    ]
+    ResizeArugs = namedtuple("ResizeArugs", "height,width,resized_height,resized_width")
+
+    def __init__(self, **kwargs: Unpack[KeyeVL1_5VideoProcessorInitKwargs]):
+        size = kwargs.pop("size", None)
+        min_pixels = kwargs.pop("min_pixels", None)
+        max_pixels = kwargs.pop("max_pixels", None)
+        size.pop("height", None)
+        size.pop("width", None)
+        # backward compatibility: override size with min_pixels and max_pixels if they are provided
+        size = size or self.size
+        if min_pixels is not None:
+            size["shortest_edge"] = min_pixels
+            size.pop("min_pixels", None)
+        if max_pixels is not None:
+            size["longest_edge"] = max_pixels
+            size.pop("max_pixels", None)
+        if "shortest_edge" not in size or "longest_edge" not in size:
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+        
+        try:
+            bicubic = BicubicVideoFusionOpProcessor()
+        except Exception as err:
+            logger.warning_once(
+                "Failed to build object from BicubicVideoFusionOpProcessor class."
+                f"Error info {str(err)}."
+            )
+            bicubic = None
+
+        self.bicubic = bicubic
+        self.enable_fusion_op = bool(int(os.environ.get("ENABLE_FUSION_PROCESSOR_OP", 1))) and \
+                                (bicubic is not None)
+        
+        if self.enable_fusion_op:
+            logger.warning_once("Fusion op is enabled to processing videos.")
+        else:
+            logger.warning_once("Fusion op is disabled to processing videos.")
+        
+        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        if self.temporal_patch_size != 1:
+            raise ValueError("temporal_patch_size != 1 is not supported yet.")
+
+    @staticmethod
+    def group_videos_indices(
+        arugs_list: List[Tuple[int]],
+    ) -> List[List[int]]:
+        indices = list(range(len(arugs_list)))
+        indices.sort(key=lambda idx: arugs_list[idx])
+        last = (-10000, ) * len(arugs_list[0])
+        groups = list()
+        for idx in indices:
+            if last != arugs_list[idx]:
+                groups.append([idx])
+            else:
+                groups[-1].append(idx)
+            last = arugs_list[idx]
+
+        return groups
+    
+    def _preprocess_native_op(
+        self,
+        videos: List[torch.Tensor],
+        videos_kwargs: Dict[str, Any],
+        do_resize: bool = True,
+        do_rescale: bool = True,
+        do_normalize: bool = True,
+        rescale_factor: float = 1 / 255,
+        image_mean: Union[List[float], float] = OPENAI_CLIP_MEAN,
+        image_std: Union[List[float], float] = OPENAI_CLIP_STD,
+        size: Optional[List[SizeDict]] = None,
+        factor: int = 28,
+        patch_size: int = 14,
+        merge_size: int = 2,
+        min_pixels: int = 28 * 28 * 4,
+        max_pixels: int = 28 * 28 * 1280,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        input_data_format: ChannelDimension = ChannelDimension.FIRST,
+        temporal_patch_size: int = 1,
+        **kwargs,
+    ) -> Dict[str, torch.Tensor]:
+
+        resample = resample.name.lower()
+        num_frames = list()
+        batch_slow_frames = list()
+        batch_fast_frames = list()
+        batch_slow_argus = list()
+        batch_fast_argus = list()
+
+        num_videos = len(videos)
+        batch_frame_types = videos_kwargs.get("frame_types", [None] * num_videos)
+        batch_width = videos_kwargs.get("width", [None] * num_videos)
+        batch_height = videos_kwargs.get("height", [None] * num_videos)
+        batch_fast_width = videos_kwargs.get("fast_width", [None] * num_videos)
+        batch_fast_height = videos_kwargs.get("fast_height", [None] * num_videos)
+
+        for index, frames in enumerate(videos):
+            if isinstance(frames, np.ndarray):
+                frames = torch.from_numpy(frames)
+            nframes, channel, ori_height, ori_width = frames.shape
+            num_frames.append(nframes)
+            if nframes <= 0:
+                raise ValueError("No frames in video.")
+
+            if batch_frame_types[index] is None:
+                # default to all slow frames
+                batch_frame_types[index] = torch.zeros((nframes, ), dtype=torch.long)
+            frame_types = batch_frame_types[index]
+            slow_frames, fast_frames = select_slow_fast_frames(frames, frame_types)
+            has_fast_frames = fast_frames.shape[0] > 0
+            batch_slow_frames.append(slow_frames)
+
+            resized_width = batch_width[index]
+            resized_height = batch_height[index]
+
+            if resized_height is None or resized_width is None:
+                resized_height, resized_width = smart_resize(
+                    ori_height,
+                    ori_width,
+                    factor=factor,
+                    min_pixels=min_pixels,
+                    max_pixels=max_pixels,
+                )
+            batch_slow_argus.append(self.ResizeArugs(ori_height, ori_width, resized_height, resized_width))
+
+            if has_fast_frames:
+                batch_fast_frames.append(fast_frames)
+                
+                fast_resized_width = batch_fast_width[index]
+                fast_resized_height = batch_fast_height[index]
+
+                if fast_resized_height is None or fast_resized_width is None:
+                    fast_resized_height, fast_resized_width = smart_resize(
+                        ori_height,
+                        ori_width,
+                        factor=factor,
+                        min_pixels=min_pixels,
+                        max_pixels=max_pixels,
+                    )
+                batch_fast_argus.append(self.ResizeArugs(ori_height, ori_width, fast_resized_height, fast_resized_width))
+
+        num_slow_videos = len(batch_slow_frames)
+        num_fast_videos = len(batch_fast_frames)
+
+        batch_argus = batch_slow_argus + batch_fast_argus
+        batch_frames = batch_slow_frames + batch_fast_frames
+        batch_nframes = [tensor.shape[0] for tensor in batch_frames]
+
+        if do_resize:
+            
+            groups = self.group_videos_indices(batch_argus)
+
+            resized_frames = [None for _ in batch_frames]
+            for group in groups:
+                group_frames = torch.concat([batch_frames[i] for i in group], dim=0)
+                resized_height, resized_width = batch_argus[group[0]].resized_height, batch_argus[group[0]].resized_width
+
+                resized_group_frames = nn.functional.interpolate(
+                    group_frames,
+                    [resized_height, resized_width],
+                    mode=resample,
+                    antialias=True,
+                ).float()
+
+                resized_group_frames = torch.split(resized_group_frames, [batch_nframes[i] for i in group], dim=0)
+                
+                for i in range(len(group)):
+                    resized_frames[group[i]] = resized_group_frames[i]
+            batch_frames = resized_frames
+
+        pixel_values_videos = list()
+        video_grid_thw = list()
+        for i, frames in enumerate(batch_frames):
+            frames = self.rescale_and_normalize(
+                frames, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            patches = frames
+            grid_t, channel, height, width = patches.shape
+            if grid_t % temporal_patch_size != 0:
+                repeat = temporal_patch_size - (grid_t - 1) % temporal_patch_size - 1
+                repeats = patches[-1:].expand(repeat, -1, -1, -1)
+                patches = torch.concat([patches, repeats], dim=1)
+
+            grid_t = patches.shape[0] // temporal_patch_size
+            grid_h, grid_w = height // patch_size, width // patch_size
+
+            patches = patches.reshape(
+                grid_t,
+                temporal_patch_size,
+                channel,
+                grid_h,
+                patch_size,
+                grid_w,
+                patch_size,
+            )
+            patches = patches.permute(0, 3, 5, 2, 1, 4, 6)
+            patches = patches.reshape(
+                grid_t * grid_h * grid_w, channel, patch_size, patch_size
+            )
+            pixel_values_videos.append(patches)
+            video_grid_thw.append([grid_t, grid_h, grid_w])
+        slow_pixel_values_videos, fast_pixel_values_videos = pixel_values_videos[:num_slow_videos], pixel_values_videos[num_slow_videos:]
+        slow_video_grid_thw, fast_video_grid_thw = video_grid_thw[:num_slow_videos], video_grid_thw[num_slow_videos:]
+        
+        slow_video_grid_thw = torch.LongTensor(slow_video_grid_thw)
+        slow_pixel_values_videos = torch.concat(slow_pixel_values_videos, dim=0)
+
+        fast_video_grid_thw = torch.LongTensor(fast_video_grid_thw) if num_fast_videos > 0 else torch.empty(size=(0, 1), dtype=torch.float32)
+        fast_pixel_values_videos = torch.concat(fast_pixel_values_videos, dim=0) if num_fast_videos > 0 else torch.empty(size=(0, 3), dtype=torch.long)
+
+        return {
+            "pixel_values_videos": slow_pixel_values_videos,
+            "fast_pixel_values_videos": fast_pixel_values_videos,
+            "video_grid_thw": slow_video_grid_thw,
+            "fast_video_grid_thw": fast_video_grid_thw,
+            "num_frames": torch.LongTensor(num_frames),
+        }
+    
+    def _preprocess_fusion_op(
+        self,
+        videos: List[torch.Tensor],
+        videos_kwargs: Dict[str, Any],
+        do_resize: bool = True,
+        do_rescale: bool = True,
+        do_normalize: bool = True,
+        rescale_factor: float = 1 / 255,
+        image_mean: Union[List[float], float] = OPENAI_CLIP_MEAN,
+        image_std: Union[List[float], float] = OPENAI_CLIP_STD,
+        size: Optional[List[SizeDict]] = None,
+        factor: int = 28,
+        patch_size: int = 14,
+        merge_size: int = 2,
+        min_pixels: int = 28 * 28 * 4,
+        max_pixels: int = 28 * 28 * 1280,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        temporal_patch_size: int = 1,
+        **kwargs,
+    ) -> Dict[str, torch.Tensor]:
+        scale = round(1 / rescale_factor)
+
+        if not (do_resize and do_normalize and do_rescale):
+            raise ValueError("When the fusion op is enabled, `do_resize`, `do_normalize`, `do_rescale` must be True.")
+
+        if scale != 255:
+            raise ValueError("When the fusion op is enabled, `rescale_factor` must be 1 / 255.")
+        
+        logger.warning_once("When the fusion op is enabled, `resample` becomes ineffective, and we will use bicubic interpolation.")
+
+        num_frames = list()
+        batch_slow_frames = list()
+        batch_fast_frames = list()
+
+        num_videos = len(videos)
+        batch_frame_types = videos_kwargs.get("frame_types", [None] * num_videos)
+        batch_width = videos_kwargs.get("width", [None] * num_videos)
+        batch_height = videos_kwargs.get("height", [None] * num_videos)
+        batch_fast_width = videos_kwargs.get("fast_width", [None] * num_videos)
+        batch_fast_height = videos_kwargs.get("fast_height", [None] * num_videos)
+
+        for index, frames in enumerate(videos):
+            if isinstance(frames, np.ndarray):
+                frames = torch.from_numpy(frames)
+            nframes, channel, ori_height, ori_width = frames.shape
+            num_frames.append(nframes)
+            if nframes <= 0:
+                raise ValueError("No frames in video.")
+
+            if batch_frame_types[index] is None:
+                # default to all slow frames
+                batch_frame_types[index] = torch.zeros((nframes, ), dtype=torch.long)
+            frame_types = batch_frame_types[index]
+            slow_indices = (frame_types == 0).nonzero().flatten().tolist()
+            fast_indices = (frame_types == 1).nonzero().flatten().tolist()
+            has_fast_frames = len(fast_indices) > 0
+            resized_width = batch_width[index] or 0
+            resized_height = batch_height[index] or 0
+            fast_width = batch_fast_width[index] or 0
+            fast_height = batch_fast_height[index] or 0
+
+            slow_inputs = self.bicubic.interp(
+                frames,
+                nframes,
+                slow_indices,
+                ori_height,
+                ori_width,
+                resized_height,
+                resized_width,
+                patch=patch_size,
+                factor=factor,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels,
+                scale=scale,
+                image_mean=image_mean,
+                image_std=image_std,
+            )
+            batch_slow_frames.append(slow_inputs)
+
+            if has_fast_frames:
+                fast_inputs = self.bicubic.interp(
+                    frames,
+                    nframes,
+                    fast_indices,
+                    ori_height,
+                    ori_width,
+                    fast_height,
+                    fast_width,
+                    patch=patch_size,
+                    factor=factor,
+                    min_pixels=min_pixels,
+                    max_pixels=max_pixels,
+                    scale=scale,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                )
+                batch_fast_frames.append(fast_inputs)
+
+        if len(batch_slow_frames) == 0:
+            raise ValueError("Slow frames should not be empty.")
+
+        slow_pixel_values_videos_list = [
+            video["pixel_values_videos"] for video in batch_slow_frames if video is not None
+        ]
+        slow_video_grid_thw_list = [
+            video["video_grid_thw"] for video in batch_slow_frames if video is not None
+        ]
+
+        slow_pixel_values_videos = torch.concat(slow_pixel_values_videos_list, dim=0)
+        slow_video_grid_thw = torch.concat(slow_video_grid_thw_list, dim=0)
+
+        fast_pixel_values_videos_list = [
+            video["pixel_values_videos"] for video in batch_fast_frames if video is not None
+        ]
+        fast_video_grid_thw_list = [
+            video["video_grid_thw"] for video in batch_fast_frames if video is not None
+        ]
+
+        fast_pixel_values_videos = \
+            torch.concat(fast_pixel_values_videos_list, dim=0) if fast_pixel_values_videos_list else torch.empty(size=(0, 1), dtype=torch.float32)
+        fast_video_grid_thw = \
+            torch.concat(fast_video_grid_thw_list, dim=0) if fast_video_grid_thw_list else torch.empty(size=(0, 3), dtype=torch.long)
+
+        return {
+            "pixel_values_videos": slow_pixel_values_videos,
+            "fast_pixel_values_videos": fast_pixel_values_videos,
+            "video_grid_thw": slow_video_grid_thw,
+            "fast_video_grid_thw": fast_video_grid_thw,
+            "num_frames": torch.LongTensor(num_frames),
+        }
+
+    def _preprocess(
+        self,
+        videos: List[torch.Tensor],
+        videos_kwargs: Dict[str, Any],
+        do_resize: Optional[bool] = None,
+        do_normalize: Optional[bool] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        size: Optional[Union[SizeDict, List[SizeDict]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Optional[Union[str, torch.device]] = None,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        **kwargs,
+    ):
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+        min_pixels = min_pixels if min_pixels is not None else self.min_pixels
+        max_pixels = max_pixels if max_pixels is not None else self.max_pixels
+        patch_size = patch_size if patch_size is not None else self.patch_size
+        temporal_patch_size = temporal_patch_size if temporal_patch_size is not None else self.temporal_patch_size
+        merge_size = merge_size if merge_size is not None else self.merge_size
+
+        size = size or self.size
+        if not isinstance(size, list):
+            size = [size for _ in videos]
+
+        if len(videos) != len(size):
+            raise ValueError("Lengths of videos and size must be equal.")
+
+        if self.enable_fusion_op:
+            preprocess_op = self._preprocess_fusion_op
+        else:
+            preprocess_op = self._preprocess_native_op
+        
+        video_inputs = preprocess_op(
+            videos=videos,
+            videos_kwargs=videos_kwargs,
+            do_resize=do_resize,
+            do_rescale=do_rescale,
+            do_normalize=do_normalize,
+            rescale_factor=rescale_factor,
+            image_mean=image_mean,
+            image_std=image_std,
+            factor=merge_size * patch_size,
+            patch_size=patch_size,
+            merge_size=merge_size,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+            resample=resample,
+            size=size,
+            temporal_patch_size=temporal_patch_size,
+            device=device,
+            **kwargs,
+        )
+
+        return BatchFeature(
+            data=video_inputs,
+            tensor_type=return_tensors,
+        )
+
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+        """
+        A utility that returns number of video patches a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+        """
+        min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
+        max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+
+        if temporal_patch_size != 1:
+            raise ValueError("temporal_patch_size != 1 is not supported yet.")
+
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_t = num_frames // temporal_patch_size
+        return grid_t * grid_h * grid_w
+
+
 class KeyeVL1_5Processor(ProcessorMixin):
     r"""
     [`KeyeVL1_5Processor`] offers all the functionalities of [`KeyeVL1_5ImageProcessor`] and [`Qwen2TokenizerFast`]. See the
@@ -1034,54 +1516,33 @@ class KeyeVL1_5Processor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
+        video_processor ([`KeyeVL1_5VideoProcessor`], *optional*):
+            The video processor is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template","image_std", "min_pixels", "image_mean", "merge_size", "image_processor_type",
-        "temporal_patch_size", "patch_size", "max_pixels"
-    ]
+    attributes = ["image_processor", "tokenizer", "video_processor"]
 
     image_processor_class = "AutoImageProcessor"
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
+    video_processor_class = "AutoVideoProcessor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(
             self,
             image_processor: Optional[KeyeVL1_5ImageProcessor] = None,
             tokenizer: Optional[Qwen2TokenizerFast] = None,
+            video_processor: Optional[KeyeVL1_5VideoProcessor] = None,
             chat_template: Optional[str] = None,
             **kwargs,
     ):
-        self.image_token = getattr(tokenizer, "image_token", "<|image_pad|>")
-        self.video_token = getattr(tokenizer, "video_token", "<|video_pad|>")
-        self.frame_token = getattr(tokenizer, "frame_token", "<|frame|>")
-        self.fast_start = getattr(tokenizer, "fast_start", "<|fast_start|>")
-        self.fast_end = getattr(tokenizer, "fast_end", "<|fast_end|>")
+        self.image_token = tokenizer.image_token
+        self.video_token = tokenizer.video_token
+        self.frame_token = tokenizer.frame_token
+        self.fast_start = tokenizer.fast_start
+        self.fast_end = tokenizer.fast_end
 
-        self.merge_size = getattr(image_processor, "merge_size", 2)
-        self.patch_size = getattr(image_processor, "patch_size", 14)
-        self.min_pixels = getattr(image_processor, "min_pixels", 28 * 28 * 4)
-        self.max_pixels = getattr(image_processor, "max_pixels", 28 * 28 * 1280)
-        self.scale = 255 if not hasattr(image_processor, "rescale_factor") else int(round(1.0 / image_processor.rescale_factor))
-        self.image_mean = getattr(image_processor, "image_mean", OPENAI_CLIP_MEAN)
-        self.image_std = getattr(image_processor, "image_std", OPENAI_CLIP_STD)
-
-        if not isinstance(self.image_mean, (list, tuple)):
-            self.image_mean = [self.image_mean] * 3
-        if not isinstance(self.image_std, (list, tuple)):
-            self.image_std = [self.image_std] * 3
-        self.factor = self.merge_size * self.patch_size
-
-        self.enable_fusion_op = bool(int(os.environ.get("ENABLE_FUSION_PROCESSOR_OP", 1))) and \
-                                (bicubic is not None)
-        
-        if self.enable_fusion_op:
-            logger.warning_once("Fusion op is enabled to processing videos.")
-        else:
-            logger.warning_once("Fusion op is not enabled to processing videos.")
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def __call__(
             self,
@@ -1141,157 +1602,44 @@ class KeyeVL1_5Processor(ProcessorMixin):
             image_inputs = dict()
             image_grid_thw = None
 
-        num_frames = list()
         if videos is not None:
-            batch_slow_frames = list()
-            batch_fast_frames = list()
-
-            videos_kwargs = output_kwargs["videos_kwargs"]
             num_videos = len(videos)
+            videos_kwargs = output_kwargs["videos_kwargs"]
             batch_frame_types = videos_kwargs.get("frame_types", [None] * num_videos)
             batch_timestamps = videos_kwargs.get("timestamps", [None] * num_videos)
-            batch_width = videos_kwargs.get("width", [None] * num_videos)
-            batch_height = videos_kwargs.get("height", [None] * num_videos)
-            batch_fast_width = videos_kwargs.get("fast_width", [None] * num_videos)
-            batch_fast_height = videos_kwargs.get("fast_height", [None] * num_videos)
 
-            for index, frames in enumerate(videos):
-                if isinstance(frames, np.ndarray):
-                    frames = torch.from_numpy(frames)
-                nframes, channel, ori_height, ori_width = frames.shape
-                num_frames.append(nframes)
-                assert nframes > 0, "No frames in video"
-                if batch_frame_types[index] is None:
-                    # default to all slow frames
-                    batch_frame_types[index] = torch.zeros((nframes, ), dtype=torch.long)
-                frame_types = batch_frame_types[index]
-                if not self.enable_fusion_op:
-                    slow_frames, fast_frames = select_slow_fast_frames(frames, frame_types)
-                    has_fast_frames = fast_frames.shape[0] > 0
-                    # resize slow frames
-                    resized_width = batch_width[index]
-                    resized_height = batch_height[index]
-                    if resized_width is not None and resized_height is not None:
-                        slow_frames = nn.functional.interpolate(
-                            slow_frames,
-                            [resized_height, resized_width],
-                            mode="bilinear",
-                            antialias=True,
-                        ).float()
-                        do_resize = False
-                    else:
-                        slow_frames = slow_frames.float()
-                        do_resize = True
+            video_inputs = self.video_processor(
+                videos=videos, 
+                return_tensors="pt", 
+                videos_kwargs=videos_kwargs
+            )
+            slow_video_grid_thw = video_inputs["video_grid_thw"]
+            fast_video_grid_thw = video_inputs["fast_video_grid_thw"]
+            slow_video_grid_thw = slow_video_grid_thw if slow_video_grid_thw.numel() > 0 else None
+            fast_video_grid_thw = fast_video_grid_thw if fast_video_grid_thw.numel() > 0 else None
 
-                    slow_video_inputs = self.image_processor(
-                        images=None, videos=[slow_frames], **output_kwargs["images_kwargs"], do_resize=do_resize)
-                    slow_video_grid_thw = slow_video_inputs["video_grid_thw"]
-                    batch_slow_frames.append(slow_video_inputs)
+            slow_pixel_values_videos = video_inputs["pixel_values_videos"]
+            fast_pixel_values_videos = video_inputs["fast_pixel_values_videos"]
+            slow_pixel_values_videos = slow_pixel_values_videos if slow_pixel_values_videos.numel() > 0 else None
+            fast_pixel_values_videos = fast_pixel_values_videos if fast_pixel_values_videos.numel() > 0 else None
 
-                    if has_fast_frames:
-                        # TODO: shrink fast_frames
-                        fast_resized_width = batch_fast_width[index]
-                        fast_resized_height = batch_fast_height[index]
-                        if fast_resized_width is not None and fast_resized_height is not None:
-                            fast_frames = nn.functional.interpolate(
-                                fast_frames,
-                                [fast_resized_height, fast_resized_width],
-                                mode="bilinear",
-                                antialias=True,
-                            ).float()
-                            do_fast_resize = False
-                        else:
-                            fast_frames = fast_frames.float()
-                            do_fast_resize = True
-
-                        fast_video_inputs = self.image_processor(
-                            images=None, videos=[fast_frames], **output_kwargs["images_kwargs"], do_resize=do_fast_resize)
-                        fast_video_grid_thw = fast_video_inputs["video_grid_thw"]
-                        batch_fast_frames.append(fast_video_inputs)
-                else:
-                    slow_indices = (frame_types == 0).nonzero().flatten().tolist()
-                    fast_indices = (frame_types == 1).nonzero().flatten().tolist()
-                    has_fast_frames = len(fast_indices) > 0
-                    resized_width = batch_width[index] or 0
-                    resized_height = batch_height[index] or 0
-                    fast_width = batch_fast_width[index] or 0
-                    fast_height = batch_fast_height[index] or 0
-
-                    slow_inputs = bicubic.interp(
-                        frames,
-                        nframes,
-                        slow_indices,
-                        ori_height,
-                        ori_width,
-                        resized_height,
-                        resized_width,
-                        patch=self.patch_size,
-                        factor=self.factor,
-                        min_pixels=self.min_pixels,
-                        max_pixels=self.max_pixels,
-                        scale=self.scale,
-                        image_mean=self.image_mean,
-                        image_std=self.image_std,
-                    )
-                    batch_slow_frames.append(slow_inputs)
-
-                    if has_fast_frames:
-                        fast_inputs = bicubic.interp(
-                            frames,
-                            nframes,
-                            fast_indices,
-                            ori_height,
-                            ori_width,
-                            fast_height,
-                            fast_width,
-                            patch=self.patch_size,
-                            factor=self.factor,
-                            min_pixels=self.min_pixels,
-                            max_pixels=self.max_pixels,
-                            scale=self.scale,
-                            image_mean=self.image_mean,
-                            image_std=self.image_std,
-                        )
-                        batch_fast_frames.append(fast_inputs)
-
-            assert len(batch_slow_frames) > 0, "Slow frames should not be empty."
-            slow_pixel_values_videos_list = [
-                video["pixel_values_videos"] for video in batch_slow_frames if video is not None]
-            slow_video_grid_thw_list = [
-                video["video_grid_thw"] for video in batch_slow_frames if video is not None]
-
-            slow_pixel_values_videos = torch.concat(slow_pixel_values_videos_list, dim=0)
-            slow_video_grid_thw = torch.concat(slow_video_grid_thw_list, dim=0)
-
-            if has_fast_frames:
-                fast_pixel_values_videos_list = [
-                    video["pixel_values_videos"] for video in batch_fast_frames \
-                    if video is not None]
-                fast_video_grid_thw_list = [
-                    video["video_grid_thw"] for video in batch_fast_frames \
-                    if video is not None]
-
-                fast_pixel_values_videos = \
-                    torch.concat(fast_pixel_values_videos_list, dim=0)
-                fast_video_grid_thw = \
-                    torch.concat(fast_video_grid_thw_list, dim=0)
-            else:
-                fast_video_grid_thw = None
+            num_frames = video_inputs["num_frames"]
         else:
             slow_video_grid_thw = None
             fast_video_grid_thw = None
 
         if not isinstance(text, list):
             text = [text]
+        text = deepcopy(text)
         if image_grid_thw is not None:
             index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
-                    image_place_holder_tempale = "<|placeholder|>" * (
+                    image_place_holder_template = "<|placeholder|>" * (
                             image_grid_thw[index].prod() // self.image_processor.merge_size ** 2)
                     text[i] = text[i].replace(
                         self.image_token,
-                        image_place_holder_tempale,
+                        image_place_holder_template,
                         1,
                     )
                     index += 1
@@ -1311,18 +1659,18 @@ class KeyeVL1_5Processor(ProcessorMixin):
             fast_pixels_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    video_place_holder_tempale = ""
+                    video_place_holder_template = ""
 
                     for j in range(batch_frame_types[index].shape[-1]):
                         if batch_timestamps[index] is not None: # If has timestamps
-                            video_place_holder_tempale += self.frame_token + format(batch_timestamps[index][j], ".1f")
+                            video_place_holder_template += self.frame_token + format(batch_timestamps[index][j], ".1f")
                         else:
-                            video_place_holder_tempale += self.frame_token
+                            video_place_holder_template += self.frame_token
 
                         # Current frame is slow frame
                         if batch_frame_types[index][j] == 0:
                             num_patches = int(slow_video_grid_thw[slow_index].prod())
-                            video_place_holder_tempale += "<|placeholder|>" * (
+                            video_place_holder_template += "<|placeholder|>" * (
                                     num_patches // self.image_processor.merge_size ** 2)
                             pixel_values_videos.append(
                                 slow_pixel_values_videos[slow_pixels_index:slow_pixels_index + num_patches])
@@ -1333,7 +1681,7 @@ class KeyeVL1_5Processor(ProcessorMixin):
                         # Current frame is fast frame
                         elif batch_frame_types[index][j] == 1:
                             num_patches = int(fast_video_grid_thw[fast_index].prod())
-                            video_place_holder_tempale += self.fast_start + "<|placeholder|>" * (
+                            video_place_holder_template += self.fast_start + "<|placeholder|>" * (
                                     num_patches // self.image_processor.merge_size ** 2) + \
                                                           self.fast_end
                             pixel_values_videos.append(
@@ -1343,7 +1691,7 @@ class KeyeVL1_5Processor(ProcessorMixin):
                             fast_index += 1
                     text[i] = text[i].replace(
                         self.video_token,
-                        video_place_holder_tempale,
+                        video_place_holder_template,
                         1,
                     )
                     index += 1
@@ -1356,67 +1704,6 @@ class KeyeVL1_5Processor(ProcessorMixin):
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    def post_process_image_text_to_text(
-            self,
-            generated_outputs: Union[torch.LongTensor, NDArray[np.long]],
-            skip_special_tokens: bool = True,
-            clean_up_tokenization_spaces: bool = False,
-            **kwargs
-    ) -> List[str]:
-        """
-        Post-process the output of the model to decode the text.
-
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length, )`.
-            skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            Clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
-            **kwargs:
-                Additional arguments to be passed to the tokenizer's `batch_decode method`.
-
-        Returns:
-            `List[str]`: The decoded text.
-        """
-        return self.tokenizer.batch_decode(
-            generated_outputs,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            **kwargs,
-        )
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        names_from_processor = list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-        return names_from_processor
-
-
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_varlen_func
-    from flash_attn.layers.rotary import apply_rotary_emb
-    from ...modeling_flash_attention_utils import _flash_attention_forward
-else:
-    flash_attn_varlen_func = None
-    apply_rotary_emb = None
 
 
 class KeyeVL1_5VisionEmbeddings(nn.Module):
@@ -1462,56 +1749,54 @@ class KeyeVL1_5VisionEmbeddings(nn.Module):
         return patch_pos_embed
 
     def forward(
-            self,
-            pixel_values: torch.FloatTensor,
-            position_ids: Optional[torch.LongTensor] = None,
-            image_grid_thw: Optional[torch.LongTensor] = None,
+        self,
+        pixel_values: torch.FloatTensor,
+        position_ids: Optional[torch.LongTensor] = None,
+        grid_thw: Optional[torch.LongTensor] = None,
     ) -> torch.FloatTensor:
         """
         Args:
             pixel_values: (batch, length, channel, height, width)  batch * length = sum(t * h * w for all images in batch)
-            image_grid_thw: torch.LongTensor  (nimages, 3), nimages represents number of images, 3 represents (t, h, w)
+            grid_thw: torch.LongTensor  (nimages, 3), nimages represents number of images, 3 represents (t, h, w)
         Returns:
             (batch, length, dim)
         """
+
         if pixel_values.dim() == 6:
-            assert pixel_values.shape[0] == 1
             pixel_values = pixel_values.squeeze(0)
 
         if pixel_values.dim() != 5:
             raise NotImplementedError(f"Expected 5-D input (batch, length, channel, height, width), got {pixel_values.shape}")
 
         batch, length, channel, height, width = pixel_values.shape
-        assert image_grid_thw is not None
-
-        tokens_per_img = torch.prod(image_grid_thw, dim=1).tolist()
+        tokens_per_img = torch.prod(grid_thw, dim=1).tolist()
         total_tokens = sum(tokens_per_img)
-        assert total_tokens == batch * length, f"token mismatch: {total_tokens} vs {length}"
 
-        embeddings = pixel_values.view(batch * length, channel, height, width)
+        if total_tokens != batch * length:
+            raise ValueError(f"Token length mismatch: {total_tokens} vs {length}")
+
+        pixel_values = pixel_values.view(batch * length, channel, height, width)
 
         target_dtype = self.patch_embedding.weight.dtype
-        embeddings = embeddings.to(dtype=target_dtype)
-        embeddings = self.patch_embedding(embeddings)  # (batch * length, dim, gh=1, gw=1)
-        embeddings = embeddings.flatten(2).transpose(1, 2)  # (batch * length, 1, dim)
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+        embeddings = patch_embeds.flatten(1)
 
-        dim = embeddings.size(-1)
+        dim = embeddings.shape[-1]
 
-        token_embed_list = torch.split(embeddings.view(-1, dim), tokens_per_img, dim=0)
+        token_embed_list = torch.split(embeddings, tokens_per_img, dim=0)
 
         hw_pos_dict = dict()
         outs = list()
-        for img_embeds, (t, h, w) in zip(token_embed_list, image_grid_thw.tolist()):
-            img_embeds = img_embeds.view(t, h * w, -1)  # (t, h * w, dim)
-            if (h, w) not in hw_pos_dict:
-                pos = self.interpolate_pos_encoding(h, w, dim)  # (1, h * w, dim)
-                hw_pos_dict[(h, w)] = pos
-            else:
-                pos = hw_pos_dict[(h, w)]
-            img_embeds = img_embeds + pos.expand(t, -1, -1)
-            outs.append(img_embeds.view(-1, dim))  # (t * h * w, dim)
+        for img_embeds, (t, h, w) in zip(token_embed_list, grid_thw.tolist()):
+            img_embeds = img_embeds.view(t, h * w, -1)
+            hw_pair = (h, w)
+            if hw_pair not in hw_pos_dict:
+                hw_pos_dict[hw_pair] = self.interpolate_pos_encoding(h, w, dim)
 
-        embeddings = torch.cat(outs, dim=0)  # (batch * length, dim)
+            img_embeds = img_embeds + hw_pos_dict[hw_pair]
+            outs.append(img_embeds.view(-1, dim))
+
+        embeddings = torch.cat(outs, dim=0)
         embeddings = embeddings.view(batch, length, -1)
         return embeddings
 
@@ -1527,6 +1812,29 @@ def apply_rotary_pos_emb_flashatt(
     q_embed = apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
     k_embed = apply_rotary_emb(k.float(), cos.float(), sin.float()).type_as(k)
     return q_embed, k_embed
+
+
+def eager_attention_forward(
+        module: nn.Module,
+        query: torch.FloatTensor,
+        key: torch.FloatTensor,
+        value: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor],
+        scaling: float,
+        dropout: float = 0.0,
+        **kwargs,
+) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 class KeyeVL1_5VisionAttention(nn.Module):
@@ -1553,13 +1861,13 @@ class KeyeVL1_5VisionAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def forward(
-            self,
-            hidden_states: torch.FloatTensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            output_attentions: bool = False,
-            cu_seqlens: Optional[torch.IntTensor] = None,
-            rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
-            **kwargs,
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+        cu_seqlens: Optional[torch.IntTensor] = None,
+        rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -1644,7 +1952,7 @@ class KeyeVL1_5VisionMLP(SiglipMLP):
     pass
 
 
-class KeyeVL1_5VisionBlock(GradientCheckpointingLayer):
+class KeyeVL1_5VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: KeyeVL1_5VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -1654,64 +1962,12 @@ class KeyeVL1_5VisionBlock(GradientCheckpointingLayer):
         self.mlp = KeyeVL1_5VisionMLP(config)
 
     def forward(
-            self,
-            hidden_states: torch.FloatTensor,
-            attention_mask: torch.FloatTensor,
-            output_attentions: bool = False,
-            cu_seqlens: Optional[torch.IntTensor] = None,
-            rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
-    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(batch, seq_len, embed_dim)`.
-            attention_mask (`torch.FloatTensor`):
-                Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            cu_seqlens=cu_seqlens,
-            rope_emb=rope_emb,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states, )
-
-        if output_attentions:
-            outputs += (attn_weights, )
-
-        return outputs
-
-
-class KeyeVL1_5VisionEncoderLayer(nn.Module):
-    def __init__(self, config: KeyeVL1_5VisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.self_attn = KeyeVL1_5VisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = KeyeVL1_5VisionMLP(config)
-
-    def forward(
-            self,
-            hidden_states: torch.FloatTensor,
-            attention_mask: torch.FloatTensor,
-            output_attentions: bool = False,
-            cu_seqlens: Optional[torch.IntTensor] = None,
-            rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: torch.FloatTensor,
+        output_attentions: bool = False,
+        cu_seqlens: Optional[torch.IntTensor] = None,
+        rope_emb: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -1751,7 +2007,7 @@ class KeyeVL1_5VisionEncoderLayer(nn.Module):
 class KeyeVL1_5VisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`KeyeVL1_5VisionBlock`].
+    [`KeyeVL1_5VisionEncoderLayer`].
 
     Args:
         config: KeyeVL1_5VisionConfig
@@ -1768,19 +2024,19 @@ class KeyeVL1_5VisionEncoder(nn.Module):
         self.gradient_checkpointing = False
 
     def forward(
-            self,
-            inputs_embeds: torch.FloatTensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            cu_seqlens: Optional[torch.IntTensor] = None,
-            image_grid_thw: Optional[torch.LongTensor] = None,
-            height_position_ids: Optional[torch.LongTensor] = None,
-            width_position_ids: Optional[torch.LongTensor] = None,
+        self,
+        pixel_values: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        cu_seqlens: Optional[torch.IntTensor] = None,
+        grid_thw: Optional[torch.LongTensor] = None,
+        height_position_ids: Optional[torch.LongTensor] = None,
+        width_position_ids: Optional[torch.LongTensor] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
@@ -1808,9 +2064,7 @@ class KeyeVL1_5VisionEncoder(nn.Module):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        device = inputs_embeds.device
-        hidden_states = inputs_embeds
-        attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
+        hidden_states = pixel_values
 
         pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
         max_grid_size = pids.max() + 1
@@ -1827,23 +2081,13 @@ class KeyeVL1_5VisionEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states, )
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                    cu_seqlens,
-                    rope_emb,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions=output_attentions,
-                    cu_seqlens=cu_seqlens,
-                    rope_emb=rope_emb,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                output_attentions=output_attentions,
+                cu_seqlens=cu_seqlens,
+                rope_emb=rope_emb,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1890,19 +2134,18 @@ class KeyeVL1_5VisionTransformer(nn.Module):
         self.encoder = KeyeVL1_5VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(KEYE_VL_1_5_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVL1_5VisionConfig)
+    @auto_docstring
     def forward(
-            self,
-            pixel_values: torch.FloatTensor,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            height_position_ids: Optional[torch.LongTensor] = None,
-            width_position_ids: Optional[torch.LongTensor] = None,
-            cu_seqlens: Optional[torch.IntTensor] = None,
-            image_grid_thw: Optional[torch.LongTensor] = None,
+        self,
+        pixel_values: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        height_position_ids: Optional[torch.LongTensor] = None,
+        width_position_ids: Optional[torch.LongTensor] = None,
+        cu_seqlens: Optional[torch.IntTensor] = None,
+        grid_thw: Optional[torch.LongTensor] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1916,16 +2159,16 @@ class KeyeVL1_5VisionTransformer(nn.Module):
         hidden_states = self.embeddings(
             pixel_values,
             position_ids=position_ids,
-            image_grid_thw=image_grid_thw,
+            grid_thw=grid_thw,
         )
 
         encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
+            pixel_values=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
-            image_grid_thw=image_grid_thw,
+            grid_thw=grid_thw,
             height_position_ids=height_position_ids,
             width_position_ids=width_position_ids,
         )
@@ -1933,16 +2176,11 @@ class KeyeVL1_5VisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-        hidden_state = last_hidden_state.squeeze(0)
-        assert hidden_state.shape[0] == cu_seqlens[-1].item()
-
-        sample_hidden_state_list = list(torch.split(hidden_state, lengths, dim=0))
+        if last_hidden_state.squeeze(0).shape[0] != cu_seqlens[-1].item():
+            raise ValueError("Number of tokens in `hidden_state` does not match the last element of `cu_seqlens`.")
 
         return KeyeVL1_5VisionModelOutput(
-            last_hidden_state=sample_hidden_state_list,
-            image_embeds=None,
-            hidden_states=None,
+            last_hidden_state=last_hidden_state,
             attentions=encoder_outputs.attentions,
         )
 
@@ -1956,7 +2194,7 @@ class KeyeVL1_5PreTrainedModel(PreTrainedModel):
     config_class: KeyeVL1_5Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionBlock"]
+    _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionEncoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -2022,7 +2260,6 @@ class KeyeVL1_5PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-@auto_docstring
 class KeyeVL1_5VisionModel(KeyeVL1_5PreTrainedModel):
     config_class = KeyeVL1_5VisionConfig
     main_input_name = "pixel_values"
@@ -2038,42 +2275,66 @@ class KeyeVL1_5VisionModel(KeyeVL1_5PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(KEYE_VL_1_5_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVL1_5VisionConfig)
+    def _extract_required_argus(
+        self,
+        pixel_values: torch.FloatTensor,
+        grid_thw: torch.LongTensor,
+    ) -> Dict[str, torch.Tensor]:
+        
+        device = pixel_values.device
+        total_patches = grid_thw.prod(dim=1)
+        width = torch.repeat_interleave(grid_thw[:, 2], total_patches)
+        cu_seqlens = total_patches.cumsum(0)
+
+        arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
+        position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
+
+        width_position_ids = torch.remainder(position_ids, width)
+        height_position_ids = torch.div(position_ids, width, rounding_mode="floor")
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
+        width_position_ids = width_position_ids.to(device)
+        height_position_ids = height_position_ids.to(device)
+
+        return {
+            "width_position_ids": width_position_ids,
+            "height_position_ids": height_position_ids,
+            "cu_seqlens": cu_seqlens,
+            "position_ids": position_ids,
+        }
+
+    @auto_docstring
     def forward(
-            self,
-            pixel_values: torch.FloatTensor,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            image_grid_thw: Optional[torch.LongTensor] = None,
-            cu_seqlens: Optional[torch.IntTensor] = None,
-            height_position_ids: Optional[torch.LongTensor] = None,
-            width_position_ids: Optional[torch.LongTensor] = None,
+        self,
+        pixel_values: torch.FloatTensor,
+        grid_thw: torch.LongTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
             keye_vl_1_5_vision_model_output (`KeyeVL1_5VisionModelOutput` see class KeyeVL1_5VisionModelOutput for details.)
         ```"""
 
+        argus_dict = self._extract_required_argus(
+            pixel_values=pixel_values,
+            grid_thw=grid_thw,
+        )
+
         return self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            position_ids=position_ids,
-            image_grid_thw=image_grid_thw,
-            cu_seqlens=cu_seqlens,
-            height_position_ids=height_position_ids,
-            width_position_ids=width_position_ids,
+            grid_thw=grid_thw,
+            **argus_dict,
         )
 
 
 class KeyeVL1_5VisionRotaryEmbedding(nn.Module):
 
     def __init__(
-            self,
-            dim: int,
-            theta: float = 10000.0
+        self,
+        dim: int,
+        theta: float = 10000.0
     ) -> None:
         super().__init__()
         self.dim = dim
@@ -2085,8 +2346,8 @@ class KeyeVL1_5VisionRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(
-            self,
-            seqlen: int
+        self,
+        seqlen: int
     ) -> torch.FloatTensor:
         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(seq, self.inv_freq)
@@ -2216,18 +2477,17 @@ class KeyeVL1_5Attention(nn.Module):
 
         self.rotary_emb = KeyeVL1_5RotaryEmbedding(config=config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
-            self,
-            hidden_states: torch.FloatTensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Cache] = None,
-            output_attentions: bool = False,
-            use_cache: bool = False,
-            cache_position: Optional[torch.LongTensor] = None,
-            position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
-            **kwargs: Unpack[FlashAttentionKwargs],
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -2302,20 +2562,19 @@ class KeyeVL1_5FlashAttention2(KeyeVL1_5Attention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
-            self,
-            hidden_states: torch.FloatTensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Cache] = None,
-            output_attentions: bool = False,
-            use_cache: bool = False,
-            cache_position: Optional[torch.LongTensor] = None,
-            position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
-            cu_seqlens: Optional[torch.IntTensor] = None,
-            sliding_window = -1,
-            **kwargs,
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
+        cu_seqlens: Optional[torch.IntTensor] = None,
+        sliding_window = -1,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         bsz, q_len, _ = hidden_states.size()
         q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
@@ -2427,18 +2686,17 @@ class KeyeVL1_5SdpaAttention(KeyeVL1_5Attention):
     SDPA API.
     """
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
-            self,
-            hidden_states: torch.FloatTensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Cache] = None,
-            output_attentions: bool = False,
-            use_cache: bool = False,
-            cache_position: Optional[torch.LongTensor] = None,
-            position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
-            **kwargs,
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -2539,18 +2797,17 @@ class KeyeVL1_5DecoderLayer(Qwen2_5_VLDecoderLayer):
         self.input_layernorm = KeyeVL1_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = KeyeVL1_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
-            self,
-            hidden_states: torch.FloatTensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Cache] = None,
-            output_attentions: bool = False,
-            use_cache: bool = False,
-            cache_position: Optional[torch.LongTensor] = None,
-            position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
-            **kwargs: Unpack[FlashAttentionKwargs],
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -2604,25 +2861,19 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def forward(
-            self,
-            input_ids: torch.LongTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Cache] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-            cache_position: Optional[torch.LongTensor] = None,
-            **kwargs
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2679,31 +2930,17 @@ class KeyeVL1_5TextModel(KeyeVL1_5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                    **kwargs,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_values=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -2904,35 +3141,43 @@ class KeyeVL1_5Projector(nn.Module):
         self.linear_2 = nn.Linear(hidden_size, text_config.hidden_size, bias=True)
 
     def forward(
-            self,
-            image_features: List[torch.FloatTensor],
-            image_grid_thw: torch.LongTensor,
+        self,
+        hidden_states: torch.FloatTensor,
+        grid_thw: torch.LongTensor,
     ) -> torch.FloatTensor:
+
+        hidden_states = hidden_states.squeeze(0)
+        lengths = grid_thw.prod(-1).tolist()
+
+        if hidden_states.shape[0] != sum(lengths):
+            raise ValueError("Number of tokens in `hidden_states` does not match the sum of `lengths`.")
+
+        hidden_states_list = torch.split(hidden_states, lengths, dim=0)
         h_kernel, w_kernel = self.merge_kernel_size
-        processed_features = list()
-        for image_feature, (temporal, height, width) in zip(image_features, image_grid_thw.tolist()):
-            image_feature = (
-                image_feature.view(temporal, height // h_kernel, h_kernel, width // w_kernel, w_kernel, -1)
+        merged_hidden_states = list()
+        for hidden, (temporal, height, width) in zip(hidden_states_list, grid_thw.tolist()):
+            hidden = (
+                hidden.view(temporal, height // h_kernel, h_kernel, width // w_kernel, w_kernel, -1)
                 .permute(0, 1, 3, 2, 4, 5)
                 .flatten(0, 2)  # temporal * height * width
                 .flatten(1, 3)  # h_kernel * w_kernel * dim
             )
 
-            image_feature = self.pre_norm(image_feature)
-            hidden_states = self.linear_1(image_feature)
-            hidden_states = self.act(hidden_states)
-            hidden_states = self.linear_2(hidden_states)
-            processed_features.append(hidden_states)
+            hidden = self.pre_norm(hidden)
+            hidden = self.linear_1(hidden)
+            hidden = self.act(hidden)
+            hidden = self.linear_2(hidden)
+            merged_hidden_states.append(hidden)
 
-        processed_features = torch.concat(processed_features, dim=0)
-        return processed_features
+        merged_hidden_states = torch.concat(merged_hidden_states, dim=0)
+        return merged_hidden_states
 
 
 @auto_docstring
 class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
     config: KeyeVL1_5Config
     base_model_prefix = ""
-    _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionBlock"]
+    _no_split_modules = ["KeyeVL1_5DecoderLayer", "KeyeVL1_5VisionEncoderLayer"]
 
     def __init__(self, config: KeyeVL1_5Config):
         super().__init__(config)
@@ -2958,15 +3203,17 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
         return self.language_model
 
     def get_rope_index(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            image_grid_thw: Optional[torch.LongTensor] = None,
-            video_grid_thw: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            **kwargs,
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        **kwargs,
     ) -> Tuple[torch.LongTensor, torch.LongTensor]:
         """
         Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
+        Our approach differs from previous Qwen2.5-VL series models in that the temporal dimension 
+        **relative** position id is always 0, because the "t" value in grid_thw is fixed at 1.
 
         Explanation:
             Each embedding sequence contains vision embedding and text embedding or just contains text embedding.
@@ -3156,36 +3403,21 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         pixel_values_videos = pixel_values_videos.unsqueeze(0)
 
-        assert torch.all(video_grid_thw[:, 0] == 1)
-
-        total_patches = video_grid_thw.prod(dim=1)
-        width = torch.repeat_interleave(video_grid_thw[:, 2], total_patches)
-        cu_seqlens = total_patches.cumsum(0)
-        arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-        video_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
-
-        width_position_ids = torch.remainder(video_position_ids, width)
-        height_position_ids = torch.div(video_position_ids, width, rounding_mode="floor")
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
-        width_position_ids = width_position_ids.to(device)
-        height_position_ids = height_position_ids.to(device)
+        if not torch.all(video_grid_thw[:, 0] == 1):
+            raise ValueError(f"`video_grid_thw` must be a tensor where the first value in each row is 1.")
 
         vision_outputs = self.visual(
             pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            position_ids=video_position_ids,
-            cu_seqlens=cu_seqlens,
-            width_position_ids=width_position_ids,
-            height_position_ids=height_position_ids,
+            grid_thw=video_grid_thw,
         )
 
         video_embeds = vision_outputs.last_hidden_state
         return video_embeds
 
     def get_image_features(
-            self,
-            pixel_values: torch.FloatTensor,
-            image_grid_thw: torch.LongTensor
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor
     ) -> torch.FloatTensor:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
@@ -3199,54 +3431,76 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
         device = pixel_values.device
         pixel_values = pixel_values.type(self.visual.dtype)
         pixel_values = pixel_values.unsqueeze(0)
-        # assert torch.all(image_grid_thw[:, 0] == 1)
-        # image_grid_thw = image_grid_thw.to(device)
-
-        total_patches = image_grid_thw.prod(dim=1)
-        width = torch.repeat_interleave(image_grid_thw[:, 2], total_patches)
-        cu_seqlens = total_patches.cumsum(0)
-
-        arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-        image_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
-
-        width_position_ids = torch.remainder(image_position_ids, width)
-        height_position_ids = torch.div(image_position_ids, width, rounding_mode="floor")
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
-        width_position_ids = width_position_ids.to(device)
-        height_position_ids = height_position_ids.to(device)
+        image_grid_thw = image_grid_thw.to(device)
 
         vision_outputs = self.visual(
             pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
-            position_ids=image_position_ids,
-            cu_seqlens=cu_seqlens,
-            width_position_ids=width_position_ids,
-            height_position_ids=height_position_ids,
+            grid_thw=image_grid_thw,
         )
 
         image_embeds = vision_outputs.last_hidden_state
         return image_embeds
 
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: Optional[torch.FloatTensor] = None,
+        video_features: Optional[torch.FloatTensor] = None,
+    ) -> Tuple[torch.BoolTensor, torch.BoolTensor]:
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
+            raise ValueError(
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+            )
+
+        return special_image_mask, special_video_mask
+
     @auto_docstring
     def forward(
-            self,
-            input_ids: torch.LongTensor = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Cache] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-            pixel_values: Optional[torch.FloatTensor] = None,
-            pixel_values_videos: Optional[torch.FloatTensor] = None,
-            image_grid_thw: Optional[torch.LongTensor] = None,
-            video_grid_thw: Optional[torch.LongTensor] = None,
-            rope_deltas: Optional[torch.LongTensor] = None,
-            cache_position: Optional[torch.LongTensor] = None,
-            num_frames: Optional[torch.LongTensor] = None,
-            **kwargs: Unpack[TransformersKwargs],
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        rope_deltas: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        num_frames: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[Tuple, KeyeVL1_5ModelOutputWithPast]:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
@@ -3271,112 +3525,26 @@ class KeyeVL1_5Model(KeyeVL1_5PreTrainedModel):
         device = inputs_embeds.device
 
         if pixel_values is not None:
-            # device = pixel_values.device
-            # pixel_values = pixel_values.type(self.visual.dtype)
-            # pixel_values = pixel_values.unsqueeze(0)
-            # assert torch.all(image_grid_thw[:, 0] == 1)
-            # image_grid_thw = image_grid_thw.to(device)
-
-            # total_patches = image_grid_thw.prod(dim=1)
-            # width = torch.repeat_interleave(image_grid_thw[:, 2], total_patches)
-            # cu_seqlens = total_patches.cumsum(0)
-
-            # arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-            # image_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
-
-            # width_position_ids = torch.remainder(image_position_ids, width)
-            # height_position_ids = torch.div(image_position_ids, width, rounding_mode="floor")
-            # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
-            # width_position_ids = width_position_ids.to(device)
-            # height_position_ids = height_position_ids.to(device)
-
-            # vision_outputs = self.visual(
-            #     pixel_values=pixel_values,
-            #     image_grid_thw=image_grid_thw,
-            #     position_ids=image_position_ids,
-            #     cu_seqlens=cu_seqlens,
-            #     width_position_ids=width_position_ids,
-            #     height_position_ids=height_position_ids,
-            # )
-
-            # image_embeds = vision_outputs.last_hidden_state
-
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
             image_embeds = self.mm_projector(image_embeds, image_grid_thw)
-
-            if input_ids is None:
-                image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=device)
-                )
-                image_mask = image_mask.all(-1)
-            else:
-                image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = image_mask.sum().item()
-
-            n_image_features = image_embeds.shape[0]
-            if n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-
-            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(device)
-
-            image_embeds = image_embeds.to(device, inputs_embeds.dtype)
-
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+        else:
+            image_embeds = None
 
         if pixel_values_videos is not None:
-            # device = pixel_values_videos.device
-            # pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-            # pixel_values_videos = pixel_values_videos.unsqueeze(0)
-            # video_grid_thw = split_thw(video_grid_thw.squeeze(0)).to(device)
-
-            # assert torch.all(video_grid_thw[:, 0] == 1)
-
-            # total_patches = video_grid_thw.prod(dim=1)
-            # width = torch.repeat_interleave(video_grid_thw[:, 2], total_patches)
-            # cu_seqlens = total_patches.cumsum(0)
-            # arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-            # video_position_ids = arange - torch.repeat_interleave(cu_seqlens.to(device) - total_patches, total_patches)
-
-            # width_position_ids = torch.remainder(video_position_ids, width)
-            # height_position_ids = torch.div(video_position_ids, width, rounding_mode="floor")
-            # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
-            # width_position_ids = width_position_ids.to(device)
-            # height_position_ids = height_position_ids.to(device)
-
-            # vision_outputs = self.visual(
-            #     pixel_values=pixel_values_videos,
-            #     image_grid_thw=video_grid_thw,
-            #     position_ids=video_position_ids,
-            #     cu_seqlens=cu_seqlens,
-            #     width_position_ids=width_position_ids,
-            #     height_position_ids=height_position_ids,
-            # )
-
-            # video_embeds = vision_outputs.last_hidden_state
             video_grid_thw = split_thw(video_grid_thw.squeeze(0)).to(device)
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
             video_embeds = self.mm_projector(video_embeds, video_grid_thw)
+        else:
+            video_embeds = None
 
-            if input_ids is None:
-                video_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=device)
-                )
-                video_mask = video_mask.all(-1)
-            else:
-                video_mask = input_ids == self.config.video_token_id
+        image_mask, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_embeds, video_embeds)
 
-            n_video_tokens = video_mask.sum().item()
+        if image_embeds is not None:
 
-            n_video_features = video_embeds.shape[0]
-            if n_video_tokens != n_video_features:
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-
-            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(device)
+            image_embeds = image_embeds.to(device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+        
+        if video_embeds is not None:
 
             video_embeds = video_embeds.to(device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
@@ -3462,25 +3630,25 @@ class KeyeVL1_5ForConditionalGeneration(KeyeVL1_5PreTrainedModel, GenerationMixi
     @can_return_tuple
     @replace_return_docstrings(output_type=KeyeVL1_5CausalLMOutputWithPast, config_class="KeyeVL1_5Config")
     def forward(
-            self,
-            input_ids: torch.LongTensor = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[Cache] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            labels: Optional[torch.LongTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-            pixel_values: Optional[torch.FloatTensor] = None,
-            pixel_values_videos: Optional[torch.FloatTensor] = None,
-            image_grid_thw: Optional[torch.LongTensor] = None,
-            video_grid_thw: Optional[torch.LongTensor] = None,
-            rope_deltas: Optional[torch.LongTensor] = None,
-            cache_position: Optional[torch.LongTensor] = None,
-            num_frames: Optional[torch.LongTensor] = None,
-            **kwargs,
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        rope_deltas: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        num_frames: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[Tuple, KeyeVL1_5CausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -3583,19 +3751,19 @@ class KeyeVL1_5ForConditionalGeneration(KeyeVL1_5PreTrainedModel, GenerationMixi
         )
 
     def prepare_inputs_for_generation(
-            self,
-            input_ids: torch.LongTensor,
-            past_key_values: Optional[Cache] = None,
-            attention_mask: torch.FloatTensor = None,
-            inputs_embeds: torch.FloatTensor = None,
-            cache_position: torch.LongTensor = None,
-            position_ids: torch.LongTensor = None,
-            use_cache: bool = True,
-            pixel_values: torch.FloatTensor = None,
-            pixel_values_videos: torch.FloatTensor = None,
-            image_grid_thw: torch.LongTensor = None,
-            video_grid_thw: torch.LongTensor = None,
-            **kwargs,
+        self,
+        input_ids: torch.LongTensor,
+        past_key_values: Optional[Cache] = None,
+        attention_mask: torch.FloatTensor = None,
+        inputs_embeds: torch.FloatTensor = None,
+        cache_position: torch.LongTensor = None,
+        position_ids: torch.LongTensor = None,
+        use_cache: bool = True,
+        pixel_values: torch.FloatTensor = None,
+        pixel_values_videos: torch.FloatTensor = None,
+        image_grid_thw: torch.LongTensor = None,
+        video_grid_thw: torch.LongTensor = None,
+        **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
@@ -3624,9 +3792,9 @@ class KeyeVL1_5ForConditionalGeneration(KeyeVL1_5PreTrainedModel, GenerationMixi
         return model_inputs
 
     def _get_image_nums_and_video_nums(
-            self,
-            input_ids: Optional[torch.LongTensor],
-            inputs_embeds: Optional[torch.FloatTensor] = None,
+        self,
+        input_ids: Optional[torch.LongTensor],
+        inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> Tuple[torch.LongTensor, torch.LongTensor]:
         """
         Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
@@ -3764,13 +3932,16 @@ class KeyeVL1_5ForConditionalGeneration(KeyeVL1_5PreTrainedModel, GenerationMixi
 
 
 __all__ = [
-    "KeyeVL1_5ForConditionalGeneration",
-    "KeyeVL1_5VisionModel",
-    "KeyeVL1_5Model",
     "KeyeVL1_5Config",
-    "KeyeVL1_5PreTrainedModel",
-    "KeyeVL1_5Processor",
+    "KeyeVL1_5VisionConfig",
     "KeyeVL1_5TextConfig",
-    "KeyeVL1_5TextModel",
+    "KeyeVL1_5Processor",
     "KeyeVL1_5ImageProcessor",
+    "KeyeVL1_5ImageProcessorFast",
+    "KeyeVL1_5VideoProcessor",
+    "KeyeVL1_5PreTrainedModel",
+    "KeyeVL1_5VisionModel",
+    "KeyeVL1_5TextModel",
+    "KeyeVL1_5Model",
+    "KeyeVL1_5ForConditionalGeneration",
 ]
