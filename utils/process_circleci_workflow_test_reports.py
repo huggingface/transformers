@@ -33,6 +33,9 @@ if __name__ == "__main__":
     os.makedirs("outputs", exist_ok=True)
 
     workflow_summary = {}
+    workflow_repo_ids = {}
+    workflow_repo_ids_2 = []
+
     # for each job, download artifacts
     for job in jobs:
         project_slug = job["project_slug"]
@@ -45,13 +48,23 @@ if __name__ == "__main__":
             os.makedirs(f"outputs/{job['name']}", exist_ok=True)
 
             job_test_summaries = {}
+            job_repo_id_files = {}
             for artifact in job_artifacts:
-                if artifact["path"].startswith("reports/") and artifact["path"].endswith("/summary_short.txt"):
+
+                to_fetch1 = artifact["path"].startswith("reports/") and artifact["path"].endswith("/summary_short.txt")
+                to_fetch2 = artifact["path"].startswith("hub_repos/")
+                to_fetch = to_fetch1 or to_fetch2
+
+                if to_fetch:
                     node_index = artifact["node_index"]
                     url = artifact["url"]
                     r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
                     test_summary = r.text
-                    job_test_summaries[node_index] = test_summary
+
+                    if to_fetch1:
+                        job_test_summaries[node_index] = test_summary
+                    elif to_fetch2:
+                        job_repo_id_files[node_index] = test_summary
 
             summary = {}
             for node_index, node_test_summary in job_test_summaries.items():
@@ -62,13 +75,31 @@ if __name__ == "__main__":
                     elif line.startswith("FAILED "):
                         test = line[len("FAILED ") :].split()[0]
                         summary[test] = "failed"
+
+            repo_ids = []
+            for node_index, node_repo_ids in job_repo_id_files.items():
+                for line in node_repo_ids.splitlines():
+                    repo_ids.append(line)
+            repo_ids = sorted(set(repo_ids))
+
             # failed before passed
             summary = dict(sorted(summary.items(), key=lambda x: (x[1], x[0])))
             workflow_summary[job["name"]] = summary
 
+            workflow_repo_ids[job["name"]] = repo_ids
+            workflow_repo_ids_2.extend(repo_ids)
+
             # collected version
             with open(f"outputs/{job['name']}/test_summary.json", "w") as fp:
                 json.dump(summary, fp, indent=4)
+
+            with open(f"outputs/{job['name']}/repo_ids.json", "w") as fp:
+                json.dump(workflow_repo_ids, fp, indent=4)
+
+    workflow_repo_ids_2 = sorted(set(workflow_repo_ids_2))
+
+    with open(f"outputs/repo_ids.json", "w") as fp:
+        json.dump(workflow_repo_ids_2, fp, indent=4)
 
     new_workflow_summary = {}
     for job_name, job_summary in workflow_summary.items():

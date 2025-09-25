@@ -211,6 +211,7 @@ class CircleCIJob:
             {"store_test_results": {"path": "test-results"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
+            {"store_artifacts": {"path": "hub_repos"}},
             {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
