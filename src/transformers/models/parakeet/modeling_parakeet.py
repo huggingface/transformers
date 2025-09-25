@@ -686,6 +686,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
+    @torch.no_grad()
     def generate(
         self,
         input_features: torch.Tensor,
