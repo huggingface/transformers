@@ -66,7 +66,7 @@ if is_torchvision_available():
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
         }
         _TORCHVISION_OK = True
-    except Exception as e:
+    except (ImportError, ModuleNotFoundError, AttributeError) as e:
         logger.warning(
             "Torchvision is installed but failed to import (%s). "
             "Continuing without torchvision; image pipelines that require it "
