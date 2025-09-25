@@ -101,9 +101,9 @@ KEYS_TO_MODIFY_MAPPING = {
     "trunk.": "",
     "out_proj": "o_proj",
     "body.": "timm_model.",
-    "ff.0": "feed_forward.layer_norm",
-    "ff.1": "feed_forward.linear1",
-    "ff.3": "feed_forward.linear2",
+    "ff.0": "mlp.layer_norm",
+    "ff.1": "mlp.up_proj",
+    "ff.3": "mlp.down_proj",
 }
 
 
@@ -115,6 +115,7 @@ def replace_keys(state_dict):
     output_vision_encoder_mlps_pattern = r"vision_encoder.backbone.blocks.(\d+).mlp.layers.(\d+).*"
     output_vision_encoder_neck_pattern = r"vision_encoder.neck.convs.(\d+).conv"
     output_memory_encoder_projection_pattern = r"memory_encoder.o_proj.*"
+    memory_attention_pattern = r"memory_attention.*"
     output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
     output_memory_encoder_mask_downsampler_pattern = r"memory_encoder.mask_downsampler.encoder.(\d+).*"
     perceiver_resampler_patterns = {
@@ -149,6 +150,10 @@ def replace_keys(state_dict):
                 key = key.replace("layers.0", "proj_in")
             elif layer_nb == 1:
                 key = key.replace("layers.1", "proj_out")
+
+        if re.match(memory_attention_pattern, key):
+            key = key.replace("linear1", "mlp.up_proj")
+            key = key.replace("linear2", "mlp.down_proj")
 
         # mask_decoder.transformer.layers.0.mlp.layers.1.weight -> mask_decoder.transformer.layers.1.mlp.proj_out.weight
         if re.match(output_mask_decoder_mlps_pattern, key):

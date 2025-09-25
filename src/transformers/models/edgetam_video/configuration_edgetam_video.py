@@ -197,9 +197,9 @@ class EdgeTamVideoConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the memory attention.
         memory_attention_downsample_rate (`int`, *optional*, defaults to 1):
             The downsample rate for the attention layers.
-        memory_attention_feed_forward_hidden_size (`int`, *optional*, defaults to 2048):
+        memory_attention_mlp_hidden_size (`int`, *optional*, defaults to 2048):
             The dimension of the feedforward network in the memory attention module.
-        memory_attention_feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
+        memory_attention_mlp_hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in the feedforward network in the memory attention module.
         memory_attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout rate for the memory attention module.
@@ -217,8 +217,8 @@ class EdgeTamVideoConfig(PretrainedConfig):
             The number of 2D latent tokens in the perceiver resampler.
         perceiver_resampler_hidden_size (`int`, *optional*, defaults to 64):
             The hidden size of the perceiver resampler.
-        perceiver_resampler_ff_intermediate_size (`int`, *optional*, defaults to 256):
-            The intermediate size of the feed forward network in the perceiver resampler.
+        perceiver_resampler_mlp_intermediate_size (`int`, *optional*, defaults to 256):
+            The intermediate size of the feedforward network in the perceiver resampler.
         perceiver_resampler_num_attention_heads (`int`, *optional*, defaults to 1):
             The number of attention heads in the perceiver resampler.
         perceiver_resampler_attention_head_dim (`int`, *optional*, defaults to 64):
@@ -236,7 +236,7 @@ class EdgeTamVideoConfig(PretrainedConfig):
         mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
             The dimension of the mask downsampler embedding.
         memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
-            The intermediate dimension of the memory fuser feed forward network.
+            The intermediate dimension of the memory fuser feedforward network.
         mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the mask downsampler.
         mask_downsampler_stride (`int`, *optional*, defaults to 2):
@@ -319,8 +319,8 @@ class EdgeTamVideoConfig(PretrainedConfig):
         memory_attention_num_layers=2,
         memory_attention_num_attention_heads=1,
         memory_attention_downsample_rate=1,
-        memory_attention_feed_forward_hidden_size=2048,
-        memory_attention_feed_forward_hidden_act="relu",
+        memory_attention_mlp_hidden_size=2048,
+        memory_attention_mlp_hidden_act="relu",
         memory_attention_dropout=0.1,
         memory_attention_rope_theta=10000,
         memory_attention_rope_feat_sizes=None,
@@ -330,7 +330,7 @@ class EdgeTamVideoConfig(PretrainedConfig):
         perceiver_resampler_num_latents=256,
         perceiver_resampler_num_latents_2d=256,
         perceiver_resampler_hidden_size=64,
-        perceiver_resampler_ff_intermediate_size=256,
+        perceiver_resampler_mlp_intermediate_size=256,
         perceiver_resampler_num_attention_heads=1,
         perceiver_resampler_attention_head_dim=64,
         perceiver_resampler_num_layers=2,
@@ -395,8 +395,8 @@ class EdgeTamVideoConfig(PretrainedConfig):
         self.memory_attention_num_layers = memory_attention_num_layers
         self.memory_attention_num_attention_heads = memory_attention_num_attention_heads
         self.memory_attention_downsample_rate = memory_attention_downsample_rate
-        self.memory_attention_feed_forward_hidden_size = memory_attention_feed_forward_hidden_size
-        self.memory_attention_feed_forward_hidden_act = memory_attention_feed_forward_hidden_act
+        self.memory_attention_mlp_hidden_size = memory_attention_mlp_hidden_size
+        self.memory_attention_mlp_hidden_act = memory_attention_mlp_hidden_act
         self.memory_attention_dropout = memory_attention_dropout
         self.memory_attention_rope_theta = memory_attention_rope_theta
         self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
@@ -407,7 +407,7 @@ class EdgeTamVideoConfig(PretrainedConfig):
         self.perceiver_resampler_num_latents = perceiver_resampler_num_latents
         self.perceiver_resampler_num_latents_2d = perceiver_resampler_num_latents_2d
         self.perceiver_resampler_hidden_size = perceiver_resampler_hidden_size
-        self.perceiver_resampler_ff_intermediate_size = perceiver_resampler_ff_intermediate_size
+        self.perceiver_resampler_mlp_intermediate_size = perceiver_resampler_mlp_intermediate_size
         self.perceiver_resampler_attention_head_dim = perceiver_resampler_attention_head_dim
         self.perceiver_resampler_num_attention_heads = perceiver_resampler_num_attention_heads
         self.perceiver_resampler_num_layers = perceiver_resampler_num_layers

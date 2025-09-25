@@ -117,9 +117,9 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
             Number of attention heads for each attention layer in the memory attention.
         memory_attention_downsample_rate (`int`, *optional*, defaults to 1):
             The downsample rate for the attention layers.
-        memory_attention_feed_forward_hidden_size (`int`, *optional*, defaults to 2048):
+        memory_attention_mlp_hidden_size (`int`, *optional*, defaults to 2048):
             The dimension of the feedforward network in the memory attention module.
-        memory_attention_feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
+        memory_attention_mlp_hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in the feedforward network in the memory attention module.
         memory_attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout rate for the memory attention module.
@@ -137,8 +137,8 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
             The number of 2D latent tokens in the perceiver resampler.
         perceiver_resampler_hidden_size (`int`, *optional*, defaults to 64):
             The hidden size of the perceiver resampler.
-        perceiver_resampler_ff_intermediate_size (`int`, *optional*, defaults to 256):
-            The intermediate size of the feed forward network in the perceiver resampler.
+        perceiver_resampler_mlp_intermediate_size (`int`, *optional*, defaults to 256):
+            The intermediate size of the feedforward network in the perceiver resampler.
         perceiver_resampler_num_attention_heads (`int`, *optional*, defaults to 1):
             The number of attention heads in the perceiver resampler.
         perceiver_resampler_attention_head_dim (`int`, *optional*, defaults to 64):
@@ -156,7 +156,7 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
             The dimension of the mask downsampler embedding.
         memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
-            The intermediate dimension of the memory fuser feed forward network.
+            The intermediate dimension of the memory fuser feedforward network.
         mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the mask downsampler.
         mask_downsampler_stride (`int`, *optional*, defaults to 2):
@@ -239,8 +239,8 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         memory_attention_num_layers=2,
         memory_attention_num_attention_heads=1,
         memory_attention_downsample_rate=1,
-        memory_attention_feed_forward_hidden_size=2048,
-        memory_attention_feed_forward_hidden_act="relu",
+        memory_attention_mlp_hidden_size=2048,
+        memory_attention_mlp_hidden_act="relu",
         memory_attention_dropout=0.1,
         memory_attention_rope_theta=10000,
         memory_attention_rope_feat_sizes=None,
@@ -250,7 +250,7 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         perceiver_resampler_num_latents=256,
         perceiver_resampler_num_latents_2d=256,
         perceiver_resampler_hidden_size=64,
-        perceiver_resampler_ff_intermediate_size=256,
+        perceiver_resampler_mlp_intermediate_size=256,
         perceiver_resampler_num_attention_heads=1,
         perceiver_resampler_attention_head_dim=64,
         perceiver_resampler_num_layers=2,
@@ -315,8 +315,8 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         self.memory_attention_num_layers = memory_attention_num_layers
         self.memory_attention_num_attention_heads = memory_attention_num_attention_heads
         self.memory_attention_downsample_rate = memory_attention_downsample_rate
-        self.memory_attention_feed_forward_hidden_size = memory_attention_feed_forward_hidden_size
-        self.memory_attention_feed_forward_hidden_act = memory_attention_feed_forward_hidden_act
+        self.memory_attention_mlp_hidden_size = memory_attention_mlp_hidden_size
+        self.memory_attention_mlp_hidden_act = memory_attention_mlp_hidden_act
         self.memory_attention_dropout = memory_attention_dropout
         self.memory_attention_rope_theta = memory_attention_rope_theta
         self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
@@ -327,7 +327,7 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         self.perceiver_resampler_num_latents = perceiver_resampler_num_latents
         self.perceiver_resampler_num_latents_2d = perceiver_resampler_num_latents_2d
         self.perceiver_resampler_hidden_size = perceiver_resampler_hidden_size
-        self.perceiver_resampler_ff_intermediate_size = perceiver_resampler_ff_intermediate_size
+        self.perceiver_resampler_mlp_intermediate_size = perceiver_resampler_mlp_intermediate_size
         self.perceiver_resampler_attention_head_dim = perceiver_resampler_attention_head_dim
         self.perceiver_resampler_num_attention_heads = perceiver_resampler_num_attention_heads
         self.perceiver_resampler_num_layers = perceiver_resampler_num_layers
@@ -661,6 +661,21 @@ class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):
     pass
 
 
+class EdgeTamVideoMemoryAttentionMLP(nn.Module):
+    def __init__(self, config: EdgeTamVideoConfig):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.memory_attention_hidden_size
+        self.intermediate_size = config.memory_attention_mlp_hidden_size
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
+        self.dropout = nn.Dropout(config.memory_attention_dropout)
+        self.act_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
+
+    def forward(self, x):
+        return self.down_proj(self.dropout(self.act_fn(self.up_proj(x))))
+
+
 class EdgeTamVideoMemoryAttentionLayer(nn.Module):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
@@ -668,10 +683,8 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
         self.self_attn = EdgeTamVideoRoPESelfAttention(config)
         self.cross_attn_image = EdgeTamVideoRoPECrossAttention(config, kv_in_dim=64)
 
-        # Implementation of Feedforward model
-        self.linear1 = nn.Linear(hidden_size, config.memory_attention_feed_forward_hidden_size)
-        self.dropout = nn.Dropout(config.memory_attention_dropout)
-        self.linear2 = nn.Linear(config.memory_attention_feed_forward_hidden_size, hidden_size)
+        # MLP module
+        self.mlp = EdgeTamVideoMemoryAttentionMLP(config)
 
         self.layer_norm1 = nn.LayerNorm(hidden_size)
         self.layer_norm2 = nn.LayerNorm(hidden_size)
@@ -679,8 +692,6 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
         self.dropout1 = nn.Dropout(config.memory_attention_dropout)
         self.dropout2 = nn.Dropout(config.memory_attention_dropout)
         self.dropout3 = nn.Dropout(config.memory_attention_dropout)
-
-        self.activation = ACT2FN[config.memory_attention_feed_forward_hidden_act]
 
     def forward(
         self,
@@ -711,7 +722,7 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
         queries = queries + self.dropout2(query)
         # MLP
         query = self.layer_norm3(queries)
-        query = self.linear2(self.dropout(self.activation(self.linear1(query))))
+        query = self.mlp(query)
         queries = queries + self.dropout3(query)
         return queries
 
@@ -774,22 +785,20 @@ class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
         return normed_output
 
 
-class EdgeTamVideoPerceiverFeedForward(nn.Module):
+class EdgeTamVideoPerceiverMLP(nn.Module):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
-        hidden_size = config.perceiver_resampler_hidden_size
-        intermediate_size = config.perceiver_resampler_ff_intermediate_size
+        self.hidden_size = config.perceiver_resampler_hidden_size
+        self.intermediate_size = config.perceiver_resampler_mlp_intermediate_size
 
-        self.layer_norm = nn.LayerNorm(hidden_size)
-        self.linear1 = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.activation = nn.GELU()
-        self.linear2 = nn.Linear(intermediate_size, hidden_size, bias=False)
+        self.layer_norm = nn.LayerNorm(self.hidden_size)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = nn.GELU()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.linear1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.linear2(hidden_states)
+        hidden_states = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
         return hidden_states
 
 
@@ -866,11 +875,11 @@ class EdgeTamVideoPerceiverEncoderLayer(nn.Module):
         super().__init__()
 
         self.cross_attention = EdgeTamVideoPerceiverAttention(config)
-        self.feed_forward = EdgeTamVideoPerceiverFeedForward(config)
+        self.mlp = EdgeTamVideoPerceiverMLP(config)
         self.dropout = nn.Dropout(config.perceiver_resampler_hidden_dropout)
 
         self.self_attention = EdgeTamVideoPerceiverAttention(config)
-        self.self_feed_forward = EdgeTamVideoPerceiverFeedForward(config)
+        self.self_mlp = EdgeTamVideoPerceiverMLP(config)
 
         # Layer norms moved from attention classes to here
         self.layer_norm_input = nn.LayerNorm(config.perceiver_resampler_hidden_size)
@@ -894,8 +903,8 @@ class EdgeTamVideoPerceiverEncoderLayer(nn.Module):
         )
         latents = latents + self.dropout(cross_attention_output)
 
-        feed_forward_output = self.feed_forward(latents)
-        latents = latents + feed_forward_output
+        mlp_output = self.mlp(latents)
+        latents = latents + mlp_output
 
         # Self attention with layer norm
         normalized_latents_self = self.layer_norm_self(latents)
@@ -904,8 +913,8 @@ class EdgeTamVideoPerceiverEncoderLayer(nn.Module):
         )
         latents = latents + self_attention_output
 
-        self_feed_forward_output = self.self_feed_forward(latents)
-        latents = latents + self_feed_forward_output
+        self_mlp_output = self.self_mlp(latents)
+        latents = latents + self_mlp_output
 
         return latents
 

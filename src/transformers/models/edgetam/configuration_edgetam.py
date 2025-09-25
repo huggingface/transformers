@@ -317,8 +317,6 @@ class EdgeTamConfig(PretrainedConfig):
         if isinstance(vision_config, dict):
             vision_config["model_type"] = vision_config.get("model_type", "edgetam_vision_model")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif isinstance(vision_config, PretrainedConfig):
-            vision_config = vision_config
         if isinstance(prompt_encoder_config, EdgeTamPromptEncoderConfig):
             prompt_encoder_config = prompt_encoder_config.to_dict()
         if isinstance(mask_decoder_config, EdgeTamMaskDecoderConfig):
