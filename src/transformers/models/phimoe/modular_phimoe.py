@@ -314,7 +314,6 @@ class PhimoeRouter(nn.Linear):
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
             )
-        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = super().forward(hidden_states)
         return router_logits
 
@@ -341,7 +340,7 @@ class PhimoeSparseMoeBlock(nn.Module):
         self.gate = PhimoeRouter(config)
         self.experts = PhimoeExperts(config)
 
-    def route_tokens_to_experts(self, hidden_states, router_logits):
+    def route_tokens_to_experts(self, router_logits):
         routing_weights, selected_experts = sparsemixer(
             router_logits,
             jitter_eps=self.router_jitter_noise,
@@ -350,15 +349,12 @@ class PhimoeSparseMoeBlock(nn.Module):
         return routing_weights, selected_experts
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-
+        hidden_states = hidden_states.reshape(-1, hidden_dim)
         router_logits = self.gate(hidden_states)
-        routing_weights, selected_experts = self.route_tokens_to_experts(hidden_states, router_logits)
-        final_hidden_states = self.experts(
-            hidden_states.reshape(batch_size, sequence_length, hidden_dim), routing_weights, selected_experts
-        )
-        return final_hidden_states
+        routing_weights, selected_experts = self.route_tokens_to_experts(router_logits)
+        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
 class PhimoeDecoderLayer(MixtralDecoderLayer):
