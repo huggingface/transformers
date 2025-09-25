@@ -3312,7 +3312,7 @@ class Trainer:
 
         return is_new_best_metric
 
-    def _save_checkpoint(self, model, trial):
+    def _save_checkpoint(self, model, trial, save_latest=True):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
         # assert unwrap_model(model) is self.model, "internal model should be a reference to self.model"
@@ -3362,6 +3362,10 @@ class Trainer:
         if self.args.should_save:
             # we use mtime as default, filesystems without mtime support will be detected in `_sorted_checkpoints`
             self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+
+        if save_latest and self.is_world_process_zero():
+            with open(os.path.join(run_dir, "latest"), "w") as fd:
+                fd.write(checkpoint_folder)
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
