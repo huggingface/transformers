@@ -621,5 +621,5 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         self.assertIsInstance(processor, ConditionalDetrImageProcessor)
         self.assertIn("max_size", cl.out)
         self.assertIn("deprecated", cl.out)
-        self.assertIn("shortest_edge", cl.out)
-        self.assertIn("longest_edge", cl.out)
+        self.assertIn("v4.26", cl.out)
+        self.assertIn("size['longest_edge']", cl.out)
