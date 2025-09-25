@@ -135,14 +135,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
 
-        module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Params4bit):
-            # Add here check for loaded components' dtypes once serialization is implemented
-            return True
-        elif isinstance(module, bnb.nn.Linear4bit) and tensor_name == "bias":
-            return True
-        else:
-            return False
+        module, name = get_module_from_name(model, param_name)
+        return isinstance(module, bnb.nn.Linear4bit) and name != "bias"
 
     def create_quantized_param(
         self,
@@ -158,45 +152,14 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         import bitsandbytes as bnb
 
         module, tensor_name = get_module_from_name(model, param_name)
-
-        if tensor_name not in module._parameters:
-            raise ValueError(f"{module} does not have a parameter or a buffer named {tensor_name}.")
-
         old_value = getattr(module, tensor_name)
 
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
         if isinstance(target_device, int) and is_torch_npu_available():
             target_device = f"npu:{target_device}"
-        if tensor_name == "bias":
-            if param_value is None:
-                new_value = old_value.to(target_device)
-            else:
-                new_value = param_value.to(target_device)
 
-            new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad)
-            module._parameters[tensor_name] = new_value
-            return
-
-        if not isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
-            raise ValueError("this function only loads `Linear4bit components`")
-        if (
-            old_value.device == torch.device("meta")
-            and target_device not in ["meta", torch.device("meta")]
-            and param_value is None
-        ):
-            raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {target_device}.")
-
-        # construct `new_value` for the module._parameters[tensor_name]:
+        # construct `new_value` for the module._parameters[tensor_name]
         if self.pre_quantized:
-            # 4bit loading. Collecting components for restoring quantized weight
-            # This can be expanded to make a universal call for any quantized weight loading
-
-            if not self.is_serializable:
-                raise ValueError(
-                    "Detected int4 weights but the version of bitsandbytes is not compatible with int4 serialization. "
-                    "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
-                )
-
             if (param_name + ".quant_state.bitsandbytes__fp4" not in state_dict) and (
                 param_name + ".quant_state.bitsandbytes__nf4" not in state_dict
             ):
@@ -304,7 +267,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         model = replace_with_bnb_linear(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
-        # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
 
         model.config.quantization_config = self.quantization_config
 
