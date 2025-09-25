@@ -2529,6 +2529,7 @@ class Trainer:
 
         self.state.epoch = 0
         start_time = time.time()
+        initial_num_input_tokens_seen_for_session = self.state.num_input_tokens_seen
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
 
@@ -3785,7 +3786,8 @@ class Trainer:
         if self.args.include_num_input_tokens_seen != "no":
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
             if start_time is not None:
-                logs.update(speed_metrics("train", start_time, num_tokens=self.state.num_input_tokens_seen))
+                current_session_num_tokens = self.state.num_input_tokens_seen - initial_num_input_tokens_seen_for_session
+                logs.update(speed_metrics("train", start_time, num_tokens=current_session_num_tokens))
 
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
