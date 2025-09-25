@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Blt model."""
 
-import tempfile
 import unittest
 
 import pytest
@@ -22,13 +21,10 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     cleanup,
-    is_flaky,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -249,6 +245,14 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 
+    @unittest.skip("BLT does not support flash attention")
+    def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
+        pass
+
+    @unittest.skip("BLT does not support flash attention dispatch")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         """Override rope scaling from config test to handle Blt's sub-config structure."""
@@ -287,50 +291,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @is_flaky()
-    @slow
-    def test_flash_attn_2_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(reason="Model does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16, attn_implementation="eager")
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model_class.main_input_name]
-                dummy_input = dummy_input.to(torch_device)
-                outputs = model(dummy_input, output_hidden_states=True)
-                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_fa = outputs_fa.hidden_states[-1]
-                # Use higher tolerance for BLT model due to numerical precision differences in flash attention
-                torch.testing.assert_close(logits_fa, logits, atol=1e-1, rtol=1e-1)
-
-    def flash_attn_inference_equivalence(
-        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
-    ):
-        # Use higher tolerance for BLT model due to numerical precision differences in flash attention
-        super().flash_attn_inference_equivalence(
-            attn_implementation,
-            padding_side,
-            atol=1e-1,  # Increase from default 4e-2 to handle BLT's numerical differences
-            rtol=1e-1,  # Increase from default 4e-2 to handle BLT's numerical differences
-        )
 
 
 @require_torch_accelerator

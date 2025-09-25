@@ -426,8 +426,8 @@ class BltPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BltTransformerLayer"]
     _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
+    _supports_flash_attn = False
+    _supports_flex_attn = False
     _supports_attention_backend = False
     _can_record_outputs = {
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
@@ -974,7 +974,7 @@ def _prepare_patch_cross_attention_mask(
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor]:
-            - cross_attention_mask: 4D tensor [batch_size, 1, q_len, kv_len] or 2D [batch_size, q_len] for flash attention
+            - cross_attention_mask: 4D tensor [batch_size, 1, q_len, kv_len]
     """
     batch_size, seq_len = patch_ids.shape
     device = patch_ids.device
@@ -1015,24 +1015,17 @@ def _prepare_patch_cross_attention_mask(
             f"Cross attention mask shape {cross_attention_mask.shape} doesn't match expected {expected_shape}"
         )
 
-    if "flash" in attn_implementation:
-        cross_attention_mask = cross_attention_mask.unsqueeze(1)
-        flash_mask = cross_attention_mask.to(dtype)
+    # Reshape so it can be used by attn module - add head dimension
+    cross_attention_mask = cross_attention_mask.unsqueeze(1)  # [batch_size, 1, q_len, kv_len]
 
-        flash_mask = flash_mask.squeeze(1).any(dim=1).to(dtype)
-        return flash_mask
-    else:
-        # Reshape so it can be used by attn module - add head dimension
-        cross_attention_mask = cross_attention_mask.unsqueeze(1)  # [batch_size, 1, q_len, kv_len]
+    # Invert the mask (following mllama pattern exactly)
+    # True -> 0.0 (attend), False -> 1.0 (will become -inf)
+    inverted_cross_attn_mask = 1.0 - cross_attention_mask.to(dtype)
+    cross_attention_mask = inverted_cross_attn_mask.masked_fill(
+        inverted_cross_attn_mask.to(torch.bool), torch.finfo(dtype).min
+    )
 
-        # Invert the mask (following mllama pattern exactly)
-        # True -> 0.0 (attend), False -> 1.0 (will become -inf)
-        inverted_cross_attn_mask = 1.0 - cross_attention_mask.to(dtype)
-        cross_attention_mask = inverted_cross_attn_mask.masked_fill(
-            inverted_cross_attn_mask.to(torch.bool), torch.finfo(dtype).min
-        )
-
-        return cross_attention_mask
+    return cross_attention_mask
 
 
 class BltModel(BltPreTrainedModel):
