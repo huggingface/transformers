@@ -380,6 +380,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    call_only_args = ["images", "segmentation_maps"]
 
     valid_kwargs = Sam2FastImageProcessorKwargs
 
