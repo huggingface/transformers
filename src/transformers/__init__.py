@@ -602,22 +602,6 @@ if TYPE_CHECKING:
     from .generation import TemperatureLogitsWarper as TemperatureLogitsWarper
     from .generation import TextIteratorStreamer as TextIteratorStreamer
     from .generation import TextStreamer as TextStreamer
-    from .generation import TFForcedBOSTokenLogitsProcessor as TFForcedBOSTokenLogitsProcessor
-    from .generation import TFForcedEOSTokenLogitsProcessor as TFForcedEOSTokenLogitsProcessor
-    from .generation import TFForceTokensLogitsProcessor as TFForceTokensLogitsProcessor
-    from .generation import TFGenerationMixin as TFGenerationMixin
-    from .generation import TFLogitsProcessor as TFLogitsProcessor
-    from .generation import TFLogitsProcessorList as TFLogitsProcessorList
-    from .generation import TFLogitsWarper as TFLogitsWarper
-    from .generation import TFMinLengthLogitsProcessor as TFMinLengthLogitsProcessor
-    from .generation import TFNoBadWordsLogitsProcessor as TFNoBadWordsLogitsProcessor
-    from .generation import TFNoRepeatNGramLogitsProcessor as TFNoRepeatNGramLogitsProcessor
-    from .generation import TFRepetitionPenaltyLogitsProcessor as TFRepetitionPenaltyLogitsProcessor
-    from .generation import TFSuppressTokensAtBeginLogitsProcessor as TFSuppressTokensAtBeginLogitsProcessor
-    from .generation import TFSuppressTokensLogitsProcessor as TFSuppressTokensLogitsProcessor
-    from .generation import TFTemperatureLogitsWarper as TFTemperatureLogitsWarper
-    from .generation import TFTopKLogitsWarper as TFTopKLogitsWarper
-    from .generation import TFTopPLogitsWarper as TFTopPLogitsWarper
     from .generation import TopHLogitsWarper as TopHLogitsWarper
     from .generation import TopKLogitsWarper as TopKLogitsWarper
     from .generation import TopPLogitsWarper as TopPLogitsWarper
