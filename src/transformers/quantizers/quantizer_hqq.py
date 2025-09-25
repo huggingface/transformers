@@ -35,8 +35,8 @@ if is_hqq_available():
     # but some models attempt to access `weight.dtype` during the forward pass. To prevent runtime errors,
     # we patch HQQLinear with a dummy `weight` property that returns an empty tensor with the correct dtype and device.
     @property
-    def weight(_self):
-        return torch.empty(0, dtype=_self.compute_dtype, device=_self.device)
+    def weight(self):
+        return torch.empty(0, dtype=self.compute_dtype, device=self.device)
 
     HQQLinear.weight = weight
 
