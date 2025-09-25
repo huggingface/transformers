@@ -17,7 +17,7 @@ import json
 import math
 import os
 import re
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -44,7 +44,7 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
-            "padding_side": "right",
+            "padding_side": "left",
             "add_special_tokens": False,
         },
         "audio_kwargs": {
@@ -90,6 +90,13 @@ class VibeVoiceProcessor(ProcessorMixin):
         self.speech_tok_compress_ratio = speech_tok_compress_ratio
         self.db_normalize = db_normalize
         self.system_prompt = " Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n"
+        
+        # Pre-compute common token sequences for efficiency
+        self._prompt_tokens = self.tokenizer.encode(self.system_prompt)
+        self._voice_input_tokens = self.tokenizer.encode(' Voice input:\n', add_special_tokens=False)
+        self._text_input_tokens = self.tokenizer.encode(' Text input:\n', add_special_tokens=False)
+        self._speech_output_tokens = self.tokenizer.encode(' Speech output:\n', add_special_tokens=False)
+        self._newline_tokens = self.tokenizer.encode('\n', add_special_tokens=False)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
@@ -217,7 +224,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             ["audio3", "audio2"],
         ]
         ```
-        would result in `['audio1', 'audio2', 'audio3', 'audio4']`. Therefore, speaker IDs should be
+        would result group the unique audio into `['audio1', 'audio2', 'audio3', 'audio4']`. Therefore, speaker IDs should be
         in order of appearance across all scripts.
 
         Args:
@@ -280,101 +287,129 @@ class VibeVoiceProcessor(ProcessorMixin):
 
         # Handle voice samples
         # -- List of lists for each script, which is flattened to set of voice samples for the whole batch
-        processed_audio = None
+        processed_audio = {
+            "speech_tensors": None,
+            "speech_masks": None,
+            "audio_select_mask": None,
+        }
         if voice_samples is not None:
             voice_samples_list = [make_list_of_audio(_voices) for _voices in voice_samples]
             if len(texts) != len(voice_samples_list):
                 raise ValueError(f"Got {len(texts)} texts but {len(voice_samples)} audio lists; they must match 1:1.")
 
-            # With duplicates
-            voices = [voice for _voices in voice_samples_list for voice in _voices]
-            processed_audio = self.audio_processor(voices, **audio_kwargs)
-
-            # # TODO switch to below to avoid processing duplicate audio samples
-            # # check correct number of samples per script, and extract audio for unique speakers
-            # speaker_to_audio = {}
-            # for speakers, audios in zip(speakers_per_script, voice_samples_list):
-            #     if len(speakers) != len(audios):
-            #         raise ValueError(f"Got {len(speakers)} speakers but {len(audios)} audio samples; they must match 1:1.")
-            #     for _speaker, _audio in zip(speakers, audios):
-            #         if _speaker not in speaker_to_audio:
-            #             speaker_to_audio[_speaker] = _audio
-            # unique_audio = [speaker_to_audio[spk] for spk in sorted(speaker_to_audio)]
+            # TODO switch to below to avoid processing duplicate audio samples
+            # check correct number of samples per script, and extract audio for unique speakers
+            speaker_to_audio = {}
+            for speakers, audios in zip(speakers_per_script, voice_samples_list):
+                if len(speakers) != len(audios):
+                    raise ValueError(f"Got {len(speakers)} speakers but {len(audios)} audio samples; they must match 1:1.")
+                for _speaker, _audio in zip(speakers, audios):
+                    if _speaker not in speaker_to_audio:
+                        speaker_to_audio[_speaker] = _audio
+            unique_audio = [speaker_to_audio[spk] for spk in sorted(speaker_to_audio)]
 
             # # Process audio samples
             # processed_audio = self.audio_processor(unique_audio, **audio_kwargs)
+            # processed_audio["speech_tensors"] = processed_audio.pop("audio")
+
+            # With duplicates
+            voices = [voice for _voices in voice_samples_list for voice in _voices]
+            processed_audio = self.audio_processor(voices, **audio_kwargs)
+            processed_audio["speech_tensors"] = processed_audio.pop("audio")
 
             # Create speech masks for audio tokenizer based on its compression ratio
             padding_masks = processed_audio["padding_mask"]
-            if isinstance(padding_masks, torch.Tensor):
-                vae_tok_seqlens = torch.ceil(padding_masks.sum(dim=-1) / self.speech_tok_compress_ratio).int().tolist()
-                speech_masks = torch.zeros((len(padding_masks), max(vae_tok_seqlens)), dtype=torch.bool)
-            else:
-                vae_tok_seqlens = np.ceil(np.sum(padding_masks, axis=-1) / self.speech_tok_compress_ratio).astype(int).tolist()
-                speech_masks = np.zeros((len(padding_masks), max(vae_tok_seqlens)), dtype=np.bool_)
+            vae_tok_seqlens = torch.ceil(padding_masks.sum(dim=-1) / self.speech_tok_compress_ratio).int().tolist()
+            speech_masks = torch.zeros((len(padding_masks), max(vae_tok_seqlens)), dtype=torch.bool)
             for i, seq_len in enumerate(vae_tok_seqlens):
                 speech_masks[i, :seq_len] = True
-        
+            processed_audio["speech_masks"] = speech_masks
+            del processed_audio["padding_mask"]
+
+            # TODO would like to expand like this for proper batch dim
+            # batch_size = len(texts)
+            # batch_encoding["speech_tensors"] = processed_audio["audio"].unsqueeze(0).expand(batch_size, -1, -1) 
+            # batch_encoding["speech_masks"] = speech_masks.unsqueeze(0).expand(batch_size, -1, -1) 
+
+            # Create mask to know which audio is used by a particular script
+            audio_select_mask = np.zeros((len(scripts), len(speaker_to_audio)), dtype=np.bool_)
+            for i, speakers in enumerate(speakers_per_script):
+                for spk in speakers:
+                    audio_select_mask[i, spk] = True
+            processed_audio["audio_select_mask"] = audio_select_mask
+            processed_audio = BatchFeature(data=processed_audio, tensor_type=return_tensors)
         else:
             voice_samples_list = [None] * len(texts)
 
         # Build full token sequence for each script
+        # Pre-compute speaker prefixes for unique speaker IDs (vectorized)
+        all_speaker_ids = set()
+        for speakers in speakers_per_script:
+            all_speaker_ids.update(speakers)
+        speaker_prefix_cache = {
+            spk_id: self.tokenizer.encode(f" Speaker {spk_id}:", add_special_tokens=False)
+            for spk_id in all_speaker_ids
+        }
+
         input_ids = []
         speech_input_masks = []
-        prompt_tokens = self.tokenizer.encode(self.system_prompt)
+        
         for i, _script in enumerate(scripts):
+            # Initialize with prompt
+            full_tokens = self._prompt_tokens.copy()
+            speech_input_mask = [False] * len(self._prompt_tokens)
 
-            # Add voice token and masks if audio provided
-            voice_tokens, voice_speech_masks = [], []
+            # Add voice section if audio provided
             if processed_audio is not None:
                 script_speakers = speakers_per_script[i]
 
-                voice_speech_padding = processed_audio["padding_mask"][script_speakers]
+                # Add voice input header
+                full_tokens.extend(self._voice_input_tokens)
+                speech_input_mask.extend([False] * len(self._voice_input_tokens))
 
-                # prepare speech tokens
-                voice_tokens = self.tokenizer.encode(' Voice input:\n', add_special_tokens=False)
-                voice_speech_masks = [False] * len(voice_tokens)
-
-                for speaker_id, padding_mask in zip(script_speakers, voice_speech_padding):
-                    prefix_tokens = self.tokenizer.encode(f" Speaker {speaker_id}:", add_special_tokens=False)
-
-                    # Calculate token length based on compression ratio
-                    vae_tok_len = math.ceil(padding_mask.sum() / self.speech_tok_compress_ratio)
-
-                    # Build tokens and masks
+                # Build speaker voice tokens
+                vae_tok_lens = processed_audio["speech_masks"][script_speakers].sum(dim=-1).int().tolist()
+                for speaker_id, vae_tok_len in zip(script_speakers, vae_tok_lens):
+                    prefix_tokens = speaker_prefix_cache[speaker_id]
+                    
+                    # Build tokens in one go
                     speaker_tokens = (prefix_tokens +
                                     [self.tokenizer.speech_start_id] +
                                     [self.tokenizer.speech_diffusion_id] * vae_tok_len +
                                     [self.tokenizer.speech_end_id] +
-                                    self.tokenizer.encode('\n', add_special_tokens=False))
-
+                                    self._newline_tokens)
+                    
+                    # Build mask in one go
                     vae_input_mask = ([False] * len(prefix_tokens) +
-                                    [False] +
-                                    [True] * vae_tok_len +
-                                    [False] +
-                                    [False])
+                                    [False] +  # speech_start_id
+                                    [True] * vae_tok_len +  # speech tokens  
+                                    [False] +  # speech_end_id
+                                    [False] * len(self._newline_tokens))
 
-                    voice_tokens.extend(speaker_tokens)
-                    voice_speech_masks.extend(vae_input_mask)
-            full_tokens = prompt_tokens + voice_tokens
-            speech_input_mask = [False] * len(prompt_tokens) + voice_speech_masks
+                    full_tokens.extend(speaker_tokens)
+                    speech_input_mask.extend(vae_input_mask)
 
             # Add text input section
-            full_tokens += self.tokenizer.encode(' Text input:\n', add_special_tokens=False)
-            speech_input_mask += [False] * len(self.tokenizer.encode(' Text input:\n', add_special_tokens=False))
-            for speaker_id, speaker_text in _script:
-                speaker_text_tokens = self.tokenizer.encode(f" Speaker {speaker_id}:{speaker_text}\n", add_special_tokens=False)
-                full_tokens += speaker_text_tokens
-                speech_input_mask += [False] * len(speaker_text_tokens)
+            full_tokens.extend(self._text_input_tokens)
+            speech_input_mask.extend([False] * len(self._text_input_tokens))
+            
+            # Batch encode all speaker text at once
+            speaker_texts = [f" Speaker {speaker_id}:{speaker_text}\n" for speaker_id, speaker_text in _script]
+            if speaker_texts:
+                # Encode all speaker texts in one call
+                all_speaker_tokens = [self.tokenizer.encode(text, add_special_tokens=False) for text in speaker_texts]
+                for speaker_tokens in all_speaker_tokens:
+                    full_tokens.extend(speaker_tokens)
+                    speech_input_mask.extend([False] * len(speaker_tokens))
 
             # Add speech output section
-            full_tokens += self.tokenizer.encode(' Speech output:\n', add_special_tokens=False) + [self.tokenizer.speech_start_id]
-            speech_input_mask += [False] * (len(self.tokenizer.encode(' Speech output:\n', add_special_tokens=False)) + 1)
+            full_tokens.extend(self._speech_output_tokens + [self.tokenizer.speech_start_id])
+            speech_input_mask.extend([False] * (len(self._speech_output_tokens) + 1))
 
             input_ids.append(full_tokens)
             speech_input_masks.append(speech_input_mask)
         
-        # Pad/truncate for batch
+        # Pad/truncate tokenizer input for batch
         batch_encoding = self.tokenizer.pad(
             BatchFeature({"input_ids": input_ids, "speech_input_mask": speech_input_masks}),
             padding=padding,
@@ -383,18 +418,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             return_tensors=return_tensors,
             return_attention_mask=return_attention_mask,
         )
-
-        if processed_audio is not None:
-            batch_encoding["speech_tensors"] = processed_audio["audio"]
-            batch_encoding["speech_masks"] = speech_masks
-
-            # TODO would like to expand like this for proper batch dim
-            # batch_size = len(texts)
-            # batch_encoding["speech_tensors"] = processed_audio["audio"].unsqueeze(0).expand(batch_size, -1, -1) 
-            # batch_encoding["speech_masks"] = speech_masks.unsqueeze(0).expand(batch_size, -1, -1) 
-        else:
-            batch_encoding["speech_tensors"] = None
-            batch_encoding["speech_masks"] = None
+        batch_encoding.update(processed_audio)
 
         return batch_encoding
 
@@ -440,14 +464,14 @@ class VibeVoiceProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to VibeVoiceTextTokenizer's [`~PreTrainedTokenizer.batch_decode`].
+        This method forwards all its arguments to VibeVoiceTokenizer's [`~PreTrainedTokenizer.batch_decode`].
         Please refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to VibeVoiceTextTokenizer's [`~PreTrainedTokenizer.decode`].
+        This method forwards all its arguments to VibeVoiceTokenizer's [`~PreTrainedTokenizer.decode`].
         Please refer to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
