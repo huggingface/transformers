@@ -5786,7 +5786,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys = [key for key in missing_keys if ignore_missing_regex.search(key) is None]
 
         # Clean-up unexpected keys
-        if ignore_missing_regex is not None:
+        if ignore_unexpected_regex is not None:
             unexpected_keys = [key for key in unexpected_keys if ignore_unexpected_regex.search(key) is None]
 
         # Note: only the unexpected keys should remove the added prefix here, to correctly display the original name
