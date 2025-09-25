@@ -97,7 +97,6 @@ Minitron is released under the [NVIDIA Open Model License Agreement](https://dev
 | :------------- | :------------- | :------------- | :------------- | :------------- |
 | 75.0 | 74.0 | 24.1  | 50.9 | 29.5
 
-
 *Code generation performance*. Evaluated using [HumanEval](https://github.com/openai/human-eval):
 
 | p@1, 0-Shot |
@@ -109,6 +108,7 @@ Please refer to our [paper](https://huggingface.co/papers/2407.14679) for the fu
 ### Citation
 
 If you find our work helpful, please consider citing our paper:
+
 ```
 @article{minitron2024,
       title={Compact Language Models via Pruning and Knowledge Distillation},
@@ -123,12 +123,10 @@ If you find our work helpful, please consider citing our paper:
 
 [[autodoc]] NemotronConfig
 
-
 ## NemotronModel
 
 [[autodoc]] NemotronModel
     - forward
-
 
 ## NemotronForCausalLM
 
@@ -140,12 +138,10 @@ If you find our work helpful, please consider citing our paper:
 [[autodoc]] NemotronForSequenceClassification
     - forward
 
-
 ## NemotronForQuestionAnswering
 
 [[autodoc]] NemotronForQuestionAnswering
     - forward
-
 
 ## NemotronForTokenClassification
 

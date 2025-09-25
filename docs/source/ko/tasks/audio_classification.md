@@ -187,8 +187,6 @@ MinDS-14 데이터 세트의 샘플링 속도는 8khz이므로(이 정보는 [�
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)을 살펴보세요!
@@ -247,8 +245,6 @@ MinDS-14 데이터 세트의 샘플링 속도는 8khz이므로(이 정보는 [�
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -289,8 +285,6 @@ For a more in-depth example of how to finetune a model for audio classification,
 
 원하는 경우 `pipeline`의 결과를 수동으로 복제할 수도 있습니다:
 
-<frameworkcontent>
-<pt>
 특징 추출기를 가져와서 오디오 파일을 전처리하고 `입력`을 PyTorch 텐서로 반환합니다:
 
 ```py
@@ -320,5 +314,3 @@ For a more in-depth example of how to finetune a model for audio classification,
 >>> predicted_label
 'cash_deposit'
 ```
-</pt>
-</frameworkcontent>

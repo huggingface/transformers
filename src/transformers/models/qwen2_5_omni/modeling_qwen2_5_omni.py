@@ -3040,7 +3040,7 @@ class DiTTimestepEmbedding(nn.Module):
         self.time_embed = SinusPositionEmbedding(freq_embed_dim)
         self.time_mlp = nn.ModuleList([nn.Linear(freq_embed_dim, dim), nn.SiLU(), nn.Linear(dim, dim)])
 
-    def forward(self, timestep):  # noqa: F821
+    def forward(self, timestep):
         time_hidden = self.time_embed(timestep)
         time_hidden = time_hidden.to(timestep.dtype)
         for layer in self.time_mlp:

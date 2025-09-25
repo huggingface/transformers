@@ -402,6 +402,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["VideoMAEEmbeddings", "VideoMAELayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -414,8 +415,6 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv3d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()

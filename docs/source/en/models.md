@@ -45,7 +45,6 @@ There are two general types of models you can load:
 1. A barebones model, like [`AutoModel`] or [`LlamaModel`], that outputs hidden states.
 2. A model with a specific *head* attached, like [`AutoModelForCausalLM`] or [`LlamaForCausalLM`], for performing specific tasks.
 
-
 ## Model classes
 
 To get a pretrained model, you need to load the weights into the model. This is done by calling [`~PreTrainedModel.from_pretrained`] which accepts weights from the Hugging Face Hub or a local directory.
@@ -110,7 +109,6 @@ Large pretrained models require a lot of memory to load. The loading process inv
 You need enough memory to hold two copies of the model weights (random and pretrained) which may not be possible depending on your hardware. In distributed training environments, this is even more challenging because each process loads a pretrained model.
 
 Transformers reduces some of these memory-related challenges with fast initialization, sharded checkpoints, Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature, and supporting lower bit data types.
-
 
 ### Sharded checkpoints
 

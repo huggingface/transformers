@@ -316,6 +316,27 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
+    def test_question_answering_model(self):
+        if self.model_tester.question_answering_class is None:
+            self.skipTest("Model does not support question answering")
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        model = self.model_tester.question_answering_class(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask)
+        self.assertEqual(
+            result.start_logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
+        )
+        self.assertEqual(
+            result.end_logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
+        )
+
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         """
@@ -497,7 +518,7 @@ def _config_supports_rope_scaling(config: PretrainedConfig) -> bool:
     # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
     main_config_has_rope = hasattr(config, "rope_scaling") or hasattr(config, "rope_theta")
     sub_config_has_rope = any(
-        hasattr(config[sub_config], "rope_scaling") or hasattr(config[sub_config], "rope_theta")
+        hasattr(getattr(config, sub_config), "rope_scaling") or hasattr(getattr(config, sub_config), "rope_theta")
         for sub_config in config.sub_configs.keys()
     )
     return main_config_has_rope or sub_config_has_rope

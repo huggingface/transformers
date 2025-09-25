@@ -81,12 +81,10 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 [[autodoc]] HGNetV2Config
 
-
 ## HGNetV2Backbone
 
 [[autodoc]] HGNetV2Backbone
     - forward
-
 
 ## HGNetV2ForImageClassification
 

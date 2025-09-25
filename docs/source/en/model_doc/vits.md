@@ -156,4 +156,3 @@ Audio(waveform, rate=model.config.sampling_rate)
 
 [[autodoc]] VitsModel
 - forward
-

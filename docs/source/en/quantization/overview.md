@@ -34,7 +34,7 @@ Use the Space below to help you pick a quantization method depending on your har
 | [GGUF / GGML (llama.cpp)](../gguf)        | 🟢                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🟢              | 🔴              | 1/8          | 🔴               | [See Notes](../gguf)     | [See Notes](../gguf) | https://github.com/ggerganov/llama.cpp      |
 | [GPTQModel](./gptq)                       | 🔴                   | 🟢 | 🟢        | 🟢        | 🟢                                 | 🟢 | 🔴              | 2/3/4/8      | 🟢               | 🟢                          | 🟢                      | https://github.com/ModelCloud/GPTQModel        |
 | [AutoGPTQ](./gptq)                        | 🔴                   | 🔴              | 🟢        | 🟢        | 🔴                                 | 🔴              | 🔴              | 2/3/4/8      | 🟢               | 🟢                          | 🟢                      | https://github.com/AutoGPTQ/AutoGPTQ        |
-| [HIGGS](./higgs)                          | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 2/4          | 🔴               | 🟢                          | 🟢                      | https://github.com/HanGuo97/flute           |       
+| [HIGGS](./higgs)                          | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 2/4          | 🔴               | 🟢                          | 🟢                      | https://github.com/HanGuo97/flute           |
 | [HQQ](./hqq)                              | 🟢                   | 🟢              | 🟢        | 🔴        | 🔴                                 | 🟢              | 🟢              | 1/8          | 🟢               | 🔴                          | 🟢                      | https://github.com/mobiusml/hqq/            |
 | [optimum-quanto](./quanto)                | 🟢                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🟢              | 🟢              | 2/4/8        | 🔴               | 🔴                          | 🟢                      | https://github.com/huggingface/optimum-quanto       |
 | [FBGEMM_FP8](./fbgemm_fp8)                | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🔴              | 8            | 🔴               | 🟢                          | 🟢                      | https://github.com/pytorch/FBGEMM       |
@@ -53,7 +53,7 @@ If you are new to quantization, we recommend checking out these beginner-friendl
 
 ## User-Friendly Quantization Tools
 
-If you are looking for a user-friendly quantization experience, you can use the following community spaces and notebooks: 
+If you are looking for a user-friendly quantization experience, you can use the following community spaces and notebooks:
 
 * [Bitsandbytes Space](https://huggingface.co/spaces/bnb-community/bnb-my-repo)
 * [GGUF Space](https://huggingface.co/spaces/ggml-org/gguf-my-repo)

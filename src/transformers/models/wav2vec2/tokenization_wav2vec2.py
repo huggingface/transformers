@@ -30,9 +30,6 @@ from ...utils import (
     PaddingStrategy,
     TensorType,
     add_end_docstrings,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
     logging,
     to_py_obj,
 )
@@ -42,12 +39,7 @@ logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
-    if is_tf_available():
-        import tensorflow as tf
-    if is_flax_available():
-        import jax.numpy as jnp  # noqa: F401
+    import torch
 
 
 VOCAB_FILES_NAMES = {
@@ -80,7 +72,6 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             verbose (`bool`, *optional*, defaults to `True`):
@@ -457,7 +448,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
     # because we need docs for `output_char_offsets` here
     def batch_decode(
         self,
-        sequences: Union[list[int], list[list[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         output_char_offsets: bool = False,
@@ -468,7 +459,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
-            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
+            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
@@ -527,7 +518,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
     # and `output_word_offsets` here
     def decode(
         self,
-        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         output_char_offsets: bool = False,
@@ -541,7 +532,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.

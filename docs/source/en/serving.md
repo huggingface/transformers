@@ -356,7 +356,6 @@ ResponseCompletedEvent(response=Response(id='resp_req_0', created_at=1754060400.
 </hfoption>
 </hfoptions>
 
-
 ## MCP integration
 
 The `transformers serve` server is also an MCP client, so it can interact with MCP tools in agentic use cases. This, of course, requires the use of an LLM that is designed to use tools.
@@ -382,7 +381,6 @@ transformers serve \
   --attn_implementation sdpa_paged
 ```
 
-
 ### Performance tips
 
 - Use an efficient attention backend when available:
@@ -401,5 +399,3 @@ transformers serve \
 - `--load_in_4bit`/`--load_in_8bit` can reduce memory footprint for LoRA setups
 
 - `--force-model <repo_id>` avoids per-request model hints and helps produce stable, repeatable runs
-
-

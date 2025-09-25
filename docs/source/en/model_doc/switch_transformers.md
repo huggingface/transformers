@@ -27,7 +27,6 @@ rendered properly in your Markdown viewer.
 
 You can find all the original Switch Transformers checkpoints under the [Switch Transformer](https://huggingface.co/collections/google/switch-transformers-release-6548c35c6507968374b56d1f) collection.
 
-
 > [!TIP]
 > This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
 >
@@ -98,7 +97,6 @@ input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(0)
 outputs = model.generate(input_ids)
 print(tokenizer.decode(outputs[0]))
 ```
-
 
 ## SwitchTransformersConfig
 

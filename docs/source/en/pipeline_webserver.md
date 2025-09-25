@@ -82,6 +82,7 @@ Query the server with a POST request.
 ```bash
 curl -X POST -d "Paris is the [MASK] of France." http://localhost:8000/
 ```
+
 This should return the output below.
 
 ```bash

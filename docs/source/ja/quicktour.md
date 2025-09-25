@@ -31,20 +31,10 @@ specific language governing permissions and limitations under the License.
 
 あなたはまた、好きな機械学習フレームワークをインストールする必要があります:
 
-<frameworkcontent>
-<pt>
 
 ```bash
 pip install torch
 ```
-</pt>
-<tf>
-
-```bash
-pip install tensorflow
-```
-</tf>
-</frameworkcontent>
 
 ## Pipeline
 
@@ -143,8 +133,6 @@ label: NEGATIVE, スコア: 0.5309
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-<frameworkcontent>
-<pt>
 [`AutoModelForSequenceClassification`]と[`AutoTokenizer`]を使用して事前学習済みモデルとそれに関連するトークナイザをロードします（次のセクションで`AutoClass`について詳しく説明します）：
 
 ```python
@@ -154,18 +142,6 @@ label: NEGATIVE, スコア: 0.5309
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
-</pt>
-<tf>
-以下のコードは、[`TFAutoModelForSequenceClassification`]および[`AutoTokenizer`]を使用して、事前学習済みモデルとその関連するトークナイザをロードする方法を示しています（`TFAutoClass`については次のセクションで詳しく説明します）：
-
-```python
->>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
->>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-```
-</tf>
-</frameworkcontent>
 
 指定したモデルとトークナイザを[`pipeline`]に設定し、今度はフランス語のテキストに`classifier`を適用できます：
 
@@ -222,8 +198,6 @@ Pass your text to the tokenizer:
 
 トークナイザはまた、入力のリストを受け入れ、一様な長さのバッチを返すためにテキストをパディングおよび切り詰めることができます。
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> pt_batch = tokenizer(
@@ -234,20 +208,6 @@ Pass your text to the tokenizer:
 ...     return_tensors="pt",
 ... )
 ```
-</pt>
-<tf>
-
-```py
->>> tf_batch = tokenizer(
-...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
-...     padding=True,
-...     truncation=True,
-...     max_length=512,
-...     return_tensors="tf",
-... )
-```
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -257,8 +217,6 @@ Pass your text to the tokenizer:
 
 ### AutoModel
 
-<frameworkcontent>
-<pt>
 🤗 Transformersは事前学習済みインスタンスを簡単に統一的にロードする方法を提供します。
 これは、[`AutoTokenizer`]をロードするのと同じように[`AutoModel`]をロードできることを意味します。
 タスクに適した[`AutoModel`]を選択する以外の違いはありません。
@@ -294,43 +252,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
 
-</pt>
-<tf>
-🤗 Transformersは事前学習済みインスタンスをロードするためのシンプルで統一された方法を提供します。
-これは、[`TFAutoModel`]を[`AutoTokenizer`]をロードするのと同じようにロードできることを意味します。
-唯一の違いは、タスクに適した[`TFAutoModel`]を選択することです。
-テキスト（またはシーケンス）分類の場合、[`TFAutoModelForSequenceClassification`]をロードする必要があります：
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
-```
-
-<Tip>
-
-詳細については、[`AutoModel`]クラスでサポートされているタスクに関する情報は、[タスクの概要](./task_summary)を参照してください。
-
-</Tip>
-
-次に、前処理済みのバッチを直接モデルに渡します。テンソルをそのまま渡すことができます：
-
-```python
->>> tf_outputs = tf_model(tf_batch)
-```
-
-モデルは`logits`属性に最終的なアクティベーションを出力します。`logits`にソフトマックス関数を適用して確率を取得します：
-
-```python
->>> import tensorflow as tf
-
->>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
->>> tf_predictions  # doctest: +IGNORE_RESULT
-```
-
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -343,8 +264,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 ### Save a Model
 
-<frameworkcontent>
-<pt>
 モデルをファインチューニングしたら、[`PreTrainedModel.save_pretrained`]を使用してトークナイザと共に保存できます：
 
 ```py
@@ -359,29 +278,9 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
 
-</pt>
-<tf>
-モデルをファインチューニングしたら、そのトークナイザを使用してモデルを保存できます。[`TFPreTrainedModel.save_pretrained`]を使用します：
-
-```py
->>> tf_save_directory = "./tf_save_pretrained"
->>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
->>> tf_model.save_pretrained(tf_save_directory)
-```
-
-モデルを再度使用する準備ができたら、[`TFPreTrainedModel.from_pretrained`]を使用して再度ロードします：
-
-```py
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
-```
-
-</tf>
-</frameworkcontent>
 
 🤗 Transformersの特に素晴らしい機能の一つは、モデルを保存し、それをPyTorchモデルまたはTensorFlowモデルとして再ロードできることです。 `from_pt`または`from_tf`パラメータを使用してモデルをフレームワーク間で変換できます：
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import AutoModel
@@ -390,17 +289,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
 
-</pt>
-<tf>
-
-```py
->>> from transformers import TFAutoModel
-
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
-```
-</tf>
-</frameworkcontent>
 
 ## Custom model builds
 
@@ -414,8 +302,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
-<frameworkcontent>
-<pt>
 [`AutoModel.from_config`]を使用してカスタム設定からモデルを作成します：
 
 ```python
@@ -424,18 +310,6 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> my_model = AutoModel.from_config(my_config)
 ```
 
-</pt>
-<tf>
-カスタム構成からモデルを作成するには、[`TFAutoModel.from_config`]を使用します：
-
-```py
->>> from transformers import TFAutoModel
-
->>> my_model = TFAutoModel.from_config(my_config)
-```
-
-</tf>
-</frameworkcontent>
 
 [カスタムアーキテクチャを作成](./create_a_model)ガイドを参照して、カスタム構成の詳細情報を確認してください。
 

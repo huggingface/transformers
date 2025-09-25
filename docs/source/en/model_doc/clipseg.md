@@ -47,7 +47,7 @@ can be formulated. Finally, we find our system to adapt well
 to generalized queries involving affordances or properties*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/clipseg_architecture.png"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> CLIPSeg overview. Taken from the <a href="https://huggingface.co/papers/2112.10003">original paper.</a> </small>
 

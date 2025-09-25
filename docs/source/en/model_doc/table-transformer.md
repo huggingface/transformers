@@ -43,8 +43,8 @@ alt="drawing" width="600"/>
 
 <small> Table detection and table structure recognition clarified. Taken from the <a href="https://huggingface.co/papers/2110.00061">original paper</a>. </small>
 
-The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in 
-documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition) 
+The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in
+documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition)
 (the task of recognizing the individual rows, columns etc. in a table).
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be

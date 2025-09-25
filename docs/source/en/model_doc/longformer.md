@@ -85,7 +85,6 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 </hfoption>
 </hfoptions>
 
-
 ## Notes
 
 - Longformer is based on [RoBERTa](https://huggingface.co/docs/transformers/en/model_doc/roberta) and doesn't have `token_type_ids`. You don't need to indicate which token belongs to which segment. You only need to separate the segments with the separation token `</s>` or `tokenizer.sep_token`.

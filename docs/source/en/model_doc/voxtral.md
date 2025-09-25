@@ -43,6 +43,7 @@ Voxtral builds on Ministral-3B by adding audio processing capabilities:
 The model supports audio-text instructions, including multi-turn and multi-audio interactions, all processed in batches.
 
 ➡️ audio + text instruction
+
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
@@ -78,7 +79,8 @@ print(decoded_outputs[0])
 print("=" * 80)
 ```
 
-➡️ multi-audio + text instruction 
+➡️ multi-audio + text instruction
+
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
@@ -119,6 +121,7 @@ print("=" * 80)
 ```
 
 ➡️ multi-turn:
+
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
@@ -173,6 +176,7 @@ print("=" * 80)
 ```
 
 ➡️ text only:
+
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
@@ -208,6 +212,7 @@ print("=" * 80)
 ```
 
 ➡️ audio only:
+
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
@@ -243,6 +248,7 @@ print("=" * 80)
 ```
 
 ➡️ batched inference!
+
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device()

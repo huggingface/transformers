@@ -332,7 +332,6 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -341,6 +340,23 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
+        elif module.__class__.__name__ == "Snake1d":
+            module.alpha.data.fill_(1.0)
+        elif isinstance(module, nn.ConvTranspose1d):
+            module.reset_parameters()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+        elif isinstance(module, XcodecModel):
+            # The conv1d are not handled correctly, as `self.acoustic_encoder/decoder` are initialized from a PreTrainedModel,
+            # but then only the submodules are used (which are not PreTrainedModels...) -> here we reinit them as in DacModel
+            for submodule in module.acoustic_encoder.modules():
+                if isinstance(submodule, nn.Conv1d):
+                    nn.init.trunc_normal_(submodule.weight, std=0.02)
+                    nn.init.constant_(submodule.bias, 0)
+            for submodule in module.acoustic_decoder.modules():
+                if isinstance(submodule, nn.Conv1d):
+                    nn.init.trunc_normal_(submodule.weight, std=0.02)
+                    nn.init.constant_(submodule.bias, 0)
 
     def apply_weight_norm(self):
         """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""
@@ -395,6 +411,9 @@ class XcodecModel(XcodecPreTrainedModel):
         self.fc1 = nn.Linear(config.hidden_size, config.semantic_model_config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, config.acoustic_model_config.hidden_size)
         self.quantizer = XcodecResidualVectorQuantization(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @staticmethod
     def _adjust_dac_decoder(decoder: nn.Module):

@@ -54,7 +54,6 @@ The main class that implements callbacks is [`TrainerCallback`]. It gets the
 Trainer's internal state via [`TrainerState`], and can take some actions on the training loop via
 [`TrainerControl`].
 
-
 ## Available Callbacks
 
 Here is the list of the available [`TrainerCallback`] in the library:

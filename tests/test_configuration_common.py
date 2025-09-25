@@ -160,7 +160,7 @@ class ConfigTester:
         for composite configs. We should overwrite only the requested keys, keeping all values of the
         subconfig that are loaded from the checkpoint.
         """
-        # Check only composite configs. We can't know which attributes each type fo config has so check
+        # Check only composite configs. We can't know which attributes each type of config has so check
         # only text config because we are sure that all text configs have a `vocab_size`
         config = self.config_class(**self.inputs_dict)
         if config.get_text_config() is config or not hasattr(self.parent.model_tester, "get_config"):

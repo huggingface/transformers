@@ -50,6 +50,7 @@ from transformers import pipeline
 pipeline = pipeline("fill-mask", model="camembert-base", dtype=torch.float16, device=0)
 pipeline("Le camembert est un délicieux fromage <mask>.")
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -72,6 +73,7 @@ predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
 ```
+
 </hfoption>
 
 <hfoption id="transformers CLI">
@@ -83,7 +85,6 @@ echo -e "Le camembert est un délicieux fromage <mask>." | transformers run --ta
 </hfoption>
 
 </hfoptions>
-
 
 Quantization reduces the memory burden of large models by representing weights in lower precision. Refer to the [Quantization](../quantization/overview) overview for available options.
 

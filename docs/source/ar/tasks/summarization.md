@@ -118,24 +118,12 @@ pip install transformers datasets evaluate rouge_score
 
 الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorForSeq2Seq`].  الأكثر كفاءة *الحشو الديناميكي* للجمل إلى أطول طول في دفعة أثناء عملية التجميع، بدلاً من حشو مجموعة البيانات بأكملها إلى الحد الأقصى للطول.
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-<tf>
-
-```py
->>> from transformers import DataCollatorForSeq2Seq
-
->>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## التقييم (Evaluate)
 
@@ -170,8 +158,6 @@ pip install transformers datasets evaluate rouge_score
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -226,91 +212,6 @@ pip install transformers datasets evaluate rouge_score
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-إذا لم تكن معتادًا على ضبط نموذج باستخدام Keras، فألق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-لضبط نموذج في TensorFlow، ابدأ بإعداد دالة مُحسِّن وجدول معدل التعلم وبعض معلمات التدريب:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-ثم يمكنك تحميل T5 باستخدام [`TFAutoModelForSeq2SeqLM`]:
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained(checkpoint)
-```
-
-حوّل مجموعات البيانات الخاصة بك إلى تنسيق `tf.data.Dataset` باستخدام [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_billsum["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     tokenized_billsum["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-قم بتكوين النموذج للتدريب باستخدام [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). لاحظ أن جميع نماذج Transformers لديها دالة خسارة ذات صلة بالمهمة افتراضيًا، لذلك لست بحاجة إلى تحديد واحدة ما لم تكن ترغب في ذلك:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-آخر شيئين يجب إعدادهما قبل بدء التدريب هما حساب درجة ROUGE من التنبؤات، وتوفير طريقة لدفع نموذجك إلى Hub. يتم كلاهما باستخدام [استدعاءات Keras](../main_classes/keras_callbacks).
-
-مرر دالة `compute_metrics` الخاصة بك إلى [`~transformers.KerasMetricCallback`]:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_test_set)
-```
-
-حدد مكان دفع نموذجك ومُحلِّلك اللغوي في [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_billsum_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-ثم اجمع استدعاءاتك معًا:
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-أخيرًا، أنت جاهز لبدء تدريب نموذجك! اتصل بـ [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع مجموعات بيانات التدريب والتحقق من الصحة وعدد الحقب واستدعاءاتك لضبط النموذج:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=callbacks)
-```
-
-بمجرد اكتمال التدريب، يتم تحميل نموذجك تلقائيًا إلى Hub حتى يتمكن الجميع من استخدامه!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -341,8 +242,6 @@ pip install transformers datasets evaluate rouge_score
 
 يمكنك أيضًا تكرار نتائج `pipeline` يدويًا إذا أردت:
 
-<frameworkcontent>
-<pt>
 قسم النص وإرجع `input_ids` كتنسورات PyTorch:
 
 ```py
@@ -367,31 +266,3 @@ pip install transformers datasets evaluate rouge_score
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
 ```
-</pt>
-<tf>
-قسم النص وإرجع `input_ids` كتنسورات TensorFlow:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_billsum_model")
->>> inputs = tokenizer(text, return_tensors="tf").input_ids
-```
-
-استخدم طريقة [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] لإنشاء التلخيص. لمزيد من التفاصيل حول استراتيجيات توليد النص المختلفة والمعلمات للتحكم في التوليد، راجع واجهة برمجة تطبيقات [توليد النص](../main_classes/text_generation).
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained("username/my_awesome_billsum_model")
->>> outputs = model.generate(inputs, max_new_tokens=100, do_sample=False)
-```
-
-فك تشفير معرفات الرموز المولدة مرة أخرى إلى نص:
-
-```py
->>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
-```
-</tf>
-</frameworkcontent>

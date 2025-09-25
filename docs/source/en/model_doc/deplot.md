@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Overview 
+## Overview
 
 DePlot was proposed in the paper [DePlot: One-shot visual language reasoning by plot-to-table translation](https://huggingface.co/papers/2212.10505) from Fangyu Liu, Julian Martin Eisenschlos, Francesco Piccinno, Syrine Krichene, Chenxi Pang, Kenton Lee, Mandar Joshi, Wenhu Chen, Nigel Collier, Yasemin Altun.
 
@@ -36,8 +36,7 @@ DePlot is a Visual Question Answering subset of `Pix2Struct` architecture. It re
 
 Currently one checkpoint is available for DePlot:
 
-- `google/deplot`: DePlot fine-tuned on ChartQA dataset 
-
+- `google/deplot`: DePlot fine-tuned on ChartQA dataset
 
 ```python
 from transformers import AutoProcessor, Pix2StructForConditionalGeneration
@@ -57,6 +56,7 @@ print(processor.decode(predictions[0], skip_special_tokens=True))
 ## Fine-tuning
 
 To fine-tune DePlot, refer to the pix2struct [fine-tuning notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_pix2struct.ipynb). For `Pix2Struct` models, we have found out that fine-tuning the model with Adafactor and cosine learning rate scheduler leads to faster convergence:
+
 ```python
 from transformers.optimization import Adafactor, get_cosine_schedule_with_warmup
 

@@ -61,7 +61,7 @@ class Qwen3VLMoeVisionText2TextModelTester:
             "model_type": "qwen3_vl_moe",
             "num_attention_heads": 4,
             "num_key_value_heads": 2,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "moe_intermediate_size": 16,
             "num_experts_per_tok": 4,
             "num_experts": 8,
@@ -202,6 +202,7 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             _ = model(**input_dict)  # successful forward with no modifications
             curr_input_dict = copy.deepcopy(input_dict)
 

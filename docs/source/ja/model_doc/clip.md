@@ -146,8 +146,6 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 
 [[autodoc]] CLIPProcessor
 
-<frameworkcontent>
-<pt>
 
 ## CLIPModel
 
@@ -176,50 +174,3 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 [[autodoc]] CLIPVisionModel
     - forward
 
-</pt>
-<tf>
-
-## TFCLIPModel
-
-[[autodoc]] TFCLIPModel
-    - call
-    - get_text_features
-    - get_image_features
-
-## TFCLIPTextModel
-
-[[autodoc]] TFCLIPTextModel
-    - call
-
-## TFCLIPVisionModel
-
-[[autodoc]] TFCLIPVisionModel
-    - call
-
-</tf>
-<jax>
-
-## FlaxCLIPModel
-
-[[autodoc]] FlaxCLIPModel
-    - __call__
-    - get_text_features
-    - get_image_features
-
-## FlaxCLIPTextModel
-
-[[autodoc]] FlaxCLIPTextModel
-    - __call__
-
-## FlaxCLIPTextModelWithProjection
-
-[[autodoc]] FlaxCLIPTextModelWithProjection
-    - __call__
-
-## FlaxCLIPVisionModel
-
-[[autodoc]] FlaxCLIPVisionModel
-    - __call__
-
-</jax>
-</frameworkcontent>

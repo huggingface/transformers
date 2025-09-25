@@ -363,7 +363,6 @@ Leverage [`Trainer`](https://huggingface.co/docs/transformers/main_classes/train
 
 Most of the training arguments are self-explanatory, but one that is quite important here is `remove_unused_columns=False`. This one will drop any features not used by the model's call function. By default it's `True` because usually it's ideal to drop unused feature columns, making it easier to unpack inputs into the model's call function. But, in this case, you need the unused features ('video' in particular) in order to create `pixel_values` (which is a mandatory key our model expects in its inputs).
 
-
 ```py
 >>> from transformers import TrainingArguments, Trainer
 
@@ -476,7 +475,6 @@ The simplest way to try out your fine-tuned model for inference is to use it in 
 ```
 
 You can also manually replicate the results of the `pipeline` if you'd like.
-
 
 ```py
 >>> def run_inference(model, video):

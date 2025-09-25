@@ -81,7 +81,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 ## Notes
 
-- Swin Transformer V2 can pad the inputs for any input height and width divisible by `32`. 
+- Swin Transformer V2 can pad the inputs for any input height and width divisible by `32`.
 - Swin Transformer V2 can be used as a [backbone](../backbones). When `output_hidden_states = True`, it outputs both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
 
 ## Swinv2Config

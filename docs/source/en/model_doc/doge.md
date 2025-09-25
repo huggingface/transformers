@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Doge
 
-
 ## Overview
 
 Doge is a series of small language models based on the [Doge](https://github.com/SmallDoges/small-doge) architecture, aiming to combine the advantages of state-space and self-attention algorithms, calculate dynamic masks from cached value states using the zero-order hold method, and solve the problem of existing mainstream language models getting lost in context. It uses the `wsd_scheduler` scheduler to pre-train on the `smollm-corpus`, and can continue training on new datasets or add sparse activation feedforward networks from stable stage checkpoints.
@@ -27,7 +26,6 @@ Doge is a series of small language models based on the [Doge](https://github.com
 As shown in the figure below, the sequence transformation part of the Doge architecture uses `Dynamic Mask Attention`, which can be understood as using self-attention related to value states during training, and using state-space without past state decay during inference, to solve the problem of existing Transformers or SSMs getting lost in long text. The state transformation part of Doge uses `Cross Domain Mixture of Experts`, which consists of dense linear layers and sparse embedding layers, and can additionally increase sparse parameters to continue training from dense weight checkpoints without retraining the entire model, thereby reducing the cost of continuous iteration of the model. In addition, Doge also uses `RMSNorm` and `Residual` with learnable parameters to adapt the gradient range of deep models.
 
 Checkout all Doge model checkpoints [here](https://huggingface.co/collections/SmallDoge/doge-slm-679cc991f027c4a3abbded4a).
-
 
 ## Usage
 
@@ -44,6 +42,7 @@ inputs = tokenizer("Hey how are you doing?", return_tensors="pt")
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.batch_decode(outputs))
 ```
+
 </details>
 
 <details>
@@ -82,6 +81,7 @@ outputs = model.generate(
     streamer=steamer
 )
 ```
+
 </details>
 
 ## DogeConfig

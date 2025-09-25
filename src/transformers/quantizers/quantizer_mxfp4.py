@@ -379,7 +379,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 return param_name.replace("down_proj", "down_proj_blocks")
         return param_name
 
-    def get_state_dict_and_metadata(self, model):
+    def get_state_dict_and_metadata(self, model, safe_serialization: bool = False):
         from ..integrations import Mxfp4GptOssExperts
 
         state_dict = model.state_dict()

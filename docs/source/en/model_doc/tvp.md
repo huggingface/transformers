@@ -47,6 +47,7 @@ The [`TvpProcessor`] wraps [`BertTokenizer`] and [`TvpImageProcessor`] into a si
 encode the text and prepare the images respectively.
 
 The following example shows how to run temporal video grounding using [`TvpProcessor`] and [`TvpForVideoGrounding`].
+
 ```python
 import av
 import cv2
@@ -164,7 +165,6 @@ Tips:
 - This implementation of TVP uses [`BertTokenizer`] to generate text embeddings and Resnet-50 model to compute visual embeddings.
 - Checkpoints for pre-trained [tvp-base](https://huggingface.co/Intel/tvp-base) is released.
 - Please refer to [Table 2](https://huggingface.co/papers/2303.04995) for TVP's performance on Temporal Video Grounding task.
-
 
 ## TvpConfig
 

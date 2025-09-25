@@ -29,13 +29,181 @@ from transformers import (
     MobileNetV2ForImageClassification,
     MobileNetV2ForSemanticSegmentation,
     MobileNetV2ImageProcessor,
-    load_tf_weights_in_mobilenet_v2,
 )
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
+
+def _build_tf_to_pytorch_map(model, config, tf_weights=None):
+    """
+    A map of modules from TF to PyTorch.
+    """
+
+    tf_to_pt_map = {}
+
+    if isinstance(model, (MobileNetV2ForImageClassification, MobileNetV2ForSemanticSegmentation)):
+        backbone = model.mobilenet_v2
+    else:
+        backbone = model
+
+    # Use the EMA weights if available
+    def ema(x):
+        return x + "/ExponentialMovingAverage" if x + "/ExponentialMovingAverage" in tf_weights else x
+
+    prefix = "MobilenetV2/Conv/"
+    tf_to_pt_map[ema(prefix + "weights")] = backbone.conv_stem.first_conv.convolution.weight
+    tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = backbone.conv_stem.first_conv.normalization.bias
+    tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_stem.first_conv.normalization.weight
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.first_conv.normalization.running_mean
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.first_conv.normalization.running_var
+
+    prefix = "MobilenetV2/expanded_conv/depthwise/"
+    tf_to_pt_map[ema(prefix + "depthwise_weights")] = backbone.conv_stem.conv_3x3.convolution.weight
+    tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = backbone.conv_stem.conv_3x3.normalization.bias
+    tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_stem.conv_3x3.normalization.weight
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.conv_3x3.normalization.running_mean
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.conv_3x3.normalization.running_var
+
+    prefix = "MobilenetV2/expanded_conv/project/"
+    tf_to_pt_map[ema(prefix + "weights")] = backbone.conv_stem.reduce_1x1.convolution.weight
+    tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = backbone.conv_stem.reduce_1x1.normalization.bias
+    tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_stem.reduce_1x1.normalization.weight
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.reduce_1x1.normalization.running_mean
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.reduce_1x1.normalization.running_var
+
+    for i in range(16):
+        tf_index = i + 1
+        pt_index = i
+        pointer = backbone.layer[pt_index]
+
+        prefix = f"MobilenetV2/expanded_conv_{tf_index}/expand/"
+        tf_to_pt_map[ema(prefix + "weights")] = pointer.expand_1x1.convolution.weight
+        tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = pointer.expand_1x1.normalization.bias
+        tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = pointer.expand_1x1.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.expand_1x1.normalization.running_mean
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.expand_1x1.normalization.running_var
+
+        prefix = f"MobilenetV2/expanded_conv_{tf_index}/depthwise/"
+        tf_to_pt_map[ema(prefix + "depthwise_weights")] = pointer.conv_3x3.convolution.weight
+        tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = pointer.conv_3x3.normalization.bias
+        tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = pointer.conv_3x3.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.conv_3x3.normalization.running_mean
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.conv_3x3.normalization.running_var
+
+        prefix = f"MobilenetV2/expanded_conv_{tf_index}/project/"
+        tf_to_pt_map[ema(prefix + "weights")] = pointer.reduce_1x1.convolution.weight
+        tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = pointer.reduce_1x1.normalization.bias
+        tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = pointer.reduce_1x1.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.reduce_1x1.normalization.running_mean
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.reduce_1x1.normalization.running_var
+
+    prefix = "MobilenetV2/Conv_1/"
+    tf_to_pt_map[ema(prefix + "weights")] = backbone.conv_1x1.convolution.weight
+    tf_to_pt_map[ema(prefix + "BatchNorm/beta")] = backbone.conv_1x1.normalization.bias
+    tf_to_pt_map[ema(prefix + "BatchNorm/gamma")] = backbone.conv_1x1.normalization.weight
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_1x1.normalization.running_mean
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_1x1.normalization.running_var
+
+    if isinstance(model, MobileNetV2ForImageClassification):
+        prefix = "MobilenetV2/Logits/Conv2d_1c_1x1/"
+        tf_to_pt_map[ema(prefix + "weights")] = model.classifier.weight
+        tf_to_pt_map[ema(prefix + "biases")] = model.classifier.bias
+
+    if isinstance(model, MobileNetV2ForSemanticSegmentation):
+        prefix = "image_pooling/"
+        tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_pool.convolution.weight
+        tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_pool.normalization.bias
+        tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_pool.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = model.segmentation_head.conv_pool.normalization.running_mean
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            model.segmentation_head.conv_pool.normalization.running_var
+        )
+
+        prefix = "aspp0/"
+        tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_aspp.convolution.weight
+        tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_aspp.normalization.bias
+        tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_aspp.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = model.segmentation_head.conv_aspp.normalization.running_mean
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            model.segmentation_head.conv_aspp.normalization.running_var
+        )
+
+        prefix = "concat_projection/"
+        tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_projection.convolution.weight
+        tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_projection.normalization.bias
+        tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_projection.normalization.weight
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = (
+            model.segmentation_head.conv_projection.normalization.running_mean
+        )
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            model.segmentation_head.conv_projection.normalization.running_var
+        )
+
+        prefix = "logits/semantic/"
+        tf_to_pt_map[ema(prefix + "weights")] = model.segmentation_head.classifier.convolution.weight
+        tf_to_pt_map[ema(prefix + "biases")] = model.segmentation_head.classifier.convolution.bias
+
+    return tf_to_pt_map
+
+
+def load_tf_weights_in_mobilenet_v2(model, config, tf_checkpoint_path):
+    """Load TensorFlow checkpoints in a PyTorch model."""
+    try:
+        import numpy as np
+        import tensorflow as tf
+    except ImportError:
+        logger.error(
+            "Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
+            "https://www.tensorflow.org/install/ for installation instructions."
+        )
+        raise
+
+    # Load weights from TF model
+    init_vars = tf.train.list_variables(tf_checkpoint_path)
+    tf_weights = {}
+    for name, shape in init_vars:
+        logger.info(f"Loading TF weight {name} with shape {shape}")
+        array = tf.train.load_variable(tf_checkpoint_path, name)
+        tf_weights[name] = array
+
+    # Build TF to PyTorch weights loading map
+    tf_to_pt_map = _build_tf_to_pytorch_map(model, config, tf_weights)
+
+    for name, pointer in tf_to_pt_map.items():
+        logger.info(f"Importing {name}")
+        if name not in tf_weights:
+            logger.info(f"{name} not in tf pre-trained weights, skipping")
+            continue
+
+        array = tf_weights[name]
+
+        if "depthwise_weights" in name:
+            logger.info("Transposing depthwise")
+            array = np.transpose(array, (2, 3, 0, 1))
+        elif "weights" in name:
+            logger.info("Transposing")
+            if len(pointer.shape) == 2:  # copying into linear layer
+                array = array.squeeze().transpose()
+            else:
+                array = np.transpose(array, (3, 2, 0, 1))
+
+        if pointer.shape != array.shape:
+            raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
+
+        logger.info(f"Initialize PyTorch weight {name} {array.shape}")
+        pointer.data = torch.from_numpy(array)
+
+        tf_weights.pop(name, None)
+        tf_weights.pop(name + "/RMSProp", None)
+        tf_weights.pop(name + "/RMSProp_1", None)
+        tf_weights.pop(name + "/ExponentialMovingAverage", None)
+        tf_weights.pop(name + "/Momentum", None)
+
+    logger.info(f"Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}")
+    return model
 
 
 def get_mobilenet_v2_config(model_name):

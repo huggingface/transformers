@@ -114,23 +114,11 @@ pip install transformers datasets evaluate sacrebleu
 
 이제 [`DataCollatorForSeq2Seq`]를 사용하여 예제 배치를 생성합니다. 데이터세트의 최대 길이로 전부를 padding하는 대신, 데이터 정렬 중 각 배치의 최대 길이로 문장을 *동적으로 padding*하는 것이 더 효율적입니다.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-<tf>
-
-```py
->>> from transformers import DataCollatorForSeq2Seq
-
->>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## 평가[[evalulate]]
 
@@ -179,8 +167,6 @@ pip install transformers datasets evaluate sacrebleu
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]로 모델을 파인튜닝하는 방법에 익숙하지 않다면 [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 살펴보시기 바랍니다!
@@ -234,91 +220,6 @@ pip install transformers datasets evaluate sacrebleu
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-Keras로 모델을 파인튜닝하는 방법이 익숙하지 않다면, [여기](../training#train-a-tensorflow-model-with-keras)에서 기본 튜토리얼을 살펴보시기 바랍니다!
-
-</Tip>
-TensorFlow에서 모델을 파인튜닝하려면 우선 optimizer 함수, 학습률 스케줄 등의 훈련 하이퍼파라미터를 설정하세요:
-
-```py
->>> from transformers import AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-이제 [`TFAutoModelForSeq2SeqLM`]로 T5를 가져오세요:
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained(checkpoint)
-```
-
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`]로 데이터 세트를 `tf.data.Dataset` 형식으로 변환하세요:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_books["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     tokenized_books["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-훈련하기 위해 [`compile`](https://keras.io/api/models/model_training_apis/#compile-method) 메서드로 모델을 구성하세요:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-훈련을 시작하기 전에 예측값으로부터 SacreBLEU 메트릭을 계산하는 방법과 모델을 Hub에 업로드하는 방법 두 가지를 미리 설정해둬야 합니다. 둘 다 [Keras callbacks](../main_classes/keras_callbacks)로 구현하세요.
-
-[`~transformers.KerasMetricCallback`]에 `compute_metrics` 함수를 전달하세요.
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
-```
-
-모델과 토크나이저를 업로드할 위치를 [`~transformers.PushToHubCallback`]에서 지정하세요:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_opus_books_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-이제 콜백들을 한데로 묶어주세요:
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-드디어 모델을 훈련시킬 모든 준비를 마쳤군요! 이제 훈련 및 검증 데이터 세트에 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) 메서드를 에폭 수와 만들어둔 콜백과 함께 호출하여 모델을 파인튜닝하세요:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=callbacks)
-```
-
-학습이 완료되면 모델이 자동으로 Hub에 업로드되고, 누구나 사용할 수 있게 됩니다!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -351,8 +252,6 @@ TensorFlow에서 모델을 파인튜닝하려면 우선 optimizer 함수, 학습
 
 원한다면 `pipeline`의 결과를 직접 복제할 수도 있습니다:
 
-<frameworkcontent>
-<pt>
 텍스트를 토큰화하고 `input_ids`를 PyTorch 텐서로 반환하세요:
 
 ```py
@@ -377,31 +276,3 @@ TensorFlow에서 모델을 파인튜닝하려면 우선 optimizer 함수, 학습
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'Les lignées partagent des ressources avec des bactéries enfixant l'azote.'
 ```
-</pt>
-<tf>
-텍스트를 토큰화하고 `input_ids`를 TensorFlow 텐서로 반환하세요:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_opus_books_model")
->>> inputs = tokenizer(text, return_tensors="tf").input_ids
-```
-
-[`~transformers.generation_tf_utils.TFGenerationMixin.generate`] 메서드로 번역을 생성하세요. 다양한 텍스트 생성 전략 및 생성을 제어하기 위한 매개변수에 대한 자세한 내용은 [Text Generation](../main_classes/text_generation) API를 살펴보시기 바랍니다.
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained("my_awesome_opus_books_model")
->>> outputs = model.generate(inputs, max_new_tokens=40, do_sample=True, top_k=30, top_p=0.95)
-```
-
-생성된 토큰 ID들을 다시 텍스트로 디코딩하세요:
-
-```py
->>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'Les lugumes partagent les ressources avec des bactéries fixatrices d'azote.'
-```
-</tf>
-</frameworkcontent>

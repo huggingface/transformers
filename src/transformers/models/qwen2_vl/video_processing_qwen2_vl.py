@@ -186,7 +186,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
@@ -195,13 +194,10 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
         # Group videos by size for batched resizing
@@ -215,8 +211,8 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
+                    min_pixels=size["shortest_edge"],
+                    max_pixels=size["longest_edge"],
                 )
                 stacked_videos = self.resize(
                     image=stacked_videos,

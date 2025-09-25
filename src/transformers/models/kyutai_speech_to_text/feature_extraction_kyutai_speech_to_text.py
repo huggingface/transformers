@@ -126,7 +126,6 @@ class KyutaiSpeechToTextFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -204,7 +203,7 @@ class KyutaiSpeechToTextFeatureExtractor(SequenceFeatureExtractor):
             if padding:
                 padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
 
-        # now let's padd left and right
+        # now let's pad left and right
         pad_left = int(self.audio_silence_prefix_seconds * self.sampling_rate)
         pad_right = int((self.audio_delay_seconds + 1.0) * self.sampling_rate)
         padded_inputs["input_values"] = np.pad(

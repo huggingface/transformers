@@ -141,7 +141,6 @@ with torch.inference_mode():
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-
 ## Notes
 
 * Different checkpoints (Mistral, Vicuna, etc.) require a specific prompt format depending on the underlying LLM. Always use [`~ProcessorMixin.apply_chat_template`] to ensure correct formatting. Refer to the [Templates](../chat_templating) guide for more details.
@@ -188,7 +187,6 @@ inputs = processor([image1, image2], prompt, return_tensors="pt").to(model.devic
 output = model.generate(**inputs, max_new_tokens=100)
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
-
 
 ## LlavaNextConfig
 

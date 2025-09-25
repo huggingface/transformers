@@ -1,0 +1,19 @@
+name: Benchmark v2 Scheduled Runner - MI325 Single-GPU
+
+on:
+  schedule:
+    # Run daily at 16:30 UTC
+    - cron: "30 16 * * *"
+  pull_request:
+    types: [ opened, labeled, reopened, synchronize ]
+
+jobs:
+  benchmark-v2-default:
+    name: Benchmark v2 - Default Models
+    uses: ./.github/workflows/benchmark_v2.yml
+    with:
+      runner: amd-mi325-ci-1gpu
+      commit_sha: ${{ github.sha }}
+      run_id: ${{ github.run_id }}
+      benchmark_repo_id: hf-internal-testing/transformers-daily-benchmarks
+    secrets: inherit

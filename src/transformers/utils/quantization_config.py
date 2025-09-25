@@ -845,7 +845,7 @@ class GPTQConfig(QuantizationConfigMixin):
                     "You current version of `optimum` does not support `modules_in_block_to_quantize` quantization argument, please upgrade `optimum` package to a version superior than 1.15.0 ."
                 )
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         config_dict = super().to_dict()
         config_dict.pop("disable_exllama", None)
         return config_dict
@@ -1882,9 +1882,9 @@ class BitNetQuantConfig(QuantizationConfigMixin):
     def __init__(
         self,
         modules_to_not_convert: Optional[list] = None,
-        linear_class: Optional[str] = "bitlinear",
-        quantization_mode: Optional[str] = "offline",
-        use_rms_norm: Optional[bool] = False,
+        linear_class: str = "bitlinear",
+        quantization_mode: str = "offline",
+        use_rms_norm: bool = False,
         rms_norm_eps: Optional[float] = 1e-6,
         **kwargs,
     ):

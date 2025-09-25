@@ -92,7 +92,6 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.check_tokenizer_from_pretrained(GPT2Tokenizer)
 
     def test_tensor_type_from_str(self):
-        self.assertEqual(TensorType("tf"), TensorType.TENSORFLOW)
         self.assertEqual(TensorType("pt"), TensorType.PYTORCH)
         self.assertEqual(TensorType("np"), TensorType.NUMPY)
 

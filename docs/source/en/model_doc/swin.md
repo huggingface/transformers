@@ -47,6 +47,7 @@ pipeline = pipeline(
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -79,6 +80,7 @@ class_labels = model.config.id2label
 predicted_class_label = class_labels[predicted_class_id]
 print(f"The predicted class label is: {predicted_class_label}")
 ```
+
 </hfoption>
 </hfoptions>
 

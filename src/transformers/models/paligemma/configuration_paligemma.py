@@ -120,6 +120,12 @@ class PaliGemmaConfig(PretrainedConfig):
                 is_encoder_decoder=False,
                 vocab_size=vocab_size,
             )
+
+        # BC: `use_bidirectional_attention` was originally unset in PaliGemma1 (backbone = Gemma1) AND PaliGemma2
+        # (backbone = Gemma2). Both PaliGemmas want to default to True.
+        if self.text_config.use_bidirectional_attention is None:
+            self.text_config.use_bidirectional_attention = True
+
         self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
         self.vision_config.projection_dim = projection_dim
         super().__init__(**kwargs)

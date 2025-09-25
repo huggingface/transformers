@@ -51,4 +51,3 @@ to export models for different types of topologies or tasks.
 ### FeaturesManager
 
 [[autodoc]] onnx.features.FeaturesManager
-

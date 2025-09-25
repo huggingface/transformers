@@ -118,7 +118,7 @@ Consider the quantization method below during fine-tuning to save memory.
 
 Other methods offer PEFT compatibility, though bitsandbytes is the most established and straightforward path for QLoRA.
 
-See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#aqlm-quantization) for more details. 
+See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#aqlm-quantization) for more details.
 
 ## Research
 

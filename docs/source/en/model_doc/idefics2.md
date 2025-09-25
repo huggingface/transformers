@@ -202,18 +202,15 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Idefics2Config
 
-
 ## Idefics2Model
 
 [[autodoc]] Idefics2Model
     - forward
 
-
 ## Idefics2ForConditionalGeneration
 
 [[autodoc]] Idefics2ForConditionalGeneration
     - forward
-
 
 ## Idefics2ImageProcessor
 [[autodoc]] Idefics2ImageProcessor

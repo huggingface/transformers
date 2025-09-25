@@ -208,7 +208,7 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         config = FalconConfig(
             vocab_size=1000,
             hidden_size=64,
-            num_hidden_layers=3,
+            num_hidden_layers=2,
             num_attention_heads=4,
             new_decoder_architecture=True,
             alibi=True,

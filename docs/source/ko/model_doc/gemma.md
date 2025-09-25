@@ -64,13 +64,3 @@ Gemma 모델은 6조 토큰으로 학습되었으며, 2b와 7b의 두 가지 버
 
 [[autodoc]] GemmaForTokenClassification
     - forward
-
-## FlaxGemmaModel [[transformers.FlaxGemmaModel]]
-
-[[autodoc]] FlaxGemmaModel
-    - __call__
-
-## FlaxGemmaForCausalLM [[transformers.FlaxGemmaForCausalLM]]
-
-[[autodoc]] FlaxGemmaForCausalLM
-    - __call__

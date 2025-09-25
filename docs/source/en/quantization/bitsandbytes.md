@@ -32,12 +32,12 @@ bitsandbytes offers two main quantization features:
 
 > **Note:** For a user-friendly quantization experience, you can use the `bitsandbytes` [community space](https://huggingface.co/spaces/bnb-community/bnb-my-repo).
 
-
 Run the command below to install bitsandbytes.
 
 ```bash
 pip install --upgrade transformers accelerate bitsandbytes
 ```
+
 To compile from source, follow the instructions in the [bitsandbytes installation guide](https://huggingface.co/docs/bitsandbytes/main/en/installation).
 
 ## Hardware Compatibility
@@ -116,6 +116,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 model.push_to_hub("bloom-560m-8bit")
 ```
+
 </div>
 </hfoption>
 <hfoption id="4-bit">
@@ -166,6 +167,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 model.push_to_hub("bloom-560m-4bit")
 ```
+
 </div>
 </hfoption>
 </hfoptions>

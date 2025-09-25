@@ -98,7 +98,6 @@ Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direc
 >>> def model_init(trial):
 ...     return AutoModelForSequenceClassification.from_pretrained(
 ...         model_args.model_name_or_path,
-...         from_tf=bool(".ckpt" in model_args.model_name_or_path),
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,

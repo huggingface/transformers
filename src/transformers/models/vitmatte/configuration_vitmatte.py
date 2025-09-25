@@ -15,6 +15,7 @@
 """VitMatte model configuration"""
 
 import copy
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -80,7 +81,7 @@ class VitMatteConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config: PretrainedConfig = None,
+        backbone_config: Optional[PretrainedConfig] = None,
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,

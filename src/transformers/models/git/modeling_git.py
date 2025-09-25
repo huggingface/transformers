@@ -76,8 +76,6 @@ class GitEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -463,8 +461,6 @@ class GitPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.patch_embedding.weight, std=self.config.initializer_range)
             nn.init.normal_(module.position_embedding.weight, std=self.config.initializer_range)
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -954,7 +950,7 @@ class GitModel(GitPreTrainedModel):
         self.visual_projection = GitProjection(config)
 
         if config.num_image_with_embedding is not None:
-            self.img_temperal_embedding = nn.ParameterList(
+            self.img_temporal_embedding = nn.ParameterList(
                 nn.Parameter(torch.zeros(1, 1, config.vision_config.hidden_size))
                 for _ in range(config.num_image_with_embedding)
             )
@@ -1119,7 +1115,7 @@ class GitModel(GitPreTrainedModel):
                     visual_features_frame = self.image_encoder(
                         pixel_values[:, frame_idx, :, :], interpolate_pos_encoding=interpolate_pos_encoding
                     ).last_hidden_state
-                    visual_features_frame += self.img_temperal_embedding[frame_idx]
+                    visual_features_frame += self.img_temporal_embedding[frame_idx]
                     visual_features.append(visual_features_frame)
 
                 # finally, concatenate all features along sequence dimension

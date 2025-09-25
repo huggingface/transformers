@@ -695,10 +695,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def _save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
-        file_names: tuple[str],
+        file_names: tuple[str, ...],
         legacy_format: Optional[bool] = None,
         filename_prefix: Optional[str] = None,
-    ) -> tuple[str]:
+    ) -> tuple[str, ...]:
         """
         Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens as well as in a unique JSON
         file containing {config + vocab + added-tokens}.

@@ -22,7 +22,6 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-
 # Cohere 2
 
 [Cohere Command R7B](https://cohere.com/blog/command-r7b) is an open weights research release of a 7B billion parameter model. It is a multilingual model trained on 23 languages and has a context window of 128k. The model features three layers with sliding window attention and ROPE for efficient local context modeling and relative positional encoding. A fourth layer uses global attention without positional embeddings, enabling unrestricted token interactions across the entire sequence.
@@ -30,7 +29,6 @@ rendered properly in your Markdown viewer.
 This model is optimized for speed, cost-performance, and compute resources.
 
 You can find all the original Command-R checkpoints under the [Command Models](https://huggingface.co/collections/CohereForAI/command-models-67652b401665205e17b192ad) collection.
-
 
 > [!TIP]
 > Click on the Cohere models in the right sidebar for more examples of how to apply Cohere to different language tasks.
@@ -45,7 +43,7 @@ import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    task="text-generation", 
+    task="text-generation",
     model="CohereLabs/c4ai-command-r7b-12-2024",
     dtype=torch.float16,
     device_map=0
@@ -66,9 +64,9 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
 model = AutoModelForCausalLM.from_pretrained(
-    "CohereLabs/c4ai-command-r7b-12-2024", 
-    dtype=torch.float16, 
-    device_map="auto", 
+    "CohereLabs/c4ai-command-r7b-12-2024",
+    dtype=torch.float16,
+    device_map="auto",
     attn_implementation="sdpa"
 )
 
@@ -90,7 +88,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```bash
 # pip install -U flash-attn --no-build-isolation
-transformers-cli chat CohereLabs/c4ai-command-r7b-12-2024 --dtype auto --attn_implementation flash_attention_2
+transformers chat CohereLabs/c4ai-command-r7b-12-2024 --dtype auto --attn_implementation flash_attention_2
 ```
 
 </hfoption>
@@ -107,10 +105,10 @@ from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
 model = AutoModelForCausalLM.from_pretrained(
-    "CohereLabs/c4ai-command-r7b-12-2024", 
-    dtype=torch.float16, 
-    device_map="auto", 
-    quantization_config=bnb_config, 
+    "CohereLabs/c4ai-command-r7b-12-2024",
+    dtype=torch.float16,
+    device_map="auto",
+    quantization_config=bnb_config,
     attn_implementation="sdpa"
 )
 
@@ -136,10 +134,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 [[autodoc]] Cohere2Model
     - forward
 
-
 ## Cohere2ForCausalLM
 
 [[autodoc]] Cohere2ForCausalLM
     - forward
-
-

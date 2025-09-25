@@ -40,7 +40,6 @@ Finetuning the model in `float16` is not recommended and known to produce `nan`,
 
 </Tip>
 
-
 Tips:
 
 - To convert the model, you need to clone the original repository using `git clone https://github.com/persimmon-ai-labs/adept-inference`, then get the checkpoints:
@@ -55,10 +54,12 @@ python src/transformers/models/fuyu/convert_fuyu_weights_to_hf.py  --input_dir /
 ```
 
 For the chat model:
+
 ```bash
 wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_chat_model_release.tar
 tar -xvf 8b_base_model_release.tar
 ```
+
 Then, model can be loaded via:
 
 ```py
@@ -98,7 +99,6 @@ The original code can be found [here](https://github.com/persimmon-ai-labs/adept
 The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece.
 
 - The authors suggest to use the following prompt for image captioning: `f"Generate a coco-style caption.\\n"`
-
 
 ## FuyuConfig
 

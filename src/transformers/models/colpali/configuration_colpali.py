@@ -83,9 +83,7 @@ class ColPaliConfig(PretrainedConfig):
                     f"The model type `{vlm_config['model_type']}` is not supported. Please provide a valid model type."
                 )
             vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
-        elif isinstance(vlm_config, PretrainedConfig):
-            vlm_config = vlm_config
-        else:
+        elif not isinstance(vlm_config, PretrainedConfig):
             raise TypeError(
                 f"Invalid type for `vlm_config`. Expected `PretrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
             )

@@ -119,24 +119,12 @@ pip install transformers datasets evaluate rouge_score
 
 次に、[`DataCollat​​orForSeq2Seq`] を使用してサンプルのバッチを作成します。データセット全体を最大長までパディングするのではなく、照合中にバッチ内の最長の長さまで文を *動的にパディング* する方が効率的です。
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-<tf>
-
-```py
->>> from transformers import DataCollatorForSeq2Seq
-
->>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -172,8 +160,6 @@ pip install transformers datasets evaluate rouge_score
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 
@@ -229,93 +215,6 @@ pip install transformers datasets evaluate rouge_score
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-Keras を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-a-tensorflow-model-with-keras) の基本的なチュートリアルをご覧ください。
-
-</Tip>
-TensorFlow でモデルを微調整するには、オプティマイザー関数、学習率スケジュール、およびいくつかのトレーニング ハイパーパラメーターをセットアップすることから始めます。
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-次に、[`TFAutoModelForSeq2SeqLM`] を使用して T5 をロードできます。
-
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained(checkpoint)
-```
-
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`] を使用して、データセットを `tf.data.Dataset` 形式に変換します。
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_billsum["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     tokenized_billsum["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-[`compile`](https://keras.io/api/models/model_training_apis/#compile-method) を使用してトレーニング用のモデルを設定します。 Transformers モデルにはすべてデフォルトのタスク関連の損失関数があるため、次の場合を除き、損失関数を指定する必要はないことに注意してください。
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-トレーニングを開始する前にセットアップする最後の 2 つのことは、予測から ROUGE スコアを計算し、モデルをハブにプッシュする方法を提供することです。どちらも [Keras コールバック](../main_classes/keras_callbacks) を使用して行われます。
-
-`compute_metrics` 関数を [`~transformers.KerasMetricCallback`] に渡します。
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
-```
-
-Specify where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_billsum_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-次に、コールバックをまとめてバンドルします。
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-ついに、モデルのトレーニングを開始する準備が整いました。トレーニングおよび検証データセット、エポック数、コールバックを指定して [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) を呼び出し、モデルを微調整します。
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=callbacks)
-```
-
-トレーニングが完了すると、モデルは自動的にハブにアップロードされ、誰でも使用できるようになります。
-
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -347,8 +246,6 @@ Specify where to push your model and tokenizer in the [`~transformers.PushToHubC
 
 必要に応じて、`pipeline`」の結果を手動で複製することもできます。
 
-<frameworkcontent>
-<pt>
 Tokenize the text and return the `input_ids` as PyTorch tensors:
 
 ```py
@@ -373,32 +270,3 @@ Tokenize the text and return the `input_ids` as PyTorch tensors:
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
 ```
-</pt>
-<tf>
-
-テキストをトークン化し、`input_ids`を TensorFlow テンソルとして返します。
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_billsum_model")
->>> inputs = tokenizer(text, return_tensors="tf").input_ids
-```
-
-[`~transformers.generation_tf_utils.TFGenerationMixin.generate`] メソッドを使用して要約を作成します。さまざまなテキスト生成戦略と生成を制御するためのパラメーターの詳細については、[Text Generation](../main_classes/text_generation) API を確認してください。
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained("stevhliu/my_awesome_billsum_model")
->>> outputs = model.generate(inputs, max_new_tokens=100, do_sample=False)
-```
-
-生成されたトークン ID をデコードしてテキストに戻します。
-
-```py
->>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
-```
-</tf>
-</frameworkcontent>

@@ -152,7 +152,6 @@ class CsmProcessor(ProcessorMixin):
                 padding_left = padding_total
                 padding_right = extra_padding
             else:
-                padding_left = padding_left
                 padding_right = padding_right + extra_padding
 
             cur_length = cur_length + padding_left + padding_right
@@ -226,10 +225,8 @@ class CsmProcessor(ProcessorMixin):
                 The ratio of audio frames to keep for the depth decoder labels.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'tf'`: Return TensorFlow `tf.constant` objects.
                     - `'pt'`: Return PyTorch `torch.Tensor` objects.
                     - `'np'`: Return NumPy `np.ndarray` objects.
-                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

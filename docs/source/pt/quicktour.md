@@ -66,18 +66,9 @@ No exemplo a seguir, você usará [`pipeline`] para análise sentimental.
 Instale as seguintes dependências se você ainda não o fez:
 
 
-<frameworkcontent>
-<pt>
 ```bash
 pip install torch
 ```
-</pt>
-<tf>
-```bash
-pip install tensorflow
-```
-</tf>
-</frameworkcontent>
 
 Importe [`pipeline`] e especifique a tarefa que deseja completar:
 
@@ -152,8 +143,6 @@ A [`pipeline`] pode acomodar qualquer modelo do [Model Hub](https://huggingface.
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-<frameworkcontent>
-<pt>
 Use o [`AutoModelForSequenceClassification`] e [`AutoTokenizer`] para carregar o modelo pré-treinado e seu tokenizer associado (mais em `AutoClass` abaixo):
 
 ```py
@@ -162,19 +151,6 @@ Use o [`AutoModelForSequenceClassification`] e [`AutoTokenizer`] para carregar o
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
-</pt>
-<tf>
-
-Use o [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] para carregar o modelo pré-treinado e o tokenizer associado (mais em `TFAutoClass` abaixo):
-
-```py
->>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
->>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-```
-</tf>
-</frameworkcontent>
 
 Então você pode especificar o modelo e o tokenizador na [`pipeline`] e aplicar o `classifier` no seu texto alvo:
 
@@ -226,8 +202,6 @@ O tokenizer retornará um dicionário contendo:
 
 Assim como o [`pipeline`], o tokenizer aceitará uma lista de entradas. Além disso, o tokenizer também pode preencher e truncar o texto para retornar um lote com comprimento uniforme:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> pt_batch = tokenizer(
@@ -238,27 +212,11 @@ Assim como o [`pipeline`], o tokenizer aceitará uma lista de entradas. Além di
 ...     return_tensors="pt",
 ... )
 ```
-</pt>
-<tf>
-
-```py
->>> tf_batch = tokenizer(
-...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
-...     padding=True,
-...     truncation=True,
-...     max_length=512,
-...     return_tensors="tf",
-... )
-```
-</tf>
-</frameworkcontent>
 
 Leia o tutorial de [pré-processamento](./pré-processamento) para obter mais detalhes sobre tokenização.
 
 ### AutoModel
 
-<frameworkcontent>
-<pt>
 🤗 Transformers fornecem uma maneira simples e unificada de carregar instâncias pré-treinadas. Isso significa que você pode carregar um [`AutoModel`] como carregaria um [`AutoTokenizer`]. A única diferença é selecionar o [`AutoModel`] correto para a tarefa. Como você está fazendo classificação de texto ou sequência, carregue [`AutoModelForSequenceClassification`]:
 
 ```py
@@ -290,39 +248,6 @@ O modelo gera as ativações finais no atributo `logits`. Aplique a função sof
 tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
-</pt>
-<tf>
-🤗 Transformers fornecem uma maneira simples e unificada de carregar instâncias pré-treinadas. Isso significa que você pode carregar um [`TFAutoModel`] como carregaria um [`AutoTokenizer`]. A única diferença é selecionar o [`TFAutoModel`] correto para a tarefa. Como você está fazendo classificação de texto ou sequência, carregue [`TFAutoModelForSequenceClassification`]:
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
-```
-
-<Tip>
-
-Veja o [sumário de tarefas](./task_summary) para qual classe de [`AutoModel`] usar para cada tarefa.
-
-</Tip>
-
-Agora você pode passar seu grupo de entradas pré-processadas diretamente para o modelo através da passagem de chaves de dicionários ao tensor.
-
-```py
->>> tf_outputs = tf_model(tf_batch)
-```
-
-O modelo gera as ativações finais no atributo `logits`. Aplique a função softmax aos `logits` para recuperar as probabilidades:
-
-```py
->>> import tensorflow as tf
-
->>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
->>> tf_predictions  # doctest: +IGNORE_RESULT
-```
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -342,8 +267,6 @@ As saídas do modelo também se comportam como uma tupla ou um dicionário (por 
 
 ### Salvar um modelo
 
-<frameworkcontent>
-<pt>
 Uma vez que seu modelo estiver afinado, você pode salvá-lo com seu Tokenizer usando [`PreTrainedModel.save_pretrained`]:
 
 ```py
@@ -357,28 +280,9 @@ Quando você estiver pronto para usá-lo novamente, recarregue com [`PreTrainedM
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
-</pt>
-<tf>
-Uma vez que seu modelo estiver afinado, você pode salvá-lo com seu Tokenizer usando [`TFPreTrainedModel.save_pretrained`]:
-
-```py
->>> tf_save_directory = "./tf_save_pretrained"
->>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
->>> tf_model.save_pretrained(tf_save_directory)
-```
-
-Quando você estiver pronto para usá-lo novamente, recarregue com [`TFPreTrainedModel.from_pretrained`]
-
-```py
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
-```
-</tf>
-</frameworkcontent>
 
 Um recurso particularmente interessante dos 🤗 Transformers é a capacidade de salvar um modelo e recarregá-lo como um modelo PyTorch ou TensorFlow. Use `from_pt` ou `from_tf` para converter o modelo de um framework para outro:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import AutoModel
@@ -386,14 +290,3 @@ Um recurso particularmente interessante dos 🤗 Transformers é a capacidade de
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
-</pt>
-<tf>
-
-```py
->>> from transformers import TFAutoModel
-
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
-```
-</tf>
-</frameworkcontent>

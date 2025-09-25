@@ -52,7 +52,6 @@ or for an editable install:
 pip install -e .[quality]
 ```
 
-
 ## Tests
 
 All the jobs that begin with `ci/circleci: run_tests_` run parts of the Transformers testing suite. Each of those jobs focuses on a part of the library in a certain environment: for instance `ci/circleci: run_tests_pipelines` runs the pipeline tests in an environment where all pipeline-related requirements are installed.

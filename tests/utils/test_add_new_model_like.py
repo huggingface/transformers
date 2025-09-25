@@ -481,7 +481,7 @@ class TestAddNewModelLike(unittest.TestCase):
                 Phi4MultimodalAudioAttention,
                 Phi4MultimodalAudioConformerEncoderLayer,
                 Phi4MultimodalAudioConvModule,
-                Phi4MultimodalAudioDepthWiseSeperableConv1d,
+                Phi4MultimodalAudioDepthWiseSeparableConv1d,
                 Phi4MultimodalAudioEmbedding,
                 Phi4MultimodalAudioGluPointWiseConv,
                 Phi4MultimodalAudioMeanVarianceNormLayer,
@@ -567,7 +567,7 @@ class TestAddNewModelLike(unittest.TestCase):
                 pass
 
 
-            class MyTest2AudioDepthWiseSeperableConv1d(Phi4MultimodalAudioDepthWiseSeperableConv1d):
+            class MyTest2AudioDepthWiseSeparableConv1d(Phi4MultimodalAudioDepthWiseSeparableConv1d):
                 pass
 
 

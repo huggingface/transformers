@@ -62,8 +62,6 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
     - all
 
 
-<frameworkcontent>
-<pt>
 
 ## BloomModel
 
@@ -90,18 +88,3 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
 [[autodoc]] BloomForQuestionAnswering
     - forward
 
-</pt>
-<jax>
-
-## FlaxBloomModel
-
-[[autodoc]] FlaxBloomModel
-    - __call__
-
-## FlaxBloomForCausalLM
-
-[[autodoc]] FlaxBloomForCausalLM
-    - __call__
-
-</jax>
-</frameworkcontent>

@@ -117,10 +117,8 @@ out = model(**inputs)
 out.loss.backward()
 ```
 
-
 This model was contributed by [Jaeyong Sung](https://huggingface.co/buttercrab), [Arthur Zucker](https://huggingface.co/ArthurZ),
 and [Anton Vlasjuk](https://huggingface.co/AntonV). The original code can be found [here](https://github.com/nari-labs/dia/).
-
 
 ## DiaConfig
 

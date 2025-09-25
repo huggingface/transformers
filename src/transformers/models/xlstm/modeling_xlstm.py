@@ -169,7 +169,7 @@ else:
         eps: float = 1e-6,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         _device = matQ.device
-        nc, chunk_size = num_chunks, chunk_size
+        nc = num_chunks
         batch_size, nh, dqk, dhv = matC_states.shape
         matC_k_states = matC_states.view(batch_size, nh, nc, dqk // nc, dhv)
         vecN_k_states = vecN_states.view(batch_size, nh, nc, dqk // nc)

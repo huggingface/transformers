@@ -19,7 +19,6 @@ specific language governing permissions and limitations under the License.
     </div>
 </div>
 
-
 # KOSMOS-2.5
 
 The Kosmos-2.5 model was proposed in [KOSMOS-2.5: A Multimodal Literate Model](https://huggingface.co/papers/2309.11419/) by Microsoft.
@@ -158,7 +157,6 @@ image.save("output.png")
 
 </hfoption>
 </hfoptions>
-
 
 ## Chat version
 

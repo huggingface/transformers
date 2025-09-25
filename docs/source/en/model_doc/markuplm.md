@@ -54,7 +54,7 @@ These are the XPATH tags and subscripts respectively for each token in the input
 - One can use [`MarkupLMProcessor`] to prepare all data for the model. Refer to the [usage guide](#usage-markuplmprocessor) for more info.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/markuplm_architecture.jpg"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> MarkupLM architecture. Taken from the <a href="https://huggingface.co/papers/2110.08518">original paper.</a> </small>
 

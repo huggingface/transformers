@@ -31,7 +31,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
 from threading import Thread
-from typing import Optional, Union
+from typing import Optional, TypedDict, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
@@ -141,7 +141,7 @@ if serve_dependencies_available:
 
         file: bytes  # Overwritten -- pydantic isn't happy with `typing.IO[bytes]`, present in the original type
         generation_config: str
-        stream: Optional[bool] = False
+        stream: bool = False
 
     # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have built-in validation.
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
@@ -528,7 +528,7 @@ class ServeCommand(BaseTransformersCLICommand):
     def _validate_request(
         self,
         request: dict,
-        schema: "_TypedDictMeta",  # noqa: F821
+        schema: TypedDict,
         validator: "TypeAdapter",
         unused_fields: set,
     ):
@@ -538,7 +538,7 @@ class ServeCommand(BaseTransformersCLICommand):
         Args:
             request (`dict`):
                 The request to validate.
-            schema (`_TypedDictMeta`):
+            schema (`TypedDict`):
                 The schema of the request to validate. It is a `TypedDict` definition.
             validator (`TypeAdapter`):
                 The validator to use to validate the request. Built from `schema`.
@@ -600,7 +600,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def build_chat_completion_chunk(
         self,
-        request_id: Optional[str] = "",
+        request_id: str = "",
         content: Optional[int] = None,
         model: Optional[str] = None,
         role: Optional[str] = None,
@@ -1026,7 +1026,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
-            last_kv_cache = self.last_kv_cache
+            seq_len = self.last_kv_cache.get_seq_length()
+            if inputs["input_ids"].shape[-1] > seq_len:
+                last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
             **inputs,
@@ -1213,7 +1215,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
-            last_kv_cache = self.last_kv_cache
+            seq_len = self.last_kv_cache.get_seq_length()
+            if inputs["input_ids"].shape[-1] > seq_len:
+                last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
             "inputs": inputs,

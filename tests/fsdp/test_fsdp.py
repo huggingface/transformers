@@ -88,22 +88,11 @@ def get_master_port(real_launcher=False):
 
 
 if is_torch_available():
-    from tests.trainer.test_trainer import (  # noqa
-        RegressionModelConfig,
-        RegressionPreTrainedModel,
-    )
-
     # hack to restore original logging level pre #21700
     get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
 
-require_fsdp_version = require_fsdp
 if is_accelerate_available():
-    from accelerate.utils.constants import (
-        FSDP_PYTORCH_VERSION,
-        FSDP_SHARDING_STRATEGY,
-    )
-
-    require_fsdp_version = partial(require_fsdp, min_version=FSDP_PYTORCH_VERSION)
+    from accelerate.utils.constants import FSDP_SHARDING_STRATEGY
 
 
 FSDP2_ACCELERATE_VERSION = "1.6.0"
@@ -142,7 +131,6 @@ def _parameterized_custom_name_func(func, param_num, param):
 
 @require_accelerate
 @require_torch_accelerator
-@require_fsdp_version
 class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def setUp(self):
         super().setUp()

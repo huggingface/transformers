@@ -55,7 +55,6 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
   pre-computed values in the context of text generation. See the [`forward`](model_doc/ctrl#transformers.CTRLModel.forward)
   method for more information on the usage of this argument.
 
-
 ## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)

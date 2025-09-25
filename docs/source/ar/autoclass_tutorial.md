@@ -115,8 +115,6 @@
 
 ## النموذج التلقائي (AutoModel)
 
-<frameworkcontent>
-<pt>
 تسمح لك فئات `AutoModelFor` بتحميل نموذج مُدرب مسبقًا لمهمة معينة (راجع [هنا](model_doc/auto) للحصول على قائمة كاملة بالمهام المتاحة). على سبيل المثال، قم بتحميل نموذج لتصنيف التسلسل باستخدام [`AutoModelForSequenceClassification.from_pretrained`]:
 
 ```py
@@ -143,25 +141,4 @@
 
 
 بشكل عام، نوصي باستخدام فئة `AutoTokenizer` وفئة `AutoModelFor` لتحميل مثيلات مُدربة مسبقًا من النماذج. سيساعدك هذا في تحميل البنية الصحيحة في كل مرة. في البرنامج التعليمي التالي، تعرف على كيفية استخدام المحلل اللغوي ومعالج الصور ومستخرج الميزات والمعالج الذي تم تحميله حديثًا لمعالجة مجموعة بيانات للضبط الدقيق.
-</pt>
 
-<tf>
-أخيرًا، تسمح لك فئات `TFAutoModelFor` بتحميل نموذج مُدرب مسبقًا لمهمة معينة (راجع [هنا](model_doc/auto) للحصول على قائمة كاملة بالمهام المتاحة). على سبيل المثال، قم بتحميل نموذج لتصنيف التسلسل باستخدام [`TFAutoModelForSequenceClassification.from_pretrained`]:
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-أعد استخدام نفس نقطة التفتيش لتحميل بنية لمهمة مختلفة:
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-بشكل عام، نوصي باستخدام فئة `AutoTokenizer` وفئة `TFAutoModelFor` لتحميل نسخ لنماذج مُدربة مسبقًا. سيساعدك هذا في تحميل البنية الصحيحة في كل مرة. في البرنامج التعليمي التالي، ستتعرف على كيفية استخدام المُجزّئ اللغوي ومعالج الصور ومستخرج الميزات والمعالج الذي تم تحميله حديثًا لمعالجة مجموعة بيانات للضبط الدقيق.
-</tf>
-</frameworkcontent>

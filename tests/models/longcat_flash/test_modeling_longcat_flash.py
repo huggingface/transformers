@@ -60,7 +60,7 @@ class LongcatFlashModelTester(CausalLMModelTester):
         hidden_size=144,
         ffn_hidden_size=288,
         expert_ffn_hidden_size=48,
-        num_layers=2,
+        num_layers=1,  # We have `self.num_hidden_layers = 2 * num_layers` in the body. See `LongcatFlashConfig`.
         num_attention_heads=8,
         num_key_value_heads=8,
         kv_lora_rank=16,
@@ -96,7 +96,7 @@ class LongcatFlashModelTester(CausalLMModelTester):
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
         self.num_layers = num_layers
         self.num_hidden_layers = 2 * num_layers  # for compatibility
-        self.expected_num_hidden_layers = 3  # embedding + 2 layers
+        self.expected_num_hidden_layers = 2  # embedding + 2 layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.kv_lora_rank = kv_lora_rank

@@ -56,7 +56,6 @@ class XLNetModelTester:
         d_inner=128,
         num_hidden_layers=2,
         type_sequence_label_size=2,
-        untie_r=True,
         bi_data=False,
         same_length=False,
         initializer_range=0.05,
@@ -81,9 +80,8 @@ class XLNetModelTester:
         self.hidden_size = 32
         self.num_attention_heads = 4
         self.d_inner = 128
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 3
         self.type_sequence_label_size = 2
-        self.untie_r = True
         self.bi_data = False
         self.same_length = False
         self.initializer_range = 0.05
@@ -152,7 +150,6 @@ class XLNetModelTester:
             n_head=self.num_attention_heads,
             d_inner=self.d_inner,
             n_layer=self.num_hidden_layers,
-            untie_r=self.untie_r,
             mem_len=self.mem_len,
             clamp_len=self.clamp_len,
             same_length=self.same_length,

@@ -174,7 +174,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
             The dropout ratio.
         ext_pw_out_channel (`int`, *optional*, defaults to 1024):
             Number of out channels in the point-wise conv modules.
-        depthwise_seperable_out_channel (`int`, *optional*, defaults to 1024):
+        depthwise_separable_out_channel (`int`, *optional*, defaults to 1024):
             Number of out channels in the depth-wise separable conv modules.
         depthwise_multiplier (`int`, *optional*, defaults to 1):
             Input size multiplier for the depth-wise separable conv modules.
@@ -227,7 +227,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         left_chunk: int = 18,
         dropout_rate: float = 0.0,
         ext_pw_out_channel: int = 1024,
-        depthwise_seperable_out_channel: int = 1024,
+        depthwise_separable_out_channel: int = 1024,
         depthwise_multiplier: int = 1,
         kernel_size: int = 3,
         conv_activation: str = "swish",
@@ -254,7 +254,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.num_blocks = num_blocks
         self.dropout_rate = dropout_rate
         self.ext_pw_out_channel = ext_pw_out_channel
-        self.depthwise_seperable_out_channel = depthwise_seperable_out_channel
+        self.depthwise_separable_out_channel = depthwise_separable_out_channel
         self.depthwise_multiplier = depthwise_multiplier
         self.kernel_size = kernel_size
         self.conv_activation = conv_activation
@@ -930,7 +930,7 @@ class Phi4MultimodalAudioAttention(nn.Module):
         return attn_output
 
 
-class Phi4MultimodalAudioDepthWiseSeperableConv1d(nn.Module):
+class Phi4MultimodalAudioDepthWiseSeparableConv1d(nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig, padding: int = 0):
         super().__init__()
         self.dw_conv = nn.Conv1d(
@@ -942,7 +942,7 @@ class Phi4MultimodalAudioDepthWiseSeperableConv1d(nn.Module):
             groups=config.hidden_size,
         )
         self.pw_conv = nn.Conv1d(
-            config.hidden_size * config.depthwise_multiplier, config.depthwise_seperable_out_channel, 1, 1, 0
+            config.hidden_size * config.depthwise_multiplier, config.depthwise_separable_out_channel, 1, 1, 0
         )
 
     def forward(self, hidden_states):
@@ -978,7 +978,7 @@ class Phi4MultimodalAudioConvModule(nn.Module):
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.glu = Phi4MultimodalAudioGluPointWiseConv(config)
-        self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeperableConv1d(config, padding=config.kernel_size - 1)
+        self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeparableConv1d(config, padding=config.kernel_size - 1)
         self.act = ACT2FN[config.conv_activation]
         self.ext_pw_conv_1d = nn.Conv1d(config.hidden_size, config.ext_pw_out_channel, kernel_size=1, stride=1)
         self.dropout = nn.Dropout(config.dropout_rate)

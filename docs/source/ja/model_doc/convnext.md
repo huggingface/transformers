@@ -69,8 +69,6 @@ ConvNeXT の使用を開始するのに役立つ公式 Hugging Face およびコ
 [[autodoc]] ConvNextImageProcessorFast
     - preprocess
 
-<frameworkcontent>
-<pt>
 
 ## ConvNextModel
 
@@ -82,18 +80,3 @@ ConvNeXT の使用を開始するのに役立つ公式 Hugging Face およびコ
 [[autodoc]] ConvNextForImageClassification
     - forward
 
-</pt>
-<tf>
-
-## TFConvNextModel
-
-[[autodoc]] TFConvNextModel
-    - call
-
-## TFConvNextForImageClassification
-
-[[autodoc]] TFConvNextForImageClassification
-    - call
-
-</tf>
-</frameworkcontent>
