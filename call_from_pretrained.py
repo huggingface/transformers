@@ -20,6 +20,10 @@ import json
 #     if call is None:
 #         continue
 #
+#     # if "tiny-random-BertForMaskedLM" in call:
+#     #     breakpoint()
+#
+#
 #     if ".from_pretrained" not in call:
 #         continue
 #
@@ -39,21 +43,35 @@ import json
 #
 # with open("calls.json", "w", encoding="utf-8") as fp:
 #     json.dump(new_calls, fp, indent=4, ensure_ascii=False)
-
+#
 # exit(0)
 
-with open("calls.json") as fp:
-    calls = json.load(fp)
+import tempfile
+import subprocess
 
-print(len(calls))
-
-for call in calls:
-
+def foo(call):
     class_name = call.split(".from_pretrained")[0]
-    expr = f'from transformers import {class_name}; torch_device = "cpu"; obj = {call}; print(obj.__class__); print("OK")'
+    expr = f'import torch; from transformers.tokenization_utils import AddedToken; from transformers import {class_name}; torch_device = "cpu"; obj = {call}; print(obj.__class__); print("OK")'
     print(expr)
-    with open("file.py", "w", encoding="utf-8") as fp:
-        fp.write(expr)
 
-    import os
-    os.system("python file.py")
+    result = subprocess.run(
+        ["python", "-c", expr],
+        # capture_output=True,
+        text=True
+    )
+
+
+if __name__ == "__main__":
+
+    with open("calls.json") as fp:
+        calls = json.load(fp)
+
+    print(len(calls))
+
+
+    import multiprocessing
+    with multiprocessing.Pool(processes=8) as pool:
+        pool.map(foo, calls)
+
+    # for call in calls[:16]:
+    #     foo(call)
