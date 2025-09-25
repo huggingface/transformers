@@ -140,6 +140,9 @@ class HfQuantizer(ABC):
         """
         return expected_keys
 
+    def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
+        return unexpected_keys
+
     def get_special_dtypes_update(self, model, dtype: "torch.dtype") -> dict[str, "torch.dtype"]:
         """
         returns dtypes for modules that are not quantized - used for the computation of the device_map in case
