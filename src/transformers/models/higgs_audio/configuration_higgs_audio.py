@@ -17,6 +17,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
+
 class HiggsAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class for the HiggsAudioModel. Instantiating a configuration
@@ -313,7 +314,7 @@ class HiggsAudioConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        
+
         if audio_adapter_type not in [
             "stack",
             "dual_ffn_fast_forward",
@@ -322,7 +323,7 @@ class HiggsAudioConfig(PretrainedConfig):
         if audio_adapter_type.startswith("dual_ffn"):
             if audio_dual_ffn_layers is None:
                 raise ValueError("audio_dual_ffn_layers must be specified when using dual_ffn adapter.")
-        
+
         self.audio_adapter_type = audio_adapter_type
         self.audio_dual_ffn_layers = audio_dual_ffn_layers
         self.encode_audio_in_tokens = encode_audio_in_tokens

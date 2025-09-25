@@ -15,9 +15,9 @@
 """HiggsAudioProcessor."""
 
 from dataclasses import asdict, dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Optional, Union
-from io import BytesIO
 from urllib.request import urlopen
 
 import numpy as np
@@ -25,7 +25,7 @@ import numpy as np
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import is_soundfile_available, is_torch_available, is_librosa_available, logging
+from ...utils import is_librosa_available, is_soundfile_available, is_torch_available, logging
 from ...utils.chat_template_utils import render_jinja_template
 
 
