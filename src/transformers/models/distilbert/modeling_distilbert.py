@@ -96,31 +96,26 @@ class Embeddings(nn.Module):
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
 
-    def forward(self, input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        Parameters:
-            input_ids (torch.Tensor):
-                torch.tensor(bs, max_seq_length) The token ids to embed.
-            input_embeds (*optional*, torch.Tensor):
-                The pre-computed word embeddings. Can only be passed if the input ids are `None`.
-
-
-        Returns: torch.tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type
-        embeddings)
-        """
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        input_embeds: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+    ) -> torch.Tensor:
         if input_ids is not None:
             input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
 
         seq_length = input_embeds.size(1)
 
-        # Setting the position-ids to the registered buffer in constructor, it helps
-        # when tracing the model without passing position-ids, solves
-        # issues similar to issue #5664
-        if hasattr(self, "position_ids"):
-            position_ids = self.position_ids[:, :seq_length]
-        else:
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
-            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
+        if position_ids is None:
+            # Setting the position-ids to the registered buffer in constructor, it helps
+            # when tracing the model without passing position-ids, solves
+            # issues similar to issue #5664
+            if hasattr(self, "position_ids"):
+                position_ids = self.position_ids[:, :seq_length]
+            else:
+                position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
+                position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
 
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
@@ -435,6 +430,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -453,7 +449,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        embeddings = self.embeddings(input_ids, inputs_embeds)
+        embeddings = self.embeddings(input_ids, inputs_embeds, position_ids)
 
         attention_mask = self._update_full_mask(
             attention_mask,
@@ -551,6 +547,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[MaskedLMOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -575,6 +572,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
             return_dict=True,
             **kwargs,
         )
@@ -645,6 +643,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[SequenceClassifierOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -658,6 +657,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
             return_dict=True,
             **kwargs,
         )
@@ -744,6 +744,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[QuestionAnsweringModelOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -764,6 +765,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
             return_dict=True,
             **kwargs,
         )
@@ -843,6 +845,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[TokenClassifierOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -854,6 +857,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
             return_dict=True,
             **kwargs,
         )
@@ -918,6 +922,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[MultipleChoiceModelOutput, tuple[torch.Tensor, ...]]:
         r"""
@@ -973,6 +978,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
             return_dict=True,
             **kwargs,
         )
