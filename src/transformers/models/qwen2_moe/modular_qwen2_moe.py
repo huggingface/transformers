@@ -35,7 +35,7 @@ from ...modeling_layers import (
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..gemma.modeling_gemma import GemmaMLP
-from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, LlamaRotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
     MixtralExperts,
@@ -120,9 +120,9 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         return expert_output
 
 
-class Qwen2MoeDecoderLayer(MixtralDecoderLayer):
+class Qwen2MoeDecoderLayer(LlamaDecoderLayer, nn.Module):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+        nn.Module.__init__(config, layer_idx)
         self.self_attn = Qwen2MoeAttention(config, layer_idx)
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
@@ -130,40 +130,9 @@ class Qwen2MoeDecoderLayer(MixtralDecoderLayer):
             self.mlp = Qwen2MoeSparseMoeBlock(config)
         else:
             self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
-        del self.block_sparse_moe
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            cache_position=cache_position,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states
+        self.input_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.hidden_size = config.hidden_size
 
 
 @auto_docstring
