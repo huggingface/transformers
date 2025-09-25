@@ -113,17 +113,6 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
         model.push_to_hub(push_to_hub)
 
 
-"""
-```
-# Download config and checkpoint files
-git clone https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base /workspace/higgs_audio_original
-# Run conversion:
-python src/transformers/models/higgs_audio/convert_higgs_audio_to_hf.py \
-    --checkpoint_path /workspace/higgs_audio_original \
-    --config_path /workspace/higgs_audio_original/config.json \
-    --push_to_hub hf-audio/higgs-audio-v2-generation-3B-base
-```
-"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
