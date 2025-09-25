@@ -44,8 +44,7 @@ from .utils.constants import (  # noqa: F401
 )
 
 
-# Fallback values for torchvision-dependent variables.
-# These are used when torchvision is unavailable or fails to import.
+# Safe import of torchvision transforms (avoid crashing text-only users if torchvision is broken)
 InterpolationMode = None
 pil_torch_interpolation_mapping = {}
 
