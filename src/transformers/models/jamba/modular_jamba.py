@@ -8,7 +8,6 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import (
@@ -21,19 +20,14 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
-
     logging,
 )
-from ...utils.generic import OutputRecorder
-from ...utils.generic import check_model_inputs
-from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
-from ..mixtral.modeling_mixtral import (
-    MixtralExperts,
-    MixtralForCausalLM,
-    MixtralMLP
-)
-from .configuration_jamba import JambaConfig
+from ...utils.generic import OutputRecorder, check_model_inputs
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
+from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
+from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, MixtralMLP
+from .configuration_jamba import JambaConfig
+
 
 if is_flash_attn_available():
     pass
@@ -142,7 +136,7 @@ class HybridMambaAttentionDynamicCache:
         query_length = cache_position.shape[0]
         kv_length = self.get_seq_length(layer_idx) + query_length
         return kv_length, kv_offset
-    
+
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
@@ -642,7 +636,7 @@ class JambaPreTrainedModel(PreTrainedModel):
         "attentions": JambaAttention,
         "router_logits": OutputRecorder(nn.Linear, layer_name="router"),
     }
-    
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv1d)):

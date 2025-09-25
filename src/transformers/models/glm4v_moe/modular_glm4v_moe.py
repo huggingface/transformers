@@ -29,8 +29,8 @@ from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
-    Glm4MoeMoE,
     Glm4MoeMLP,
+    Glm4MoeMoE,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
     Glm4MoeTopkRouter,
