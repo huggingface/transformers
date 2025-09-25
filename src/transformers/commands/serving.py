@@ -26,7 +26,7 @@ import threading
 import time
 import uuid
 from argparse import ArgumentParser, Namespace
-from collections.abc import AsyncGenerator, Generator, Iterable
+from collections.abc import AsyncGenerator, AsyncIterator, Generator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -35,6 +35,8 @@ from typing import Optional, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
+from openai.types.chat.chat_completion import Choice
+from starlette.responses import StreamingResponse
 from tokenizers.decoders import DecodeStream
 
 import transformers
@@ -90,13 +92,15 @@ if serve_dependencies_available:
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.audio.transcription import Transcription
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
-    from openai.types.chat import ChatCompletionMessageParam
+    from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageParam
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
-        Choice,
         ChoiceDelta,
         ChoiceDeltaToolCall,
         ChoiceDeltaToolCallFunction,
+    )
+    from openai.types.chat.chat_completion_chunk import (
+        Choice as ChoiceChunk,
     )
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.responses import (
@@ -609,6 +613,7 @@ class ServeCommand(BaseTransformersCLICommand):
         tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
         decode_stream: Optional[DecodeStream] = None,
         tokenizer: Optional[PreTrainedTokenizerFast] = None,
+        compile_to_sse: Optional[bool] = True,
     ) -> str:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
@@ -635,12 +640,13 @@ class ServeCommand(BaseTransformersCLICommand):
         """
         if decode_stream is not None and content is not None and tokenizer is not None:
             content = decode_stream.step(tokenizer._tokenizer, content)
+
         chunk = ChatCompletionChunk(
             id=request_id,
             created=int(time.time()),
             model=model,
             choices=[
-                Choice(
+                ChoiceChunk(
                     delta=ChoiceDelta(
                         content=content,
                         role=role,
@@ -653,7 +659,8 @@ class ServeCommand(BaseTransformersCLICommand):
             system_fingerprint="",
             object="chat.completion.chunk",
         )
-        return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+
+        return chunk if not compile_to_sse else f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     def build_response_event(self, response: "BaseModel") -> str:
         """
@@ -717,10 +724,9 @@ class ServeCommand(BaseTransformersCLICommand):
             self.validate_chat_completion_request(request=body)
 
             if self.use_continuous_batching:
-                output = self.continuous_batching_chat_completion(body, request.state.request_id)
+                return self.continuous_batching_chat_completion(body, request.state.request_id)
             else:
-                output = self.generate_chat_completion(body)
-            return StreamingResponse(output, media_type="text/event-stream")
+                return self.generate_chat_completion(body)
 
         @app.post("/v1/responses")
         def responses(request: dict):
@@ -860,11 +866,13 @@ class ServeCommand(BaseTransformersCLICommand):
             model.device
         )
 
-        def stream_chat_completion(request_id, decode_stream):
+        def stream_chat_completion(request_id, decode_stream, compile_to_sse: bool = True):
             try:
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
-                yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
+                yield self.build_chat_completion_chunk(
+                    request_id, role="assistant", model=model_id_and_revision, compile_to_sse=compile_to_sse
+                )
 
                 for result in self.running_continuous_batching_manager.request_id_iter(request_id):
                     if result.status == RequestStatus.FINISHED:
@@ -872,6 +880,7 @@ class ServeCommand(BaseTransformersCLICommand):
                             request_id,
                             finish_reason="stop",
                             model=model_id_and_revision,
+                            compile_to_sse=compile_to_sse,
                         )
                         break
                     else:
@@ -881,6 +890,7 @@ class ServeCommand(BaseTransformersCLICommand):
                             model=model_id_and_revision,
                             decode_stream=decode_stream,
                             tokenizer=tokenizer,
+                            compile_to_sse=compile_to_sse,
                         )
 
             except Exception as e:
@@ -888,21 +898,29 @@ class ServeCommand(BaseTransformersCLICommand):
                 self.running_continuous_batching_manager.cancel_request(request_id)
                 yield f'data: {{"error": "{str(e)}"}}'
 
-        async def cancellation_wrapper(_inputs, request_id):
+        async def cancellation_wrapper(_inputs, request_id, compile_to_sse: bool = True):
             try:
                 decode_stream = DecodeStream(_inputs.tolist(), False)
                 # XXX: using returned request_id as safety in case it is None
                 request_id = self.running_continuous_batching_manager.add_request(
                     _inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens
                 )
-                for chunk in stream_chat_completion(request_id, decode_stream):
+                for chunk in stream_chat_completion(request_id, decode_stream, compile_to_sse=compile_to_sse):
                     yield chunk
                     await asyncio.sleep(0)  # Yield control to the event loop to check for cancellations
             except asyncio.CancelledError:
                 self.running_continuous_batching_manager.cancel_request(request_id)
                 logger.warning(f"Request {request_id} was cancelled.")
 
-        return cancellation_wrapper(inputs[0], request_id)
+        if req.get("stream"):
+            return cancellation_wrapper(inputs[0], request_id)
+        else:
+            return self.unstream_response(
+                cancellation_wrapper(inputs[0], request_id, compile_to_sse=False),
+                request_id=request_id,
+                model=req.get("model"),
+                _async=True,
+            )
 
     @staticmethod
     def get_model_modality(model: "PreTrainedModel") -> Modality:
@@ -962,7 +980,7 @@ class ServeCommand(BaseTransformersCLICommand):
             processor_inputs.append(parsed_message)
         return processor_inputs
 
-    def generate_chat_completion(self, req: dict) -> Generator[str, None, None]:
+    def generate_chat_completion(self, req: dict) -> StreamingResponse | JSONResponse:
         """
         Generates an OpenAI Chat Completion using `generate`.
 
@@ -1037,7 +1055,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "past_key_values": last_kv_cache,
         }
 
-        def stream_chat_completion(streamer, _request_id):
+        def stream_chat_completion(streamer, _request_id, compile_to_sse: bool = True):
             # Temporary hack for GPTOS 2: filter out the CoT tokens. Full solution here implies defining new output
             # classes and piping the reasoning trace into a new field
             filter_cot = False
@@ -1060,7 +1078,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
-                yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
+                yield self.build_chat_completion_chunk(
+                    request_id, role="assistant", model=model_id_and_revision, compile_to_sse=compile_to_sse
+                )
 
                 for result in streamer:
                     # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
@@ -1092,6 +1112,7 @@ class ServeCommand(BaseTransformersCLICommand):
                                 role=None,
                                 finish_reason="tool_calls",
                                 model=model_id_and_revision,
+                                compile_to_sse=compile_to_sse,
                             )
 
                             continue
@@ -1140,7 +1161,11 @@ class ServeCommand(BaseTransformersCLICommand):
                                 )
 
                             yield self.build_chat_completion_chunk(
-                                request_id=_request_id, role=None, tool_calls=[tool], model=model_id_and_revision
+                                request_id=_request_id,
+                                role=None,
+                                tool_calls=[tool],
+                                model=model_id_and_revision,
+                                compile_to_sse=compile_to_sse,
                             )
                             continue
                     # ====== END OF TOOL CALL LOGIC ======
@@ -1148,9 +1173,11 @@ class ServeCommand(BaseTransformersCLICommand):
                     # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
                     if result != "":
                         yield self.build_chat_completion_chunk(
-                            _request_id, content=result, model=model_id_and_revision
+                            _request_id, content=result, model=model_id_and_revision, compile_to_sse=compile_to_sse
                         )
-                yield self.build_chat_completion_chunk(_request_id, finish_reason="stop", model=model_id_and_revision)
+                yield self.build_chat_completion_chunk(
+                    _request_id, finish_reason="stop", model=model_id_and_revision, compile_to_sse=compile_to_sse
+                )
 
                 thread.join()
             except Exception as e:
@@ -1160,7 +1187,63 @@ class ServeCommand(BaseTransformersCLICommand):
             finally:
                 thread.join()
 
-        return stream_chat_completion(generation_streamer, request_id)
+            return (
+                StreamingResponse(
+                    stream_chat_completion(generation_streamer, request_id), media_type="text/event-stream"
+                )
+                if req.get("stream")
+                else self.unstream_response(
+                    stream_chat_completion(generation_streamer, request_id, compile_to_sse=False),
+                    request_id=request_id,
+                    model=req.get("model"),
+                )
+            )
+
+    async def unpack_generator(self, agen):
+        return [x async for x in agen]
+
+    def unstream_response(
+        self,
+        gen: AsyncIterator[ChatCompletionChunk] | Generator[ChatCompletionChunk],
+        request_id: str,
+        model: str,
+        _async: bool = False,
+    ) -> JSONResponse:
+        content = []
+        finish_reason = "stop"
+        usage = None
+
+        # Works with both synchronous and asynchronous generators
+        sgen = gen if not _async else asyncio.run(self.unpack_generator(gen))
+
+        for chunk in sgen:
+            choice = chunk.choices[0]
+            if getattr(choice.delta, "content", None):
+                content.append(choice.delta.content)
+            if choice.finish_reason:
+                finish_reason = choice.get(finish_reason, "stop")
+            if getattr(chunk, "usage", None):
+                usage = chunk.usage
+
+        chat_completion_result = ChatCompletion(
+            id=request_id,
+            created=int(time.time()),
+            object="chat.completion",
+            # TODO Check the model
+            model=model,
+            choices=[
+                Choice(
+                    # TODO check the index
+                    index=0,
+                    message=ChatCompletionMessage(content="".join(content), role="assistant"),
+                    finish_reason=finish_reason,
+                )
+            ],
+            # TODO implement function calling
+            usage=usage,
+        )
+
+        return JSONResponse(chat_completion_result.model_dump(exclude_none=True), media_type="application/json")
 
     def generate_response(self, req: dict) -> Generator[str, None, None]:
         """
