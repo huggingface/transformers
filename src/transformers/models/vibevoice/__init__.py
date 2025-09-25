@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from .modular_vibevoice_tokenizer import *  # TODO move to separate model?
     from .processing_vibevoice import *
     from .tokenization_vibevoice import *
-    from .tokenization_vibevoice_fast import *
 else:
     import sys
 
