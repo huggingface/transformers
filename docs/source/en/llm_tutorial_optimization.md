@@ -16,18 +16,18 @@ rendered properly in your Markdown viewer.
 Large Language Models (LLMs) such as GPT3/4, [Falcon](https://huggingface.co/tiiuae/falcon-40b), and [Llama](https://huggingface.co/meta-llama/Llama-2-70b-hf) are rapidly advancing in their ability to tackle human-centric tasks, establishing themselves as essential tools in modern knowledge-based industries.
 Deploying these models in real-world tasks remains challenging, however:
 
--   To exhibit near-human text understanding and generation capabilities, LLMs currently require to be composed of billions of parameters (see [Kaplan et al](https://huggingface.co/papers/2001.08361), [Wei et. al](https://huggingface.co/papers/2206.07682)). This consequently amplifies the memory demands for inference.
--   In many real-world tasks, LLMs need to be given extensive contextual information. This necessitates the model's capability to manage very long input sequences during inference.
+- To exhibit near-human text understanding and generation capabilities, LLMs currently require to be composed of billions of parameters (see [Kaplan et al](https://huggingface.co/papers/2001.08361), [Wei et. al](https://huggingface.co/papers/2206.07682)). This consequently amplifies the memory demands for inference.
+- In many real-world tasks, LLMs need to be given extensive contextual information. This necessitates the model's capability to manage very long input sequences during inference.
 
 The crux of these challenges lies in augmenting the computational and memory capabilities of LLMs, especially when handling expansive input sequences.
 
 In this guide, we will go over the effective techniques for efficient LLM deployment:
 
-1.  **Lower Precision:** Research has shown that operating at reduced numerical precision, namely [8-bit and 4-bit](./main_classes/quantization) can achieve computational advantages without a considerable decline in model performance.
+1. **Lower Precision:** Research has shown that operating at reduced numerical precision, namely [8-bit and 4-bit](./main_classes/quantization) can achieve computational advantages without a considerable decline in model performance.
 
-2.  **Flash Attention:** Flash Attention is a variation of the attention algorithm that not only provides a more memory-efficient approach but also realizes increased efficiency due to optimized GPU memory utilization.
+2. **Flash Attention:** Flash Attention is a variation of the attention algorithm that not only provides a more memory-efficient approach but also realizes increased efficiency due to optimized GPU memory utilization.
 
-3.  **Architectural Innovations:** Considering that LLMs are always deployed in the same way during inference, namely autoregressive text generation with a long input context, specialized model architectures have been proposed that allow for more efficient inference. The most important advancement in model architectures hereby are [Alibi](https://huggingface.co/papers/2108.12409), [Rotary embeddings](https://huggingface.co/papers/2104.09864), [Multi-Query Attention (MQA)](https://huggingface.co/papers/1911.02150) and [Grouped-Query-Attention (GQA)](https://huggingface.co/papers/2305.13245).
+3. **Architectural Innovations:** Considering that LLMs are always deployed in the same way during inference, namely autoregressive text generation with a long input context, specialized model architectures have been proposed that allow for more efficient inference. The most important advancement in model architectures hereby are [Alibi](https://huggingface.co/papers/2108.12409), [Rotary embeddings](https://huggingface.co/papers/2104.09864), [Multi-Query Attention (MQA)](https://huggingface.co/papers/1911.02150) and [Grouped-Query-Attention (GQA)](https://huggingface.co/papers/2305.13245).
 
 Throughout this guide, we will offer an analysis of auto-regressive generation from a tensor's perspective. We delve into the pros and cons of adopting lower precision, provide a comprehensive exploration of the latest attention algorithms, and discuss improved LLM architectures. While doing so, we run practical examples showcasing each of the feature improvements.
 
@@ -37,22 +37,22 @@ Memory requirements of LLMs can be best understood by seeing the LLM as a set of
 
 At the time of writing this guide, LLMs consist of at least a couple billion parameters. Each parameter thereby is made of a decimal number, e.g. `4.5689` which is usually stored in either [float32](https://en.wikipedia.org/wiki/Single-precision_floating-point_format), [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), or [float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format) format. This allows us to easily compute the memory requirement to load the LLM into memory:
 
-> *Loading the weights of a model having X billion parameters requires roughly 4 * X GB of VRAM in float32 precision*
+> *Loading the weights of a model having X billion parameters requires roughly 4 \* X GB of VRAM in float32 precision*
 
 Nowadays, models are however rarely trained in full float32 precision, but usually in bfloat16 precision or less frequently in float16 precision. Therefore the rule of thumb becomes:
 
-> *Loading the weights of a model having X billion parameters requires roughly 2 * X GB of VRAM in bfloat16/float16 precision*
+> *Loading the weights of a model having X billion parameters requires roughly 2 \* X GB of VRAM in bfloat16/float16 precision*
 
 For shorter text inputs (less than 1024 tokens), the memory requirement for inference is very much dominated by the memory requirement to load the weights. Therefore, for now, let's assume that the memory requirement for inference is equal to the memory requirement to load the model into the GPU VRAM.
 
 To give some examples of how much VRAM it roughly takes to load a model in bfloat16:
 
--   **GPT3** requires 2 \* 175 GB = **350 GB** VRAM
--   [**Bloom**](https://huggingface.co/bigscience/bloom) requires 2 \* 176 GB = **352 GB** VRAM
--   [**Llama-2-70b**](https://huggingface.co/meta-llama/Llama-2-70b-hf) requires 2 \* 70 GB = **140 GB** VRAM
--   [**Falcon-40b**](https://huggingface.co/tiiuae/falcon-40b) requires 2 \* 40 GB = **80 GB** VRAM
--   [**MPT-30b**](https://huggingface.co/mosaicml/mpt-30b) requires 2 \* 30 GB = **60 GB** VRAM
--   [**bigcode/starcoder**](https://huggingface.co/bigcode/starcoder) requires 2 \* 15.5 = **31 GB** VRAM
+- **GPT3** requires 2 \* 175 GB = **350 GB** VRAM
+- [**Bloom**](https://huggingface.co/bigscience/bloom) requires 2 \* 176 GB = **352 GB** VRAM
+- [**Llama-2-70b**](https://huggingface.co/meta-llama/Llama-2-70b-hf) requires 2 \* 70 GB = **140 GB** VRAM
+- [**Falcon-40b**](https://huggingface.co/tiiuae/falcon-40b) requires 2 \* 40 GB = **80 GB** VRAM
+- [**MPT-30b**](https://huggingface.co/mosaicml/mpt-30b) requires 2 \* 30 GB = **60 GB** VRAM
+- [**bigcode/starcoder**](https://huggingface.co/bigcode/starcoder) requires 2 \* 15.5 = **31 GB** VRAM
 
 As of writing this document, the largest GPU chip on the market is the A100 & H100 offering 80GB of VRAM. Most of the models listed before require more than 80GB just to be loaded and therefore necessarily require [tensor parallelism](https://huggingface.co/docs/transformers/perf_train_gpu_many#tensor-parallelism) and/or [pipeline parallelism](https://huggingface.co/docs/transformers/perf_train_gpu_many#naive-model-parallelism-vertical-and-pipeline-parallelism).
 
@@ -169,17 +169,17 @@ All that matters is that the next token *logit* distribution stays roughly the s
 
 There are various quantization techniques, which we won't discuss in detail here, but in general, all quantization techniques work as follows:
 
--   1.  Quantize all weights to the target precision
--   2.  Load the quantized weights, and pass the input sequence of vectors in bfloat16 precision
--   3.  Dynamically dequantize weights to bfloat16 to perform the computation with their input vectors in bfloat16 precision
+- 1. Quantize all weights to the target precision
+- 2. Load the quantized weights, and pass the input sequence of vectors in bfloat16 precision
+- 3. Dynamically dequantize weights to bfloat16 to perform the computation with their input vectors in bfloat16 precision
 
 In a nutshell, this means that *inputs-weight matrix* multiplications, with \\( X \\) being the *inputs*, \\( W \\) being a weight matrix and \\( Y \\) being the output:
 
-$$ Y = X * W $$
+$$ Y = X \* W $$
 
 are changed to
 
-$$ Y = X * \text{dequantize}(W) $$
+$$ Y = X \* \text{dequantize}(W) $$
 
 for every matrix multiplication. Dequantization and re-quantization is performed sequentially for all weight matrices as the inputs run through the network graph.
 
@@ -310,7 +310,7 @@ $$ \textbf{O} = \text{Attn}(\mathbf{X}) = \mathbf{V} \times \text{Softmax}(\math
 \\(  \mathbf{X} = (\mathbf{x}_1, ... \mathbf{x}_{N}) \\) is thereby the input sequence to the attention layer. The projections \\( \mathbf{Q} \\) and \\( \mathbf{K} \\) will each consist of \\( N \\) vectors resulting in the \\( \mathbf{QK}^T \\) being of size \\( N^2 \\) .
 
 LLMs usually have multiple attention heads, thus doing multiple self-attention computations in parallel.
-Assuming, the LLM has 40 attention heads and runs in bfloat16 precision, we can calculate the memory requirement to store the \\( \mathbf{QK^T} \\) matrices to be \\( 40 * 2 * N^2 \\) bytes. For \\( N=1000 \\) only around 50 MB of VRAM are needed, however, for \\( N=16000 \\) we would need 19 GB of VRAM, and for \\( N=100,000 \\) we would need almost 1TB just to store the \\( \mathbf{QK}^T \\) matrices.
+Assuming, the LLM has 40 attention heads and runs in bfloat16 precision, we can calculate the memory requirement to store the \\( \mathbf{QK^T} \\) matrices to be \\( 40 \* 2 \* N^2 \\) bytes. For \\( N=1000 \\) only around 50 MB of VRAM are needed, however, for \\( N=16000 \\) we would need 19 GB of VRAM, and for \\( N=100,000 \\) we would need almost 1TB just to store the \\( \mathbf{QK}^T \\) matrices.
 
 Long story short, the default self-attention algorithm quickly becomes prohibitively memory-expensive for large input contexts.
 
@@ -505,21 +505,22 @@ For more information on how to use Flash Attention, please have a look at [this 
 
 So far we have looked into improving computational and memory efficiency by:
 
--   Casting the weights to a lower precision format
--   Replacing the self-attention algorithm with a more memory- and compute efficient version
+- Casting the weights to a lower precision format
+- Replacing the self-attention algorithm with a more memory- and compute efficient version
 
 Let's now look into how we can change the architecture of an LLM so that it is most effective and efficient for task that require long text inputs, *e.g.*:
--   Retrieval augmented Questions Answering,
--   Summarization,
--   Chat
+
+- Retrieval augmented Questions Answering,
+- Summarization,
+- Chat
 
 Note that *chat* not only requires the LLM to handle long text inputs, but it also necessitates that the LLM is able to efficiently handle the back-and-forth dialogue between user and assistant (such as ChatGPT).
 
 Once trained, the fundamental LLM architecture is difficult to change, so it is important to make considerations about the LLM's tasks beforehand and accordingly optimize the model's architecture.
 There are two important components of the model architecture that quickly become memory and/or performance bottlenecks for large input sequences.
 
--   The positional embeddings
--   The key-value cache
+- The positional embeddings
+- The key-value cache
 
 Let's go over each component in more detail
 
@@ -553,8 +554,8 @@ Sinusoidal and learned position embeddings used to be the predominant methods to
 
 Recently, relative positional embeddings that can tackle the above mentioned problems have become more popular, most notably:
 
--   [Rotary Position Embedding (RoPE)](https://huggingface.co/papers/2104.09864)
--   [ALiBi](https://huggingface.co/papers/2108.12409)
+- [Rotary Position Embedding (RoPE)](https://huggingface.co/papers/2104.09864)
+- [ALiBi](https://huggingface.co/papers/2108.12409)
 
 Both *RoPE* and *ALiBi* argue that it's best to cue the LLM about sentence order directly in the self-attention algorithm as it's there that word tokens are put into relation with each other. More specifically, sentence order should be cued by modifying the \\( \mathbf{QK}^T \\) computation.
 
@@ -568,9 +569,9 @@ $$ \mathbf{\hat{q}}_i^T \mathbf{\hat{x}}_j = \mathbf{{q}}_i^T \mathbf{R}_{\theta
 
 *RoPE* is used in multiple of today's most important LLMs, such as:
 
--   [**Falcon**](https://huggingface.co/tiiuae/falcon-40b)
--   [**Llama**](https://huggingface.co/papers/2302.13971)
--   [**PaLM**](https://huggingface.co/papers/2204.02311)
+- [**Falcon**](https://huggingface.co/tiiuae/falcon-40b)
+- [**Llama**](https://huggingface.co/papers/2302.13971)
+- [**PaLM**](https://huggingface.co/papers/2204.02311)
 
 As an alternative, *ALiBi* proposes a much simpler relative position encoding scheme. The relative distance that input tokens have to each other is added as a negative integer scaled by a pre-defined value `m` to each query-key entry of the \\( \mathbf{QK}^T \\) matrix right before the softmax computation.
 
@@ -580,17 +581,18 @@ As shown in the [ALiBi](https://huggingface.co/papers/2108.12409) paper, this si
 
 *ALiBi* is used in multiple of today's most important LLMs, such as:
 
--   [**MPT**](https://huggingface.co/mosaicml/mpt-30b)
--   [**BLOOM**](https://huggingface.co/bigscience/bloom)
+- [**MPT**](https://huggingface.co/mosaicml/mpt-30b)
+- [**BLOOM**](https://huggingface.co/bigscience/bloom)
 
 Both *RoPE* and *ALiBi* position encodings can extrapolate to input lengths not seen during training whereas it has been shown that extrapolation works much better out-of-the-box for *ALiBi* as compared to *RoPE*.
 For ALiBi, one simply increases the values of the lower triangular position matrix to match the length of the input sequence.
 For *RoPE*, keeping the same \\( \theta \\) that was used during training leads to poor results when passing text inputs much longer than those seen during training, *c.f* [Press et al.](https://huggingface.co/papers/2108.12409). However, the community has found a couple of effective tricks that adapt \\( \theta \\), thereby allowing *RoPE* position embeddings to work well for extrapolated text input sequences (see [here](https://github.com/huggingface/transformers/pull/24653)).
 
 > Both RoPE and ALiBi are relative positional embeddings that are *not* learned during training, but instead are based on the following intuitions:
- -   Positional cues about the text inputs should be given directly to the \\( QK^T \\) matrix of the self-attention layer
- -   The LLM should be incentivized to learn a constant *relative* distance positional encodings have to each other
- -   The further text input tokens are from each other, the lower the probability of their query-value probability. Both RoPE and ALiBi lower the query-key probability of tokens far away from each other. RoPE by decreasing their vector product by increasing the angle between the query-key vectors. ALiBi by adding large negative numbers to the vector product
+
+- Positional cues about the text inputs should be given directly to the \\( QK^T \\) matrix of the self-attention layer
+- The LLM should be incentivized to learn a constant *relative* distance positional encodings have to each other
+- The further text input tokens are from each other, the lower the probability of their query-value probability. Both RoPE and ALiBi lower the query-key probability of tokens far away from each other. RoPE by decreasing their vector product by increasing the angle between the query-key vectors. ALiBi by adding large negative numbers to the vector product
 
 In conclusion, LLMs that are intended to be deployed in tasks that require handling large text inputs are better trained with relative positional embeddings, such as RoPE and ALiBi. Also note that even if an LLM with RoPE and ALiBi has been trained only on a fixed length of say \\( N_1 = 2048 \\) it can still be used in practice with text inputs much larger than \\( N_1 \\), like \\( N_2 = 8192 > N_1 \\) by extrapolating the positional embeddings.
 
@@ -675,8 +677,9 @@ As one can see, when using the key-value cache the text input tokens are *not* i
 > Making use of the key-value cache means that the \\( \mathbf{QK}^T \\) is essentially reduced to \\( \mathbf{q}_c\mathbf{K}^T \\) with \\( \mathbf{q}_c \\) being the query projection of the currently passed input token which is *always* just a single vector.
 
 Using the key-value cache has two advantages:
--   Significant increase in computational efficiency as less computations are performed compared to computing the full \\( \mathbf{QK}^T \\) matrix. This leads to an increase in inference speed
--   The maximum required memory is not increased quadratically with the number of generated tokens, but only increases linearly.
+
+- Significant increase in computational efficiency as less computations are performed compared to computing the full \\( \mathbf{QK}^T \\) matrix. This leads to an increase in inference speed
+- The maximum required memory is not increased quadratically with the number of generated tokens, but only increases linearly.
 
 > One should *always* make use of the key-value cache as it leads to identical results and a significant speed-up for longer input sequences. Transformers has the key-value cache enabled by default when making use of the text pipeline or the [`generate` method](https://huggingface.co/docs/transformers/main_classes/text_generation). We have an entire guide dedicated to caches [here](./kv_cache).
 
@@ -698,10 +701,12 @@ Assistant: Germany has ca. 81 million inhabitants
 ```
 
 In this chat, the LLM runs auto-regressive decoding twice:
+
   1. The first time, the key-value cache is empty and the input prompt is `"User: How many people live in France?"` and the model auto-regressively generates the text `"Roughly 75 million people live in France"` while increasing the key-value cache at every decoding step.
   2. The second time the input prompt is `"User: How many people live in France? \n Assistant: Roughly 75 million people live in France \n User: And how many in Germany?"`. Thanks to the cache, all key-value vectors for the first two sentences are already computed. Therefore the input prompt only consists of `"User: And how many in Germany?"`. While processing the shortened input prompt, its computed key-value vectors are concatenated to the key-value cache of the first decoding. The second Assistant's answer `"Germany has ca. 81 million inhabitants"` is then auto-regressively generated with the key-value cache consisting of encoded key-value vectors of `"User: How many people live in France? \n Assistant: Roughly 75 million people live in France \n User: And how many are in Germany?"`.
 
 Two things should be noted here:
+
   1. Keeping all the context is crucial for LLMs deployed in chat so that the LLM understands all the previous context of the conversation. E.g. for the example above the LLM needs to understand that the user refers to the population when asking `"And how many are in Germany"`.
   2. The key-value cache is extremely useful for chat as it allows us to continuously grow the encoded chat history instead of having to re-encode the chat history again from scratch (as e.g. would be the case when using an encoder-decoder architecture).
 
@@ -772,10 +777,10 @@ The important part to understand here is that reducing the number of key-value a
 
 MQA has seen wide adoption by the community and is now used by many of the most popular LLMs:
 
--   [**Falcon**](https://huggingface.co/tiiuae/falcon-40b)
--   [**PaLM**](https://huggingface.co/papers/2204.02311)
--   [**MPT**](https://huggingface.co/mosaicml/mpt-30b)
--   [**BLOOM**](https://huggingface.co/bigscience/bloom)
+- [**Falcon**](https://huggingface.co/tiiuae/falcon-40b)
+- [**PaLM**](https://huggingface.co/papers/2204.02311)
+- [**MPT**](https://huggingface.co/mosaicml/mpt-30b)
+- [**BLOOM**](https://huggingface.co/bigscience/bloom)
 
 Also, the checkpoint used in this notebook - `bigcode/octocoder` - makes use of MQA.
 
