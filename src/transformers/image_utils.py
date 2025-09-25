@@ -133,11 +133,15 @@ def is_valid_list_of_images(images: list):
 
 
 def concatenate_list(input_list):
-    if isinstance(input_list[0], list):
+    first_item = input_list[0]
+
+    if isinstance(first_item, list):
         return [item for sublist in input_list for item in sublist]
-    elif isinstance(input_list[0], np.ndarray):
+    if isinstance(first_item, np.ndarray):
         return np.concatenate(input_list, axis=0)
-    elif isinstance(input_list[0], torch.Tensor):
+    if is_torch_tensor(first_item):
+        import torch
+
         return torch.cat(input_list, dim=0)
 
 
