@@ -722,7 +722,6 @@ def cached_files(
         }
         info_str = json.dumps(info, ensure_ascii=False, sort_keys=True)
 
-        breakpoint()
         with open(file_path, "a", encoding="utf-8") as fp:
             fp.write(f"{info_str}\n")
 
