@@ -59,6 +59,8 @@ def foo(call):
         # capture_output=True,
         text=True
     )
+    ok = result.returncode == 0
+    return ok
 
 
 if __name__ == "__main__":
@@ -68,10 +70,15 @@ if __name__ == "__main__":
 
     print(len(calls))
 
+    # for x in calls[:10]:
+    #     print(x)
 
     import multiprocessing
     with multiprocessing.Pool(processes=8) as pool:
-        pool.map(foo, calls)
+        results = pool.map(foo, calls)
+
+    print(sum(results))
+
 
     # for call in calls[:16]:
     #     foo(call)
