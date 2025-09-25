@@ -573,11 +573,14 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
             activation=config.activation,  # "swish"
         )
 
-        # Quantile prediction projection: 1280 -> 10240 (matching original exactly)
+        # Quantile prediction projection: hidden_size -> output_quantile_len * (num_quantiles + 1)
+        # Original: 1024 * 10 = 10240 (9 quantiles + 1 extra)
+        output_quantile_len = getattr(config, "output_quantile_len", 1024)  # Default from original
+        quantile_output_size = output_quantile_len * (len(config.quantiles) + 1)
         self.output_projection_quantiles = Timesfm2P5ResidualBlock(
-            input_dims=config.hidden_size,  # 1280
-            hidden_dims=config.hidden_size,  # 1280
-            output_dims=10240,  # Exact match to original model
+            input_dims=config.hidden_size,
+            hidden_dims=config.hidden_size,
+            output_dims=quantile_output_size,  # Dynamic based on horizon_length
             use_bias=config.use_bias,  # False
             activation=config.activation,  # "swish"
         )
@@ -738,13 +741,15 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         # Apply denormalization to get final predictions
         b, n = hidden_states.shape[:2]
 
-        # Reshape point predictions: [B, N, 1280] -> [B, N, 128, 10]
-        point_reshaped = point_output.view(b, n, 128, 10)
-        decode_index = 5  # Median index (should match config)
-        mean_preds_norm = point_reshaped[:, :, :, decode_index]  # [B, N, 128]
+        # Reshape point predictions: [B, N, hidden_size] -> [B, N, horizon_length, quantiles_per_step]
+        horizon_length = self.config.horizon_length
+        quantiles_per_step = point_output.shape[-1] // horizon_length
+        point_reshaped = point_output.view(b, n, horizon_length, quantiles_per_step)
+        decode_index = min(5, quantiles_per_step - 1)  # Median index, clamp to available quantiles
+        mean_preds_norm = point_reshaped[:, :, :, decode_index]  # [B, N, horizon_length]
 
-        # Flatten and take first 128 values (horizon length)
-        mean_preds_flat = mean_preds_norm.reshape(b, -1)[:, :128]  # [B, 128]
+        # Flatten and take first horizon_length values
+        mean_preds_flat = mean_preds_norm.reshape(b, -1)[:, :horizon_length]  # [B, horizon_length]
 
         # Denormalize using stats from base model
         loc_pred = loc.view(b, 1)  # [B, 1]
@@ -752,24 +757,40 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         mean_predictions = mean_preds_flat * scale_pred + loc_pred
 
         # Process quantile predictions similarly
-        quantile_reshaped = quantile_output.view(b, n, 128, 80)  # [B, N, 128, 80] (8 quantiles * 10)
+        quantile_output_size = quantile_output.shape[-1]
+        quantiles_per_horizon_step = quantile_output_size // horizon_length
+        quantile_reshaped = quantile_output.view(
+            b, n, horizon_length, quantiles_per_horizon_step
+        )  # [B, N, horizon_length, quantiles_per_horizon_step]
 
-        # Take quantiles: we need 9 quantiles (indices 0-8), plus the median is at index 5
+        # Take quantiles: we need num_quantiles quantiles, plus the median is at the end
         # The original TimesFM expects [B, horizon, quantiles] shape
-        # From 80 values per horizon step, we need to extract 9 quantiles
-        quantile_indices = list(range(9))  # Use first 9 quantiles (0.1 to 0.9)
-        quantile_preds_norm = quantile_reshaped[:, :, :, quantile_indices]  # [B, N, 128, 9]
+        num_quantiles = len(self.config.quantiles)  # From config
+        available_quantile_indices = min(quantiles_per_horizon_step, num_quantiles)
+        quantile_indices = list(range(available_quantile_indices))
+        quantile_preds_norm = quantile_reshaped[
+            :, :, :, quantile_indices
+        ]  # [B, N, horizon_length, available_quantiles]
 
         # Flatten and take first horizon values, then reshape properly
-        quantile_preds_flat = quantile_preds_norm.reshape(b, -1, 9)[:, :128, :]  # [B, 128, 9]
+        quantile_preds_flat = quantile_preds_norm.reshape(b, -1, available_quantile_indices)[
+            :, :horizon_length, :
+        ]  # [B, horizon_length, available_quantiles]
 
-        # Add median (point prediction) as 10th quantile
-        mean_preds_expanded = mean_preds_flat.unsqueeze(-1)  # [B, 128, 1]
-        quantile_preds_with_median = torch.cat([quantile_preds_flat, mean_preds_expanded], dim=-1)  # [B, 128, 10]
+        # Add median (point prediction) as final quantile
+        mean_preds_expanded = mean_preds_flat.unsqueeze(-1)  # [B, horizon_length, 1]
+        quantile_preds_with_median = torch.cat(
+            [quantile_preds_flat, mean_preds_expanded], dim=-1
+        )  # [B, horizon_length, available_quantiles+1]
 
         # Denormalize all quantiles
-        scale_expanded_for_quantiles = scale_pred.unsqueeze(-1).expand(-1, 128, 10)  # [B, 128, 10]
-        loc_expanded_for_quantiles = loc_pred.unsqueeze(-1).expand(-1, 128, 10)  # [B, 128, 10]
+        total_quantiles = available_quantile_indices + 1
+        scale_expanded_for_quantiles = scale_pred.unsqueeze(-1).expand(
+            -1, horizon_length, total_quantiles
+        )  # [B, horizon_length, total_quantiles]
+        loc_expanded_for_quantiles = loc_pred.unsqueeze(-1).expand(
+            -1, horizon_length, total_quantiles
+        )  # [B, horizon_length, total_quantiles]
         quantile_predictions = quantile_preds_with_median * scale_expanded_for_quantiles + loc_expanded_for_quantiles
 
         # Apply truncate_negative if requested (same logic as parent class)
