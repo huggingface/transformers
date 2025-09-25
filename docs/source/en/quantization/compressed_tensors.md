@@ -65,11 +65,11 @@ print(f"{mem_params/2**30:.4f} GB")
 
 ## Model checkpoint
 
-compressed-tensor models are defined through its configuration entry. The following example is taken from the [nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf/blob/main/config.json) `config.json` file.
+Compressed-tensor models are defined through its configuration entry. The following example is taken from the [nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf/blob/main/config.json) `config.json` file.
 
 There are a lot of entries to allow for flexible expression both during and after compression, but the entries for loading and inference can be simplified to focus on just a few key entries.
 
-```yaml
+```json
 "quantization_config": {
   "config_groups": {
     "group_0": {
