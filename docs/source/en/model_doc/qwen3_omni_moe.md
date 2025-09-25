@@ -13,9 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-26 and added to Hugging Face Transformers on 2025-04-14.*
+*This model was released on 2025-03-26 and added to Hugging Face Transformers on 2025-09-21.*
 
-# Qwen2.5-Omni
+# Qwen3-Omni-MOE
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -25,22 +25,22 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The [Qwen2.5-Omni](https://qwenlm.github.io/blog/qwen2.5-omni/) model is a unified multiple modalities model proposed in [Qwen2.5-Omni Technical Report](https://huggingface.co/papers/2503.20215) from Qwen team, Alibaba Group.
+The Qwen3-Omni-MOE model is a unified multiple modalities model proposed in [Qwen3-Omni Technical Report](https://huggingface.co/papers/2509.17765) from Qwen team, Alibaba Group.
 
 The abstract from the technical report is the following:
 
-*We present Qwen2.5-Omni, an end-to-end multimodal model designed to perceive diverse modalities, including text, images, audio, and video, while simultaneously generating text and natural speech responses in a streaming manner. To enable the streaming of multimodal information inputs, both audio and visual encoders utilize a block-wise processing approach. This strategy effectively decouples the handling of long sequences of multimodal data, assigning the perceptual responsibilities to the multimodal encoder and entrusting the modeling of extended sequences to a large language model. Such a division of labor enhances the fusion of different modalities via the shared attention mechanism. To synchronize the timestamps of video inputs with audio, we organized the audio and video sequentially in an interleaved manner and propose a novel position embedding approach, named TMRoPE (Time-aligned Multimodal RoPE). To concurrently generate text and speech while avoiding interference between the two modalities, we propose Thinker-Talker architecture. In this framework, Thinker functions as a large language model tasked with text generation, while Talker is a dual-track autoregressive model that directly utilizes the hidden representations from the Thinker to produce audio tokens as output. Both the Thinker and Talker models are designed to be trained and inferred in an end-to-end manner. For decoding audio tokens in a streaming manner, we introduce a sliding-window DiT that restricts the receptive field, aiming to reduce the initial package delay. Qwen2.5-Omni outperforms the similarly sized Qwen2-VL and Qwen2-Audio in both image and audio capabilities. Furthermore, Qwen2.5-Omni achieves state-of-the-art performance on multimodal benchmarks like Omni-Bench. Notably, Qwen2.5-Omni is the first open-source model to achieve a level of performance in end-to-end speech instruction following that is comparable to its capabilities with text inputs, as evidenced by benchmarks such as MMLU and GSM8K. As for speech generation, Qwen2.5-Omni's streaming Talker outperform most existing streaming and non-streaming alternatives in robustness and naturalness.*
+*We present Qwen3-Omni, a single multimodal model that, for the first time, maintains state-of-the-art performance across text, image, audio, and video without any degradation relative to single-modal counterparts. Qwen3-Omni matches the performance of same-sized single-modal models within the Qwen series and excels particularly on audio tasks. Across 36 audio and audio-visual benchmarks, Qwen3-Omni achieves open-source SOTA on 32 benchmarks and overall SOTA on 22, outperforming strong closed-source models such as Gemini-2.5-Pro, Seed-ASR, and GPT-4o-Transcribe. Qwen3-Omni adopts a Thinker-Talker MoE architecture that unifies perception and generation across text, images, audio, and video, yielding fluent text and natural real-time speech. It supports text interaction in 119 languages, speech understanding in 19 languages, and speech generation in 10 languages. To reduce first-packet latency in streaming synthesis, Talker autoregressively predicts discrete speech codecs using a multi-codebook scheme. Leveraging the representational capacity of these codebooks, we replace computationally intensive block-wise diffusion with a lightweight causal ConvNet, enabling streaming from the first codec frame. In cold-start settings, Qwen3-Omni achieves a theoretical end-to-end first-packet latency of 234 ms. To further strengthen multimodal reasoning, we introduce a Thinking model that explicitly reasons over inputs from any modality. Since the research community currently lacks a general-purpose audio captioning model, we fine-tuned Qwen3-Omni-30B-A3B to obtain Qwen3-Omni-30B-A3B-Captioner, which produces detailed, low-hallucination captions for arbitrary audio inputs. Qwen3-Omni-30B-A3B, Qwen3-Omni-30B-A3B-Thinking, and Qwen3-Omni-30B-A3B-Captioner are publicly released under the Apache 2.0 license.
 
 ## Notes
 
-- Use [`Qwen2_5OmniForConditionalGeneration`] to generate audio and text output. To generate only one output type, use [`Qwen2_5OmniThinkerForConditionalGeneration`] for text-only and [`Qwen2_5OmniTalkersForConditionalGeneration`] for audio-only outputs.
-- Audio generation with [`Qwen2_5OmniForConditionalGeneration`] supports only single batch size at the moment.
+- Use [`Qwen3OmniMoeForConditionalGeneration`] to generate audio and text output. To generate only one output type, use [`Qwen3OmniMoeThinkerForConditionalGeneration`] for text-only and [`Qwen3OmniMoeTalkerForConditionalGeneration`] for audio-only outputs.
+- Audio generation with [`Qwen3OmniMoeForConditionalGeneration`] supports only single batch size at the moment.
 - In case out out-of-memory errors hwen working with video input, decrease `processor.max_pixels`. By default the maximum is set to a very arge value and high resolution visuals will not be resized, unless resolution exceeds `processor.max_pixels`.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
 
 ## Usage example
 
-`Qwen2.5-Omni` can be found on the [Huggingface Hub](https://huggingface.co/Qwen).
+`Qwen3-Omni` can be found on the [Huggingface Hub](https://huggingface.co/Qwen).
 
 ### Single Media inference
 
@@ -48,14 +48,14 @@ The model can accept text, images, audio and videos as input. Here's an example 
 
 ```python
 import soundfile as sf
-from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
+from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
 
-model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
+model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     dtype="auto",
     device_map="auto"
 )
-processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
 
 conversations = [
     {
@@ -82,7 +82,7 @@ inputs = processor.apply_chat_template(
     return_tensors="pt",
     video_fps=1,
 
-    # kwargs to be passed to `Qwen2-5-OmniProcessor`
+    # kwargs to be passed to `Qwen3OmniMoeProcessor`
     padding=True,
     use_audio_in_video=True,
 ).to(model.device)
@@ -101,17 +101,17 @@ print(text)
 
 ### Text-only generation
 
-To generate only text output and save compute by not loading the audio generation model, we can use `Qwen2_5OmniThinkerForConditionalGeneration` model.  
+To generate only text output and save compute by not loading the audio generation model, we can use `Qwen3OmniMoeThinkerForConditionalGeneration` model.
 
 ```python
-from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5OmniProcessor
+from transformers import Qwen3OmniMoeThinkerForConditionalGeneration, Qwen3OmniMoeProcessor
 
-model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
+model = Qwen3OmniMoeThinkerForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     dtype="auto",
     device_map="auto",
 )
-processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
 
 conversations = [
     {
@@ -138,7 +138,7 @@ inputs = processor.apply_chat_template(
     return_tensors="pt",
     video_fps=1,
 
-    # kwargs to be passed to `Qwen2-5-OmniProcessor`
+    # kwargs to be passed to `Qwen3OmniMoeProcessor`
     padding=True,
     use_audio_in_video=True,
 ).to(model.device)
@@ -157,18 +157,18 @@ print(text)
 
 ### Batch Mixed Media Inference
 
-The model can batch inputs composed of mixed samples of various types such as text, images, audio and videos as input when using `Qwen2_5OmniThinkerForConditionalGeneration` model. Here is an example.
+The model can batch inputs composed of mixed samples of various types such as text, images, audio and videos as input when using `Qwen3OmniMoeThinkerForConditionalGeneration` model. Here is an example.
 
 ```python
 import soundfile as sf
-from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
+from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
 
-model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
+model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     dtype="auto",
     device_map="auto"
 )
-processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
 
 # Conversation with video only
 conversation1 = [
@@ -247,7 +247,7 @@ inputs = processor.apply_chat_template(
     return_tensors="pt",
     video_fps=1,
 
-    # kwargs to be passed to `Qwen2-5-OmniProcessor`
+    # kwargs to be passed to `Qwen3OmniMoeProcessor`
     padding=True,
     use_audio_in_video=True,
 ).to(model.thinker.device)
@@ -267,7 +267,7 @@ The model supports a wide range of resolution inputs. By default, it uses the na
 ```python
 min_pixels = 128*28*28
 max_pixels = 768*28*28
-processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B", min_pixels=min_pixels, max_pixels=max_pixels)
+processor = AutoProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
 ```
 
 #### Prompt for audio output
@@ -285,8 +285,8 @@ If users need audio output, the system prompt must be set as "You are Qwen, a vi
 The model supports both text and audio outputs, if users do not need audio outputs, they can set `enable_audio_output` in the `from_pretrained` function. This option will save about `~2GB` of GPU memory but the `return_audio` option for `generate` function will only allow to be set at `False`.
 
 ```python
-model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
+model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     dtype="auto",
     device_map="auto",
     enable_audio_output=False,
@@ -296,8 +296,8 @@ model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
 In order to obtain a flexible experience, we recommend that users set `enable_audio_output` at `True` when initializing the model through `from_pretrained` function, and then decide whether to return audio when `generate` function is called. When `return_audio` is set to `False`, the model will only return text outputs to get text responses faster.
 
 ```python
-model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
+model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     dtype="auto",
     device_map="auto",
     enable_audio_output=True,
@@ -307,7 +307,7 @@ text_ids = model.generate(**inputs, return_audio=False)
 ```
 
 #### Change voice type of output audio
-Qwen2.5-Omni supports the ability to change the voice of the output audio. Users can use the `spk` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen2.5-Omni-7B"` checkpoint support two voice types: `Chelsie` and `Ethan`, while `Chelsie` is a female voice and `Ethan` is a male voice. By default, if `spk` is not specified, the default voice type is `Chelsie`.
+Qwen3-Omni-MOE supports the ability to change the voice of the output audio. Users can use the `spk` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen3-Omni-30B-A3B-Instruct"` checkpoint support two voice types: `Chelsie` and `Ethan`, while `Chelsie` is a female voice and `Ethan` is a male voice. By default, if `spk` is not specified, the default voice type is `Chelsie`.
 
 ```python
 text_ids, audio = model.generate(**inputs, spk="Chelsie")
@@ -330,10 +330,10 @@ Also, you should have hardware that is compatible with FlashAttention 2. Read mo
 To load and run a model using FlashAttention-2, add `attn_implementation="flash_attention_2"` when loading the model:
 
 ```python
-from transformers import Qwen2_5OmniForConditionalGeneration
+from transformers import Qwen3OmniMoeForConditionalGeneration
 
-model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
+model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     device_map="auto",
     dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
