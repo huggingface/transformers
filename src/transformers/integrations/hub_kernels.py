@@ -25,7 +25,6 @@ try:
         LayerRepository,
         Mode,
         get_kernel,
-        load_kernel,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
