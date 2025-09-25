@@ -319,9 +319,8 @@ class VibeVoiceProcessor(ProcessorMixin):
             voice_samples_list = [None] * len(texts)
 
         # Build full token sequence for each script
-        all_encodings = []
-        # inputs_ids = []
-        # speech_input_masks = []
+        input_ids = []
+        speech_input_masks = []
         prompt_tokens = self.tokenizer.encode(self.system_prompt)
         for i, _script in enumerate(scripts):
 
@@ -372,24 +371,15 @@ class VibeVoiceProcessor(ProcessorMixin):
             full_tokens += self.tokenizer.encode(' Speech output:\n', add_special_tokens=False) + [self.tokenizer.speech_start_id]
             speech_input_mask += [False] * (len(self.tokenizer.encode(' Speech output:\n', add_special_tokens=False)) + 1)
 
-            # inputs_ids.append(full_tokens)
-            # speech_input_masks.append(speech_input_mask)
-            all_encodings.append(
-                {
-                    "input_ids": full_tokens,
-                    "speech_input_mask": speech_input_mask,
-                }
-            )
+            input_ids.append(full_tokens)
+            speech_input_masks.append(speech_input_mask)
         
-        # TODO Pad/truncate for batch
-
-
-        # Combine batch
-        batch_encoding = self._batch_encode(
-            all_encodings,
+        # Pad/truncate for batch
+        batch_encoding = self.tokenizer.pad(
+            BatchFeature({"input_ids": input_ids, "speech_input_mask": speech_input_masks}),
             padding=padding,
-            truncation=truncation,
-            max_length=max_length,
+            padding_side="left",
+            max_length=max_length if truncation else None,
             return_tensors=return_tensors,
             return_attention_mask=return_attention_mask,
         )
@@ -407,82 +397,6 @@ class VibeVoiceProcessor(ProcessorMixin):
             batch_encoding["speech_masks"] = None
 
         return batch_encoding
-
-    def _batch_encode(
-        self,
-        encodings: list[dict[str, Any]],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        truncation: Union[bool, str, TruncationStrategy] = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: bool = True,
-    ) -> BatchFeature:
-        """Combine multiple encodings into a batch with padding."""
-        # Extract input_ids and create attention_mask
-        input_ids_list = [enc["input_ids"] for enc in encodings]
-        speech_input_masks_list = [enc["speech_input_mask"] for enc in encodings]
-
-        # Determine padding strategy
-        if isinstance(padding, bool):
-            padding_strategy = PaddingStrategy.LONGEST if padding else PaddingStrategy.DO_NOT_PAD
-        elif isinstance(padding, str):
-            padding_strategy = PaddingStrategy(padding)
-        else:
-            padding_strategy = padding
-
-        # Apply padding to input_ids
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD:
-            if padding_strategy == PaddingStrategy.LONGEST:
-                max_len = max(len(ids) for ids in input_ids_list)
-            elif padding_strategy == PaddingStrategy.MAX_LENGTH and max_length is not None:
-                max_len = max_length
-            else:
-                max_len = max(len(ids) for ids in input_ids_list)
-
-            # Pad sequences
-            padded_input_ids = []
-            attention_masks = []
-            padded_speech_input_masks = []
-
-            for input_ids, speech_mask in zip(input_ids_list, speech_input_masks_list):
-                # Truncate if needed
-                if truncation and len(input_ids) > max_len:
-                    input_ids = input_ids[:max_len]
-                    speech_mask = speech_mask[:max_len]
-
-                # Pad
-                padding_length = max_len - len(input_ids)
-                padded_ids = [self.tokenizer.pad_token_id] * padding_length + input_ids
-                attention_mask = [0] * padding_length + [1] * len(input_ids)
-                padded_speech_mask = [False] * padding_length + speech_mask
-
-                padded_input_ids.append(padded_ids)
-                attention_masks.append(attention_mask)
-                padded_speech_input_masks.append(padded_speech_mask)
-
-            input_ids_list = padded_input_ids
-            speech_input_masks_list = padded_speech_input_masks
-        else:
-            # No padding, just create attention masks
-            attention_masks = [[1] * len(ids) for ids in input_ids_list] if return_attention_mask else None
-
-        # Prepare batch encoding
-        batch_encoding = BatchFeature()
-
-        # Handle tensor conversion
-        if return_tensors is not None:
-            batch_encoding["input_ids"] = torch.tensor(input_ids_list, dtype=torch.long)
-            if return_attention_mask and attention_masks is not None:
-                batch_encoding["attention_mask"] = torch.tensor(attention_masks, dtype=torch.long)
-            batch_encoding["speech_input_mask"] = torch.tensor(speech_input_masks_list, dtype=torch.bool)
-        else:
-            batch_encoding["input_ids"] = input_ids_list
-            if return_attention_mask and attention_masks is not None:
-                batch_encoding["attention_mask"] = attention_masks
-            batch_encoding["speech_input_mask"] = speech_input_masks_list
-
-        return batch_encoding
-    
 
     def separate_script(self, script: str) -> list[tuple[int, str]]:
         """Separate script into list of (speaker_id, text) tuples."""
@@ -510,44 +424,6 @@ class VibeVoiceProcessor(ProcessorMixin):
             raise ValueError("No valid speaker lines found in script")
 
         return parsed_lines
-
-
-    def _parse_script(self, script: str) -> list[tuple[int, str]]:
-        """Parse script into list of (speaker_id, text) tuples."""
-        lines = script.strip().split("\n")
-        parsed_lines = []
-        speaker_ids = []
-
-        # First pass: parse all lines and collect speaker IDs
-        for line in lines:
-            if not line.strip():
-                continue
-
-            # Use regex to handle edge cases like multiple colons
-            match = re.match(r'^Speaker\s+(\d+)\s*:\s*(.*)$', line.strip(), re.IGNORECASE)
-
-            if match:
-                speaker_id = int(match.group(1))
-                text = ' ' + match.group(2).strip()
-                parsed_lines.append((speaker_id, text))
-                speaker_ids.append(speaker_id)
-            else:
-                logger.warning(f"Could not parse line: '{line}'")
-
-        if not parsed_lines:
-            raise ValueError("No valid speaker lines found in script")
-
-        # Check if we need to normalize speaker IDs (only if all are > 0)
-        min_speaker_id = min(speaker_ids)
-        if min_speaker_id > 0:
-            # Normalize to start from 0
-            normalized_lines = []
-            for speaker_id, text in parsed_lines:
-                normalized_lines.append((speaker_id - 1, text))
-            return normalized_lines
-        else:
-            # Keep original IDs
-            return parsed_lines
 
     def _merge_inputs(self, text_inputs: BatchEncoding, audio_inputs: dict) -> BatchEncoding:
         """Merge text and audio inputs into a single BatchEncoding."""
