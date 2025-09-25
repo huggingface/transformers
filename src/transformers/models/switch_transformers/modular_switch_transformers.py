@@ -18,7 +18,6 @@ import copy
 from typing import Optional, Union
 
 import torch
-import torch.fx
 import torch.nn as nn
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
@@ -43,7 +42,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import OutputRecorder
+from ...utils.generic import OutputRecorder, check_model_inputs
 from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerCrossAttention, T5LayerNorm, T5LayerSelfAttention
 from .configuration_switch_transformers import SwitchTransformersConfig
 
@@ -142,7 +141,7 @@ class SwitchTransformersTop1Router(nn.Module):
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
 
-    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         r"""
         Computes router probabilities from input hidden states.
 
@@ -176,7 +175,7 @@ class SwitchTransformersTop1Router(nn.Module):
         expert_capacity_mask = token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        return expert_index, router_probs, router_logits
+        return router_probs, expert_index, router_logits
 
 
 class SwitchTransformersLayerNorm(T5LayerNorm):
@@ -190,21 +189,21 @@ class SwitchTransformersDenseActDense(T5DenseActDense):
 class SwitchTransformersExperts(nn.ModuleDict):
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__()
-        self.experts = nn.ModuleDict()
+        self.num_experts = config.num_experts
         for idx in range(config.num_experts):
-            self.experts[f"expert_{idx}"] = SwitchTransformersDenseActDense(config)
+            self[f"expert_{idx}"] = SwitchTransformersDenseActDense(config)
 
     def forward(
         self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+        expert_mask = selected_experts.permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = list(self.values())[expert_idx](current_state) * routing_weights[top_x, idx, None]
+            current_hidden_states = self[f"expert_{expert_idx[0]}"](current_state) * routing_weights[top_x, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
@@ -217,11 +216,11 @@ class SwitchTransformersSparseMLP(nn.Module):  # inherit from mixtral
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        router_logits, selected_experts, routing_weights = self.router(hidden_states)
+        _, selected_experts, routing_weights = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
         hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states, router_logits
+        return hidden_states
 
 
 class SwitchTransformersLayerFF(nn.Module):
@@ -252,9 +251,7 @@ class SwitchTransformersLayerFF(nn.Module):
     def forward(self, hidden_states, **kwargs):
         forwarded_states = self.layer_norm(hidden_states)
         forwarded_states = self.mlp(forwarded_states)
-        if isinstance(forwarded_states, tuple):
-            forwarded_states, _ = forwarded_states
-
+        forwarded_states = forwarded_states
         output = hidden_states + self.dropout(forwarded_states)
         return output
 
@@ -299,9 +296,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
         cross_attn_layer_head_mask=None,
         past_key_values=None,
         use_cache=False,
-        output_attentions=False,
-        output_router_logits=True,
-        return_dict=True,
         cache_position=None,
         **kwargs,
     ):
@@ -312,9 +306,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
             layer_head_mask=layer_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
-            **kwargs,
         )
 
         # clamp inf values to enable fp16 training
@@ -334,7 +326,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **kwargs,
             )
             hidden_states = cross_attention_outputs[0]
 
@@ -343,7 +334,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        hidden_states = self.layer[-1](hidden_states, output_router_logits)
+        hidden_states = self.layer[-1](hidden_states)
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
@@ -510,7 +501,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             layer_head_mask = head_mask[i]
             cross_attn_layer_head_mask = cross_attn_head_mask[i]
 
-            hidden_states, position_bias, encoder_decoder_position_bias = layer_module(
+            hidden_states = layer_module(
                 hidden_states,
                 causal_mask,
                 position_bias,
@@ -707,6 +698,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -718,6 +710,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -727,7 +720,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
                 inputs_embeds=inputs_embeds,
             )
 
-        hidden_states = encoder_outputs.last_hidden_states
+        hidden_states = encoder_outputs.last_hidden_state
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
@@ -801,6 +794,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         return self.encoder
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -814,6 +808,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         labels: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -822,7 +817,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 inputs_embeds=inputs_embeds,
             )
 
-        hidden_states = encoder_outputs.last_hidden_states
+        hidden_states = encoder_outputs.last_hidden_state
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
@@ -945,12 +940,14 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         return self.encoder
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], MoEModelOutput]:
         encoder_outputs = self.encoder(
             input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
