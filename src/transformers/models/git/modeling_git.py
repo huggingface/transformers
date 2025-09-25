@@ -229,9 +229,7 @@ GIT_SELF_ATTENTION_CLASSES = {
 class GitAttention(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
-        self.self = GIT_SELF_ATTENTION_CLASSES[config._attn_implementation](
-            config, layer_idx=layer_idx
-        )
+        self.self = GIT_SELF_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self.output = GitSelfOutput(config)
         self.pruned_heads = set()
 

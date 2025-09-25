@@ -363,15 +363,11 @@ class RobertaPreLayerNormSelfOutput(nn.Module):
 
 
 class RobertaPreLayerNormAttention(nn.Module):
-    def __init__(
-        self, config, is_causal=False, layer_idx=None, is_cross_attention=False
-    ):
+    def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
         super().__init__()
         self.is_cross_attention = is_cross_attention
         attention_class = RobertaPreLayerNormCrossAttention if is_cross_attention else RobertaPreLayerNormSelfAttention
-        self.self = attention_class(
-            config, is_causal=is_causal, layer_idx=layer_idx
-        )
+        self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
         self.output = RobertaPreLayerNormSelfOutput(config)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pruned_heads = set()

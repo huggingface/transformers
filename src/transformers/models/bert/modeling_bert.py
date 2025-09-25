@@ -319,15 +319,11 @@ class BertSelfOutput(nn.Module):
 
 
 class BertAttention(nn.Module):
-    def __init__(
-        self, config, is_causal=False, layer_idx=None, is_cross_attention=False
-    ):
+    def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
         super().__init__()
         self.is_cross_attention = is_cross_attention
         attention_class = BertCrossAttention if is_cross_attention else BertSelfAttention
-        self.self = attention_class(
-            config, is_causal=is_causal, layer_idx=layer_idx
-        )
+        self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
         self.output = BertSelfOutput(config)
         self.pruned_heads = set()
 

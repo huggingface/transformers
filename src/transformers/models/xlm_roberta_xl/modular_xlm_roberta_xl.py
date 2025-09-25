@@ -133,9 +133,7 @@ class XLMRobertaXLSelfOutput(nn.Module):
 
 
 class XLMRobertaXLAttention(BertAttention):
-    def __init__(
-        self, config, is_causal=False, layer_idx=None, is_cross_attention=False
-    ):
+    def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
         super().__init__(config, is_causal, layer_idx, is_cross_attention)
         del self.LayerNorm
 
