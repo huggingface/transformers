@@ -50,9 +50,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-NougatFastImageProcessorKwargs = NougatImageProcessorKwargs
-
-
 @auto_docstring
 class NougatImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -66,13 +63,13 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
     do_pad: bool = True
     do_rescale = True
     do_crop_margin: bool = True
-    valid_kwargs = NougatFastImageProcessorKwargs
+    valid_kwargs = NougatImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[NougatFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[NougatImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[NougatFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[NougatImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def python_find_non_zero(

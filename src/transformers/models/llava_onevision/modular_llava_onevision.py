@@ -64,9 +64,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-LlavaOnevisionFastImageProcessorKwargs = LlavaOnevisionImageProcessorKwargs
-
-
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -127,7 +124,7 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
         return padded_images
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]) -> BatchFeature:
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
             # if the first element is a list, we assume that all elements are lists
             batch_num_images = [len(x) for x in images]

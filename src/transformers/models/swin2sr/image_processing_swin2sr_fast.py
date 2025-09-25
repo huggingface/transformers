@@ -44,9 +44,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-Swin2SRFastImageProcessorKwargs = Swin2SRImageProcessorKwargs
-
-
 @auto_docstring
 class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
@@ -74,7 +71,7 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
         )
         self.size_divisor = value
 
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Swin2SRImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     @deprecate_kwarg("size", version="v5", new_name="size_divisor")

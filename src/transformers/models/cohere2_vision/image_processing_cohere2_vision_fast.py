@@ -38,7 +38,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs):
+class Cohere2VisionImageProcessorKwargs(ImagesKwargs):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -124,14 +124,14 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
     crop_to_patches = True
     min_patches = 1
     max_patches = 12
-    valid_kwargs = Cohere2VisionFastImageProcessorKwargs
+    valid_kwargs = Cohere2VisionImageProcessorKwargs
     patch_size = 16
 
-    def __init__(self, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Cohere2VisionImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Cohere2VisionImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def crop_image_to_patches(

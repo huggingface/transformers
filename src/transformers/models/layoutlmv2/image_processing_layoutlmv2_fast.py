@@ -40,9 +40,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-LayoutLMv2FastImageProcessorKwargs = LayoutLMv2ImageProcessorKwargs
-
-
 @auto_docstring
 class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -52,13 +49,13 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
     apply_ocr = True
     ocr_lang = None
     tesseract_config = ""
-    valid_kwargs = LayoutLMv2FastImageProcessorKwargs
+    valid_kwargs = LayoutLMv2ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[LayoutLMv2FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[LayoutLMv2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LayoutLMv2FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LayoutLMv2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(

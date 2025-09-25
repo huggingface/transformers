@@ -24,7 +24,7 @@ import torch
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
+    DefaultImageProcessorKwargs,
     get_size_dict,
 )
 from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
@@ -127,9 +127,6 @@ class FlavaMaskingGenerator:
         return mask
 
 
-FlavaFastImageProcessorKwargs = FlavaImageProcessorKwargs
-
-
 @auto_docstring
 class FlavaImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -164,13 +161,13 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
     codebook_do_normalize = True
     codebook_image_mean = FLAVA_CODEBOOK_MEAN
     codebook_image_std = FLAVA_CODEBOOK_STD
-    valid_kwargs = FlavaFastImageProcessorKwargs
+    valid_kwargs = FlavaImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[FlavaFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[FlavaImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     @classmethod

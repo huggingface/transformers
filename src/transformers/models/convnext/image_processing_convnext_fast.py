@@ -47,9 +47,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-ConvNextFastImageProcessorKwargs = ConvNextImageProcessorKwargs
-
-
 @auto_docstring
 class ConvNextImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -61,13 +58,13 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     crop_pct = 224 / 256
-    valid_kwargs = ConvNextFastImageProcessorKwargs
+    valid_kwargs = ConvNextImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[ConvNextImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[ConvNextImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

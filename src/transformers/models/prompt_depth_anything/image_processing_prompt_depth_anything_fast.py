@@ -95,9 +95,6 @@ def _get_resize_output_image_size(
     return (new_height, new_width)
 
 
-PromptDepthAnythingFastImageProcessorKwargs = PromptDepthAnythingImageProcessorKwargs
-
-
 @auto_docstring
 class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values", "prompt_depth"]
@@ -114,9 +111,9 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     do_pad = False
     size_divisor = None
     prompt_scale_to_meter = 0.001
-    valid_kwargs = PromptDepthAnythingFastImageProcessorKwargs
+    valid_kwargs = PromptDepthAnythingImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
@@ -124,7 +121,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         prompt_depth: Optional[ImageInput] = None,
-        **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs],
+        **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         prompt_depth (`ImageInput`, *optional*):
@@ -201,7 +198,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         device: Optional[Union[str, "torch.device"]] = None,
         prompt_scale_to_meter: Optional[float] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs],
+        **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs, including the main images and optional prompt depth.

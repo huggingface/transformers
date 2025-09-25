@@ -51,9 +51,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-Glm4vFastImageProcessorKwargs = Glm4vImageProcessorKwargs
-
-
 @auto_docstring
 class Glm4vImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
@@ -67,10 +64,10 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    valid_kwargs = Glm4vFastImageProcessorKwargs
+    valid_kwargs = Glm4vImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Glm4vFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Glm4vImageProcessorKwargs]):
         super().__init__(**kwargs)
         if self.size is not None and (
             self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
@@ -197,7 +194,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Glm4vFastImageProcessorKwargs],
+        **kwargs: Unpack[Glm4vImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

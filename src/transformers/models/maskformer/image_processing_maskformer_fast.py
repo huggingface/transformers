@@ -100,9 +100,6 @@ def convert_segmentation_map_to_binary_masks_fast(
     return binary_masks.float(), labels.long()
 
 
-MaskFormerFastImageProcessorKwargs = MaskFormerImageProcessorKwargs
-
-
 @auto_docstring
 class MaskFormerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -118,9 +115,9 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values", "pixel_mask"]
     size_divisor = 32
     do_reduce_labels = False
-    valid_kwargs = MaskFormerFastImageProcessorKwargs
+    valid_kwargs = MaskFormerImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[MaskFormerFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[MaskFormerImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -250,7 +247,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
         instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
-        **kwargs: Unpack[MaskFormerFastImageProcessorKwargs],
+        **kwargs: Unpack[MaskFormerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -273,7 +270,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[MaskFormerFastImageProcessorKwargs],
+        **kwargs: Unpack[MaskFormerImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

@@ -43,9 +43,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-PixtralFastImageProcessorKwargs = PixtralImageProcessorKwargs
-
-
 @auto_docstring
 class PixtralImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -58,15 +55,15 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = PixtralFastImageProcessorKwargs
+    valid_kwargs = PixtralImageProcessorKwargs
 
     model_input_names = ["pixel_values", "image_sizes"]
 
-    def __init__(self, **kwargs: Unpack[PixtralFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[PixtralImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[PixtralFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[PixtralImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

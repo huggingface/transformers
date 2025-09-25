@@ -46,9 +46,6 @@ else:
     from torchvision.transforms import functional as F_t
 
 
-SamFastImageProcessorKwargs = SamImageProcessorKwargs
-
-
 @auto_docstring
 class SamImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -61,13 +58,13 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
 
-    valid_kwargs = SamFastImageProcessorKwargs
+    valid_kwargs = SamImageProcessorKwargs
 
     do_pad = True
     pad_size = {"height": 1024, "width": 1024}
     mask_pad_size = {"height": 256, "width": 256}
 
-    def __init__(self, **kwargs: Unpack[SamFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[SamImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _get_preprocess_shape(self, old_shape: tuple[int, int], longest_edge: int):
@@ -165,7 +162,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[SamFastImageProcessorKwargs],
+        **kwargs: Unpack[SamImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -180,7 +177,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[SamFastImageProcessorKwargs],
+        **kwargs: Unpack[SamImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

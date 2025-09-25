@@ -46,9 +46,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-JanusFastImageProcessorKwargs = JanusImageProcessorKwargs
-
-
 @auto_docstring
 class JanusImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -60,9 +57,9 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_pad = True
-    valid_kwargs = JanusFastImageProcessorKwargs
+    valid_kwargs = JanusImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[JanusFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[JanusImageProcessorKwargs]):
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:

@@ -48,9 +48,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-TextNetFastImageProcessorKwargs = TextNetImageProcessorKwargs
-
-
 @auto_docstring
 class TextNetImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -65,13 +62,13 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
     size_divisor = 32
-    valid_kwargs = TextNetFastImageProcessorKwargs
+    valid_kwargs = TextNetImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

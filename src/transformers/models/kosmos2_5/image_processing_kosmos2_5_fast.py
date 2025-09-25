@@ -56,9 +56,6 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
     return patches
 
 
-Kosmos2_5FastImageProcessorKwargs = Kosmos2_5ImageProcessorKwargs
-
-
 @auto_docstring
 class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
     # To be checked against the slow image processor
@@ -68,13 +65,13 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
     patch_size = {"height": 16, "width": 16}
     max_patches = 4096
     rescale_factor = None
-    valid_kwargs = Kosmos2_5FastImageProcessorKwargs
+    valid_kwargs = Kosmos2_5ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[Kosmos2_5FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Kosmos2_5ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Kosmos2_5FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Kosmos2_5ImageProcessorKwargs]) -> BatchFeature:
         r"""
         patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
             The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.

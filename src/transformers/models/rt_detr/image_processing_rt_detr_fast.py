@@ -102,9 +102,6 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-RTDetrFastImageProcessorKwargs = RTDetrImageProcessorKwargs
-
-
 @auto_docstring
 @requires(backends=("torchvision", "torch"))
 class RTDetrImageProcessorFast(BaseImageProcessorFast):
@@ -119,10 +116,10 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
     size = {"height": 640, "width": 640}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = RTDetrFastImageProcessorKwargs
+    valid_kwargs = RTDetrImageProcessorKwargs
     do_convert_annotations = True
 
-    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[RTDetrImageProcessorKwargs]) -> None:
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations")
         do_normalize = kwargs.get("do_normalize")
@@ -351,7 +348,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
+        **kwargs: Unpack[RTDetrImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

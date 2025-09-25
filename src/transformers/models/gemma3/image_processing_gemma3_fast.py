@@ -45,9 +45,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-Gemma3FastImageProcessorKwargs = Gemma3ImageProcessorKwargs
-
-
 @auto_docstring
 class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -63,9 +60,9 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     pan_and_scan_min_crop_size = None
     pan_and_scan_max_num_crops = None
     pan_and_scan_min_ratio_to_activate = None
-    valid_kwargs = Gemma3FastImageProcessorKwargs
+    valid_kwargs = Gemma3ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[Gemma3FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Gemma3ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def pan_and_scan_batched(
@@ -157,7 +154,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Gemma3FastImageProcessorKwargs],
+        **kwargs: Unpack[Gemma3ImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

@@ -808,7 +808,3 @@ class BaseImageProcessorFast(BaseImageProcessor):
         encoder_dict.pop("_valid_processor_keys", None)
         encoder_dict.pop("_valid_kwargs_names", None)
         return encoder_dict
-
-
-# `DefaultFastImageProcessorKwargs` is deprecated. Keep reference for BC
-DefaultFastImageProcessorKwargs = ImagesKwargs

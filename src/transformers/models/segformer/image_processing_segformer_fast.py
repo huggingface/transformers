@@ -45,9 +45,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-SegformerFastImageProcessorKwargs = SegformerImageProcessorKwargs
-
-
 @auto_docstring
 class SegformerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -61,10 +58,10 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_reduce_labels = False
-    valid_kwargs = SegformerFastImageProcessorKwargs
+    valid_kwargs = SegformerImageProcessorKwargs
     rescale_factor = 1 / 255
 
-    def __init__(self, **kwargs: Unpack[SegformerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[SegformerImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def reduce_label(self, labels: list["torch.Tensor"]):
@@ -82,7 +79,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[SegformerFastImageProcessorKwargs],
+        **kwargs: Unpack[SegformerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -97,7 +94,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[SegformerFastImageProcessorKwargs],
+        **kwargs: Unpack[SegformerImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

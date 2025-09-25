@@ -301,7 +301,7 @@ def get_optimal_tiled_canvas(
     return best_grid
 
 
-class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs):
+class Cohere2VisionImageProcessorKwargs(ImagesKwargs):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -326,7 +326,7 @@ class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
     max_patches = 12
     crop_to_patches = True
     patch_size = 16
-    valid_kwargs = Cohere2VisionFastImageProcessorKwargs
+    valid_kwargs = Cohere2VisionImageProcessorKwargs
 
 
 __all__ = [

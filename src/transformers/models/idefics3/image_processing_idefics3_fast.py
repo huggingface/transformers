@@ -169,9 +169,6 @@ def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "tor
     return mask
 
 
-Idefics3FastImageProcessorKwargs = Idefics3ImageProcessorKwargs
-
-
 @auto_docstring
 class Idefics3ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.LANCZOS
@@ -186,7 +183,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
     do_image_splitting = True
     do_pad = True
     return_row_col_info = False
-    valid_kwargs = Idefics3FastImageProcessorKwargs
+    valid_kwargs = Idefics3ImageProcessorKwargs
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         """
@@ -354,7 +351,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         return image, pixel_mask
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Idefics3FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Idefics3ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(

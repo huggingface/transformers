@@ -44,9 +44,6 @@ MAX_LONGER_EDGE = 1333
 MAX_SHORTER_EDGE = 800
 
 
-ViltFastImageProcessorKwargs = ViltImageProcessorKwargs
-
-
 @auto_docstring
 class ViltImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -60,7 +57,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = ViltFastImageProcessorKwargs
+    valid_kwargs = ViltImageProcessorKwargs
 
     def _preprocess(
         self,

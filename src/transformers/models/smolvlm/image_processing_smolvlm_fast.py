@@ -153,9 +153,6 @@ def get_max_height_width(images_list: list[list["torch.Tensor"]]) -> tuple[int, 
     return (max_height, max_width)
 
 
-SmolVLMFastImageProcessorKwargs = SmolVLMImageProcessorKwargs
-
-
 @auto_docstring
 class SmolVLMImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.LANCZOS
@@ -170,7 +167,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
     do_image_splitting = True
     do_pad = True
     return_row_col_info = False
-    valid_kwargs = SmolVLMFastImageProcessorKwargs
+    valid_kwargs = SmolVLMImageProcessorKwargs
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         """
@@ -338,7 +335,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         return image, pixel_mask
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[SmolVLMFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[SmolVLMImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(

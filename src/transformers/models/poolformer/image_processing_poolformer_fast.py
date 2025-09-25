@@ -49,9 +49,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-PoolFormerFastImageProcessorKwargs = PoolFormerImageProcessorKwargs
-
-
 @auto_docstring
 class PoolFormerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -65,13 +62,13 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
     do_center_crop = True
     do_rescale = True
     do_normalize = True
-    valid_kwargs = PoolFormerFastImageProcessorKwargs
+    valid_kwargs = PoolFormerImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[PoolFormerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[PoolFormerImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[PoolFormerFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[PoolFormerImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

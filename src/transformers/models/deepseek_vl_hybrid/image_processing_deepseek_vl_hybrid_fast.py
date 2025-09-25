@@ -48,9 +48,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-DeepseekVLHybridFastImageProcessorKwargs = DeepseekVLHybridImageProcessorKwargs
-
-
 @auto_docstring
 class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -62,14 +59,14 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_pad = True
-    valid_kwargs = DeepseekVLHybridFastImageProcessorKwargs
+    valid_kwargs = DeepseekVLHybridImageProcessorKwargs
     high_res_image_mean = OPENAI_CLIP_MEAN
     high_res_image_std = OPENAI_CLIP_STD
     high_res_size = {"height": 1024, "width": 1024}
     high_res_resample = PILImageResampling.BICUBIC
     model_input_names = ["pixel_values", "high_res_pixel_values"]
 
-    def __init__(self, **kwargs: Unpack[DeepseekVLHybridFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:

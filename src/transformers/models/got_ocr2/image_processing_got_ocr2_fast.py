@@ -40,9 +40,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-GotOcr2FastImageProcessorKwargs = GotOcr2ImageProcessorKwargs
-
-
 @auto_docstring
 class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -56,13 +53,13 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
     crop_to_patches = False
     min_patches = 1
     max_patches = 12
-    valid_kwargs = GotOcr2FastImageProcessorKwargs
+    valid_kwargs = GotOcr2ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[GotOcr2FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def crop_image_to_patches(

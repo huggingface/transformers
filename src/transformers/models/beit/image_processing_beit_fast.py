@@ -48,9 +48,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-BeitFastImageProcessorKwargs = BeitImageProcessorKwargs
-
-
 @auto_docstring
 class BeitImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -64,9 +61,9 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_reduce_labels = False
-    valid_kwargs = BeitFastImageProcessorKwargs
+    valid_kwargs = BeitImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[BeitFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[BeitImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def reduce_label(self, labels: list["torch.Tensor"]):
@@ -84,7 +81,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[BeitFastImageProcessorKwargs],
+        **kwargs: Unpack[BeitImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -99,7 +96,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[BeitFastImageProcessorKwargs],
+        **kwargs: Unpack[BeitImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

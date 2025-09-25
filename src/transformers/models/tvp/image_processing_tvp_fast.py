@@ -47,9 +47,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-TvpFastImageProcessorKwargs = TvpImageProcessorKwargs
-
-
 @auto_docstring
 class TvpImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -68,16 +65,16 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
     pad_mode = "constant"
     do_normalize = True
     do_flip_channel_order = True
-    valid_kwargs = TvpFastImageProcessorKwargs
+    valid_kwargs = TvpImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[TvpFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[TvpImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
     def preprocess(
         self,
         videos: Union[ImageInput, list[ImageInput], list[list[ImageInput]]],
-        **kwargs: Unpack[TvpFastImageProcessorKwargs],
+        **kwargs: Unpack[TvpImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(videos, **kwargs)
 

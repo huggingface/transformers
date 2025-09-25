@@ -269,9 +269,6 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
-DetrFastImageProcessorKwargs = DetrImageProcessorKwargs
-
-
 @auto_docstring
 @requires(backends=("torchvision", "torch"))
 class DetrImageProcessorFast(BaseImageProcessorFast):
@@ -286,9 +283,9 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = DetrFastImageProcessorKwargs
+    valid_kwargs = DetrImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DetrFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[DetrImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -556,7 +553,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[DetrFastImageProcessorKwargs],
+        **kwargs: Unpack[DetrImageProcessorKwargs],
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")

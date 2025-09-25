@@ -304,9 +304,6 @@ def get_oneformer_resize_output_image_size(
     return (new_long, new_short) if width <= height else (new_short, new_long)
 
 
-OneFormerFastImageProcessorKwargs = OneFormerImageProcessorKwargs
-
-
 @auto_docstring
 class OneFormerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -327,10 +324,10 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     class_info_file = None
     num_text = None
     num_labels = None
-    valid_kwargs = OneFormerFastImageProcessorKwargs
+    valid_kwargs = OneFormerImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
 
-    def __init__(self, **kwargs: Unpack[OneFormerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[OneFormerImageProcessorKwargs]):
         super().__init__(**kwargs)
         if self.class_info_file:
             self.metadata = prepare_metadata(load_metadata(self.repo_path, self.class_info_file))
@@ -342,7 +339,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         task_inputs: Optional[list[str]] = None,
         segmentation_maps: Optional[ImageInput] = None,
         instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
-        **kwargs: Unpack[OneFormerFastImageProcessorKwargs],
+        **kwargs: Unpack[OneFormerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         task_inputs (`list[str]`, *optional*):
@@ -369,7 +366,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[OneFormerFastImageProcessorKwargs],
+        **kwargs: Unpack[OneFormerImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

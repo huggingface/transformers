@@ -69,9 +69,6 @@ def pad_along_first_dim(
     return tensor, mask
 
 
-Siglip2FastImageProcessorKwargs = Siglip2ImageProcessorKwargs
-
-
 @auto_docstring
 class Siglip2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -82,10 +79,10 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     patch_size = 16
     max_num_patches = 256
-    valid_kwargs = Siglip2FastImageProcessorKwargs
+    valid_kwargs = Siglip2ImageProcessorKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
-    def __init__(self, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Siglip2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs) -> tuple:
@@ -94,7 +91,7 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
         return super()._validate_preprocess_kwargs(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Siglip2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(

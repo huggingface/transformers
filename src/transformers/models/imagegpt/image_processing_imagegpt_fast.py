@@ -74,9 +74,6 @@ def color_quantize_torch(x: torch.Tensor, clusters: torch.Tensor) -> torch.Tenso
     return torch.argmin(d, dim=1)
 
 
-ImageGPTFastImageProcessorKwargs = ImageGPTImageProcessorKwargs
-
-
 @auto_docstring
 class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["input_ids"]
@@ -87,12 +84,12 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     image_std = [0.5, 0.5, 0.5]
     do_rescale = True
     do_normalize = True
-    valid_kwargs = ImageGPTFastImageProcessorKwargs
+    valid_kwargs = ImageGPTImageProcessorKwargs
 
     def __init__(
         self,
         clusters: Optional[Union[list, np.ndarray, torch.Tensor]] = None,  # keep as arg for backwards compatibility
-        **kwargs: Unpack[ImageGPTFastImageProcessorKwargs],
+        **kwargs: Unpack[ImageGPTImageProcessorKwargs],
     ):
         r"""
         clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*):

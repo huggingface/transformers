@@ -70,7 +70,7 @@ from .configuration_sam2 import (
 logger = logging.get_logger(__name__)
 
 
-class Sam2FastImageProcessorKwargs(ImagesKwargs):
+class Sam2ImageProcessorKwargs(ImagesKwargs):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
@@ -91,14 +91,14 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
 
-    valid_kwargs = Sam2FastImageProcessorKwargs
+    valid_kwargs = Sam2ImageProcessorKwargs
 
     # modular artefacts
     do_pad = None
     pad_size = None
     mask_pad_size = None
 
-    def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Sam2ImageProcessorKwargs]):
         BaseImageProcessorFast.__init__(self, **kwargs)
 
     def pad_image(self):
@@ -125,7 +125,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
+        **kwargs: Unpack[Sam2ImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

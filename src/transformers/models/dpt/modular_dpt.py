@@ -87,9 +87,6 @@ def get_resize_output_image_size(
     return SizeDict(height=new_height, width=new_width)
 
 
-DPTFastImageProcessorKwargs = DPTImageProcessorKwargs
-
-
 @auto_docstring
 class DPTImageProcessorFast(BeitImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -108,7 +105,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
     do_center_crop = None
     do_reduce_labels = None
 
-    valid_kwargs = DPTFastImageProcessorKwargs
+    valid_kwargs = DPTImageProcessorKwargs
 
     def resize(
         self,

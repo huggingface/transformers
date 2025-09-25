@@ -60,9 +60,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-ZoeDepthFastImageProcessorKwargs = ZoeDepthImageProcessorKwargs
-
-
 @auto_docstring
 class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
@@ -75,16 +72,16 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     keep_aspect_ratio = True
     ensure_multiple_of = 1 / 32
-    valid_kwargs = ZoeDepthFastImageProcessorKwargs
+    valid_kwargs = ZoeDepthImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ZoeDepthFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[ZoeDepthImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[ZoeDepthFastImageProcessorKwargs],
+        **kwargs: Unpack[ZoeDepthImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

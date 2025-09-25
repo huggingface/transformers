@@ -16,7 +16,7 @@
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
+    DefaultImageProcessorKwargs,
     Unpack,
 )
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
@@ -36,7 +36,7 @@ class MobileNetV1ImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
 
-    def __init__(self, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[DefaultImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
 

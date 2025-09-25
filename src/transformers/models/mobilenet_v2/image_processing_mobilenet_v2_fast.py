@@ -48,9 +48,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-MobileNetV2FastImageProcessorKwargs = MobileNetV2ImageProcessorKwargs
-
-
 @auto_docstring
 class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -64,9 +61,9 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_reduce_labels = False
-    valid_kwargs = MobileNetV2FastImageProcessorKwargs
+    valid_kwargs = MobileNetV2ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[MobileNetV2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.reduce_label
@@ -85,7 +82,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs],
+        **kwargs: Unpack[MobileNetV2ImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -100,7 +97,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs],
+        **kwargs: Unpack[MobileNetV2ImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

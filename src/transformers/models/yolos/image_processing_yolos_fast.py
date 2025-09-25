@@ -244,9 +244,6 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
-YolosFastImageProcessorKwargs = YolosImageProcessorKwargs
-
-
 def get_size_with_aspect_ratio(
     image_size: tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
 ) -> tuple[int, int]:
@@ -310,9 +307,9 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = YolosFastImageProcessorKwargs
+    valid_kwargs = YolosImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[YolosFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[YolosImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -580,7 +577,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[YolosFastImageProcessorKwargs],
+        **kwargs: Unpack[YolosImageProcessorKwargs],
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")

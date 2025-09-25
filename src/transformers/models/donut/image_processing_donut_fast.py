@@ -39,9 +39,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-DonutFastImageProcessorKwargs = DonutImageProcessorKwargs
-
-
 @auto_docstring
 class DonutImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -54,9 +51,9 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
     do_thumbnail = True
     do_align_long_axis = False
     do_pad = True
-    valid_kwargs = DonutFastImageProcessorKwargs
+    valid_kwargs = DonutImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DonutFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DonutImageProcessorKwargs]):
         size = kwargs.pop("size", None)
         if isinstance(size, (tuple, list)):
             size = size[::-1]
@@ -64,7 +61,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[DonutFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[DonutImageProcessorKwargs]) -> BatchFeature:
         if "size" in kwargs:
             size = kwargs.pop("size")
             if isinstance(size, (tuple, list)):

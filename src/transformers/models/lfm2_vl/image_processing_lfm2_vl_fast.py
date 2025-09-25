@@ -21,7 +21,7 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
+    DefaultImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -177,7 +177,7 @@ def pad_along_first_dim(
     return images, pixel_mask
 
 
-class Lfm2VlFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Lfm2VlImageProcessorKwargs(DefaultImageProcessorKwargs):
     """
     downsample_factor (`int`, *optional*, defaults to `2`):
         The downsampling factor for images used when resizing the image.
@@ -219,10 +219,10 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
     return_row_col_info = False
     image_mean = IMAGENET_STANDARD_STD
     image_std = IMAGENET_STANDARD_MEAN
-    valid_kwargs = Lfm2VlFastImageProcessorKwargs
+    valid_kwargs = Lfm2VlImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
 
-    def __init__(self, **kwargs: Unpack[Lfm2VlFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Lfm2VlImageProcessorKwargs]):
         super().__init__(**kwargs)
 
         max_thumbnail_image_patches = self.max_image_tokens * self.downsample_factor**2

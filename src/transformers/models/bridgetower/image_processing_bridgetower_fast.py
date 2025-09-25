@@ -90,9 +90,6 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-BridgeTowerFastImageProcessorKwargs = BridgeTowerImageProcessorKwargs
-
-
 @auto_docstring
 class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -107,14 +104,14 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_pad = True
     size_divisor = 32
-    valid_kwargs = BridgeTowerFastImageProcessorKwargs
+    valid_kwargs = BridgeTowerImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_mask"]
 
-    def __init__(self, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[BridgeTowerImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[BridgeTowerImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

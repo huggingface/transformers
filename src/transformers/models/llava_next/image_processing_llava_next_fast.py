@@ -49,9 +49,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-LlavaNextFastImageProcessorKwargs = LlavaNextImageProcessorKwargs
-
-
 @auto_docstring
 class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     # To be checked against the slow image processor
@@ -69,13 +66,13 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
-    valid_kwargs = LlavaNextFastImageProcessorKwargs
+    valid_kwargs = LlavaNextImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[LlavaNextImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _resize_for_patching(

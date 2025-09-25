@@ -26,7 +26,7 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
+    DefaultImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -57,9 +57,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-Qwen2VLFastImageProcessorKwargs = Qwen2VLImageProcessorKwargs
-
-
 @auto_docstring
 class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
@@ -75,10 +72,10 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     merge_size = 2
     min_pixels = None
     max_pixels = None
-    valid_kwargs = Qwen2VLFastImageProcessorKwargs
+    valid_kwargs = Qwen2VLImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Qwen2VLFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Qwen2VLImageProcessorKwargs]):
         size = kwargs.pop("size", None)
         min_pixels = kwargs.pop("min_pixels", None)
         max_pixels = kwargs.pop("max_pixels", None)
@@ -123,7 +120,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         videos: Optional[VideoInput] = None,
-        **kwargs: Unpack[Qwen2VLFastImageProcessorKwargs],
+        **kwargs: Unpack[Qwen2VLImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, videos, **kwargs)
 
@@ -134,7 +131,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+        **kwargs: Unpack[DefaultImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

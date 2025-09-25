@@ -91,9 +91,6 @@ def get_resize_output_image_size(
     return SizeDict(height=new_height, width=new_width)
 
 
-DPTFastImageProcessorKwargs = DPTImageProcessorKwargs
-
-
 @auto_docstring
 class DPTImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -108,13 +105,13 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_reduce_labels = None
 
-    valid_kwargs = DPTFastImageProcessorKwargs
+    valid_kwargs = DPTImageProcessorKwargs
     do_pad = False
     rescale_factor = 1 / 255
     ensure_multiple_of = 1
     keep_aspect_ratio = False
 
-    def __init__(self, **kwargs: Unpack[DPTFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DPTImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def reduce_label(self, labels: list["torch.Tensor"]):
@@ -132,7 +129,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[DPTFastImageProcessorKwargs],
+        **kwargs: Unpack[DPTImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -147,7 +144,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[DPTFastImageProcessorKwargs],
+        **kwargs: Unpack[DPTImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

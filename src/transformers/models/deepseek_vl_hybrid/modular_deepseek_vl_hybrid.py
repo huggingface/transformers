@@ -759,9 +759,6 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-DeepseekVLHybridFastImageProcessorKwargs = DeepseekVLHybridImageProcessorKwargs
-
-
 class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
     high_res_image_mean = OPENAI_CLIP_MEAN
     high_res_image_std = OPENAI_CLIP_STD
@@ -769,7 +766,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
     high_res_resample = PILImageResampling.BICUBIC
     model_input_names = ["pixel_values", "high_res_pixel_values"]
 
-    def __init__(self, **kwargs: Unpack[DeepseekVLHybridFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:

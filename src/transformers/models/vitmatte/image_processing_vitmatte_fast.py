@@ -50,9 +50,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-VitMatteFastImageProcessorKwargs = VitMatteImageProcessorKwargs
-
-
 @auto_docstring
 class VitMatteImageProcessorFast(BaseImageProcessorFast):
     do_rescale: bool = True
@@ -62,9 +59,9 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
     image_std: Optional[Union[float, list[float]]] = IMAGENET_STANDARD_STD
     do_pad: bool = True
     size_divisor: int = 32
-    valid_kwargs = VitMatteFastImageProcessorKwargs
+    valid_kwargs = VitMatteImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[VitMatteFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[VitMatteImageProcessorKwargs]) -> None:
         size_divisibility = kwargs.pop("size_divisibility", None)
         kwargs.setdefault("size_divisor", size_divisibility)
         super().__init__(**kwargs)
@@ -113,7 +110,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         trimaps: list["torch.Tensor"],
-        **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
+        **kwargs: Unpack[VitMatteImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         trimaps (`list[torch.Tensor]`):
@@ -128,7 +125,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
+        **kwargs: Unpack[VitMatteImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

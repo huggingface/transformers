@@ -37,9 +37,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-EfficientNetFastImageProcessorKwargs = EfficientNetImageProcessorKwargs
-
-
 @auto_docstring
 class EfficientNetImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.NEAREST
@@ -54,9 +51,9 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
     rescale_offset = False
     do_normalize = True
     include_top = True
-    valid_kwargs = EfficientNetFastImageProcessorKwargs
+    valid_kwargs = EfficientNetImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[EfficientNetImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def rescale(
@@ -192,7 +189,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientNetImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
 

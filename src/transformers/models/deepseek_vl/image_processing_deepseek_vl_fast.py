@@ -31,9 +31,6 @@ from ...utils import TensorType, auto_docstring
 from .image_processing_deepseek_vl import DeepseekVLImageProcessorKwargs
 
 
-DeepseekVLFastImageProcessorKwargs = DeepseekVLImageProcessorKwargs
-
-
 @auto_docstring
 class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -45,9 +42,9 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_pad = True
-    valid_kwargs = DeepseekVLFastImageProcessorKwargs
+    valid_kwargs = DeepseekVLImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DeepseekVLFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DeepseekVLImageProcessorKwargs]):
         super().__init__(**kwargs)
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)

@@ -47,9 +47,6 @@ else:
     from torchvision.transforms import functional as F
 
 
-SegformerFastImageProcessorKwargs = SegformerImageProcessorKwargs
-
-
 class SegformerImageProcessorFast(BeitImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -70,7 +67,7 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[SegformerFastImageProcessorKwargs],
+        **kwargs: Unpack[SegformerImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

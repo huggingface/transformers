@@ -57,9 +57,6 @@ def is_grayscale(
     )
 
 
-SuperPointFastImageProcessorKwargs = SuperPointImageProcessorKwargs
-
-
 def convert_to_grayscale(
     image: "torch.Tensor",
 ) -> "torch.Tensor":
@@ -88,9 +85,9 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = None
-    valid_kwargs = SuperPointFastImageProcessorKwargs
+    valid_kwargs = SuperPointImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[SuperPointFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[SuperPointImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _preprocess(

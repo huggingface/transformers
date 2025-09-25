@@ -112,9 +112,6 @@ def convert_to_grayscale(
     return F.rgb_to_grayscale(image, num_output_channels=3)
 
 
-EfficientLoFTRFastImageProcessorKwargs = EfficientLoFTRImageProcessorKwargs
-
-
 @auto_docstring
 class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -124,13 +121,13 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = None
-    valid_kwargs = EfficientLoFTRFastImageProcessorKwargs
+    valid_kwargs = EfficientLoFTRImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[EfficientLoFTRFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[EfficientLoFTRImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientLoFTRFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientLoFTRImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(
