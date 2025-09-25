@@ -241,7 +241,7 @@ As a final step, create a batch of examples using [`DefaultDataCollator`]:
 
 ## Train the model
 
-You’re ready to start training your model now! Load ViLT with [`ViltForQuestionAnswering`]. Specify the number of labels
+You're ready to start training your model now! Load ViLT with [`ViltForQuestionAnswering`]. Specify the number of labels
 along with the label mappings:
 
 ```py
