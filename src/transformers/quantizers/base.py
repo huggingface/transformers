@@ -169,14 +169,7 @@ class HfQuantizer(ABC):
         )
         return self.param_needs_quantization(*args, **kwargs)
 
-    def param_needs_quantization(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ) -> bool:
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         """
         Check whether a given param needs quantization as defined by `create_quantized_param`.
         """
