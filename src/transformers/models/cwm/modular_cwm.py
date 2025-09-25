@@ -40,17 +40,10 @@ logger = logging.get_logger(__name__)
 # -----------------------------------------------------------------------------
 class CwmTextConfig(LlamaConfig):
     """
-    Llama3-compatible configuration with layer-interleaved sliding-window attention.
-
-    Behavior:
-      - Layers marked "sliding_attention" use local causal window = `sliding_window`.
-      - Layers marked "full_attention" use pure causal by default; if `global_window` is set,
-        they instead use a capped local causal window of size `global_window`.
-
-    Keep weights Llama-shaped; expose model_type='cwm' so modular tooling targets this file.
+    Llama3-compatible configuration with layer-interleaved sliding-window attention
     """
 
-    model_type = "llama"  # important for vLLM + HF compatibility
+    model_type = "llama"  # for VLLM too
 
 
     def __init__(
@@ -68,7 +61,7 @@ class CwmTextConfig(LlamaConfig):
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
-        pad_token_id: Optional[int] = None,
+        pad_token_id: Optional[int] = 128004,  # <|pad|>
         eos_token_id=(128001, 128008, 128009),
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
@@ -78,11 +71,11 @@ class CwmTextConfig(LlamaConfig):
         pretraining_tp: int = 1,
         mlp_bias: bool = False,
         rope_scaling: Optional[dict] = None,
-        # CWM interleaved SWA fields
+        # CWM interleaved sliding window fields
         sliding_window: int = 8192,
         layer_types: Optional[List[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
-        window_pattern: Optional[int] = None,     # convenience: 4 => every 4th layer "full"
-        global_window: Optional[int] = None,      # cap for "full" layers; None => pure causal
+        window_pattern: Optional[int] = None,
+        global_window: Optional[int] = None,  # causal
         **kwargs,
     ):
         if rope_scaling is None:
@@ -133,7 +126,7 @@ class CwmTextConfig(LlamaConfig):
         self.window_pattern = int(window_pattern) if window_pattern is not None else None
         self.global_window = None if global_window is None else int(global_window)
 
-        # Prefer SDPA when sliding is active (dense additive masks)
+        # use SDPA when sliding is active (dense additive mask)
         try:
             if any(t == "sliding_attention" for t in self.layer_types) and self.sliding_window > 0:
                 self._attn_implementation = "sdpa"
@@ -145,9 +138,6 @@ class CwmConfig(CwmTextConfig):
     pass
 
 
-# -----------------------------------------------------------------------------
-# Mask helpers (build additive masks compatible with SDPA)
-# -----------------------------------------------------------------------------
 def _infer_past_len(past_key_value, layer_idx: int) -> int:
     if past_key_value is None:
         return 0
@@ -165,16 +155,12 @@ def _infer_past_len(past_key_value, layer_idx: int) -> int:
 
 def _additive_mask_local(
     position_ids: torch.LongTensor,  # [B,Q] absolute positions
-    kv_len: int,                     # total keys (past + current)
+    kv_len: int,
     window: int,
     dtype: torch.dtype,
     device: torch.device,
 ) -> torch.Tensor:
-    """
-    Local-causal additive mask [B,1,Q,K]: allow iff k <= q and k >= q-(window-1).
-    Returns 0 where allowed, -inf otherwise.
-    """
-    B, Q = position_ids.shape
+    # Local-causal additive mask [B,1,Q,K]: allow iff k <= q and k >= q-(window-1) | 0 = allow, else -inf
     K = kv_len
     last = position_ids[:, -1]
     offset = last - (K - 1)
@@ -195,10 +181,7 @@ def _additive_mask_causal(
     dtype: torch.dtype,
     device: torch.device,
 ) -> torch.Tensor:
-    """
-    Pure causal additive mask [B,1,Q,K]: allow iff k <= q; 0 where allowed, -inf otherwise.
-    """
-    B, Q = position_ids.shape
+    # causal additive mask [B,1,Q,K]: allow if k <= q, 0 where allowed else -inf
     K = kv_len
     last = position_ids[:, -1]
     offset = last - (K - 1)
@@ -211,10 +194,6 @@ def _additive_mask_causal(
     return add[:, None, :, :]
 
 
-# -----------------------------------------------------------------------------
-# Attention registry (modular converter expects these symbols)
-# We keep stock Llama classes; masking happens in CwmDecoderLayer.forward.
-# -----------------------------------------------------------------------------
 ATTENTION_CLASSES = {
     "eager": LlamaAttention,
     "flash_attention_2": LlamaFlashAttention2,
@@ -222,17 +201,15 @@ ATTENTION_CLASSES = {
 }
 
 
-# -----------------------------------------------------------------------------
-# Decoder with mask injection, Model, LM Head
-# -----------------------------------------------------------------------------
 class CwmDecoderLayer(LlamaDecoderLayer):
     """
     Same as LlamaDecoderLayer, but we inject an additive mask (local or causal) per layer
-    based on config.layer_types / sliding_window / global_window *before* calling attention.
+    based on config.layer_types / sliding_window / global_window before calling attention
     """
 
     def __init__(self, config: CwmTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.layer_idx = layer_idx  # Ensure layer_idx is stored as instance attribute
         self._cwm_layer_types = getattr(config, "layer_types", None)
         self._cwm_W_local = int(getattr(config, "sliding_window", 0))
         self._cwm_W_global = getattr(config, "global_window", None)
@@ -241,15 +218,13 @@ class CwmDecoderLayer(LlamaDecoderLayer):
 
     def _cwm_build_mask(
         self,
-        position_ids: torch.LongTensor,   # [B,Q]
-        past_key_value,                   # cache for this layer
+        position_ids: torch.LongTensor,  # [B,Q]
+        past_key_value,  # cache for this layer
         hidden_states_dtype: torch.dtype,
         device: torch.device,
     ) -> torch.Tensor:
-        # Determine KV length (past + current)
         kv_len = _infer_past_len(past_key_value, self.layer_idx) + position_ids.size(1)
 
-        # Choose policy for this layer
         layer_type = "full_attention"
         if self._cwm_layer_types is not None:
             layer_type = self._cwm_layer_types[self.layer_idx]
@@ -262,7 +237,6 @@ class CwmDecoderLayer(LlamaDecoderLayer):
             else:
                 return _additive_mask_local(position_ids, kv_len, self._cwm_W_global, hidden_states_dtype, device)
 
-    # Mirror LlamaDecoderLayer.forward but only to inject our mask before attention call.
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -272,13 +246,13 @@ class CwmDecoderLayer(LlamaDecoderLayer):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Build our additive mask (requires position_ids); if not available, skip.
         if position_ids is not None:
             add = self._cwm_build_mask(
                 position_ids=position_ids,
@@ -288,7 +262,6 @@ class CwmDecoderLayer(LlamaDecoderLayer):
             )
             attention_mask = add if attention_mask is None else (attention_mask + add)
 
-        # Call the selected attention impl (stock Llama classes via ATTENTION_CLASSES)
         attn_outputs = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -297,6 +270,7 @@ class CwmDecoderLayer(LlamaDecoderLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
         )
 
         attn_output = attn_outputs[0]
@@ -312,10 +286,9 @@ class CwmDecoderLayer(LlamaDecoderLayer):
 
         if use_cache:
             outputs = (hidden_states,) + outputs
+            return outputs
         else:
-            outputs = (hidden_states,) + outputs
-
-        return outputs
+            return hidden_states
 
 
 class CwmMLP(LlamaMLP):
@@ -336,9 +309,6 @@ class CwmPreTrainedModel(LlamaPreTrainedModel):
 
 
 class CwmModel(LlamaModel):
-    """
-    Llama backbone; decoder layers are CwmDecoderLayer which inject additive masks per layer.
-    """
     config_class = CwmTextConfig
 
     def __init__(self, config: CwmTextConfig):
@@ -351,26 +321,13 @@ class CwmModel(LlamaModel):
 
         super().__init__(config)
 
-        # Recreate layers using our decoder layer and port submodule weights
-        new_layers = torch.nn.ModuleList()
-        for i, layer in enumerate(self.layers):
-            cwm_layer = CwmDecoderLayer(config, i)
-            try:
-                cwm_layer.input_layernorm.load_state_dict(layer.input_layernorm.state_dict())
-                cwm_layer.post_attention_layernorm.load_state_dict(layer.post_attention_layernorm.state_dict())
-                cwm_layer.mlp.load_state_dict(layer.mlp.state_dict())
-                # Also copy attention weights from the original (same class & params)
-                cwm_layer.self_attn.load_state_dict(layer.self_attn.state_dict(), strict=False)
-            except Exception as e:
-                logger.warning(f"CWM: could not port weights at layer {i}: {e}")
-            new_layers.append(cwm_layer)
-        self.layers = new_layers
+        # Add attention masks masks per-layer
+        self.layers = torch.nn.ModuleList([
+            CwmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
+        ])
 
 
 class CwmForCausalLM(LlamaForCausalLM):
-    """
-    Causal LM head using CwmModel. One Llama-shaped checkpoint; no weight remap required.
-    """
     config_class = CwmTextConfig
 
     def __init__(self, config: CwmTextConfig):

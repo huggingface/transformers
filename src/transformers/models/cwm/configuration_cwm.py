@@ -27,17 +27,10 @@ from ...modeling_rope_utils import rope_config_validation
 
 class CwmTextConfig(PretrainedConfig):
     """
-    Llama3-compatible configuration with layer-interleaved sliding-window attention.
-
-    Behavior:
-      - Layers marked "sliding_attention" use local causal window = `sliding_window`.
-      - Layers marked "full_attention" use pure causal by default; if `global_window` is set,
-        they instead use a capped local causal window of size `global_window`.
-
-    Keep weights Llama-shaped; expose model_type='cwm' so modular tooling targets this file.
+    Llama3-compatible configuration with layer-interleaved sliding-window attention
     """
 
-    model_type = "llama"  # important for vLLM + HF compatibility
+    model_type = "llama"  # for VLLM too
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `CwmTextModel`
     base_model_tp_plan = {
@@ -70,7 +63,7 @@ class CwmTextConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
-        pad_token_id: Optional[int] = None,
+        pad_token_id: Optional[int] = 128004,  # <|pad|>
         eos_token_id=(128001, 128008, 128009),
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
@@ -80,11 +73,11 @@ class CwmTextConfig(PretrainedConfig):
         pretraining_tp: int = 1,
         mlp_bias: bool = False,
         rope_scaling: Optional[dict] = None,
-        # CWM interleaved SWA fields
+        # CWM interleaved sliding window fields
         sliding_window: int = 8192,
         layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
-        window_pattern: Optional[int] = None,  # convenience: 4 => every 4th layer "full"
-        global_window: Optional[int] = None,  # cap for "full" layers; None => pure causal
+        window_pattern: Optional[int] = None,
+        global_window: Optional[int] = None,  # causal
         **kwargs,
     ):
         super().__init__(
@@ -144,7 +137,7 @@ class CwmTextConfig(PretrainedConfig):
         self.window_pattern = int(window_pattern) if window_pattern is not None else None
         self.global_window = None if global_window is None else int(global_window)
 
-        # Prefer SDPA when sliding is active (dense additive masks)
+        # use SDPA when sliding is active (dense additive mask)
         try:
             if any(t == "sliding_attention" for t in self.layer_types) and self.sliding_window > 0:
                 self._attn_implementation = "sdpa"
