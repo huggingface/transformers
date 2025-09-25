@@ -92,8 +92,16 @@ if __name__ == "__main__":
             summary = dict(sorted(summary.items(), key=lambda x: (x[1], x[0])))
             workflow_summary[job["name"]] = summary
 
-            workflow_repo_ids[job["name"]] = [json.loads(x) for x in repo_ids]
-            workflow_repo_ids_2.extend(repo_ids)
+            new_repo_ids = []
+            for x in repo_ids:
+                try:
+                    x = json.loads(x)
+                    new_repo_ids.append(x)
+                except Exception as e:
+                    print(e)
+
+            workflow_repo_ids[job["name"]] = new_repo_ids
+            workflow_repo_ids_2.extend(new_repo_ids)
 
             # collected version
             with open(f"outputs/{job['name']}/test_summary.json", "w") as fp:
