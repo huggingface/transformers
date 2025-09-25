@@ -29,6 +29,7 @@ from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
@@ -104,6 +105,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
         self.add_prefix_space = kwargs.get("add_prefix_space", False)
+        tokenizer_backend_config = kwargs.pop("tokenizer_backend_config", None)
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
@@ -129,6 +131,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs.update(tokenizer_config)
             if len(additional_kwargs) > 0:
                 kwargs.update(additional_kwargs)
+        elif tokenizer_backend_config is not None:
+            fast_tokenizer = self._build_tokenizer_backend(tokenizer_backend_config)
         elif self.slow_tokenizer_class is not None and slow_tokenizer is not False:
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
@@ -238,6 +242,19 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         else:
             return True
 
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)
+
     def update_post_processor(self):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
@@ -260,16 +277,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             special_tokens.append((bos, bos_token_id))
         if self.add_eos_token:
             special_tokens.append((eos, eos_token_id))
-
-        new_processor = processors.TemplateProcessing(
+        self._tokenizer.post_processor = processors.TemplateProcessing(
             single=single, pair=pair, special_tokens=special_tokens
         )
-        if isinstance(self._tokenizer.post_processor, processors.Sequence):
-            self._tokenizer.post_processor += [new_processor]
-        elif self._tokenizer.post_processor is not None:
-            self._tokenizer.post_processor = processors.Sequence([self._tokenizer.post_processor, new_processor])
-        else:
-            self._tokenizer.post_processor = new_processor
 
     @property
     def add_eos_token(self):
@@ -757,39 +767,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         save_directory = str(save_directory)
 
-        if self.slow_tokenizer_class is None and legacy_format is True:
-            raise ValueError(
-                "Your tokenizer does not have a legacy version defined and therefore cannot register this version. You"
-                " might consider leaving the legacy_format at `None` or setting it to `False`."
-            )
-
-        save_slow = (
-            (legacy_format is None or legacy_format is True)
-            and self.slow_tokenizer_class is not None
-            and self.can_save_slow_tokenizer
+        tokenizer_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_FILE
         )
-        save_fast = legacy_format is None or legacy_format is False
-
-        if save_slow:
-            added_tokens_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
-            )
-            # make sure to be forward compatible
-            added_vocab = {tok: index for tok, index in self.added_tokens_encoder.items() if index >= self.vocab_size}
-            if added_vocab:
-                with open(added_tokens_file, "w", encoding="utf-8") as f:
-                    out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-                    f.write(out_str)
-
-            vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
-            file_names = file_names + vocab_files + (added_tokens_file,)
-
-        if save_fast:
-            tokenizer_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_FILE
-            )
-            self.backend_tokenizer.save(tokenizer_file)
-            file_names = file_names + (tokenizer_file,)
+        self.backend_tokenizer.save(tokenizer_file)
+        file_names = file_names + (tokenizer_file,)
 
         return file_names
 
@@ -972,3 +954,30 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["additional_special_tokens"] = additional_special_tokens
 
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
+
+    def _build_tokenizer_backend(self, tokenizer_backend_config):
+         # Build a backend tokenizer from a lightweight config (e.g., SPM from scratch)
+        build_type = tokenizer_backend_config.get("type")
+        if build_type == "spm":
+            # Import locally to avoid hard dependency unless used
+            from .create_fast_tokenizer import SpmTokenizer
+
+            spm = SpmTokenizer(
+                handle_byte_fallback=tokenizer_backend_config.get("handle_byte_fallback", True),
+                legacy=tokenizer_backend_config.get("legacy", False),
+                add_prefix_space=tokenizer_backend_config.get("add_prefix_space", True),
+                special_tokens=tokenizer_backend_config.get("special_tokens"),
+                vocab=tokenizer_backend_config.get("vocab"),
+                unk_id=tokenizer_backend_config.get("unk_id"),
+                normalizer=tokenizer_backend_config.get("normalizer"),
+                pre_tokenizer=tokenizer_backend_config.get("pre_tokenizer"),
+                decoder=tokenizer_backend_config.get("decoder"),
+                post_processor=tokenizer_backend_config.get("post_processor"),
+                tokenizer=tokenizer_backend_config.get("tokenizer"),
+            )
+            fast_tokenizer = spm.create_tokenizer()
+            return fast_tokenizer
+        else:
+            raise ValueError(
+                f"Unsupported tokenizer_backend_config type: {build_type}. Currently supported: 'spm'."
+            )
