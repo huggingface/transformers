@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 - [DocVQA dataset](https://huggingface.co/datasets/nielsr/docvqa_1200_examples_donut)을 사용해 [LayoutLMv2](../model_doc/layoutlmv2) 미세 조정하기
 - 추론을 위해 미세 조정된 모델을 사용하기
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/image-to-text)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/image-to-text)를 확인하는 것이 좋습니다.
 
 LayoutLMv2는 토큰의 마지막 은닉층 위에 질의 응답 헤드를 추가해 답변의 시작 토큰과 끝 토큰의 위치를 예측함으로써 문서 질의 응답 태스크를 해결합니다. 즉, 문맥이 주어졌을 때 질문에 답하는 정보를 추출하는 추출형 질의 응답(Extractive question answering)으로 문제를 처리합니다.
 문맥은 OCR 엔진의 출력에서 가져오며, 여기서는 Google의 Tesseract를 사용합니다.

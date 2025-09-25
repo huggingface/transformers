@@ -54,12 +54,9 @@ al.、2019）。実験では、BERTweet が強力なベースラインである 
 >>> # from transformers import TFAutoModel
 >>> # bertweet = TFAutoModel.from_pretrained("vinai/bertweet-base")
 ```
-<Tip>
-
-この実装は、トークン化方法を除いて BERT と同じです。詳細については、[BERT ドキュメント](bert) を参照してください。
-API リファレンス情報。
-
-</Tip>
+> [!TIP]
+> この実装は、トークン化方法を除いて BERT と同じです。詳細については、[BERT ドキュメント](bert) を参照してください。
+> API リファレンス情報。
 
 このモデルは [dqnguyen](https://huggingface.co/dqnguyen) によって提供されました。元のコードは [ここ](https://github.com/VinAIResearch/BERTweet) にあります。
 

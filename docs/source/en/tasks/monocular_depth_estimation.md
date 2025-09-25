@@ -33,11 +33,8 @@ There are two main depth estimation categories:
 
 In this guide, we will see how to infer with [Depth Anything V2](https://huggingface.co/depth-anything/Depth-Anything-V2-Large), a state-of-the-art zero-shot relative depth estimation model, and [ZoeDepth](https://huggingface.co/docs/transformers/main/en/model_doc/zoedepth), an absolute depth estimation model.
 
-<Tip>
-
-Check the [Depth Estimation](https://huggingface.co/tasks/depth-estimation) task page to view all compatible architectures and checkpoints.
-
-</Tip>
+> [!TIP]
+> Check the [Depth Estimation](https://huggingface.co/tasks/depth-estimation) task page to view all compatible architectures and checkpoints.
 
 Before we begin, we need to install the latest version of Transformers:
 
@@ -141,18 +138,17 @@ Let's post-process the results to remove any padding and resize the depth map to
 >>> depth = Image.fromarray(depth.astype("uint8"))
 ```
 
-<Tip>
-<p>In the <a href="https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131">original implementation</a> ZoeDepth model performs inference on both the original and flipped images and averages out the results. The <code>post_process_depth_estimation</code> function can handle this for us by passing the flipped outputs to the optional <code>outputs_flipped</code> argument:</p>
-<pre><code class="language-Python">&gt;&gt;&gt; with torch.no_grad():
-...     outputs = model(pixel_values)
-...     outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
-&gt;&gt;&gt; post_processed_output = image_processor.post_process_depth_estimation(
-...     outputs,
-...     source_sizes=[(image.height, image.width)],
-...     outputs_flipped=outputs_flipped,
-... )
-</code></pre>
-</Tip>
+> [!TIP]
+> <p>In the <a href="https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131">original implementation</a> ZoeDepth model performs inference on both the original and flipped images and averages out the results. The <code>post_process_depth_estimation</code> function can handle this for us by passing the flipped outputs to the optional <code>outputs_flipped</code> argument:</p>
+> <pre><code class="language-Python">&gt;&gt;&gt; with torch.no_grad():
+> ...     outputs = model(pixel_values)
+> ...     outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
+> &gt;&gt;&gt; post_processed_output = image_processor.post_process_depth_estimation(
+> ...     outputs,
+> ...     source_sizes=[(image.height, image.width)],
+> ...     outputs_flipped=outputs_flipped,
+> ... )
+> </code></pre>
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/depth-visualization-zoe.png" alt="Depth estimation visualization"/>

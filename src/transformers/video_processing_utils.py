@@ -484,11 +484,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 identifier allowed by git.
 
 
-                <Tip>
-
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-                </Tip>
+                > [!TIP]
+                > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final video processor object. If `True`, then this
@@ -850,11 +847,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         Register this class with a given auto class. This should only be used for custom video processors as the ones
         in the library are already mapped with `AutoVideoProcessor `.
 
-        <Tip warning={true}>
-
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
+        > [!WARNING]
+        > This API is experimental and may have some slight breaking changes in the next releases.
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoVideoProcessor "`):

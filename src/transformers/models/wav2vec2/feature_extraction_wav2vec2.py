@@ -49,18 +49,15 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not [`~Wav2Vec2FeatureExtractor.__call__`] should return `attention_mask`.
 
-            <Tip>
-
-            Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as
-            [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
-            `attention_mask`. For such models, `input_values` should simply be padded with 0 and no `attention_mask`
-            should be passed.
-
-            For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as
-            [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
-            passed for batched inference.
-
-            </Tip>"""
+            > [!TIP]
+            > Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as
+            > [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
+            > `attention_mask`. For such models, `input_values` should simply be padded with 0 and no `attention_mask`
+            > should be passed.
+            >
+            > For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as
+            > [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
+            > passed for batched inference."""
 
     model_input_names = ["input_values", "attention_mask"]
 
@@ -144,18 +141,15 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-                <Tip>
-
-                Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as
-                [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
-                `attention_mask`. For such models, `input_values` should simply be padded with 0 and no
-                `attention_mask` should be passed.
-
-                For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as
-                [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should
-                be passed for batched inference.
-
-                </Tip>
+                > [!TIP]
+                > Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as
+                > [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
+                > `attention_mask`. For such models, `input_values` should simply be padded with 0 and no
+                > `attention_mask` should be passed.
+                >
+                > For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as
+                > [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should
+                > be passed for batched inference.
 
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:

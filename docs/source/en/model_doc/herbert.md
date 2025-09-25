@@ -64,12 +64,9 @@ This model was contributed by [rmroczkowski](https://huggingface.co/rmroczkowski
 >>> model = AutoModel.from_pretrained("allegro/herbert-klej-cased-v1")
 ```
 
-<Tip>
-
-Herbert implementation is the same as `BERT` except for the tokenization method. Refer to [BERT documentation](bert)
-for API reference and examples.
-
-</Tip>
+> [!TIP]
+> Herbert implementation is the same as `BERT` except for the tokenization method. Refer to [BERT documentation](bert)
+> for API reference and examples.
 
 ## HerbertTokenizer
 

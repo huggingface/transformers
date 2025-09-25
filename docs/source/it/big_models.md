@@ -25,11 +25,8 @@ in PyTorch è:
 
 I passi 1 e 2 una versione completa del modello in memoria, in molti casi non è un problema, ma se il modello inizia a pesare diversi GigaBytes, queste due copie possono sturare la nostra RAM. Ancora peggio, se stai usando `torch.distributed` per seguire l'addestramento (training) in distribuito, ogni processo caricherà il modello preaddestrato e memorizzerà queste due copie nella RAM.
 
-<Tip>
-
-Nota che il modello creato casualmente è inizializzato con tensori "vuoti", che occupano spazio in memoria ma senza riempirlo (quindi i valori casuali sono quelli che si trovavano in questa porzione di memoria in un determinato momento). L'inizializzazione casuale che segue la distribuzione appropriata per il tipo di modello/parametri istanziato (come la distribuzione normale per le istanze) è eseguito solo dopo il passaggio 3 sui pesi non inizializzati, per essere più rapido possibile!
-
-</Tip>
+> [!TIP]
+> Nota che il modello creato casualmente è inizializzato con tensori "vuoti", che occupano spazio in memoria ma senza riempirlo (quindi i valori casuali sono quelli che si trovavano in questa porzione di memoria in un determinato momento). L'inizializzazione casuale che segue la distribuzione appropriata per il tipo di modello/parametri istanziato (come la distribuzione normale per le istanze) è eseguito solo dopo il passaggio 3 sui pesi non inizializzati, per essere più rapido possibile!
 
 In questa guida, esploreremo le soluzioni che Transformers offre per affrontare questo problema. C'è da tenere in conto che questa è un'area in cui si sta attualmente sviluppando, quindi le API spiegate qui possono variare velocemente in futuro.
 

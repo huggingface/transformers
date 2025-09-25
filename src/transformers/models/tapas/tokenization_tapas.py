@@ -653,11 +653,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         """
         Prepare a table and a list of strings for the model.
 
-        <Tip warning={true}>
-
-        This method is deprecated, `__call__` should be used instead.
-
-        </Tip>
+        > [!WARNING]
+        > This method is deprecated, `__call__` should be used instead.
 
         Args:
             table (`pd.DataFrame`):

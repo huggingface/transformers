@@ -194,11 +194,8 @@ def get_feature_extractor_config(
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
 
-    <Tip>
-
-    Passing `token=True` is required when you want to use a private model.
-
-    </Tip>
+    > [!TIP]
+    > Passing `token=True` is required when you want to use a private model.
 
     Returns:
         `Dict`: The configuration of the tokenizer.
@@ -322,11 +319,8 @@ class AutoFeatureExtractor:
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
 
-        <Tip>
-
-        Passing `token=True` is required when you want to use a private model.
-
-        </Tip>
+        > [!TIP]
+        > Passing `token=True` is required when you want to use a private model.
 
         Examples:
 

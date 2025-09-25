@@ -386,12 +386,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         Returns the number of added tokens when encoding a sequence with special tokens.
 
-        <Tip>
-
-        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not put
-        this inside your training loop.
-
-        </Tip>
+        > [!TIP]
+        > This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not put
+        > this inside your training loop.
 
         Args:
             pair (`bool`, *optional*, defaults to `False`):

@@ -136,11 +136,8 @@ default_args = {
 }
 ```
 
-<Tip>
-
-Si planeas ejecutar varias pruebas, reinicie el kernel de Python entre cada prueba para borrar correctamente la memoria.
-
-</Tip>
+> [!TIP]
+> Si planeas ejecutar varias pruebas, reinicie el kernel de Python entre cada prueba para borrar correctamente la memoria.
 
 ## Utilización de la memoria en el entrenamiento
 

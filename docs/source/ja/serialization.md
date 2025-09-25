@@ -131,11 +131,8 @@ CLIの代わりに、🤗 TransformersモデルをONNXにプログラム的に�
 
 ### Exporting a model with `transformers.onnx`
 
-<Tip warning={true}>
-
-`transformers.onnx`はもはやメンテナンスされていないため、モデルを上記で説明したように🤗 Optimumでエクスポートしてください。このセクションは将来のバージョンで削除されます。
-
-</Tip>
+> [!WARNING]
+> `transformers.onnx`はもはやメンテナンスされていないため、モデルを上記で説明したように🤗 Optimumでエクスポートしてください。このセクションは将来のバージョンで削除されます。
 
 🤗 TransformersモデルをONNXにエクスポートするには、追加の依存関係をインストールしてください：
 

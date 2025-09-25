@@ -190,11 +190,8 @@ label: NEGATIVE, with score: 0.5309
 ... )
 ```
 
-<Tip>
-
-查阅[预处理](./preprocessing)教程来获得有关分词的更详细的信息，以及如何使用 [`AutoFeatureExtractor`] 和 [`AutoProcessor`] 来处理图像，音频，还有多模式输入。
-
-</Tip>
+> [!TIP]
+> 查阅[预处理](./preprocessing)教程来获得有关分词的更详细的信息，以及如何使用 [`AutoFeatureExtractor`] 和 [`AutoProcessor`] 来处理图像，音频，还有多模式输入。
 
 ### AutoModel
 
@@ -207,11 +204,8 @@ label: NEGATIVE, with score: 0.5309
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
 ```
 
-<Tip>
-
-通过 [任务摘要](./task_summary) 查找 [`AutoModel`] 支持的任务.
-
-</Tip>
+> [!TIP]
+> 通过 [任务摘要](./task_summary) 查找 [`AutoModel`] 支持的任务.
 
 现在可以把预处理好的输入批次直接送进模型。你只需要通过 `**` 来解包字典:
 
@@ -230,12 +224,9 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
 
-<Tip>
-
-所有 🤗 Transformers 模型（PyTorch 或 TensorFlow）在最终的激活函数（比如 softmax）*之前* 输出张量，
-因为最终的激活函数常常与 loss 融合。模型的输出是特殊的数据类，所以它们的属性可以在 IDE 中被自动补全。模型的输出就像一个元组或字典（你可以通过整数、切片或字符串来索引它），在这种情况下，为 None 的属性会被忽略。
-
-</Tip>
+> [!TIP]
+> 所有 🤗 Transformers 模型（PyTorch 或 TensorFlow）在最终的激活函数（比如 softmax）*之前* 输出张量，
+> 因为最终的激活函数常常与 loss 融合。模型的输出是特殊的数据类，所以它们的属性可以在 IDE 中被自动补全。模型的输出就像一个元组或字典（你可以通过整数、切片或字符串来索引它），在这种情况下，为 None 的属性会被忽略。
 
 ### 保存模型
 
@@ -357,11 +348,8 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> trainer.train()  # doctest: +SKIP
 ```
 
-<Tip>
-
-对于像翻译或摘要这些使用序列到序列模型的任务，用 [`Seq2SeqTrainer`] 和 [`Seq2SeqTrainingArguments`] 来替代。
-
-</Tip>
+> [!TIP]
+> 对于像翻译或摘要这些使用序列到序列模型的任务，用 [`Seq2SeqTrainer`] 和 [`Seq2SeqTrainingArguments`] 来替代。
 
 你可以通过子类化 [`Trainer`] 中的方法来自定义训练循环。这样你就可以自定义像损失函数，优化器和调度器这样的特性。查阅 [`Trainer`] 参考手册了解哪些方法能够被子类化。
 

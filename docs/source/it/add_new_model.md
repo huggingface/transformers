@@ -644,11 +644,8 @@ voi dovrete solo completarlo. Una volta che questi tests sono OK, provate:
 RUN_SLOW=1 pytest -sv tests/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
 ```
 
-<Tip>
-
-Nel caso siate su Windows, sostituite `RUN_SLOW=1` con `SET RUN_SLOW=1`
-
-</Tip>
+> [!TIP]
+> Nel caso siate su Windows, sostituite `RUN_SLOW=1` con `SET RUN_SLOW=1`
 
 Di seguito, tutte le features che sono utili e necessarire per *brand_new_bert* devono essere testate in test separati,
 contenuti in `BrandNewBertModelTester`/ `BrandNewBertModelTest`. spesso la gente si scorda questi test, ma ricordate che sono utili per:

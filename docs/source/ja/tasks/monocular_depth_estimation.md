@@ -25,11 +25,8 @@ rendered properly in your Markdown viewer.
 シーンとそれに対応する深度情報（照明条件などの要因の影響を受ける可能性があります）
 オクルージョンとテクスチャ。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/depth-estimation) を確認することをお勧めします。
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/depth-estimation) を確認することをお勧めします。
 
 このガイドでは、次の方法を学びます。
 

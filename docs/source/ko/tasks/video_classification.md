@@ -26,11 +26,8 @@ rendered properly in your Markdown viewer.
 1. [UCF101](https://www.crcv.ucf.edu/data/UCF101.php) 데이터 세트의 하위 집합을 통해 [VideoMAE](https://huggingface.co/docs/transformers/main/en/model_doc/videomae) 모델을 미세 조정하기.
 2. 미세 조정한 모델을 추론에 사용하기.
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/video-classification)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/video-classification)를 확인하는 것이 좋습니다.
 
 
 시작하기 전에 필요한 모든 라이브러리가 설치되었는지 확인하세요:

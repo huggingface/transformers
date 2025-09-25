@@ -356,12 +356,10 @@ class CsmGenerationMixin(GenerationMixin):
         3. Use these generated codebook tokens as `input_ids` to sample the next first codebook token using the backbone model
         4. Repeat until stopping criteria is met
 
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, do_sample=True)`.
-        </Tip>
+        > [!WARNING]
+        > Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        > model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        > parameters to generate(), e.g. `.generate(inputs, do_sample=True)`.
 
         Parameters:
             inputs_ids (`torch.Tensor` of shape (batch_size, seq_length), *optional*):

@@ -64,21 +64,18 @@ Install 🤗Transformers from source as not all the SpeechT5 features have been 
 pip install git+https://github.com/huggingface/transformers.git
 ```
 
-<Tip>
-
-To follow this guide you will need a GPU. If you're working in a notebook, run the following line to check if a GPU is available:
-
-```bash
-!nvidia-smi
-```
-
-or alternatively for AMD GPUs:
-
-```bash
-!rocm-smi
-```
-
-</Tip>
+> [!TIP]
+> To follow this guide you will need a GPU. If you're working in a notebook, run the following line to check if a GPU is available:
+>
+> ```bash
+> !nvidia-smi
+> ```
+>
+> or alternatively for AMD GPUs:
+>
+> ```bash
+> !rocm-smi
+> ```
 
 We encourage you to log in to your Hugging Face account to upload and share your model with the community. When prompted, enter your token to log in:
 

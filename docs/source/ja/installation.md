@@ -118,11 +118,8 @@ pip install -e .
 
 上記のコマンドは、レポジトリをクローンしたフォルダとPythonのライブラリをパスをリンクします。Pythonは通常のライブラリパスに加えて、あなたがクローンしたフォルダの中も見るようになります。例えば、Pythonパッケージが通常、`~/anaconda3/envs/main/lib/python3.7/site-packages/`にインストールされている場合、Pythonはクローンしたフォルダも検索するようになります: `~/transformers/`.
 
-<Tip warning={true}>
-
-ライブラリーを使い続けたい場合は、transformersフォルダーを保持しつづける必要があります。
-
-</Tip>
+> [!WARNING]
+> ライブラリーを使い続けたい場合は、transformersフォルダーを保持しつづける必要があります。
 
 これで、次のコマンドで簡単にクローンを🤗 Transformersの最新版に更新できます:
 
@@ -149,21 +146,15 @@ conda install conda-forge::transformers
 2. シェル環境変数: `HF_HOME`.
 3. シェル環境変数: `XDG_CACHE_HOME` + `/huggingface`.
 
-<Tip>
-
-もし、以前のバージョンのライブラリを使用していた人で、`PYTORCH_TRANSFORMERS_CACHE`または`PYTORCH_PRETRAINED_BERT_CACHE`を設定していた場合、シェル環境変数`TRANSFORMERS_CACHE`を指定しない限り🤗 Transformersはこれらのシェル環境変数を使用します。
-
-</Tip>
+> [!TIP]
+> もし、以前のバージョンのライブラリを使用していた人で、`PYTORCH_TRANSFORMERS_CACHE`または`PYTORCH_PRETRAINED_BERT_CACHE`を設定していた場合、シェル環境変数`TRANSFORMERS_CACHE`を指定しない限り🤗 Transformersはこれらのシェル環境変数を使用します。
 
 ## オフラインモード
 
 🤗 Transformersはローカルファイルのみを使用することでファイアウォールやオフラインの環境でも動作させることができます。この動作を有効にするためには、環境変数`HF_HUB_OFFLINE=1`を設定します。
 
-<Tip>
-
-環境変数`HF_DATASETS_OFFLINE=1`を設定し、オフライントレーニングワークフローに[🤗 Datasets](https://huggingface.co/docs/datasets/)を追加します。
-
-</Tip>
+> [!TIP]
+> 環境変数`HF_DATASETS_OFFLINE=1`を設定し、オフライントレーニングワークフローに[🤗 Datasets](https://huggingface.co/docs/datasets/)を追加します。
 
 例えば、外部インスタンスに対してファイアウォールで保護された通常のネットワーク上でプログラムを実行する場合、通常以下のようなコマンドで実行することになります:
 
@@ -237,8 +228,5 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path goog
 >>> config = AutoConfig.from_pretrained("./your/path/bigscience_t0/config.json")
 ```
 
-<Tip>
-
-Hubに保存されているファイルをダウンロードする方法の詳細については、[How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream)セクションを参照してください。
-
-</Tip>
+> [!TIP]
+> Hubに保存されているファイルをダウンロードする方法の詳細については、[How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream)セクションを参照してください。

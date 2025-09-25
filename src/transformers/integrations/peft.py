@@ -123,11 +123,8 @@ class PeftAdapterMixin:
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
 
-                <Tip>
-
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-                </Tip>
+                > [!TIP]
+                > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
             token (`str`, `optional`):
                 Whether to use authentication token to load the remote folder. Useful to load private repositories

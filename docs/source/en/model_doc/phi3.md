@@ -43,15 +43,12 @@ The original code for Phi-3 can be found [here](https://huggingface.co/microsoft
 
 ## How to use Phi-3
 
-<Tip warning={true}>
-
-Phi-3 has been integrated in the development version (4.40.0.dev) of `transformers`. Until the official version is released through `pip`, ensure that you are doing one of the following:
-
-* When loading the model, ensure that `trust_remote_code=True` is passed as an argument of the `from_pretrained()` function.
-
-* Update your local `transformers` to the development version: `pip uninstall -y transformers && pip install git+https://github.com/huggingface/transformers`. The previous command is an alternative to cloning and installing from the source.
-
-</Tip>
+> [!WARNING]
+> Phi-3 has been integrated in the development version (4.40.0.dev) of `transformers`. Until the official version is released through `pip`, ensure that you are doing one of the following:
+>
+> * When loading the model, ensure that `trust_remote_code=True` is passed as an argument of the `from_pretrained()` function.
+>
+> * Update your local `transformers` to the development version: `pip uninstall -y transformers && pip install git+https://github.com/huggingface/transformers`. The previous command is an alternative to cloning and installing from the source.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer

@@ -35,11 +35,8 @@ rendered properly in your Markdown viewer.
 1. [ELI5](https:/) の [r/askscience](https://www.reddit.com/r/askscience/) サブセットで [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) を微調整します。 /huggingface.co/datasets/eli5) データセット。
 2. 微調整したモデルを推論に使用します。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/text-generation) を確認することをお勧めします。u
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/text-generation) を確認することをお勧めします。u
 
 始める前に、必要なライブラリがすべてインストールされていることを確認してください。
 
@@ -199,11 +196,8 @@ Apply the `group_texts` function over the entire dataset:
 
 ## Train
 
-<Tip>
-
-[`Trainer`] を使用したモデルの微調整に慣れていない場合は、[基本チュートリアル](../training#train-with-pytorch-trainer) を参照してください。
-
-</Tip>
+> [!TIP]
+> [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[基本チュートリアル](../training#train-with-pytorch-trainer) を参照してください。
 
 これでモデルのトレーニングを開始する準備が整いました。 [`AutoModelForCausalLM`] を使用して DistilGPT2 をロードします。
 
@@ -256,13 +250,10 @@ Perplexity: 49.61
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-因果言語モデリング用にモデルを微調整する方法のより詳細な例については、対応するドキュメントを参照してください。
-[PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
-または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)。
-
-</Tip>
+> [!TIP]
+> 因果言語モデリング用にモデルを微調整する方法のより詳細な例については、対応するドキュメントを参照してください。
+> [PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
+> または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)。
 
 ## Inference
 

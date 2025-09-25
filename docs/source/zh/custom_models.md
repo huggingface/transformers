@@ -161,11 +161,8 @@ class ResnetModelForImageClassification(PreTrainedModel):
 
 在这两种情况下，请注意我们如何继承 `PreTrainedModel` 并使用 `config` 调用了超类的初始化（有点像编写常规的torch.nn.Module）。设置 `config_class` 的那行代码不是必须的，除非你想使用自动类注册你的模型（请参阅最后一节）。
 
-<Tip>
-
-如果你的模型与库中的某个模型非常相似，你可以重用与该模型相同的配置。
-
-</Tip>
+> [!TIP]
+> 如果你的模型与库中的某个模型非常相似，你可以重用与该模型相同的配置。
 
 你可以让模型返回任何你想要的内容，但是像我们为 `ResnetModelForImageClassification` 做的那样返回一个字典，并在传递标签时包含loss，可以使你的模型能够在 [`Trainer`] 类中直接使用。只要你计划使用自己的训练循环或其他库进行训练，也可以使用其他输出格式。
 
@@ -190,11 +187,8 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 
 ## 将代码发送到 Hub
 
-<Tip warning={true}>
-
-此 API 是实验性的，未来的发布中可能会有一些轻微的不兼容更改。
-
-</Tip>
+> [!WARNING]
+> 此 API 是实验性的，未来的发布中可能会有一些轻微的不兼容更改。
 
 首先，确保你的模型在一个 `.py` 文件中完全定义。只要所有文件都位于同一目录中，它就可以依赖于某些其他文件的相对导入（目前我们还不为子模块支持此功能）。对于我们的示例，我们将在当前工作目录中名为 `resnet_model` 的文件夹中定义一个 `modeling_resnet.py` 文件和一个 `configuration_resnet.py` 文件。 配置文件包含 `ResnetConfig` 的代码，模型文件包含 `ResnetModel` 和 `ResnetModelForImageClassification` 的代码。
 
@@ -208,11 +202,8 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 
 `__init__.py` 可以为空，它的存在只是为了让 Python 检测到 `resnet_model` 可以用作模块。
 
-<Tip warning={true}>
-
-如果从库中复制模型文件，你需要将文件顶部的所有相对导入替换为从 `transformers` 包中的导入。
-
-</Tip>
+> [!WARNING]
+> 如果从库中复制模型文件，你需要将文件顶部的所有相对导入替换为从 `transformers` 包中的导入。
 
 请注意，你可以重用（或子类化）现有的配置/模型。
 

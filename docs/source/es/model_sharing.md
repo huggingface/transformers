@@ -27,11 +27,8 @@ En este tutorial aprenderás dos métodos para compartir un modelo trained o fin
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
 picture-in-picture" allowfullscreen></iframe>
 
-<Tip>
-
-Para compartir un modelo con la comunidad necesitas una cuenta en [huggingface.co](https://huggingface.co/join). También puedes unirte a una organización existente o crear una nueva.
-
-</Tip>
+> [!TIP]
+> Para compartir un modelo con la comunidad necesitas una cuenta en [huggingface.co](https://huggingface.co/join). También puedes unirte a una organización existente o crear una nueva.
 
 ## Características de los repositorios
 

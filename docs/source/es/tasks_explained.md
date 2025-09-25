@@ -29,11 +29,8 @@ Para explicar cómo se resuelven las tareas, caminaremos a través de lo que suc
 - [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2) para tareas de NLP como generación de texto que utilizan un descodificador
 - [BART](https://huggingface.co/docs/transformers/model_doc/bart) para tareas de NLP como resumen y traducción que utilizan un codificador-descodificador
 
-<Tip>
-
-Antes de continuar, es bueno tener un conocimiento básico de la arquitectura original del Transformer. Saber cómo funcionan los codificadores, decodificadores y la atención te ayudará a entender cómo funcionan los diferentes modelos de Transformer. Si estás empezando o necesitas repasar, ¡echa un vistazo a nuestro [curso](https://huggingface.co/course/chapter1/4?fw=pt) para obtener más información!
-
-</Tip>
+> [!TIP]
+> Antes de continuar, es bueno tener un conocimiento básico de la arquitectura original del Transformer. Saber cómo funcionan los codificadores, decodificadores y la atención te ayudará a entender cómo funcionan los diferentes modelos de Transformer. Si estás empezando o necesitas repasar, ¡echa un vistazo a nuestro [curso](https://huggingface.co/course/chapter1/4?fw=pt) para obtener más información!
 
 ## Habla y audio
 
@@ -74,11 +71,8 @@ Hay dos formas de abordar las tareas de visión por computadora:
 1. Dividir una imagen en una secuencia de parches y procesarlos en paralelo con un Transformer.
 2. Utilizar una CNN moderna, como [ConvNeXT](https://huggingface.co/docs/transformers/model_doc/convnext), que se basa en capas convolucionales pero adopta diseños de redes modernas.
 
-<Tip>
-
-Un tercer enfoque combina Transformers con convoluciones (por ejemplo, [Convolutional Vision Transformer](https://huggingface.co/docs/transformers/model_doc/cvt) o [LeViT](https://huggingface.co/docs/transformers/model_doc/levit)). No discutiremos estos porque simplemente combinan los dos enfoques que examinamos aquí.
-
-</Tip>
+> [!TIP]
+> Un tercer enfoque combina Transformers con convoluciones (por ejemplo, [Convolutional Vision Transformer](https://huggingface.co/docs/transformers/model_doc/cvt) o [LeViT](https://huggingface.co/docs/transformers/model_doc/levit)). No discutiremos estos porque simplemente combinan los dos enfoques que examinamos aquí.
 
 ViT y ConvNeXT se utilizan comúnmente para la clasificación de imágenes, pero para otras tareas de visión como la detección de objetos, la segmentación y la estimación de profundidad, veremos DETR, Mask2Former y GLPN, respectivamente; estos modelos son más adecuados para esas tareas.
 
@@ -108,11 +102,8 @@ El cambio principal que introdujo ViT fue en cómo se alimentan las imágenes a 
 
 #### CNN
 
-<Tip>
-
-Esta sección explica brevemente las convoluciones, pero sería útil tener un entendimiento previo de cómo cambian la forma y el tamaño de una imagen. Si no estás familiarizado con las convoluciones, ¡echa un vistazo al [capítulo de Redes Neuronales Convolucionales](https://github.com/fastai/fastbook/blob/master/13_convolutions.ipynb) del libro fastai!
-
-</Tip>
+> [!TIP]
+> Esta sección explica brevemente las convoluciones, pero sería útil tener un entendimiento previo de cómo cambian la forma y el tamaño de una imagen. Si no estás familiarizado con las convoluciones, ¡echa un vistazo al [capítulo de Redes Neuronales Convolucionales](https://github.com/fastai/fastbook/blob/master/13_convolutions.ipynb) del libro fastai!
 
 [ConvNeXT](https://huggingface.co/docs/transformers/model_doc/convnext) es una arquitectura de CNN que adopta diseños de redes nuevas y modernas para mejorar el rendimiento. Sin embargo, las convoluciones siguen siendo el núcleo del modelo. Desde una perspectiva de alto nivel, una [convolución](glossary#convolution) es una operación donde una matriz más pequeña (*kernel*) se multiplica por una pequeña ventana de píxeles de la imagen. Esta calcula algunas características de ella, como una textura particular o la curvatura de una línea. Luego, se desliza hacia la siguiente ventana de píxeles; la distancia que recorre la convolución se conoce como el *stride*. 
 
@@ -230,11 +221,8 @@ Para usar BERT en la respuesta a preguntas, añade una cabecera de clasificació
 
 ¿Listo para probar la respuesta a preguntas? ¡Consulta nuestra guía completa de [respuesta a preguntas](tasks/question_answering) para aprender cómo ajustar DistilBERT y usarlo para inferencia!
 
-<Tip>
-
-💡 ¡Observa lo fácil que es usar BERT para diferentes tareas una vez que ha sido preentrenado! ¡Solo necesitas añadir una cabecera específica al modelo preentrenado para manipular los estados ocultos en tu salida deseada!
-
-</Tip>
+> [!TIP]
+> 💡 ¡Observa lo fácil que es usar BERT para diferentes tareas una vez que ha sido preentrenado! ¡Solo necesitas añadir una cabecera específica al modelo preentrenado para manipular los estados ocultos en tu salida deseada!
 
 ### Generación de texto
 
@@ -252,11 +240,8 @@ El objetivo del preentrenamiento de GPT-2 se basa completamente en el [modelado 
 
 ¿Listo para probar la generación de texto? ¡Consulta nuestra guía completa de [modelado de lenguaje causal](tasks/language_modeling#modelado-de-lenguaje-causal) para aprender cómo ajustar DistilGPT-2 y usarlo para inferencia!
 
-<Tip>
-
-Para obtener más información sobre la generación de texto, ¡consulta la guía de [estrategias de generación de texto](https://huggingface.co/docs/transformers/generation_strategies)!
-
-</Tip>
+> [!TIP]
+> Para obtener más información sobre la generación de texto, ¡consulta la guía de [estrategias de generación de texto](https://huggingface.co/docs/transformers/generation_strategies)!
 
 ### Resumir
 
@@ -272,11 +257,8 @@ Los modelos codificador-decodificador como [BART](https://huggingface.co/docs/tr
 
 ¿Listo para probar la sumarización? ¡Consulta nuestra guía completa de [Generación de resúmenes](tasks/summarization) para aprender cómo ajustar T5 y usarlo para inferencia!
 
-<Tip>
-
-Para obtener más información sobre la generación de texto, ¡consulta la guía de [estrategias de generación de texto](https://huggingface.co/docs/transformers/generation_strategies)!
-
-</Tip>
+> [!TIP]
+> Para obtener más información sobre la generación de texto, ¡consulta la guía de [estrategias de generación de texto](https://huggingface.co/docs/transformers/generation_strategies)!
 
 ### Traducción
 
@@ -288,8 +270,5 @@ Desde entonces, BART ha sido seguido por una versión multilingüe, mBART, desti
 
 ¿Listo para probar la traducción? ¡Consulta nuestra guía completa de [traducción](https://huggingface.co/docs/transformers/tasks/translation) para aprender cómo ajustar T5 y usarlo para inferencia!
 
-<Tip>
-
-Para obtener más información sobre la generación de texto, ¡consulta la guía de [estrategias de generación de texto](https://huggingface.co/docs/transformers/generation_strategies)!
-
-</Tip>
+> [!TIP]
+> Para obtener más información sobre la generación de texto, ¡consulta la guía de [estrategias de generación de texto](https://huggingface.co/docs/transformers/generation_strategies)!

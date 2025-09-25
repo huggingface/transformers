@@ -715,13 +715,10 @@ class ProcessorMixin(PushToHubMixin):
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
 
-        <Tip>
-
-        This class method is simply calling [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] and
-        [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`]. Please refer to the docstrings of the
-        methods above for more information.
-
-        </Tip>
+        > [!TIP]
+        > This class method is simply calling [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] and
+        > [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`]. Please refer to the docstrings of the
+        > methods above for more information.
 
         Args:
             save_directory (`str` or `os.PathLike`):
@@ -1344,15 +1341,12 @@ class ProcessorMixin(PushToHubMixin):
         r"""
         Instantiate a processor associated with a pretrained model.
 
-        <Tip>
-
-        This class method is simply calling the feature extractor
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], image processor
-        [`~image_processing_utils.ImageProcessingMixin`] and the tokenizer
-        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`] methods. Please refer to the docstrings of the
-        methods above for more information.
-
-        </Tip>
+        > [!TIP]
+        > This class method is simply calling the feature extractor
+        > [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], image processor
+        > [`~image_processing_utils.ImageProcessingMixin`] and the tokenizer
+        > [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`] methods. Please refer to the docstrings of the
+        > methods above for more information.
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):

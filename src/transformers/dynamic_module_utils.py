@@ -367,11 +367,8 @@ def get_cached_module_file(
         repo_type (`str`, *optional*):
             Specify the repo type (useful when downloading from a space for instance).
 
-    <Tip>
-
-    Passing `token=True` is required when you want to use a private model.
-
-    </Tip>
+    > [!TIP]
+    > Passing `token=True` is required when you want to use a private model.
 
     Returns:
         `str`: The path to the module inside the cache.
@@ -509,12 +506,9 @@ def get_class_from_dynamic_module(
     """
     Extracts a class from a module file, present in the local folder or repository of a model.
 
-    <Tip warning={true}>
-
-    Calling this function will execute the code in the module file found locally or downloaded from the Hub. It should
-    therefore only be called on trusted repos.
-
-    </Tip>
+    > [!WARNING]
+    > Calling this function will execute the code in the module file found locally or downloaded from the Hub. It should
+    > therefore only be called on trusted repos.
 
 
 
@@ -562,11 +556,8 @@ def get_class_from_dynamic_module(
             rest of the model. It can be a branch name, a tag name, or a commit id, since we use a git-based system for
             storing models and other artifacts on huggingface.co, so `revision` can be any identifier allowed by git.
 
-    <Tip>
-
-    Passing `token=True` is required when you want to use a private model.
-
-    </Tip>
+    > [!TIP]
+    > Passing `token=True` is required when you want to use a private model.
 
     Returns:
         `typing.Type`: The class, dynamically imported from the module.

@@ -265,11 +265,8 @@ pipe = pipeline("text-generation", "meta-llama/Meta-Llama-3-8B-Instruct", device
 
 ### 성능 고려사항[[performance-considerations]]
 
-<Tip>
-
-언어 모델 성능과 최적화에 대한 보다 자세한 가이드는 [LLM Inference Optimization](./llm_optims)을 참고하세요.
-
-</Tip>
+> [!TIP]
+> 언어 모델 성능과 최적화에 대한 보다 자세한 가이드는 [LLM Inference Optimization](./llm_optims)을 참고하세요.
 
 
 일반적으로 더 큰 채팅 모델은 메모리를 더 많이 요구하고, 

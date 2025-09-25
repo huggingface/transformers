@@ -15,10 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Training on TPUs
 
-<Tip>
-
- 注意: [シングルGPUセクション](perf_train_gpu_one)で紹介されているほとんどの戦略（混合精度トレーニングや勾配蓄積など）および[マルチGPUセクション](perf_train_gpu_many)は一般的なモデルのトレーニングに適用できますので、このセクションに入る前にそれを確認してください。
-
-</Tip>
+> [!TIP]
+> 注意: [シングルGPUセクション](perf_train_gpu_one)で紹介されているほとんどの戦略（混合精度トレーニングや勾配蓄積など）および[マルチGPUセクション](perf_train_gpu_many)は一般的なモデルのトレーニングに適用できますので、このセクションに入る前にそれを確認してください。
 
 このドキュメントは、TPUでのトレーニング方法に関する情報をまもなく追加いたします。

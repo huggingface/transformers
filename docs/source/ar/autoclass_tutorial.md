@@ -131,13 +131,10 @@
 >>> model = AutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-<Tip warning={true}>
-
-بالنسبة لنماذج PyTorch، تستخدم طريقة `from_pretrained()` `torch.load()` التي تستخدم داخليًا `pickle` والتي يُعرف أنها غير آمنة. بشكل عام، لا تقم مطلقًا بتحميل نموذج قد يكون مصدره مصدرًا غير موثوق به، أو قد يكون تم العبث به. يتم تخفيف هذا الخطر الأمني جزئيًا للنماذج العامة المستضافة على Hub Hugging Face، والتي يتم [فحصها بحثًا عن البرامج الضارة](https://huggingface.co/docs/hub/security-malware) في كل ارتكاب. راجع [توثيق Hub](https://huggingface.co/docs/hub/security) للحصول على أفضل الممارسات مثل [التحقق من التوقيع](https://huggingface.co/docs/hub/security-gpg#signing-commits-with-gpg) باستخدام GPG.
-
-لا تتأثر نقاط تفتيش TensorFlow و Flax، ويمكن تحميلها داخل بنيات PyTorch باستخدام `from_tf` و `from_flax` kwargs لطريقة `from_pretrained` للتحايل على هذه المشكلة.
-
-</Tip>
+> [!WARNING]
+> بالنسبة لنماذج PyTorch، تستخدم طريقة `from_pretrained()` `torch.load()` التي تستخدم داخليًا `pickle` والتي يُعرف أنها غير آمنة. بشكل عام، لا تقم مطلقًا بتحميل نموذج قد يكون مصدره مصدرًا غير موثوق به، أو قد يكون تم العبث به. يتم تخفيف هذا الخطر الأمني جزئيًا للنماذج العامة المستضافة على Hub Hugging Face، والتي يتم [فحصها بحثًا عن البرامج الضارة](https://huggingface.co/docs/hub/security-malware) في كل ارتكاب. راجع [توثيق Hub](https://huggingface.co/docs/hub/security) للحصول على أفضل الممارسات مثل [التحقق من التوقيع](https://huggingface.co/docs/hub/security-gpg#signing-commits-with-gpg) باستخدام GPG.
+>
+> لا تتأثر نقاط تفتيش TensorFlow و Flax، ويمكن تحميلها داخل بنيات PyTorch باستخدام `from_tf` و `from_flax` kwargs لطريقة `from_pretrained` للتحايل على هذه المشكلة.
 
 
 بشكل عام، نوصي باستخدام فئة `AutoTokenizer` وفئة `AutoModelFor` لتحميل مثيلات مُدربة مسبقًا من النماذج. سيساعدك هذا في تحميل البنية الصحيحة في كل مرة. في البرنامج التعليمي التالي، تعرف على كيفية استخدام المحلل اللغوي ومعالج الصور ومستخرج الميزات والمعالج الذي تم تحميله حديثًا لمعالجة مجموعة بيانات للضبط الدقيق.

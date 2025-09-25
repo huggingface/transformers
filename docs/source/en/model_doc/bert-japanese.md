@@ -74,12 +74,9 @@ Example of using a model with Character tokenization:
 
 This model was contributed by [cl-tohoku](https://huggingface.co/cl-tohoku).
 
-<Tip>
-
-This implementation is the same as BERT, except for tokenization method. Refer to [BERT documentation](bert) for
-API reference information.
-
-</Tip>
+> [!TIP]
+> This implementation is the same as BERT, except for tokenization method. Refer to [BERT documentation](bert) for
+> API reference information.
 
 ## BertJapaneseTokenizer
 

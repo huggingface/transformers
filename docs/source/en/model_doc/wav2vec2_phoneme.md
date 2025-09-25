@@ -53,12 +53,9 @@ The original code can be found [here](https://github.com/pytorch/fairseq/tree/ma
 - By default, the model outputs a sequence of phonemes. In order to transform the phonemes to a sequence of words one
   should make use of a dictionary and language model.
 
-<Tip>
-
-Wav2Vec2Phoneme's architecture is based on the Wav2Vec2 model, for API reference, check out [`Wav2Vec2`](wav2vec2)'s documentation page
-except for the tokenizer.
-
-</Tip>
+> [!TIP]
+> Wav2Vec2Phoneme's architecture is based on the Wav2Vec2 model, for API reference, check out [`Wav2Vec2`](wav2vec2)'s documentation page
+> except for the tokenizer.
 
 ## Wav2Vec2PhonemeCTCTokenizer
 

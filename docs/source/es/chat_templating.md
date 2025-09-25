@@ -301,11 +301,8 @@ tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 
 El método [`~PreTrainedTokenizer.apply_chat_template`], que utiliza tu plantilla de chat, es llamado por la clase [`TextGenerationPipeline`], así que una vez que configures la plantilla de chat correcta, tu modelo se volverá automáticamente compatible con [`TextGenerationPipeline`].
 
-<Tip>
-
-Si estás ajustando finamente un modelo para chat, además de establecer una plantilla de chat, probablemente deberías agregar cualquier nuevo token de control de chat como los tokens especiales en el tokenizador. Los tokens especiales nunca se dividen, asegurando que tus tokens de control siempre se manejen como tokens únicos en lugar de ser tokenizados en piezas. También deberías establecer el atributo `eos_token` del tokenizador con el token que marca el final de las generaciones del asistente en tu plantilla. Esto asegurará que las herramientas de generación de texto puedan determinar correctamente cuándo detener la generación de texto.
-
-</Tip>
+> [!TIP]
+> Si estás ajustando finamente un modelo para chat, además de establecer una plantilla de chat, probablemente deberías agregar cualquier nuevo token de control de chat como los tokens especiales en el tokenizador. Los tokens especiales nunca se dividen, asegurando que tus tokens de control siempre se manejen como tokens únicos en lugar de ser tokenizados en piezas. También deberías establecer el atributo `eos_token` del tokenizador con el token que marca el final de las generaciones del asistente en tu plantilla. Esto asegurará que las herramientas de generación de texto puedan determinar correctamente cuándo detener la generación de texto.
 
 ### ¿Qué plantilla debería usar?
 

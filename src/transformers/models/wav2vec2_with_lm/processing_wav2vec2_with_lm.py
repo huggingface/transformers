@@ -122,16 +122,13 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         r"""
         Instantiate a [`Wav2Vec2ProcessorWithLM`] from a pretrained Wav2Vec2 processor.
 
-        <Tip>
-
-        This class method is simply calling the feature extractor's
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], Wav2Vec2CTCTokenizer's
-        [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], and
-        [`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`].
-
-        Please refer to the docstrings of the methods above for more information.
-
-        </Tip>
+        > [!TIP]
+        > This class method is simply calling the feature extractor's
+        > [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], Wav2Vec2CTCTokenizer's
+        > [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], and
+        > [`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`].
+        >
+        > Please refer to the docstrings of the methods above for more information.
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -309,15 +306,12 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         """
         Batch decode output logits to audio transcription with language model support.
 
-        <Tip>
-
-        This function makes use of Python's multiprocessing. Currently, multiprocessing is available only on Unix
-        systems (see this [issue](https://github.com/kensho-technologies/pyctcdecode/issues/65)).
-
-        If you are decoding multiple batches, consider creating a `Pool` and passing it to `batch_decode`. Otherwise,
-        `batch_decode` will be very slow since it will create a fresh `Pool` for each call. See usage example below.
-
-        </Tip>
+        > [!TIP]
+        > This function makes use of Python's multiprocessing. Currently, multiprocessing is available only on Unix
+        > systems (see this [issue](https://github.com/kensho-technologies/pyctcdecode/issues/65)).
+        >
+        > If you are decoding multiple batches, consider creating a `Pool` and passing it to `batch_decode`. Otherwise,
+        > `batch_decode` will be very slow since it will create a fresh `Pool` for each call. See usage example below.
 
         Args:
             logits (`np.ndarray`):
@@ -327,12 +321,9 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 should be instantiated *after* `Wav2Vec2ProcessorWithLM`. Otherwise, the LM won't be available to the
                 pool's sub-processes.
 
-                <Tip>
-
-                Currently, only pools created with a 'fork' context can be used. If a 'spawn' pool is passed, it will
-                be ignored and sequential decoding will be used instead.
-
-                </Tip>
+                > [!TIP]
+                > Currently, only pools created with a 'fork' context can be used. If a 'spawn' pool is passed, it will
+                > be ignored and sequential decoding will be used instead.
 
             num_processes (`int`, *optional*):
                 If `pool` is not set, number of processes on which the function should be parallelized over. Defaults
@@ -365,13 +356,10 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 lists of floats, where the length of the outer list will correspond to the batch size and the length of
                 the inner list will correspond to the number of returned hypotheses . The value should be >= 1.
 
-                <Tip>
-
-                Please take a look at the Example of [`~Wav2Vec2ProcessorWithLM.decode`] to better understand how to
-                make use of `output_word_offsets`. [`~Wav2Vec2ProcessorWithLM.batch_decode`] works the same way with
-                batched output.
-
-                </Tip>
+                > [!TIP]
+                > Please take a look at the Example of [`~Wav2Vec2ProcessorWithLM.decode`] to better understand how to
+                > make use of `output_word_offsets`. [`~Wav2Vec2ProcessorWithLM.batch_decode`] works the same way with
+                > batched output.
 
         Returns:
             [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`].
@@ -523,11 +511,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 of strings, `logit_score` will be a list of floats, and `lm_score` will be a list of floats, where the
                 length of these lists will correspond to the number of returned hypotheses. The value should be >= 1.
 
-                <Tip>
-
-                Please take a look at the example below to better understand how to make use of `output_word_offsets`.
-
-                </Tip>
+                > [!TIP]
+                > Please take a look at the example below to better understand how to make use of `output_word_offsets`.
 
         Returns:
             [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`].

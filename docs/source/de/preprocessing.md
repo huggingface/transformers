@@ -30,11 +30,8 @@ Bevor Sie Ihre Daten in einem Modell verwenden können, müssen die Daten in ein
 
 Das wichtigste Werkzeug zur Verarbeitung von Textdaten ist ein [Tokenizer](main_classes/tokenizer). Ein Tokenizer zerlegt Text zunächst nach einer Reihe von Regeln in *Token*. Die Token werden in Zahlen umgewandelt, die zum Aufbau von Tensoren als Eingabe für ein Modell verwendet werden. Alle zusätzlichen Eingaben, die ein Modell benötigt, werden ebenfalls vom Tokenizer hinzugefügt.
 
-<Tip>
-
-Wenn Sie ein vortrainiertes Modell verwenden möchten, ist es wichtig, den zugehörigen vortrainierten Tokenizer zu verwenden. Dadurch wird sichergestellt, dass der Text auf die gleiche Weise aufgeteilt wird wie das Pretraining-Korpus und die gleichen entsprechenden Token-zu-Index (in der Regel als *vocab* bezeichnet) während des Pretrainings verwendet werden.
-
-</Tip>
+> [!TIP]
+> Wenn Sie ein vortrainiertes Modell verwenden möchten, ist es wichtig, den zugehörigen vortrainierten Tokenizer zu verwenden. Dadurch wird sichergestellt, dass der Text auf die gleiche Weise aufgeteilt wird wie das Pretraining-Korpus und die gleichen entsprechenden Token-zu-Index (in der Regel als *vocab* bezeichnet) während des Pretrainings verwendet werden.
 
 Laden Sie einen vortrainierten Tokenizer mit der Klasse [AutoTokenizer], um schnell loszulegen. Damit wird das *vocab* heruntergeladen, das verwendet wird, wenn ein Modell vortrainiert wird.
 

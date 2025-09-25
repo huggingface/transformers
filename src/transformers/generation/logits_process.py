@@ -234,12 +234,9 @@ class TemperatureLogitsWarper(LogitsProcessor):
     that it can control the randomness of the predicted tokens. Often used together with [`TopPLogitsWarper`] and
     [`TopKLogitsWarper`].
 
-    <Tip>
-
-    Make sure that `do_sample=True` is included in the `generate` arguments otherwise the temperature value won't have
-    any effect.
-
-    </Tip>
+    > [!TIP]
+    > Make sure that `do_sample=True` is included in the `generate` arguments otherwise the temperature value won't have
+    > any effect.
 
     Args:
         temperature (`float`):
@@ -977,13 +974,10 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     prompt is also considered to obtain the n-grams.
     [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
 
-    <Tip>
-
-    Use n-gram penalties with care. For instance, penalizing 2-grams (bigrams) in an article about the city of New York
-    might lead to undesirable outcomes where the city's name appears only once in the entire text.
-    [Reference](https://huggingface.co/blog/how-to-generate)
-
-    </Tip>
+    > [!TIP]
+    > Use n-gram penalties with care. For instance, penalizing 2-grams (bigrams) in an article about the city of New York
+    > might lead to undesirable outcomes where the city's name appears only once in the entire text.
+    > [Reference](https://huggingface.co/blog/how-to-generate)
 
     Args:
         ngram_size (`int`):
@@ -1102,13 +1096,10 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     one token, consider using beam methods (to gracefully work around partially completed sequences that have a
     negative bias) and applying the bias to their prefixes (to ensure the bias is applied earlier).
 
-    <Tip>
-
-    At a token-level, biasing a word is different from biasing a word with a space before it. If you want to bias
-    "foo" mid-sentence, you'll likely want to add a prefix space and bias " foo" instead. Check the tokenizer section
-    of our NLP course to find out why: https://huggingface.co/learn/nlp-course/chapter2/4?fw=pt
-
-    </Tip>
+    > [!TIP]
+    > At a token-level, biasing a word is different from biasing a word with a space before it. If you want to bias
+    > "foo" mid-sentence, you'll likely want to add a prefix space and bias " foo" instead. Check the tokenizer section
+    > of our NLP course to find out why: https://huggingface.co/learn/nlp-course/chapter2/4?fw=pt
 
     Args:
         sequence_bias (`list[list[Union[list[int], float]]]`):
@@ -1282,15 +1273,12 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     """
     [`LogitsProcessor`] that enforces that specified sequences will never be selected.
 
-    <Tip>
-
-    In order to get the token ids of the words that should not appear in the generated text, make sure to set
-    `add_prefix_space=True` when initializing the tokenizer, and use `tokenizer(bad_words,
-    add_special_tokens=False).input_ids`. The `add_prefix_space` argument is only supported for some slow tokenizers,
-    as fast tokenizers' prefixing behaviours come from `pre tokenizers`. Read more
-    [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
-
-    </Tip>
+    > [!TIP]
+    > In order to get the token ids of the words that should not appear in the generated text, make sure to set
+    > `add_prefix_space=True` when initializing the tokenizer, and use `tokenizer(bad_words,
+    > add_special_tokens=False).input_ids`. The `add_prefix_space` argument is only supported for some slow tokenizers,
+    > as fast tokenizers' prefixing behaviours come from `pre tokenizers`. Read more
+    > [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
 
     Args:
         bad_words_ids (`list[list[int]]`):
@@ -2131,12 +2119,9 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 
     See [the paper](https://huggingface.co/papers/2306.05284) for more information.
 
-    <Tip warning={true}>
-
-    This logits processor is exclusively compatible with
-    [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
-
-    </Tip>
+    > [!WARNING]
+    > This logits processor is exclusively compatible with
+    > [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
 
     Args:
         guidance_scale (float):
@@ -2190,13 +2175,10 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing alternated generation between the two codebooks of Bark.
 
-    <Tip warning={true}>
-
-    This logits processor is exclusively compatible with
-    [Bark](https://huggingface.co/docs/transformers/en/model_doc/bark)'s fine submodel. See the model documentation
-    for examples.
-
-    </Tip>
+    > [!WARNING]
+    > This logits processor is exclusively compatible with
+    > [Bark](https://huggingface.co/docs/transformers/en/model_doc/bark)'s fine submodel. See the model documentation
+    > for examples.
 
     Args:
         input_start_len (`int`):
@@ -2352,12 +2334,9 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
     r"""This processor ensures that the EOS token is selected if its probability is greater than the `min_eos_p`.
 
-    <Tip warning={true}>
-
-    This logits processor is exclusively compatible with
-    [Bark](https://huggingface.co/docs/transformers/en/model_doc/bark). See the model documentation for examples.
-
-    </Tip>
+    > [!WARNING]
+    > This logits processor is exclusively compatible with
+    > [Bark](https://huggingface.co/docs/transformers/en/model_doc/bark). See the model documentation for examples.
 
     Args:
         eos_token_id (`Union[int, list[int], torch.Tensor]`):
@@ -3018,12 +2997,9 @@ class DiaClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     calculation, e.g. conditioned logits centered, and an additional top k selection
     option.
 
-    <Tip warning={true}>
-
-    This logits processor is exclusively compatible with
-    [Dia](https://huggingface.co/docs/transformers/main/en/model_doc/dia)
-
-    </Tip>
+    > [!WARNING]
+    > This logits processor is exclusively compatible with
+    > [Dia](https://huggingface.co/docs/transformers/main/en/model_doc/dia)
 
     Args:
         guidance_scale (float):
@@ -3086,12 +3062,9 @@ class DiaEOSChannelFilterLogitsProcessor(LogitsProcessor):
     2. and 3. are especially important in contexts where we allow sampling to guarantee the
     respective tokens to be (not) sampled.
 
-    <Tip warning={true}>
-
-    This logits processor is exclusively compatible with
-    [Dia](https://huggingface.co/docs/transformers/en/model_doc/dia).
-
-    </Tip>
+    > [!WARNING]
+    > This logits processor is exclusively compatible with
+    > [Dia](https://huggingface.co/docs/transformers/en/model_doc/dia).
 
     Args:
         num_channels (`int`):
@@ -3168,12 +3141,9 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
     theirs at the respective delays (s+2, s+3, s+4). Subsequent padding tokens are
     handled by the `EosTokenCriteria` when an EOS has been detected.
 
-    <Tip warning={true}>
-
-    This logits processor is exclusively compatible with
-    [Dia](https://huggingface.co/docs/transformers/en/model_doc/dia).
-
-    </Tip>
+    > [!WARNING]
+    > This logits processor is exclusively compatible with
+    > [Dia](https://huggingface.co/docs/transformers/en/model_doc/dia).
 
     Args:
         delay_pattern (`List[int]`):

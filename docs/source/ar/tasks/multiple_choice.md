@@ -183,11 +183,8 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ## التدريب (Train)
 
 
-<Tip>
-
-إذا لم تكن معتادًا على ضبط نموذج باستخدام [`Trainer`], فراجع الدرس الأساسي [هنا](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> إذا لم تكن معتادًا على ضبط نموذج باستخدام [`Trainer`], فراجع الدرس الأساسي [هنا](../training#train-with-pytorch-trainer)!
 
 أنت جاهز لبدء تدريب نموذجك الآن! قم بتحميل BERT باستخدام [`AutoModelForMultipleChoice`]:
 
@@ -236,12 +233,9 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-للحصول على مثال أكثر تعمقًا حول كيفية ضبط نموذج للاختيار من متعدد، ألق نظرة على [دفتر ملاحظات PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)
-أو [دفتر ملاحظات TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb) المقابل.
-
-</Tip>
+> [!TIP]
+> للحصول على مثال أكثر تعمقًا حول كيفية ضبط نموذج للاختيار من متعدد، ألق نظرة على [دفتر ملاحظات PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)
+> أو [دفتر ملاحظات TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb) المقابل.
 
 ## الاستدلال  (Inference)
 

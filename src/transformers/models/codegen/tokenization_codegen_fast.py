@@ -59,11 +59,8 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer, but since
     the model was not pretrained this way, it might yield a decrease in performance.
 
-    <Tip>
-
-    When used with `is_split_into_words=True`, this tokenizer needs to be instantiated with `add_prefix_space=True`.
-
-    </Tip>
+    > [!TIP]
+    > When used with `is_split_into_words=True`, this tokenizer needs to be instantiated with `add_prefix_space=True`.
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.

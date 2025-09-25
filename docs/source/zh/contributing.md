@@ -268,11 +268,8 @@ python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classific
 
 默认情况下，会跳过时间较长的测试，但你可以将 `RUN_SLOW` 环境变量设置为 `yes` 来运行它们。这将下载以 GB 为单位的模型文件，所以确保你有足够的磁盘空间、良好的网络连接和足够的耐心！
 
-<Tip warning={true}>
-
-记得指定一个*子文件夹的路径或测试文件*来运行测试。否则你将会运行 `tests` 或 `examples` 文件夹中的所有测试，它会花费很长时间！
-
-</Tip>
+> [!WARNING]
+> 记得指定一个*子文件夹的路径或测试文件*来运行测试。否则你将会运行 `tests` 或 `examples` 文件夹中的所有测试，它会花费很长时间！
 
 ```bash
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model

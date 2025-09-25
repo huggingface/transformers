@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 1. [OPUS Books](https://huggingface.co/datasets/opus_books) データセットの英語-フランス語サブセットの [T5](https://huggingface.co/google-t5/t5-small) を微調整して、英語のテキストを次の形式に翻訳します。フランス語。
 2. 微調整されたモデルを推論に使用します。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/translation) を確認することをお勧めします。
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/translation) を確認することをお勧めします。
 
 始める前に、必要なライブラリがすべてインストールされていることを確認してください。
 
@@ -165,11 +162,8 @@ pip install transformers datasets evaluate sacrebleu
 
 ## Train
 
-<Tip>
-
-[`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
-
-</Tip>
+> [!TIP]
+> [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
 
 これでモデルのトレーニングを開始する準備が整いました。 [`AutoModelForSeq2SeqLM`] を使用して T5 をロードします。
 
@@ -220,13 +214,10 @@ pip install transformers datasets evaluate sacrebleu
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-翻訳用にモデルを微調整する方法の詳細な例については、対応するドキュメントを参照してください。
-[PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb)
-または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)。
-
-</Tip>
+> [!TIP]
+> 翻訳用にモデルを微調整する方法の詳細な例については、対応するドキュメントを参照してください。
+> [PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb)
+> または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)。
 
 ## Inference
 

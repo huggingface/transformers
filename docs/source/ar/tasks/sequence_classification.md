@@ -22,11 +22,8 @@ rendered properly in your Markdown viewer.
 1. ضبط [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) على مجموعة بيانات [IMDb](https://huggingface.co/datasets/imdb) لتحديد ما إذا كانت مراجعة الفيلم إيجابية أو سلبية.
 2. استخدام نموذج الضبط الدقيق للتنبؤ.
 
-<Tip>
-
-لرؤية جميع البنى ونقاط التحقق المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/text-classification).
-
-</Tip>
+> [!TIP]
+> لرؤية جميع البنى ونقاط التحقق المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/text-classification).
 
 قبل أن تبدأ، تأكد من تثبيت جميع المكتبات الضرورية:
 
@@ -131,11 +128,8 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
 ```
 
-<Tip>
-
-إذا لم تكن على دراية بضبط نموذج دقيق باستخدام [`Trainer`], فالق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> إذا لم تكن على دراية بضبط نموذج دقيق باستخدام [`Trainer`], فالق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
 
 أنت مستعد الآن لبدء تدريب نموذجك! قم بتحميل DistilBERT مع [`AutoModelForSequenceClassification`] جنبًا إلى جنب مع عدد التصنيفات المتوقعة، وتصنيفات الخرائط:
 
@@ -180,11 +174,8 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> trainer.train()
 ```
 
-<Tip>
-
-يستخدم [`Trainer`] الحشو الديناميكي افتراضيًا عند تمرير `tokenizer` إليه. في هذه الحالة،  لا تحتاج لتحديد مُجمِّع البيانات صراحةً. 
-
-</Tip>
+> [!TIP]
+> يستخدم [`Trainer`] الحشو الديناميكي افتراضيًا عند تمرير `tokenizer` إليه. في هذه الحالة،  لا تحتاج لتحديد مُجمِّع البيانات صراحةً.
 
 بعد اكتمال التدريب، شارك نموذجك على Hub باستخدام الطريقة [`~transformers.Trainer.push_to_hub`] ليستخدمه الجميع:
 
@@ -192,13 +183,10 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-للحصول على مثال أكثر عمقًا حول كيفية ضبط نموذج لتصنيف النصوص، قم بالاطلاع على الدفتر المقابل
-[دفتر PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)
-أو [دفتر TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb).
-
-</Tip>
+> [!TIP]
+> للحصول على مثال أكثر عمقًا حول كيفية ضبط نموذج لتصنيف النصوص، قم بالاطلاع على الدفتر المقابل
+> [دفتر PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)
+> أو [دفتر TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb).
 
 ## الاستدلال(Inference)
 

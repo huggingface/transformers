@@ -194,12 +194,9 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-                <Tip>
-
-                For SeamlessM4T models, `attention_mask` should always be passed for batched inference, to avoid subtle
-                bugs.
-
-                </Tip>
+                > [!TIP]
+                > For SeamlessM4T models, `attention_mask` should always be passed for batched inference, to avoid subtle
+                > bugs.
 
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:

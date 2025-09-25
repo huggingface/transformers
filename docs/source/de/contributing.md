@@ -269,11 +269,8 @@ Sie können auch eine kleinere Anzahl an Tests angeben, um nur die Funktion, an 
 
 Standardmäßig werden langsame Tests übersprungen, aber Sie können die Umgebungsvariable `RUN_SLOW` auf `yes` setzen, um sie auszuführen. Dies wird den Download vieler Gigabyte an Modellen starten - stellen Sie also sicher, dass Sie sowohl genügend Festplattenspeicher als auch eine gute Internetverbindung oder die nötige Geduld haben!
 
-<Tip warning={true}>
-
-Vergessen Sie nicht, einen *Pfad zu einem Unterordner oder einer Testdatei* anzugeben, um den Test auszuführen. Sonst führen Sie alle Tests im `tests` oder `examples` Ordner aus, was sehr lange dauern wird!
-
-</Tip>
+> [!WARNING]
+> Vergessen Sie nicht, einen *Pfad zu einem Unterordner oder einer Testdatei* anzugeben, um den Test auszuführen. Sonst führen Sie alle Tests im `tests` oder `examples` Ordner aus, was sehr lange dauern wird!
 
 ```bash
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
