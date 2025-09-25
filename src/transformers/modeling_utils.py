@@ -699,12 +699,11 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
-        QuantizationMethod.BITS_AND_BYTES,
+    is_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
         QuantizationMethod.TORCHAO,
     }
     is_safetensors = shard_file.endswith(".safetensors")
-    is_meta_state_dict = is_safetensors and not is_bnb_or_ao
+    is_meta_state_dict = is_safetensors and not is_ao
     file_pointer = safe_open(shard_file, framework="pt", device=tensor_device) if is_meta_state_dict else None
     params_to_load = list(state_dict.keys())
 
@@ -819,7 +818,7 @@ def load_shard_file(args):
         shard_file,
         state_dict,
         disk_only_shard_files,
-        is_bnb_or_ao,
+        is_ao,
         is_quantized,
         device_map,
         hf_quantizer,
@@ -838,11 +837,7 @@ def load_shard_file(args):
         return [], disk_offload_index
 
     map_location = "cpu"
-    if (
-        shard_file.endswith(".safetensors")
-        and not is_bnb_or_ao
-        and not (is_deepspeed_zero3_enabled() and not is_quantized)
-    ):
+    if shard_file.endswith(".safetensors") and not is_ao and not (is_deepspeed_zero3_enabled() and not is_quantized):
         map_location = "meta"
     elif (
         device_map is not None
@@ -5197,8 +5192,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
-        is_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
-            QuantizationMethod.BITS_AND_BYTES,
+        is_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.TORCHAO,
         }
 
@@ -5333,7 +5327,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 shard_file,
                 state_dict,
                 disk_only_shard_files,
-                is_bnb_or_ao,
+                is_ao,
                 is_quantized,
                 device_map,
                 hf_quantizer,
