@@ -88,7 +88,8 @@ if __name__ == "__main__":
             summary = dict(sorted(summary.items(), key=lambda x: (x[1], x[0])))
             workflow_summary[job["name"]] = summary
 
-            workflow_repo_ids[job["name"]] = repo_ids
+
+            workflow_repo_ids[job["name"]] = [json.loads(x) for x in repo_ids]
             workflow_repo_ids_2.extend(repo_ids)
 
             # collected version
@@ -99,6 +100,7 @@ if __name__ == "__main__":
                 json.dump(workflow_repo_ids, fp, indent=4)
 
     workflow_repo_ids_2 = sorted(set(workflow_repo_ids_2))
+    workflow_repo_ids_2 = [json.loads(x) for x in workflow_repo_ids_2]
 
     with open(f"outputs/repo_ids.json", "w") as fp:
         json.dump(workflow_repo_ids_2, fp, indent=4)
