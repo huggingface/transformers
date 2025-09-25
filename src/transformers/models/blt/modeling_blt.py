@@ -974,7 +974,7 @@ def _prepare_patch_cross_attention_mask(
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor]:
-            - cross_attention_mask: 4D tensor [batch_size, 1, q_len, kv_len] or 2D for flash attention
+            - cross_attention_mask: 4D tensor [batch_size, 1, q_len, kv_len] or 2D [batch_size, q_len] for flash attention
     """
     batch_size, seq_len = patch_ids.shape
     device = patch_ids.device
@@ -1016,14 +1016,9 @@ def _prepare_patch_cross_attention_mask(
         )
 
     if "flash" in attn_implementation:
-        cross_attention_mask = cross_attention_mask.unsqueeze(1)
-        # Flash attention expects 1 / 0 mask
-        flash_mask = cross_attention_mask.to(dtype)
-
-        # flash attention expects 2D mask [batch, seq_len]
-        # so if we have a 4D mask [batch, 1, q_len, kv_len], we need to convert it
-        if flash_mask.dim() == 4:
-            flash_mask = flash_mask.squeeze(1).any(dim=1).to(dtype)
+        # Flash attention expects 2D mask [batch, q_len]
+        # Convert from 3D [batch, q_len, kv_len] to 2D [batch, q_len]
+        flash_mask = cross_attention_mask.any(dim=2).to(dtype)
         return flash_mask
     else:
         # Reshape so it can be used by attn module - add head dimension
@@ -1129,13 +1124,13 @@ class BltModel(BltPreTrainedModel):
         )
 
         cross_attn_mask_enc = _prepare_patch_cross_attention_mask(
-            patch_ids,
-            patch_lengths.shape[1],
-            sequence_length,
-            True,
-            self.config.cross_attn_k,
-            encoder_embeds.dtype,
-            self.config._attn_implementation,
+            patch_ids=patch_ids,
+            num_patches=patch_lengths.shape[1],
+            sequence_length=sequence_length,
+            patches_as_queries=True,
+            cross_attn_k=self.config.cross_attn_k,
+            dtype=encoder_embeds.dtype,
+            attn_implementation=self.config._attn_implementation,
         )
         encoder_hidden_states, encoder_cross_states = self.local_encoder(
             input_ids=input_ids,
@@ -1167,13 +1162,13 @@ class BltModel(BltPreTrainedModel):
         )
         decoder_patch_ids = self._patch_ids_from_lengths(patch_lengths[:, 1:], sequence_length)
         cross_attn_mask_dec = _prepare_patch_cross_attention_mask(
-            decoder_patch_ids,
-            patch_lengths.shape[1],
-            sequence_length,
-            False,
-            self.config.cross_attn_k,
-            encoder_embeds.dtype,
-            self.config._attn_implementation,
+            patch_ids=decoder_patch_ids,
+            num_patches=patch_lengths.shape[1],
+            sequence_length=sequence_length,
+            patches_as_queries=False,
+            cross_attn_k=self.config.cross_attn_k,
+            dtype=encoder_embeds.dtype,
+            attn_implementation=self.config._attn_implementation,
         )
         output = self.local_decoder(
             input_ids=input_ids,
