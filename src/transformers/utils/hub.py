@@ -406,7 +406,11 @@ def cached_files(
     """
     path_or_repo_id_str = str(path_or_repo_id)
 
-    if not path_or_repo_id_str.startswith("/tmp/"):
+    to_log = not path_or_repo_id_str.startswith("/tmp/")
+    PYTEST_CURRENT_TEST = os.environ.get("PYTEST_CURRENT_TEST", "")
+    to_log = to_log and PYTEST_CURRENT_TEST != ""
+
+    if to_log:
 
         dir_name = "hub_repos"
 
@@ -425,6 +429,16 @@ def cached_files(
 
         file_name = f"repo_ids_node_{CIRCLE_NODE_INDEX}_{PYTEST_WORKER_INDEX}.txt"
         file_path = os.path.join(dir_name, file_name)
+
+        info = {
+            "path_or_repo_id_str": path_or_repo_id_str,
+            "PYTEST_CURRENT_TEST": PYTEST_CURRENT_TEST,
+            "filenames": filenames,
+            "subfolder": subfolder,
+            "repo_type": repo_type,
+            "revision": revision,
+        }
+        json.dumps(info, ensure_ascii=False, sort_keys=True)
 
         with open(file_path, "a", encoding="utf-8") as fp:
             fp.write(f"{path_or_repo_id_str}\n")
