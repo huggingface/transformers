@@ -79,7 +79,7 @@ AWS is going to release new DLCs for PyTorch and/or TensorFlow. The Tests should
 
 Before we can run the tests we need to adjust the `requirements.txt` for Pytorch under `/tests/sagemaker/scripts/pytorch` and for Tensorflow under `/tests/sagemaker/scripts/pytorch`. We add the new framework version to it.
 
-```pip
+```bash
 torch==1.8.1 # for pytorch
 tensorflow-gpu==2.5.0 # for tensorflow
 ```
