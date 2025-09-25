@@ -637,10 +637,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             self.layers = nn.ModuleList(layers)
         elif config.audio_adapter_type == "stack":
             self.layers = nn.ModuleList(
-                [
-                    HiggsAudioDecoderLayer(config, layer_idx)
-                    for layer_idx in range(config.num_hidden_layers)
-                ]
+                [HiggsAudioDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
             )
 
         self.num_activation_checkpointing_layers = len(self.layers)
@@ -653,9 +650,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         )  # We add 1 for the audio_stream_bos token and 1 for the audio_stream_eos token
 
         if config.use_audio_out_embed_projector:
-            self.audio_out_embed_projector = nn.Linear(
-                config.hidden_size, config.hidden_size, bias=False
-            )
+            self.audio_out_embed_projector = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
         self.audio_codebook_embeddings = nn.Embedding(
             config.audio_num_codebooks * self.audio_codebook_size, config.hidden_size
@@ -791,7 +786,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         attention_mask,
         label_ids,
         left_padding,
-        ignore_index=-100
+        ignore_index=-100,
     ):
         """
         Merge input_ids with audio features into final embeddings.
@@ -951,7 +946,9 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
                 (batch_size, max_token_num), ignore_index, dtype=label_ids.dtype, device=inputs_embeds.device
             )
 
-        final_audio_in_mask = torch.full((batch_size, max_token_num), False, dtype=torch.bool, device=inputs_embeds.device)
+        final_audio_in_mask = torch.full(
+            (batch_size, max_token_num), False, dtype=torch.bool, device=inputs_embeds.device
+        )
         final_audio_out_mask = torch.full(
             (batch_size, max_token_num), False, dtype=torch.bool, device=inputs_embeds.device
         )
@@ -1186,7 +1183,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             input_ids,
             attention_mask,
             label_ids,
-            left_padding
+            left_padding,
         )
 
         if use_cache and past_key_values is None:

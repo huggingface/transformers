@@ -120,7 +120,7 @@ class HiggsAudioProcessorTest(unittest.TestCase):
         expected_ids = torch.tensor(
             [[128000, 128006, 9125, 128007, 271, 2028, 374, 264, 1296, 11914, 13, 128011, 128015, 128012, 128009]]
         )
-        torch.testing.assert_close(input_ids['input_ids'], expected_ids)
+        torch.testing.assert_close(input_ids["input_ids"], expected_ids)
 
     @parameterized.expand([([1, 2],), ([2, 4, 6],)])
     def test_decode_audio(self, audio_lens):

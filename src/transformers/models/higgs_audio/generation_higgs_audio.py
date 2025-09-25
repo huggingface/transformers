@@ -231,9 +231,7 @@ class HiggsAudioGenerationMixin(GenerationMixin):
                 )
         if "cache_audio_discrete_codes_mask" in model_kwargs:
             if model_kwargs["cache_audio_discrete_codes_mask"] is None:
-                model_kwargs["cache_audio_discrete_codes_mask"] = (
-                    outputs.audio_in_mask | outputs.audio_out_mask
-                )
+                model_kwargs["cache_audio_discrete_codes_mask"] = outputs.audio_in_mask | outputs.audio_out_mask
             else:
                 model_kwargs["cache_audio_discrete_codes_mask"] = torch.concat(
                     [

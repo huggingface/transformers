@@ -501,7 +501,7 @@ class HiggsAudioProcessor(ProcessorMixin):
                 input_ids=torch.LongTensor(input_tokens),
                 label_ids=torch.LongTensor(input_tokens) if output_labels else None,
                 audio_ids_concat=audio_ids_concat,
-                audio_ids_start=audio_ids_start
+                audio_ids_start=audio_ids_start,
             )
 
             samples.append(sample)
