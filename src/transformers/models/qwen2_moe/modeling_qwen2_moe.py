@@ -326,7 +326,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
 
         expert_output += shared_expert_output
         expert_output = expert_output.reshape(batch_size, sequence_length, hidden_dim)
-        return expert_output, router_logits
+        return expert_output
 
 
 class Qwen2MoeDecoderLayer(GradientCheckpointingLayer):
@@ -374,8 +374,6 @@ class Qwen2MoeDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        if isinstance(hidden_states, tuple):
-            hidden_states = hidden_states[0]
         hidden_states = residual + hidden_states
         return hidden_states
 

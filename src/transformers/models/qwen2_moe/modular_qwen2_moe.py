@@ -117,7 +117,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
 
         expert_output += shared_expert_output
         expert_output = expert_output.reshape(batch_size, sequence_length, hidden_dim)
-        return expert_output, router_logits
+        return expert_output
 
 
 class Qwen2MoeDecoderLayer(MixtralDecoderLayer):
