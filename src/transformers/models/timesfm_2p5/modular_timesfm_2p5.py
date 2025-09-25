@@ -621,13 +621,15 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         ]  # [B, N, 1, 128]
         point_final = point_final.permute(0, 1, 3, 2)  # [B, N, 128, 1]
 
-        # Quantile predictions: [B, N, 10240] -> [B, N, horizon_length, quantiles]
+        # Quantile predictions: [B, N, quantile_output_size] -> [B, N, output_quantile_len, num_quantiles+1]
+        output_quantile_len = self.config.output_quantile_len
+        num_quantiles_plus_one = len(self.config.quantiles) + 1  # 9 quantiles + 1 = 10 total
         quantile_reshaped = quantile_output.view(
             b,
             n,
-            1024,
-            10,  # 10240 = 1024 * 10, but we only use first 9 quantiles
-        )  # [B, N, 1024, 10]
+            output_quantile_len,
+            num_quantiles_plus_one,
+        )  # [B, N, output_quantile_len, num_quantiles+1]
         # Take the first horizon_length entries and only the quantiles we want
         quantile_final = quantile_reshaped[
             :, :, : self.config.horizon_length, : len(self.config.quantiles)

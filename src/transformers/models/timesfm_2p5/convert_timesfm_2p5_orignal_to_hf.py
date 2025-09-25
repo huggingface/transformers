@@ -54,7 +54,8 @@ def write_model(model_path, safe_serialization=True):
 
     # Get actual dimensions from original model
     quantile_output_dims = original_model.output_projection_quantiles.output_layer.weight.shape[0]
-    actual_quantile_len = quantile_output_dims // 9  # 9 quantiles
+    # Original TimesFM 2.5 has 9 quantiles + 1 extra (median/point prediction) = 10 total
+    actual_quantile_len = quantile_output_dims // 10  # 9 quantiles + 1 = 10 total
 
     timesfm_config = Timesfm2P5Config(
         patch_length=32,
