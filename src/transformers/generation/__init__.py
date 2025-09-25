@@ -14,7 +14,7 @@
 
 from typing import TYPE_CHECKING
 
-from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_tf_available, is_torch_available
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -124,71 +124,6 @@ else:
         "SynthIDTextWatermarkDetector",
     ]
 
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tf_logits_process"] = [
-        "TFForcedBOSTokenLogitsProcessor",
-        "TFForcedEOSTokenLogitsProcessor",
-        "TFForceTokensLogitsProcessor",
-        "TFLogitsProcessor",
-        "TFLogitsProcessorList",
-        "TFLogitsWarper",
-        "TFMinLengthLogitsProcessor",
-        "TFNoBadWordsLogitsProcessor",
-        "TFNoRepeatNGramLogitsProcessor",
-        "TFRepetitionPenaltyLogitsProcessor",
-        "TFSuppressTokensAtBeginLogitsProcessor",
-        "TFSuppressTokensLogitsProcessor",
-        "TFTemperatureLogitsWarper",
-        "TFTopKLogitsWarper",
-        "TFTopPLogitsWarper",
-    ]
-    _import_structure["tf_utils"] = [
-        "TFGenerationMixin",
-        "TFGreedySearchDecoderOnlyOutput",
-        "TFGreedySearchEncoderDecoderOutput",
-        "TFSampleEncoderDecoderOutput",
-        "TFSampleDecoderOnlyOutput",
-        "TFBeamSearchEncoderDecoderOutput",
-        "TFBeamSearchDecoderOnlyOutput",
-        "TFBeamSampleEncoderDecoderOutput",
-        "TFBeamSampleDecoderOnlyOutput",
-        "TFContrastiveSearchEncoderDecoderOutput",
-        "TFContrastiveSearchDecoderOnlyOutput",
-    ]
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["flax_logits_process"] = [
-        "FlaxForcedBOSTokenLogitsProcessor",
-        "FlaxForcedEOSTokenLogitsProcessor",
-        "FlaxForceTokensLogitsProcessor",
-        "FlaxLogitsProcessor",
-        "FlaxLogitsProcessorList",
-        "FlaxLogitsWarper",
-        "FlaxMinLengthLogitsProcessor",
-        "FlaxSuppressTokensAtBeginLogitsProcessor",
-        "FlaxSuppressTokensLogitsProcessor",
-        "FlaxTemperatureLogitsWarper",
-        "FlaxTopKLogitsWarper",
-        "FlaxTopPLogitsWarper",
-        "FlaxWhisperTimeStampLogitsProcessor",
-        "FlaxNoRepeatNGramLogitsProcessor",
-    ]
-    _import_structure["flax_utils"] = [
-        "FlaxGenerationMixin",
-        "FlaxGreedySearchOutput",
-        "FlaxSampleOutput",
-        "FlaxBeamSearchOutput",
-    ]
 
 if TYPE_CHECKING:
     from .configuration_utils import (
@@ -285,66 +220,6 @@ if TYPE_CHECKING:
             WatermarkDetectorOutput,
         )
 
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tf_logits_process import (
-            TFForcedBOSTokenLogitsProcessor,
-            TFForcedEOSTokenLogitsProcessor,
-            TFForceTokensLogitsProcessor,
-            TFLogitsProcessor,
-            TFLogitsProcessorList,
-            TFLogitsWarper,
-            TFMinLengthLogitsProcessor,
-            TFNoBadWordsLogitsProcessor,
-            TFNoRepeatNGramLogitsProcessor,
-            TFRepetitionPenaltyLogitsProcessor,
-            TFSuppressTokensAtBeginLogitsProcessor,
-            TFSuppressTokensLogitsProcessor,
-            TFTemperatureLogitsWarper,
-            TFTopKLogitsWarper,
-            TFTopPLogitsWarper,
-        )
-        from .tf_utils import (
-            TFBeamSampleDecoderOnlyOutput,
-            TFBeamSampleEncoderDecoderOutput,
-            TFBeamSearchDecoderOnlyOutput,
-            TFBeamSearchEncoderDecoderOutput,
-            TFContrastiveSearchDecoderOnlyOutput,
-            TFContrastiveSearchEncoderDecoderOutput,
-            TFGenerationMixin,
-            TFGreedySearchDecoderOnlyOutput,
-            TFGreedySearchEncoderDecoderOutput,
-            TFSampleDecoderOnlyOutput,
-            TFSampleEncoderDecoderOutput,
-        )
-
-    try:
-        if not is_flax_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .flax_logits_process import (
-            FlaxForcedBOSTokenLogitsProcessor,
-            FlaxForcedEOSTokenLogitsProcessor,
-            FlaxForceTokensLogitsProcessor,
-            FlaxLogitsProcessor,
-            FlaxLogitsProcessorList,
-            FlaxLogitsWarper,
-            FlaxMinLengthLogitsProcessor,
-            FlaxNoRepeatNGramLogitsProcessor,
-            FlaxSuppressTokensAtBeginLogitsProcessor,
-            FlaxSuppressTokensLogitsProcessor,
-            FlaxTemperatureLogitsWarper,
-            FlaxTopKLogitsWarper,
-            FlaxTopPLogitsWarper,
-            FlaxWhisperTimeStampLogitsProcessor,
-        )
-        from .flax_utils import FlaxBeamSearchOutput, FlaxGenerationMixin, FlaxGreedySearchOutput, FlaxSampleOutput
 else:
     import sys
 

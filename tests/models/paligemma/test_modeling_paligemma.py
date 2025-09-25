@@ -264,9 +264,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="PaliGemma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
-    )
+    @unittest.skip(reason="PaliGemma's SigLip encoder uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
