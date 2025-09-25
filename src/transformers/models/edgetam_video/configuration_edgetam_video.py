@@ -361,12 +361,13 @@ class EdgeTamVideoConfig(PretrainedConfig):
         memory_attention_rope_feat_sizes = (
             [64, 64] if memory_attention_rope_feat_sizes is None else memory_attention_rope_feat_sizes
         )
+        memory_attention_rope_k_sizes = (
+            [16, 16] if memory_attention_rope_k_sizes is None else memory_attention_rope_k_sizes
+        )
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = vision_config.get("model_type", "sam2_vision_model")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif isinstance(vision_config, PretrainedConfig):
-            vision_config = vision_config
         if isinstance(prompt_encoder_config, EdgeTamVideoPromptEncoderConfig):
             prompt_encoder_config = prompt_encoder_config.to_dict()
         if isinstance(mask_decoder_config, EdgeTamVideoMaskDecoderConfig):
@@ -381,12 +382,12 @@ class EdgeTamVideoConfig(PretrainedConfig):
         self.image_size = image_size
         self.sigmoid_scale_for_mem_enc = sigmoid_scale_for_mem_enc  # scale factor for mask sigmoid prob
         self.sigmoid_bias_for_mem_enc = sigmoid_bias_for_mem_enc  # bias factor for mask sigmoid prob
+        self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
         self.multimask_output_in_sam = multimask_output_in_sam
         self.multimask_min_pt_num = multimask_min_pt_num
         self.multimask_max_pt_num = multimask_max_pt_num
         self.multimask_output_for_tracking = multimask_output_for_tracking
         self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
-        self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
         self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers
 
         # memory attention
@@ -399,7 +400,19 @@ class EdgeTamVideoConfig(PretrainedConfig):
         self.memory_attention_dropout = memory_attention_dropout
         self.memory_attention_rope_theta = memory_attention_rope_theta
         self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
+        self.memory_attention_rope_k_sizes = memory_attention_rope_k_sizes
         self.memory_attention_rope_dropout = memory_attention_rope_dropout
+
+        # spatial perceiver resampler
+        self.perceiver_resampler_num_latents = perceiver_resampler_num_latents
+        self.perceiver_resampler_num_latents_2d = perceiver_resampler_num_latents_2d
+        self.perceiver_resampler_hidden_size = perceiver_resampler_hidden_size
+        self.perceiver_resampler_ff_intermediate_size = perceiver_resampler_ff_intermediate_size
+        self.perceiver_resampler_attention_head_dim = perceiver_resampler_attention_head_dim
+        self.perceiver_resampler_num_attention_heads = perceiver_resampler_num_attention_heads
+        self.perceiver_resampler_num_layers = perceiver_resampler_num_layers
+        self.perceiver_resampler_hidden_dropout = perceiver_resampler_hidden_dropout
+        self.perceiver_resampler_attention_dropout = perceiver_resampler_attention_dropout
 
         # memory encoder
         self.memory_encoder_hidden_size = memory_encoder_hidden_size
@@ -417,21 +430,6 @@ class EdgeTamVideoConfig(PretrainedConfig):
         self.memory_fuser_padding = memory_fuser_padding
         self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
-        memory_attention_rope_k_sizes = (
-            [16, 16] if memory_attention_rope_k_sizes is None else memory_attention_rope_k_sizes
-        )
-        self.memory_attention_rope_k_sizes = memory_attention_rope_k_sizes
-
-        # spatial perceiver resampler
-        self.perceiver_resampler_num_latents = perceiver_resampler_num_latents
-        self.perceiver_resampler_num_latents_2d = perceiver_resampler_num_latents_2d
-        self.perceiver_resampler_hidden_size = perceiver_resampler_hidden_size
-        self.perceiver_resampler_ff_intermediate_size = perceiver_resampler_ff_intermediate_size
-        self.perceiver_resampler_attention_head_dim = perceiver_resampler_attention_head_dim
-        self.perceiver_resampler_num_attention_heads = perceiver_resampler_num_attention_heads
-        self.perceiver_resampler_num_layers = perceiver_resampler_num_layers
-        self.perceiver_resampler_hidden_dropout = perceiver_resampler_hidden_dropout
-        self.perceiver_resampler_attention_dropout = perceiver_resampler_attention_dropout
 
 
 __all__ = ["EdgeTamVideoMaskDecoderConfig", "EdgeTamVideoPromptEncoderConfig", "EdgeTamVideoConfig"]

@@ -56,7 +56,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoTwoWayAttentionBlock,
     Sam2VideoVisionEncoderOutput,
     Sam2VideoVisionRotaryEmbedding,
-    get_1d_sine_pe,
     rotate_pairwise,
 )
 
@@ -275,7 +274,7 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         memory_fuser_hidden_act="gelu",
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        PretrainedConfig.__init__(**kwargs)
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
@@ -289,8 +288,6 @@ class EdgeTamVideoConfig(Sam2VideoConfig):
         if isinstance(vision_config, dict):
             vision_config["model_type"] = vision_config.get("model_type", "sam2_vision_model")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif isinstance(vision_config, PretrainedConfig):
-            vision_config = vision_config
         if isinstance(prompt_encoder_config, EdgeTamVideoPromptEncoderConfig):
             prompt_encoder_config = prompt_encoder_config.to_dict()
         if isinstance(mask_decoder_config, EdgeTamVideoMaskDecoderConfig):
@@ -467,42 +464,33 @@ def apply_rotary_pos_emb_2d_cross_attn(
     batch_size, num_heads, k_seq_len, channels_per_head = k_for_rope.shape
 
     # Handle temporal/spatial token structure for memory
-    if k_seq_len != cos_k.shape[-2]:
-        # Keys have temporal + spatial structure, only spatial tokens get RoPE
-        tokens_per_group = k_seq_len // repeat_freqs_k
-        spatial_tokens = cos_k.shape[-2]
-        temporal_tokens = tokens_per_group - spatial_tokens
+    # Keys have temporal + spatial structure, only spatial tokens get RoPE
+    tokens_per_group = k_seq_len // repeat_freqs_k
+    spatial_tokens = cos_k.shape[-2]
+    temporal_tokens = tokens_per_group - spatial_tokens
 
-        # Reshape and separate temporal/spatial tokens
-        k_grouped = k_for_rope.view(batch_size, num_heads, repeat_freqs_k, tokens_per_group, channels_per_head)
-        k_temporal = k_grouped[..., :temporal_tokens, :].reshape(batch_size, num_heads, -1, channels_per_head)
-        k_spatial = k_grouped[..., temporal_tokens:, :].reshape(batch_size, num_heads, -1, channels_per_head)
+    # Reshape and separate temporal/spatial tokens
+    k_grouped = k_for_rope.view(batch_size, num_heads, repeat_freqs_k, tokens_per_group, channels_per_head)
+    k_temporal = k_grouped[..., :temporal_tokens, :].reshape(batch_size, num_heads, -1, channels_per_head)
+    k_spatial = k_grouped[..., temporal_tokens:, :].reshape(batch_size, num_heads, -1, channels_per_head)
 
-        # Only apply RoPE to spatial tokens
-        k_rope_input = k_spatial
+    # Only apply RoPE to spatial tokens
+    k_rope_input = k_spatial
 
-        # Prepare position embeddings for repeated groups
-        if repeat_freqs_k > 1:
-            cos_k = cos_k.repeat(1, 1, repeat_freqs_k, 1)
-            sin_k = sin_k.repeat(1, 1, repeat_freqs_k, 1)
+    # Prepare position embeddings for repeated groups
+    if repeat_freqs_k > 1:
+        cos_k = cos_k.repeat(1, 1, repeat_freqs_k, 1)
+        sin_k = sin_k.repeat(1, 1, repeat_freqs_k, 1)
 
-        # Apply RoPE to spatial tokens
-        k_spatial_embed = k_rope_input.float()
-        k_spatial_embed = (k_spatial_embed * cos_k) + (rotate_pairwise(k_spatial_embed) * sin_k)
+    # Apply RoPE to spatial tokens
+    k_spatial_embed = k_rope_input.float()
+    k_spatial_embed = (k_spatial_embed * cos_k) + (rotate_pairwise(k_spatial_embed) * sin_k)
 
-        # Reconstruct: temporal + spatial tokens back to original structure
-        k_spatial_reshaped = k_spatial_embed.view(batch_size, num_heads, repeat_freqs_k, -1, channels_per_head)
-        k_temporal_reshaped = k_temporal.view(batch_size, num_heads, repeat_freqs_k, -1, channels_per_head)
-        k_final = torch.cat([k_temporal_reshaped, k_spatial_reshaped], dim=3)
-        k_final = k_final.view(batch_size, num_heads, k_seq_len, channels_per_head)
-    else:
-        # Simple case: all tokens get RoPE with possible repetition
-        if repeat_freqs_k > 1:
-            cos_k = cos_k.repeat(1, 1, repeat_freqs_k, 1)
-            sin_k = sin_k.repeat(1, 1, repeat_freqs_k, 1)
-
-        k_final = k_for_rope.float()
-        k_final = (k_final * cos_k) + (rotate_pairwise(k_final) * sin_k)
+    # Reconstruct: temporal + spatial tokens back to original structure
+    k_spatial_reshaped = k_spatial_embed.view(batch_size, num_heads, repeat_freqs_k, -1, channels_per_head)
+    k_temporal_reshaped = k_temporal.view(batch_size, num_heads, repeat_freqs_k, -1, channels_per_head)
+    k_final = torch.cat([k_temporal_reshaped, k_spatial_reshaped], dim=3)
+    k_final = k_final.view(batch_size, num_heads, k_seq_len, channels_per_head)
 
     # Combine RoPE-processed keys with excluded tokens
     k_embed = torch.cat([k_final.type_as(k), k_excluded], dim=-2)
@@ -1039,6 +1027,42 @@ class EdgeTamVideoModel(Sam2VideoModel):
 
         self.post_init()
 
+    def _build_memory_attention_inputs(
+        self,
+        temporal_positions_and_previous_outputs: list[tuple[int, dict]],
+        device: torch.device,
+    ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+        """
+        Concatenate memory features and positional embeddings from previous frames.
+
+        Returns:
+            Tuple of (memories_to_concatenate, memory_positional_embeddings_to_concatenate).
+        """
+        memories_to_concatenate = []
+        memory_positional_embeddings_to_concatenate = []
+
+        for relative_temporal_offset, prev_output_data in temporal_positions_and_previous_outputs:
+            if prev_output_data is None:
+                continue  # Skip if no output data for this temporal position (e.g., padding frames)
+
+            # Load memory features (potentially from CPU to GPU)
+            # Features are flattened: (Batch, Channels, H, W) -> (H*W, Batch, Channels)
+            memory_features = prev_output_data["maskmem_features"].to(device, non_blocking=True)
+            memories_to_concatenate.append(memory_features.permute(1, 0, 2))
+
+            # Spatial positional encoding (potentially from CPU to GPU)
+            spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"].to(device, non_blocking=True)
+            spatial_memory_pos_embed = spatial_memory_pos_embed.squeeze(1).permute(1, 0, 2)
+
+            # Add temporal positional encoding
+            # self.memory_temporal_positional_encoding shape: (NumMaskMem, 1, 1, MemDim)
+            combined_memory_pos_embed = (
+                spatial_memory_pos_embed + self.memory_temporal_positional_encoding[relative_temporal_offset - 1]
+            )
+            memory_positional_embeddings_to_concatenate.append(combined_memory_pos_embed)
+
+        return memories_to_concatenate, memory_positional_embeddings_to_concatenate
+
     def _prepare_memory_conditioned_features(
         self,
         inference_session: EdgeTamVideoInferenceSession,
@@ -1099,138 +1123,9 @@ class EdgeTamVideoModel(Sam2VideoModel):
             )
             return current_feature_map
 
-        num_object_pointer_tokens = 0
-        temporal_position_sign_multiplier = -1 if track_in_reverse_time else 1
-
-        # Step 1: Condition the visual features of the current frame on previous memories
-        if not is_initial_conditioning_frame:
-            # Retrieve memories encoded from previous frames
-            memories_to_concatenate = []
-            memory_positional_embeddings_to_concatenate = []
-
-            # Ensure there are conditioning frame outputs to process
-            conditioning_outputs = inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"]
-            if not conditioning_outputs:
-                raise ValueError(
-                    "maskmem_features in conditioning outputs cannot be empty when not is_initial_conditioning_frame"
-                )
-
-            # Select a maximum number of temporally closest conditioning frames for cross-attention (no limit here, as is the case in the original checkpoints)
-            # Store (temporal_position, output_data) tuples
-            temporal_positions_and_previous_outputs = [(0, out) for out in conditioning_outputs.values()]
-
-            # Add non-conditioning memory frames (up to self.num_maskmem - 1)
-            # These are typically frames tracked by the model without direct user input.
-            # Frames are selected with a stride, prioritizing the most recent ones. Here we only support stride = 1 for simplicity.
-            for relative_temporal_offset in range(self.num_maskmem - 1, 0, -1):
-                # relative_temporal_offset: how many frames before (or after if reversing) the current frame
-                if not track_in_reverse_time:
-                    previous_frame_idx = frame_idx - relative_temporal_offset
-                else:
-                    previous_frame_idx = frame_idx + relative_temporal_offset
-
-                # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
-                output_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
-                    previous_frame_idx, None
-                )
-
-                temporal_positions_and_previous_outputs.append((relative_temporal_offset, output_data))
-
-            for relative_temporal_offset, prev_output_data in temporal_positions_and_previous_outputs:
-                if prev_output_data is None:
-                    continue  # Skip if no output data for this temporal position (e.g., padding frames)
-
-                # Load memory features (potentially from CPU to GPU)
-                # Features are flattened: (Batch, Channels, H, W) -> (H*W, Batch, Channels)
-                memory_features = prev_output_data["maskmem_features"].to(device, non_blocking=True)
-                memories_to_concatenate.append(memory_features.permute(1, 0, 2))
-
-                # Spatial positional encoding (potentially from CPU to GPU)
-                spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"].to(device, non_blocking=True)
-                spatial_memory_pos_embed = spatial_memory_pos_embed.squeeze(1).permute(1, 0, 2)
-
-                # Add temporal positional encoding
-                # self.memory_temporal_positional_encoding shape: (NumMaskMem, 1, 1, MemDim)
-                combined_memory_pos_embed = (
-                    spatial_memory_pos_embed + self.memory_temporal_positional_encoding[relative_temporal_offset - 1]
-                )
-                memory_positional_embeddings_to_concatenate.append(combined_memory_pos_embed)
-
-            num_spatial_memory_tokens = len(memories_to_concatenate)
-
-            # Construct the list of past object pointers to be used in attention
-            if streaming:
-                max_object_pointers_to_use = self.config.max_object_pointers_in_encoder
-            else:
-                max_object_pointers_to_use = min(num_total_frames, self.config.max_object_pointers_in_encoder)
-            temporal_diff_and_pointers = []
-
-            # Add object pointers from selected conditioning frames
-            # Optionally, only include pointers from past frames during evaluation
-            eligible_conditioning_outputs = conditioning_outputs
-            if not self.training:
-                eligible_conditioning_outputs = {
-                    temporal_idx: out
-                    for temporal_idx, out in conditioning_outputs.items()
-                    if (temporal_idx >= frame_idx if track_in_reverse_time else temporal_idx <= frame_idx)
-                }
-
-            for temporal_idx, out_data in eligible_conditioning_outputs.items():
-                temporal_difference = (frame_idx - temporal_idx) * temporal_position_sign_multiplier
-                temporal_diff_and_pointers.append((temporal_difference, out_data["object_pointer"]))
-
-            # Add object pointers from non-conditioning frames (up to max_object_pointers_to_use - 1)
-            for t_diff_offset in range(1, max_object_pointers_to_use):
-                ref_frame_idx = frame_idx + t_diff_offset if track_in_reverse_time else frame_idx - t_diff_offset
-                if ref_frame_idx < 0 or (
-                    not streaming and num_total_frames is not None and ref_frame_idx >= num_total_frames
-                ):
-                    break  # Stop if frame index is out of bounds
-
-                # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
-                out_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
-                    ref_frame_idx, None
-                )
-                if out_data is not None:
-                    temporal_diff_and_pointers.append((t_diff_offset, out_data["object_pointer"]))
-
-            if temporal_diff_and_pointers:
-                temporal_differences, object_pointers_list = zip(*temporal_diff_and_pointers)
-                # Stack object pointers: List of (Batch, Channels) -> (SeqLen_ptr, Batch, Channels)
-                object_pointers = torch.stack(object_pointers_list, dim=0)
-
-                if self.config.enable_temporal_pos_encoding_for_object_pointers:
-                    max_temporal_diff = float(max_object_pointers_to_use - 1)
-                    # Determine dimensionality for temporal positional encoding of pointers
-                    pointer_tpos_dim = num_channels
-
-                    # Normalize temporal differences before sine PE calculation
-                    normalized_temporal_diffs = (
-                        torch.tensor(temporal_differences, device=device, dtype=torch.float32) / max_temporal_diff
-                    )
-                    sine_pe = get_1d_sine_pe(normalized_temporal_diffs, dim=pointer_tpos_dim).to(object_pointers.dtype)
-                    projected_sine_pe = self.temporal_positional_encoding_projection_layer(sine_pe)
-                    object_pointers_pos_embed = projected_sine_pe.unsqueeze(1).expand(-1, batch_size, self.mem_dim)
-                else:
-                    object_pointers_pos_embed = object_pointers.new_zeros(
-                        len(temporal_differences), batch_size, self.mem_dim, dtype=object_pointers.dtype
-                    )
-
-                if self.mem_dim < num_channels:
-                    # If memory dimension is smaller, reshape/split pointers and repeat positional encoding
-                    num_splits = num_channels // self.mem_dim
-                    object_pointers = object_pointers.reshape(-1, batch_size, num_splits, self.mem_dim)
-                    object_pointers = object_pointers.permute(0, 2, 1, 3).flatten(
-                        0, 1
-                    )  # (SeqLen_ptr*num_splits, Batch, MemDim)
-                    object_pointers_pos_embed = object_pointers_pos_embed.repeat_interleave(num_splits, dim=0)
-
-                memories_to_concatenate.append(object_pointers)
-                memory_positional_embeddings_to_concatenate.append(object_pointers_pos_embed)
-                num_object_pointer_tokens = object_pointers.shape[0]
-        else:
+        # Step 1: Handle initial conditioning frames
+        if is_initial_conditioning_frame:
             # For initial conditioning frames, no prior memory is used directly in this block.
-            # The model might handle this with a special token or mechanism.
             # If configured, directly add a learnable "no memory" embedding.
             # current_vision_features has shape (SeqLen, Batch, Channels)
             conditioned_feature_map_flat = current_vision_features + self.no_memory_embedding
@@ -1240,11 +1135,37 @@ class EdgeTamVideoModel(Sam2VideoModel):
             )
             return conditioned_feature_map
 
-        # Step 2: Concatenate all retrieved memories and their positional embeddings.
+        # Step 2: Get memory frames and concatenate their features
+        temporal_positions_and_previous_outputs = self._gather_memory_frame_outputs(
+            inference_session, obj_idx, frame_idx, track_in_reverse_time
+        )
+
+        memories_to_concatenate, memory_positional_embeddings_to_concatenate = self._build_memory_attention_inputs(
+            temporal_positions_and_previous_outputs, device
+        )
+        num_spatial_memory_tokens = len(memories_to_concatenate)
+
+        # Step 3: Get and process object pointers
+        temporal_offsets, pointer_tokens, max_object_pointers_to_use = self._get_object_pointers(
+            inference_session, obj_idx, frame_idx, num_total_frames, track_in_reverse_time, streaming
+        )
+
+        num_object_pointer_tokens = 0
+        if pointer_tokens:
+            object_pointers, object_pointers_pos_embed = self._process_object_pointers(
+                temporal_offsets, pointer_tokens, max_object_pointers_to_use, batch_size, num_channels, device
+            )
+
+            if object_pointers is not None:
+                memories_to_concatenate.append(object_pointers)
+                memory_positional_embeddings_to_concatenate.append(object_pointers_pos_embed)
+                num_object_pointer_tokens = object_pointers.shape[0]
+
+        # Step 4: Concatenate all retrieved memories and their positional embeddings
         combined_memory = torch.cat(memories_to_concatenate, dim=0)
         combined_memory_positional_embeddings = torch.cat(memory_positional_embeddings_to_concatenate, dim=0)
 
-        # Step 3: Forward through the memory attention mechanism.
+        # Step 5: Forward through the memory attention mechanism
         conditioned_feature_map_flat = self.memory_attention(
             current_vision_features=current_vision_features,
             current_vision_position_embeddings=current_vision_positional_embeddings,
