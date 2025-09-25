@@ -46,7 +46,7 @@ class Timesfm2P5Config(PretrainedConfig):
         num_attention_heads: int = 16,
         num_key_value_heads: int = 16,  # Same as num_attention_heads for full attention
         tolerance: float = 1e-5,
-        rms_norm_eps: float = 1e-5,
+        rms_norm_eps: float = 1e-6,
         attention_dropout: float = 0.0,
         attention_bias: bool = False,
         initializer_range: float = 0.02,

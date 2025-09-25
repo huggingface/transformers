@@ -380,7 +380,7 @@ class Timesfm2P5Attention(nn.Module):
             value_states,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
-            scaling=None,  # Disable default scaling, we use per_dim_scale
+            scaling=1.0,  # No scaling - we already applied per_dim_scale to queries
             sliding_window=getattr(self, "sliding_window", None),
             softcap=getattr(self, "attn_logit_softcapping", None),
             **kwargs,
@@ -588,6 +588,8 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         )
 
         # Step 6: Input embedding through tokenizer (ResidualBlock: 64 -> 1280)
+        # Ensure dtype compatibility for mixed precision training
+        tokenizer_inputs = tokenizer_inputs.to(dtype=self.dtype)
         input_embeddings = self.input_ff_layer(tokenizer_inputs)
 
         # Step 7: Create position embeddings for RoPE
