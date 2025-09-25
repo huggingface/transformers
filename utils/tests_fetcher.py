@@ -1100,7 +1100,7 @@ JOB_TO_TEST_FILE = {
     # "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     # "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     # # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
-    # "pipelines_torch": r"tests/models/.*/test_modeling_.*",
+    "pipelines_torch": r"tests/models/.*/test_modeling_.*",
     # "tests_hub": r"tests/.*",
     # "tests_non_model": r"tests/[^/]*?/test_.*\.py",
 }
