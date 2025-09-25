@@ -350,8 +350,9 @@ class TimedModel:
             self._timer.cancel()
 
     def timeout_reached(self):
-        self.delete_model()
-        logger.info(f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity")
+        if self.timeout_seconds > 0:
+            self.delete_model()
+            logger.info(f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity")
 
     def is_deleted(self):
         """Check if the instances have been deleted."""
