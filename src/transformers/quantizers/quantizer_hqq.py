@@ -199,7 +199,6 @@ class HqqHfQuantizer(HfQuantizer):
             # If they are all present and saved, make it a HQQLinear layer! (we cannot do it param after param because
             # hqq does not support it...)
             if all(k in module.hqq_params for k in hqq_keys) and ("bias" in module.hqq_params or module.bias is None):
-                print(module.hqq_params)
                 hqq_layer = HQQLinear(
                     linear_layer=None,
                     quant_config=None,
