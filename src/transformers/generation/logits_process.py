@@ -652,7 +652,11 @@ class TopHLogitsWarper(LogitsProcessor):
             tau = distribution.entropy() * self.top_h
 
             # grow the kept set until the stopping rule triggers
-            cumulative_entropy = - distribution.probs[torch.tensor([0], device=top_probs.device)] * distribution.log_prob(torch.tensor([0], device=top_probs.device)) # -top_probs[0] * torch.log2(top_probs[0])
+            cumulative_entropy = -distribution.probs[
+                torch.tensor([0], device=top_probs.device)
+            ] * distribution.log_prob(
+                torch.tensor([0], device=top_probs.device)
+            )  # -top_probs[0] * torch.log2(top_probs[0])
             chosen = []
             ind = 0
             for idx, p in zip(top_idx, top_probs):
@@ -661,7 +665,9 @@ class TopHLogitsWarper(LogitsProcessor):
                 if ind == len(top_probs):
                     break
                 # update running sums for current prefix
-                cumulative_entropy = cumulative_entropy - distribution.probs[torch.tensor([ind], device=top_probs.device)] * distribution.log_prob(torch.tensor([ind], device=top_probs.device))
+                cumulative_entropy = cumulative_entropy - distribution.probs[
+                    torch.tensor([ind], device=top_probs.device)
+                ] * distribution.log_prob(torch.tensor([ind], device=top_probs.device))
 
                 # entropy difference term
                 if cumulative_entropy > tau:
