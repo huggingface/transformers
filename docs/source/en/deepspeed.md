@@ -486,7 +486,7 @@ To configure Apex-like fp16 mixed precision, set up the config as shown below wi
 > [!TIP]
 > bf16 requires DeepSpeed 0.6.0.
 
-bf16 has the same dynamic range as fp32, and doesn’t require loss scaling unlike fp16. However, if you use [gradient accumulation](#gradient-accumulation) with bf16, gradients are accumulated in bf16 which may not be desirable because the lower precision can lead to lossy accumulation.
+bf16 has the same dynamic range as fp32, and doesn't require loss scaling unlike fp16. However, if you use [gradient accumulation](#gradient-accumulation) with bf16, gradients are accumulated in bf16 which may not be desirable because the lower precision can lead to lossy accumulation.
 
 bf16 can be set up in the config file or enabled from the command line when the following arguments are passed: `--bf16` or `--bf16_full_eval`.
 
