@@ -207,9 +207,10 @@ def _prepare_patch_cross_attention_mask(
         )
 
     if "flash" in attn_implementation:
-        # Flash attention expects 2D mask [batch, q_len]
-        # Convert from 3D [batch, q_len, kv_len] to 2D [batch, q_len]
-        flash_mask = cross_attention_mask.any(dim=2).to(dtype)
+        cross_attention_mask = cross_attention_mask.unsqueeze(1)
+        flash_mask = cross_attention_mask.to(dtype)
+
+        flash_mask = flash_mask.squeeze(1).any(dim=1).to(dtype)
         return flash_mask
     else:
         # Reshape so it can be used by attn module - add head dimension
