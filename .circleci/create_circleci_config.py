@@ -104,7 +104,7 @@ class CircleCIJob:
         else:
             # BIG HACK WILL REMOVE ONCE FETCHER IS UPDATED
             print(os.environ.get("GIT_COMMIT_MESSAGE"))
-            if "[build-ci-image]" in os.environ.get("GIT_COMMIT_MESSAGE", "") or os.environ.get("GIT_COMMIT_MESSAGE", "") == "dev-ci":
+            if True or "[build-ci-image]" in os.environ.get("GIT_COMMIT_MESSAGE", "") or os.environ.get("GIT_COMMIT_MESSAGE", "") == "dev-ci":
                 self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
@@ -349,7 +349,7 @@ REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
 # ALL_TESTS = [torch_job]
-# ALL_TESTS = [pipelines_torch_job]
+ALL_TESTS = [pipelines_torch_job]
 
 def create_circleci_config(folder=None):
     if folder is None:
