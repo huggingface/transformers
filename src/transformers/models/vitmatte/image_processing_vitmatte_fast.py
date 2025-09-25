@@ -91,14 +91,14 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
 
     def _pad_image(
         self,
-        images: "torch.tensor",
+        images: torch.Tensor,
         size_divisibility: int = 32,
-    ) -> "torch.tensor":
+    ) -> torch.Tensor:
         """
         Pads an image or batched images constantly so that width and height are divisible by size_divisibility
 
         Args:
-            image (`torch,tensor`):
+            image (`torch.Tensor`):
                 Image to pad.
             size_divisibility (`int`, *optional*, defaults to 32):
                 The width and height of the image will be padded to be divisible by this number.
