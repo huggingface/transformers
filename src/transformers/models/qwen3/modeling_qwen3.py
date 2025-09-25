@@ -128,7 +128,7 @@ def apply_rotary_kernel(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
     q_rotated = q.clone()
     k_rotated = k.clone()
-
+    
     # Get half dimension for rotation
     half_dim = q.shape[-1] // 2
     q1 = q_rotated[..., :half_dim]
