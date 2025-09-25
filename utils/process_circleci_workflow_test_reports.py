@@ -39,7 +39,7 @@ if __name__ == "__main__":
     # for each job, download artifacts
     for job in jobs:
         project_slug = job["project_slug"]
-        if job["name"].startswith(("tests_", "examples_", "pipelines_")):
+        if job["name"].startswith(("tests_", "pipelines_")):
             if job["name"] == "tests_hub":
                 continue
             url = f"https://circleci.com/api/v2/project/{project_slug}/{job['job_number']}/artifacts"
