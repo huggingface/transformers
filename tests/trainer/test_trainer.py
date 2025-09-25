@@ -112,7 +112,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, SaveStrategy, check_target_module_exists
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -3778,6 +3778,25 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=False)
             self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=False)
 
+        # Test this works with SaveStrategy.BEST
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                output_dir=tmpdir,
+                learning_rate=0.1,
+                eval_strategy="epoch",
+                save_strategy=SaveStrategy.BEST,
+                load_best_model_at_end=True,
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+            )
+            self.assertTrue(trainer.args.greater_is_better)
+            trainer.train()
+            self.check_best_model_has_been_loaded(
+                tmpdir, 64 // self.batch_size, total, trainer, "eval_accuracy", greater_is_better=True
+            )
+
     @require_safetensors
     def test_load_best_model_from_safetensors(self):
         total = int(self.n_epochs * 64 / self.batch_size)
@@ -4876,19 +4895,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_metric_for_best_model_behavior(self):
         # Case 1: Metric name not provided when `save_strategy == "best"`.
-        # Should raise ValueError.
+        # `metric_for_best_model` should be set to `"loss"` by default.
         with tempfile.TemporaryDirectory() as tmpdir:
-            with self.assertRaises(ValueError) as context:
-                trainer = get_regression_trainer(
-                    a=1.5,
-                    b=2.5,
-                    output_dir=tmpdir,
-                    learning_rate=0.1,
-                    eval_strategy="epoch",
-                    save_strategy="best",
-                    compute_metrics=AlmostAccuracy(),
-                )
-            self.assertIn("`args.metric_for_best_model` must be provided", str(context.exception))
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                output_dir=tmpdir,
+                learning_rate=0.1,
+                eval_strategy="epoch",
+                save_strategy="best",
+                compute_metrics=AlmostAccuracy(),
+            )
+            self.assertTrue(trainer.args.metric_for_best_model == "loss")
 
         # Case 2: Metric name not provided when `load_best_model_at_end == True`.
         # `metric_for_best_model` should be set to `"loss"` by default.

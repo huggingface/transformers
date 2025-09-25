@@ -470,7 +470,8 @@ class TrainingArguments:
             models. Must be the name of a metric returned by the evaluation with or without the prefix `"eval_"`.
 
             If not specified, this will default to `"loss"` when either `load_best_model_at_end == True`
-            or `lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU` (to use the evaluation loss).
+            or `lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU`
+            or `save_strategy == SaveStrategy.BEST` (to use the evaluation loss).
 
             If you set this value, `greater_is_better` will default to `True` unless the name ends with "loss".
             Don't forget to set it to `False` if your metric is better when lower.
@@ -1594,7 +1595,9 @@ class TrainingArguments:
             )
 
         if (
-            self.load_best_model_at_end or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+            self.load_best_model_at_end
+            or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+            or self.save_strategy == SaveStrategy.BEST
         ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:

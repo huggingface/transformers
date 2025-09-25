@@ -3310,7 +3310,7 @@ class Trainer:
             if operator(metric_value, self.state.best_metric):
                 self.state.best_metric = metric_value
 
-                if self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH]:
+                if self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH, SaveStrategy.BEST]:
                     self.state.best_global_step = self.state.global_step
 
                 is_new_best_metric = True
@@ -3332,7 +3332,10 @@ class Trainer:
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir, _internal_call=True)
 
-        if self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH] and self.state.best_global_step:
+        if (
+            self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH, SaveStrategy.BEST]
+            and self.state.best_global_step
+        ):
             best_checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.best_global_step}"
             best_checkpoint_dir = os.path.join(run_dir, best_checkpoint_folder)
 
