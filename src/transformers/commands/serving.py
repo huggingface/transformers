@@ -531,6 +531,11 @@ class ServeCommand(BaseTransformersCLICommand):
         self.last_kv_cache = None
         self.last_model = None
 
+        if self.args.force_model:
+            model_id_and_revision = self.process_model_name(self.args.force_model)
+            self.last_model = model_id_and_revision
+            self.load_model_and_processor(model_id_and_revision)
+
     def _validate_request(
         self,
         request: dict,
