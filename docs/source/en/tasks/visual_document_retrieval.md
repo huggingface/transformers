@@ -40,6 +40,7 @@ dataset = dataset["train"]
 dataset = dataset.filter(lambda example: example["specific_detail_query"] is not None)
 dataset
 ```
+
 ```
 Dataset({
     features: ['image', 'raw_queries', 'broad_topical_query', 'broad_topical_explanation', 'specific_detail_query', 'specific_detail_explanation', 'visual_element_query', 'visual_element_explanation', 'parsed_into_json'],
@@ -134,13 +135,13 @@ for i in indices:
 ```
 
 <div style="display: flex; align-items: center;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_1.png" 
-         alt="Document 1" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_1.png"
+         alt="Document 1"
          style="height: 200px; object-fit: contain; margin-right: 10px;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_2.png" 
-         alt="Document 2" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_2.png"
+         alt="Document 2"
          style="height: 200px; object-fit: contain;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_3.png" 
-         alt="Document 3" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_3.png"
+         alt="Document 3"
          style="height: 200px; object-fit: contain;">
 </div>

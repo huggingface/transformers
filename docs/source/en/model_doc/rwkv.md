@@ -58,7 +58,7 @@ torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e
 
 If you want to make sure the model stops generating when `'\n\n'` is detected, we recommend using the following stopping criteria:
 
-```python 
+```python
 from transformers import StoppingCriteria
 
 class RwkvStoppingCriteria(StoppingCriteria):

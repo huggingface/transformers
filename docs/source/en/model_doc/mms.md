@@ -376,6 +376,7 @@ detected_lang = model.config.id2label[lang_id]
 ```
 
 To see all the supported languages of a checkpoint, you can print out the language ids as follows:
+
 ```py
 processor.id2label.values()
 ```
