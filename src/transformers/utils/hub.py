@@ -418,7 +418,7 @@ def cached_files(
     if PYTEST_WORKER_INDEX == "":
         PYTEST_WORKER_INDEX = "0"
     else:
-        PYTEST_WORKER_INDEX = worker_id[2:]  # Extract from "gw0", "gw1", etc.
+        PYTEST_WORKER_INDEX = PYTEST_WORKER_INDEX[2:]  # Extract from "gw0", "gw1", etc.
 
     file_name = f"repo_ids_node_{CIRCLE_NODE_INDEX}_{PYTEST_WORKER_INDEX}.txt"
     file_path = os.path.join(dir_name, file_name)
