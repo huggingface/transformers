@@ -14,4 +14,6 @@ RUN uv pip install --no-cache-dir librosa "git+https://github.com/huggingface/tr
 # the data are downloaded to the directory `/test_data` and during CircleCI's CI runtime, we need to move them to the root of `transformers`
 RUN mkdir test_data && cd test_data && curl -O https://raw.githubusercontent.com/huggingface/transformers/${REF}/utils/fetch_hub_objects_for_ci.py && python3 fetch_hub_objects_for_ci.py
 
+RUN python call_from_pretrained.py
+
 RUN uv pip uninstall transformers
