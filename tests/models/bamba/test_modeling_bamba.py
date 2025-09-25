@@ -360,13 +360,6 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        r"""
-        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
-        Bamba mixer are initialized differently and we tested that in test_initialization
-        """
-        self.skipTest(reason="Cumbersome and redundant for Bamba")
-
     def test_attention_outputs(self):
         r"""
         Overriding the test_attention_outputs test as the Bamba model outputs attention only for its attention layers

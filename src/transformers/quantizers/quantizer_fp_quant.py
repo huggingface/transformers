@@ -90,7 +90,6 @@ class FPQuantHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         module, _ = get_module_from_name(model, param_name)
 
@@ -121,9 +120,6 @@ class FPQuantHfQuantizer(HfQuantizer):
         module.weight = torch.nn.Parameter(param_value.to(target_device))
         # Let pre-forward handle the quantization and set None where necessary
         module.pre_forward()
-
-        if unexpected_keys is not None and param_name in unexpected_keys:
-            unexpected_keys.remove(param_name)
 
     def _process_model_before_weight_loading(
         self,
@@ -163,7 +159,7 @@ class FPQuantHfQuantizer(HfQuantizer):
     def is_serializable(self, safe_serialization=None):
         return True
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
