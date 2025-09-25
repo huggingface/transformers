@@ -16,7 +16,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on:
+      group: aws-general-8-plus
 
     strategy:
       matrix:
