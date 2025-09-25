@@ -266,7 +266,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         router_logits = self.gate(hidden_states_reshaped)
         selected_experts, routing_weights = self.route_tokens_to_experts(hidden_states_reshaped, router_logits)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim), router_logits
+        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
