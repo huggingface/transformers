@@ -703,7 +703,7 @@ def _load_state_dict_into_meta_model(
         QuantizationMethod.TORCHAO,
     }
     is_safetensors = shard_file.endswith(".safetensors")
-    is_meta_state_dict = is_safetensors and not is_hqq_or_bnb_or_ao
+    is_meta_state_dict = is_safetensors and not is_bnb_or_ao
     file_pointer = safe_open(shard_file, framework="pt", device=tensor_device) if is_meta_state_dict else None
     params_to_load = list(state_dict.keys())
 
