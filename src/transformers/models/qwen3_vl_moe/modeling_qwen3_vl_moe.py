@@ -156,7 +156,7 @@ class Qwen3VLMoeTextSparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         router_weights, router_logits, router_indices = self.gate(hidden_states)
         routed_out = self.experts(hidden_states, router_weights, router_indices)
-        return routed_out, router_logits
+        return routed_out
 
 
 def rotate_half(x):
