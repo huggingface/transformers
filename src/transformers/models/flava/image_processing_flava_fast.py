@@ -24,7 +24,6 @@ import torch
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultImageProcessorKwargs,
     get_size_dict,
 )
 from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
@@ -167,7 +166,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[FlavaImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     @classmethod

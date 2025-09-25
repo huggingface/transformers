@@ -46,7 +46,7 @@ from ...utils import (
 )
 
 
-class Sam2ImageProcessorKwargs(ImagesKwargs):
+class Sam2FastImageProcessorKwargs(ImagesKwargs):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
@@ -381,14 +381,14 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
 
-    valid_kwargs = Sam2ImageProcessorKwargs
+    valid_kwargs = Sam2FastImageProcessorKwargs
 
     # modular artefacts
     do_pad = None
     pad_size = None
     mask_pad_size = None
 
-    def __init__(self, **kwargs: Unpack[Sam2ImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _further_process_kwargs(
@@ -440,7 +440,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[Sam2ImageProcessorKwargs],
+        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -455,7 +455,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[Sam2ImageProcessorKwargs],
+        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

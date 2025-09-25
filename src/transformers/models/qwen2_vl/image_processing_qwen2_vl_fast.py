@@ -26,7 +26,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -131,7 +130,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[DefaultImageProcessorKwargs],
+        **kwargs: Unpack[Qwen2VLImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

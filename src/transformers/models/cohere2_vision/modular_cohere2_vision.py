@@ -30,6 +30,8 @@ from transformers.models.aya_vision.modeling_aya_vision import (
 from transformers.models.got_ocr2.image_processing_got_ocr2_fast import GotOcr2ImageProcessorFast
 
 from ...cache_utils import Cache
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -301,7 +303,7 @@ def get_optimal_tiled_canvas(
     return best_grid
 
 
-class Cohere2VisionImageProcessorKwargs(ImagesKwargs):
+class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -326,7 +328,14 @@ class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
     max_patches = 12
     crop_to_patches = True
     patch_size = 16
-    valid_kwargs = Cohere2VisionImageProcessorKwargs
+    valid_kwargs = Cohere2VisionFastImageProcessorKwargs
+
+    def __init__(self, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
 
 __all__ = [
