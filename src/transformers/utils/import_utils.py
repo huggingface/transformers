@@ -99,14 +99,8 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
 ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
 ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
 
-USE_TF = os.environ.get("USE_TF", "AUTO").upper()
-USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
-USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
-
 # Try to run a native pytorch job in an environment with TorchXLA installed by setting this value to 0.
 USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
-
-FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 
 # `transformers` requires `torch>=1.11` but this variable is exposed publicly, and we can't simply remove it.
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
@@ -221,9 +215,6 @@ _smdistributed_available = importlib.util.find_spec("smdistributed") is not None
 _soundfile_available = _is_package_available("soundfile")
 _spacy_available = _is_package_available("spacy")
 _sudachipy_available, _sudachipy_version = _is_package_available("sudachipy", return_version=True)
-_tensorflow_probability_available = _is_package_available("tensorflow_probability")
-_tensorflow_text_available = _is_package_available("tensorflow_text")
-_tf2onnx_available = _is_package_available("tf2onnx")
 _timm_available = _is_package_available("timm")
 _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
@@ -243,60 +234,11 @@ _matplotlib_available = _is_package_available("matplotlib")
 _mistral_common_available = _is_package_available("mistral_common")
 _triton_available, _triton_version = _is_package_available("triton", return_version=True)
 
-_torch_version = "N/A"
-_torch_available = False
-if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
-    _torch_available, _torch_version = _is_package_available("torch", return_version=True)
-    if _torch_available:
-        _torch_available = version.parse(_torch_version) >= version.parse("2.1.0")
-        if not _torch_available:
-            logger.warning(f"Disabling PyTorch because PyTorch >= 2.1 is required but found {_torch_version}")
-else:
-    logger.info("Disabling PyTorch because USE_TF is set")
-    _torch_available = False
-
-
-_tf_version = "N/A"
-_tf_available = False
-if FORCE_TF_AVAILABLE in ENV_VARS_TRUE_VALUES:
-    _tf_available = True
-else:
-    if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
-        # Note: _is_package_available("tensorflow") fails for tensorflow-cpu. Please test any changes to the line below
-        # with tensorflow-cpu to make sure it still works!
-        _tf_available = importlib.util.find_spec("tensorflow") is not None
-        if _tf_available:
-            candidates = (
-                "tensorflow",
-                "tensorflow-cpu",
-                "tensorflow-gpu",
-                "tf-nightly",
-                "tf-nightly-cpu",
-                "tf-nightly-gpu",
-                "tf-nightly-rocm",
-                "intel-tensorflow",
-                "intel-tensorflow-avx512",
-                "tensorflow-rocm",
-                "tensorflow-macos",
-                "tensorflow-aarch64",
-            )
-            _tf_version = None
-            # For the metadata, we have to look for both tensorflow and tensorflow-cpu
-            for pkg in candidates:
-                try:
-                    _tf_version = importlib.metadata.version(pkg)
-                    break
-                except importlib.metadata.PackageNotFoundError:
-                    pass
-            _tf_available = _tf_version is not None
-        if _tf_available:
-            if version.parse(_tf_version) < version.parse("2"):
-                logger.info(
-                    f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum."
-                )
-                _tf_available = False
-    else:
-        logger.info("Disabling Tensorflow because USE_TORCH is set")
+_torch_available, _torch_version = _is_package_available("torch", return_version=True)
+if _torch_available:
+    _torch_available = version.parse(_torch_version) >= version.parse("2.2.0")
+    if not _torch_available:
+        logger.warning(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {_torch_version}")
 
 
 _essentia_available = importlib.util.find_spec("essentia") is not None
@@ -349,18 +291,6 @@ try:
     logger.debug(f"Detected oneccl_bind_pt version {ccl_version}")
 except importlib.metadata.PackageNotFoundError:
     _is_ccl_available = False
-
-
-_flax_available = False
-if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
-    _flax_available, _flax_version = _is_package_available("flax", return_version=True)
-    if _flax_available:
-        _jax_available, _jax_version = _is_package_available("jax", return_version=True)
-        if _jax_available:
-            logger.info(f"JAX version {_jax_version}, Flax version {_flax_version} available.")
-        else:
-            _flax_available = _jax_available = False
-            _jax_version = _flax_version = "N/A"
 
 
 _torch_xla_available = False
@@ -592,12 +522,14 @@ def is_flash_linear_attention_available():
 
         if not torch.cuda.is_available():
             return False
-        else:
-            if _is_package_available("fla"):
-                import fla
 
-                if version.parse(fla.__version__) >= version.parse("0.2.2"):
-                    return True
+        try:
+            import fla
+
+            if version.parse(fla.__version__) >= version.parse("0.2.2"):
+                return True
+        except Exception:
+            pass
     return False
 
 
@@ -759,24 +691,12 @@ def is_bs4_available() -> Union[tuple[bool, str], bool]:
     return _bs4_available
 
 
-def is_tf_available() -> bool:
-    return _tf_available
-
-
 def is_coloredlogs_available() -> Union[tuple[bool, str], bool]:
     return _coloredlogs_available
 
 
-def is_tf2onnx_available() -> Union[tuple[bool, str], bool]:
-    return _tf2onnx_available
-
-
 def is_onnx_available() -> Union[tuple[bool, str], bool]:
     return _onnx_available
-
-
-def is_flax_available() -> bool:
-    return _flax_available
 
 
 def is_flute_available() -> bool:
@@ -842,7 +762,7 @@ def is_torch_npu_available(check_device=False) -> bool:
 
 
 @lru_cache
-def is_torch_mlu_available(check_device=False) -> bool:
+def is_torch_mlu_available() -> bool:
     """
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
     uninitialized.
@@ -1444,14 +1364,6 @@ def is_spacy_available() -> Union[tuple[bool, str], bool]:
     return _spacy_available
 
 
-def is_tensorflow_text_available() -> Union[tuple[bool, str], bool]:
-    return is_tf_available() and _tensorflow_text_available
-
-
-def is_keras_nlp_available() -> Union[tuple[bool, str], bool]:
-    return is_tensorflow_text_available() and _keras_nlp_available
-
-
 def is_in_notebook() -> bool:
     try:
         # Check if we are running inside Marimo
@@ -1474,10 +1386,6 @@ def is_in_notebook() -> bool:
 
 def is_pytorch_quantization_available() -> Union[tuple[bool, str], bool]:
     return _pytorch_quantization_available
-
-
-def is_tensorflow_probability_available() -> Union[tuple[bool, str], bool]:
-    return _tensorflow_probability_available
 
 
 def is_pandas_available() -> Union[tuple[bool, str], bool]:
@@ -1570,10 +1478,7 @@ def is_uroman_available() -> Union[tuple[bool, str], bool]:
 def torch_only_method(fn: Callable) -> Callable:
     def wrapper(*args, **kwargs):
         if not _torch_available:
-            raise ImportError(
-                "You need to install pytorch to use this method or class, "
-                "or activate it with environment variables USE_TORCH=1 and USE_TF=0."
-            )
+            raise ImportError("You need to install pytorch to use this method or class")
         else:
             return fn(*args, **kwargs)
 
@@ -1770,30 +1675,6 @@ Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
-PYTORCH_IMPORT_ERROR_WITH_TF = """
-{0} requires the PyTorch library but it was not found in your environment.
-However, we were able to find a TensorFlow installation. TensorFlow classes begin
-with "TF", but are otherwise identically named to our PyTorch classes. This
-means that the TF equivalent of the class you tried to import would be "TF{0}".
-If you want to use TensorFlow, please use TF classes instead!
-
-If you really do want to use PyTorch please go to
-https://pytorch.org/get-started/locally/ and follow the instructions that
-match your environment.
-"""
-
-# docstyle-ignore
-TF_IMPORT_ERROR_WITH_PYTORCH = """
-{0} requires the TensorFlow library but it was not found in your environment.
-However, we were able to find a PyTorch installation. PyTorch classes do not begin
-with "TF", but are otherwise identically named to our TF classes.
-If you want to use PyTorch, please use those classes instead!
-
-If you really do want to use TensorFlow, please follow the instructions on the
-installation page https://www.tensorflow.org/install that match your environment.
-"""
-
-# docstyle-ignore
 BS4_IMPORT_ERROR = """
 {0} requires the Beautiful Soup library but it was not found in your environment. You can install it with pip:
 `pip install beautifulsoup4`. Please note that you may need to restart your runtime after installation.
@@ -1815,27 +1696,12 @@ Please note that you may need to restart your runtime after installation.
 
 
 # docstyle-ignore
-TENSORFLOW_IMPORT_ERROR = """
-{0} requires the TensorFlow library but it was not found in your environment. Check out the instructions on the
-installation page: https://www.tensorflow.org/install and follow the ones that match your environment.
-Please note that you may need to restart your runtime after installation.
-"""
-
-
-# docstyle-ignore
 DETECTRON2_IMPORT_ERROR = """
 {0} requires the detectron2 library but it was not found in your environment. Check out the instructions on the
 installation page: https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
-
-# docstyle-ignore
-FLAX_IMPORT_ERROR = """
-{0} requires the FLAX library but it was not found in your environment. Check out the instructions on the
-installation page: https://github.com/google/flax and follow the ones that match your environment.
-Please note that you may need to restart your runtime after installation.
-"""
 
 # docstyle-ignore
 FTFY_IMPORT_ERROR = """
@@ -1859,19 +1725,6 @@ G2P_EN_IMPORT_ERROR = """
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
 `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
-Please note that you may need to restart your runtime after installation.
-"""
-
-# docstyle-ignore
-TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
-{0} requires the tensorflow_probability library but it was not found in your environment. You can install it with pip as
-explained here: https://github.com/tensorflow/probability. Please note that you may need to restart your runtime after installation.
-"""
-
-# docstyle-ignore
-TENSORFLOW_TEXT_IMPORT_ERROR = """
-{0} requires the tensorflow_text library but it was not found in your environment. You can install it with pip as
-explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
 Please note that you may need to restart your runtime after installation.
 """
 
@@ -2069,7 +1922,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
-        ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
         ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
@@ -2086,9 +1938,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
-        ("tensorflow_probability", (is_tensorflow_probability_available, TENSORFLOW_PROBABILITY_IMPORT_ERROR)),
-        ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
-        ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("torchaudio", (is_torchaudio_available, TORCHAUDIO_IMPORT_ERROR)),
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
@@ -2107,7 +1956,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
         ("rich", (is_rich_available, RICH_IMPORT_ERROR)),
-        ("keras_nlp", (is_keras_nlp_available, KERAS_NLP_IMPORT_ERROR)),
         ("pydantic", (is_pydantic_available, PYDANTIC_IMPORT_ERROR)),
         ("fastapi", (is_fastapi_available, FASTAPI_IMPORT_ERROR)),
         ("uvicorn", (is_uvicorn_available, UVICORN_IMPORT_ERROR)),
@@ -2122,14 +1970,6 @@ def requires_backends(obj, backends):
         backends = [backends]
 
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-
-    # Raise an error for users who might not realize that classes without "TF" are torch-only
-    if "torch" in backends and "tf" not in backends and not is_torch_available() and is_tf_available():
-        raise ImportError(PYTORCH_IMPORT_ERROR_WITH_TF.format(name))
-
-    # Raise the inverse error for PyTorch users trying to load TF classes
-    if "tf" in backends and "torch" not in backends and is_torch_available() and not is_tf_available():
-        raise ImportError(TF_IMPORT_ERROR_WITH_PYTORCH.format(name))
 
     failed = []
     for backend in backends:
@@ -2462,12 +2302,11 @@ def requires(*, backends=()):
 
 
 BASE_FILE_REQUIREMENTS = {
-    lambda e: "modeling_tf_" in e: ("tf",),
-    lambda e: "modeling_flax_" in e: ("flax",),
     lambda e: "modeling_" in e: ("torch",),
     lambda e: e.startswith("tokenization_") and e.endswith("_fast"): ("tokenizers",),
     lambda e: e.startswith("image_processing_") and e.endswith("_fast"): ("vision", "torch", "torchvision"),
     lambda e: e.startswith("image_processing_"): ("vision",),
+    lambda e: e.startswith("video_processing_"): ("vision", "torch", "torchvision"),
 }
 
 
@@ -2533,8 +2372,6 @@ def create_import_structure_from_path(module_path):
        backend specified. The default backends are defined according to the filename:
 
        - If a file is named like `modeling_*.py`, it will have a `torch` backend
-       - If a file is named like `modeling_tf_*.py`, it will have a `tf` backend
-       - If a file is named like `modeling_flax_*.py`, it will have a `flax` backend
        - If a file is named like `tokenization_*_fast.py`, it will have a `tokenizers` backend
        - If a file is named like `image_processing*_fast.py`, it will have a `torchvision` + `torch` backend
 
@@ -2612,8 +2449,8 @@ def create_import_structure_from_path(module_path):
         previous_index = 0
 
         # Some files have some requirements by default.
-        # For example, any file named `modeling_tf_xxx.py`
-        # should have TensorFlow as a required backend.
+        # For example, any file named `modeling_xxx.py`
+        # should have torch as a required backend.
         base_requirements = ()
         for string_check, requirements in BASE_FILE_REQUIREMENTS.items():
             if string_check(module_name):
@@ -2649,7 +2486,6 @@ def create_import_structure_from_path(module_path):
                     #     backends=(
                     #             "sentencepiece",
                     #             "torch",
-                    #             "tf",
                     #     )
                     # )
                     #
@@ -2657,7 +2493,7 @@ def create_import_structure_from_path(module_path):
                     #
                     # @export(
                     #     backends=(
-                    #             "sentencepiece", "tf"
+                    #             "sentencepiece",
                     #     )
                     # )
                     elif "backends" in lines[previous_index + 1]:

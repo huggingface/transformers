@@ -23,6 +23,7 @@ import tempfile
 import unittest
 import warnings
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -52,7 +53,6 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
-    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -61,6 +61,7 @@ from transformers.utils import is_ipex_available, is_torchdynamo_exporting
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import (
         AutoModelForCausalLM,
@@ -70,6 +71,7 @@ if is_torch_available():
         AutoModelForVision2Seq,
         BartForConditionalGeneration,
         BartTokenizer,
+        DataCollatorWithFlattening,
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
@@ -83,10 +85,6 @@ if is_torch_available():
         StaticCache,
     )
     from transformers.generation import (
-        BeamSampleDecoderOnlyOutput,
-        BeamSampleEncoderDecoderOutput,
-        BeamSearchDecoderOnlyOutput,
-        BeamSearchEncoderDecoderOutput,
         CompileConfig,
         GenerateBeamDecoderOnlyOutput,
         GenerateBeamEncoderDecoderOutput,
@@ -94,14 +92,10 @@ if is_torch_available():
         GenerateEncoderDecoderOutput,
         GenerationConfig,
         GenerationMixin,
-        GreedySearchDecoderOnlyOutput,
-        GreedySearchEncoderDecoderOutput,
         LogitsProcessorList,
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
         PromptLookupCandidateGenerator,
-        SampleDecoderOnlyOutput,
-        SampleEncoderDecoderOutput,
         StoppingCriteria,
         StoppingCriteriaList,
         SynthIDTextWatermarkingConfig,
@@ -363,15 +357,11 @@ class GenerationTesterMixin:
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, GreedySearchEncoderDecoderOutput)
             else:
                 self.assertTrue(
                     output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
 
             self._check_generate_outputs(output_generate, model.config)
 
@@ -445,15 +435,11 @@ class GenerationTesterMixin:
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, SampleEncoderDecoderOutput)
             else:
                 self.assertTrue(
                     output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, SampleDecoderOnlyOutput)
 
             self._check_generate_outputs(output_generate, model.config, num_return_sequences=2)
 
@@ -495,15 +481,11 @@ class GenerationTesterMixin:
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
             else:
                 self.assertTrue(
                     output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
             self._check_generate_outputs(
                 output_generate,
@@ -624,15 +606,11 @@ class GenerationTesterMixin:
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
             else:
                 self.assertTrue(
                     output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-                # Retrocompatibility check
-                self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
             self._check_generate_outputs(
                 output_generate,
@@ -672,10 +650,6 @@ class GenerationTesterMixin:
         # prepare the assistant encoder outputs in the main generate body);
         # - assisted_decoding does not support `use_cache = False`
         # - assisted_decoding does not support `batch_size > 1`
-
-        # No idea why this cause problem!
-        if type(self).__name__ not in ["Gemma3nTextModelTest"]:
-            set_model_tester_for_less_flaky_test(self)
 
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
@@ -718,6 +692,8 @@ class GenerationTesterMixin:
             #    the assistant model is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
+            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
+            #     differences vs model-specific default cache
             generation_kwargs = {
                 "eos_token_id": -1,  # see a)
                 "max_new_tokens": 4,  # see c)
@@ -729,6 +705,7 @@ class GenerationTesterMixin:
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
+                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
 
@@ -767,8 +744,15 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
+            old_models = [  # models that we won't commit resources fixing because they are old and have little usage
+                # reformer: has a different cache format
+                "reformer",
+                # imagegpt: the output lm head uses `vocab_size - 1` tokens, so the `NoBadWordsLogitsProcessor` used
+                # by prompt lookup may fail
+                "imagegpt",
+            ]
+            if any(model_name in model_class.__name__.lower() for model_name in old_models):
+                self.skipTest(reason="Won't fix: old model")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
@@ -802,6 +786,8 @@ class GenerationTesterMixin:
             #    prompt lookup is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
+            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
+            #     differences vs model-specific default cache
             generation_kwargs = {
                 "eos_token_id": -1,  # see a)
                 "max_new_tokens": 4,  # see c)
@@ -813,6 +799,7 @@ class GenerationTesterMixin:
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
+                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
 
@@ -870,6 +857,8 @@ class GenerationTesterMixin:
             #    the assistant model is correct
             # c) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
+            # d) use a cache type compatible with rollbacks (only dynamic cache atm). Otherwise, there may be
+            #     differences vs model-specific default cache
             assistant_model = model
             assistant_model.generation_config.num_assistant_tokens = 2  # see b)
             assistant_model.generation_config.num_assistant_tokens_schedule = "constant"  # see b)
@@ -885,6 +874,7 @@ class GenerationTesterMixin:
                 "output_attentions": self.has_attentions,
                 "return_dict_in_generate": True,
                 "use_cache": True,
+                "cache_implementation": "dynamic_full",  # see d)
             }
             logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
             output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
@@ -921,32 +911,44 @@ class GenerationTesterMixin:
         self.assertTrue(output_prompt_lookup.shape[-1] == 10)
 
     @pytest.mark.generate
-    def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+    def test_left_padding_compatibility(
+        self, unpadded_custom_inputs: Optional[dict] = None, padded_custom_inputs: Optional[dict] = None
+    ):
+        """
+        Tests that adding left-padding yields the same logits as the original input. Exposes arguments for custom
+        inputs for overwrites, to prevent full rewrites of the test when all we need is model-specific input handling.
+
+        ! If you overwrite this test, make sure to document why you need to overwrite it !
+
+        NOTE: left-padding results in small numerical differences. This is expected.
+        See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+
+        Args:
+            unpadded_custom_inputs (`dict`, *optional*):
+                Used in test overwrites. Custom inputs to add/overwrite over the default test inputs.
+            padded_custom_inputs (`dict`, *optional*):
+                Used in test overwrites. Custom inputs to add/overwrite over the padded test input handcrafted in this
+                test. Commonly used e.g. with multimodal cross attention masks.
+        """
 
         # First, filter out models that don't support left padding
-        # - The model must have generative capabilities
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(reason="No generative architecture available for this model.")
-
-        # - The model must support padding
+        # 1. The model must support padding
         if not self.has_attentions:
             self.skipTest(reason="This model doesn't support padding.")
-
-        # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
+        # 2. [encoder-decoder] The model must be a decoder-only architecture. Encoder-based architectures can use
+        # right-padding in their (encoder) inputs. Encoder-decoder may use left-padding on their decoder inputs
+        # [TODO: lift this restriction? technically, we can test padding the decoder inputs.]
         decoder_only_classes = []
         for model_class in self.all_generative_model_classes:
             config, _ = self.prepare_config_and_inputs_for_generate()
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 continue
             else:
                 decoder_only_classes.append(model_class)
         if len(decoder_only_classes) == 0:
             self.skipTest(reason="No decoder-only architecture available for this model.")
-
-        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
-        #   added support for it yet. We skip these models for now.
+        # 3. [old models] Decoder-only architectures derived from encoder-decoder models could support it in theory,
+        # but we haven't added support for it yet. We skip these models for now.
         has_encoder_attributes = any(
             attr_name
             for attr_name in config.to_dict()
@@ -957,48 +959,73 @@ class GenerationTesterMixin:
                 reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
             )
 
-        # Then, test left-padding
-        def _prepare_model_kwargs(input_ids, attention_mask, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        # Now we can start testing
+        unpadded_custom_inputs = unpadded_custom_inputs or {}
+        padded_custom_inputs = padded_custom_inputs or {}
+
+        def _prepare_model_kwargs(model_inputs, signature):
+            model_kwargs = {"input_ids": model_inputs["input_ids"], "attention_mask": model_inputs["attention_mask"]}
             if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
+                position_ids = torch.cumsum(model_inputs["attention_mask"], dim=-1) - 1
+                position_ids.masked_fill_(model_inputs["attention_mask"] == 0, 1)
                 model_kwargs["position_ids"] = position_ids
             if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[1], device=torch_device)
+                cache_position = torch.arange(model_inputs["input_ids"].shape[1], device=torch_device)
                 model_kwargs["cache_position"] = cache_position
+            # forward all other inputs, if they are in the signature
+            model_kwargs.update({k: v for k, v in model_inputs.items() if k not in model_kwargs and k in signature})
             return model_kwargs
 
         for model_class in decoder_only_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
-            attention_mask = inputs_dict.get("attention_mask")
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
-            # no cache as some models require special cache classes to be init outside forward
+            # No cache to simplify the test (some models need careful init)
             model.generation_config.use_cache = False
+            inputs_dict.update(unpadded_custom_inputs)
+            # special case: an inexistent `attention_mask` is a full mask
+            inputs_dict["attention_mask"] = inputs_dict.get("attention_mask", None)
+            if inputs_dict["attention_mask"] is None:
+                inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["input_ids"])
 
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
-            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
+            # Get output logits from inputs without padding
+            model_kwargs_wo_padding = _prepare_model_kwargs(inputs_dict, signature)
+            next_logits_wo_padding = model(**model_kwargs_wo_padding).logits[:, -1, :]
 
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
-            )
+            # Prepare padding on common inputs (pad length 32)
+            input_ids = inputs_dict["input_ids"]
+            attention_mask = inputs_dict["attention_mask"]
+            token_type_ids = inputs_dict.get("token_type_ids", None)
+            pad_token_id = getattr(config.get_text_config(decoder=True), "pad_token_id", None) or 0
             pad_size = (input_ids.shape[0], 32, *input_ids.shape[2:])
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
             padded_attention_mask = torch.cat(
                 (torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device), attention_mask), dim=1
             )
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
-            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
+            if token_type_ids is not None:
+                padded_token_type_ids = torch.cat(
+                    (
+                        # Assumption: `0` is a good default value for padding token type ids
+                        torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device),
+                        token_type_ids,
+                    ),
+                    dim=1,
+                )
+            else:
+                padded_token_type_ids = None
+
+            # Get output logits from inputs with left-padding (pad length 32)
+            padded_inputs_dict = copy.deepcopy(inputs_dict)
+            padded_inputs_dict["input_ids"] = padded_input_ids
+            padded_inputs_dict["attention_mask"] = padded_attention_mask
+            if padded_token_type_ids is not None:
+                padded_inputs_dict["token_type_ids"] = padded_token_type_ids
+            padded_inputs_dict.update(padded_custom_inputs)
+
+            model_kwargs_with_padding = _prepare_model_kwargs(padded_inputs_dict, signature)
+            next_logits_with_padding = model(**model_kwargs_with_padding).logits[:, -1, :]
 
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
@@ -1181,7 +1208,6 @@ class GenerationTesterMixin:
         """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         # if fails, you should probably update the `prepare_inputs_for_generation` function
-        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
@@ -1801,6 +1827,41 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             self.assertTrue("GenerationMixin" in str(model_class.__bases__))
 
+    @pytest.mark.generate
+    def test_prepare_inputs_for_generation_kwargs_forwards(self, **extra_kwargs):
+        """Tests that prepare_inputs_for_generation forwards arbitrary kwargs."""
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.prepare_config_and_inputs_for_generate()
+
+            model = model_class(config).to(torch_device).eval()
+
+            input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]]).to(torch_device)
+
+            input_args = {
+                "input_ids": input_ids,
+                "cache_position": torch.tensor([9]).to(torch_device),
+                "position_ids": torch.tensor([[0, 1, 2], [0, 1, 2]]).to(torch_device),
+            }
+            arbitrary_kwargs = {
+                "output_attentions": True,
+                "output_hidden_states": True,
+                "custom_arg": "test_value",
+                "numeric_arg": 42,
+            }
+
+            model_inputs = model.prepare_inputs_for_generation(**input_args, **arbitrary_kwargs, **extra_kwargs)
+
+            # Verify that input_ids has proper name
+            if config.is_encoder_decoder:
+                self.assertTrue("decoder_input_ids" in model_inputs)
+            else:
+                self.assertTrue("input_ids" in model_inputs)
+
+            # Verify that arbitrary kwargs are forwarded
+            for key, value in arbitrary_kwargs.items():
+                self.assertTrue(key in model_inputs)
+                self.assertTrue(model_inputs[key] == value)
+
     def _test_attention_implementation(self, attn_implementation):
         """
         Compares the output of generate with the eager attention implementation against other implementations.
@@ -1814,7 +1875,6 @@ class GenerationTesterMixin:
             "flash_attention_3": "_supports_flash_attn",
         }
 
-        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
                 self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
@@ -1911,6 +1971,340 @@ class GenerationTesterMixin:
     def test_eager_matches_fa3_generate(self):
         """Tests that generate has equivalent outputs with FA3 and eager attention implementations."""
         self._test_attention_implementation("flash_attention_3")
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    def test_flash_attention_2_continue_generate_with_position_ids(self):
+        """
+        Tests whether flash attention can continue its generation from given position ids.
+
+        NOTE: This serves as regression check as we had instances where flash attention entered the varlen
+        path here. It should now always enter the base `flash_fn`.
+        """
+
+        max_new_tokens = 2
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention.")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if config.is_encoder_decoder:
+                self.skipTest("Model is an encoder-decoder")
+
+            if not hasattr(config.get_text_config(), "use_cache"):
+                self.skipTest(f"{model_class.__name__} doesn't support caching")
+
+            if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
+                self.skipTest("Model dummy inputs should contain text input ids")
+
+            # make sure that all models have enough positions for generation
+            dummy_input_ids = inputs_dict["input_ids"]
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
+
+            model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        dtype=torch.bfloat16,
+                        attn_implementation="flash_attention_2",
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                # Drop all keys except for `input_ids`. Hard to manipulate with multimodals/head_mask/etc
+                dummy_input_ids = inputs_dict["input_ids"]
+                dummy_position_ids = torch.arange(dummy_input_ids.shape[1], device=torch_device)
+                dummy_position_ids = dummy_position_ids.unsqueeze(0).repeat(dummy_input_ids.shape[0], 1)
+
+                # Store cache for the input prompt
+                output = model(dummy_input_ids, position_ids=dummy_position_ids, use_cache=True)
+                if "past_key_values" not in output:
+                    self.skipTest("This model doesn't return `past_key_values`")
+
+                # create new input_ids and position_ids to continue generation re-using the cache
+                new_input_ids = output.logits[:, -1, :].float().argmax(-1)[:, None]
+                past_length = dummy_input_ids.shape[1]
+                position_ids = torch.arange(past_length, past_length + new_input_ids.shape[1], device=torch_device)
+                position_ids = position_ids.unsqueeze(0).repeat(new_input_ids.shape[0], 1)
+
+                output = model(
+                    input_ids=new_input_ids,
+                    past_key_values=output.past_key_values,
+                    position_ids=position_ids,
+                    use_cache=True,
+                )
+                next_token_logits = output.logits[:, -1, :].float()
+
+                generate_kwargs = {
+                    "pad_token_id": -1,
+                    "eos_token_id": -1,
+                    "forced_eos_token_id": None,
+                    "use_cache": True,
+                    "do_sample": False,
+                    "return_dict_in_generate": True,
+                    "output_logits": True,
+                    "max_new_tokens": max_new_tokens,
+                }
+                generation_out = model.generate(dummy_input_ids, **generate_kwargs)
+                next_token_logits_from_generate = generation_out.logits[-1]
+
+                # acceptable numerical instability
+                tol = torch.finfo(torch.bfloat16).eps
+                torch.testing.assert_close(next_token_logits_from_generate, next_token_logits, rtol=tol, atol=tol)
+
+    def attention_mask_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
+        """
+        Tests that the given attention implementation can work with packed sequences and infers the mask
+        from position ids. This test requires the model to use new attention mask API which handles packing.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 30
+        support_flag = {
+            "sdpa": "_supports_sdpa",
+            "flash_attention_2": "_supports_flash_attn",
+            "flash_attention_3": "_supports_flash_attn",
+        }
+
+        for model_class in self.all_generative_model_classes:
+            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+
+            # can't infer if new attn mask API is supported by assume that only model with attention backend support it
+            if not model_class._supports_attention_backend:
+                self.skipTest(f"{model_class.__name__} does not support new attention mask API")
+
+            if model_class._is_stateful:  # non-transformer models most probably have no packing support
+                self.skipTest(f"{model_class.__name__} doesn't support packing!")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if config.is_encoder_decoder:
+                self.skipTest("Model is an encoder-decoder")
+
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+
+            if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
+                self.skipTest("Model dummy inputs should contain text input ids")
+
+            # make sure that all models have enough positions for generation
+            dummy_input_ids = inputs_dict["input_ids"]
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
+
+            model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
+
+            if (not fa_kwargs) and "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # this model doesn't accept position ids as input
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Drop all keys except for the minimal set. Hard to manipulate with multimodals/head_mask/etc
+                inputs_dict = {k: v for k, v in inputs_dict.items() if k in ["input_ids", "attention_mask"]}
+
+                # Ensure left padding, to adapt for some models
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                dummy_input_ids[~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        dtype=torch.bfloat16,
+                        attn_implementation=attn_implementation,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                if fa_kwargs:
+                    # flatten
+                    features = [
+                        {"input_ids": i[a.bool()].tolist()} for i, a in zip(dummy_input_ids, dummy_attention_mask)
+                    ]
+
+                    # add position_ids + fa_kwargs
+                    data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
+                    batch = data_collator(features)
+                    padfree_inputs_dict = {
+                        k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()
+                    }
+                else:
+                    # create packed position_ids
+                    position_ids = (
+                        torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
+                        .long()
+                        .unsqueeze(0)
+                        .to(torch_device)
+                    )
+                    padfree_inputs_dict = {
+                        "input_ids": dummy_input_ids[dummy_attention_mask.bool()].unsqueeze(0),
+                        "position_ids": position_ids,
+                    }
+
+                # We need to do simple forward without cache in order to trigger packed SDPA/flex/eager attention path
+                res_padded = model(**inputs_dict, use_cache=False)
+                res_padfree = model(**padfree_inputs_dict, use_cache=False)
+
+                logits_padded = res_padded.logits[dummy_attention_mask.bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                # acceptable numerical instability
+                tol = torch.finfo(torch.bfloat16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="eager")
+
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="sdpa")
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_2")
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_2", fa_kwargs=True
+        )
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attention_3_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_3")
+
+    @require_flash_attn_3
+    @require_torch_gpu
+    @pytest.mark.flash_attn_3_test
+    @slow
+    def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_3", fa_kwargs=True
+        )
+
+    def _get_custom_4d_mask_test_data(self):
+        # Sequence in which all but the last token is the same
+        input_ids = torch.tensor(
+            [[10, 11, 12, 13], [10, 11, 12, 14], [10, 11, 12, 15]], device=torch_device, dtype=torch.int64
+        )
+        position_ids = torch.tensor([[0, 1, 2, 3]] * 3, device=torch_device, dtype=torch.int64)
+
+        # Combining common prefix with the unique ending tokens:
+        input_ids_shared_prefix = torch.cat([input_ids[0][:-1], input_ids[:, -1]]).unsqueeze(0)
+
+        # Creating a 4D mask where each of the last 3 tokens do not attend to each other.
+        mask_shared_prefix = torch.tensor(
+            [
+                [
+                    [
+                        [1, 0, 0, 0, 0, 0],
+                        [1, 1, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0],
+                        [1, 1, 1, 1, 0, 0],
+                        [1, 1, 1, 0, 1, 0],
+                        [1, 1, 1, 0, 0, 1],
+                    ]
+                ]
+            ],
+        )
+        # inverting the attention mask
+        mask_dtype = torch.float32
+        min_dtype = torch.finfo(mask_dtype).min
+        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=mask_dtype, device=torch_device) * min_dtype
+
+        # Creating a position_ids tensor. note the repeating figures in the end.
+        position_ids_shared_prefix = torch.tensor([[0, 1, 2, 3, 3, 3]], device=torch_device, dtype=torch.int64)
+
+        return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
+
+    def test_custom_4d_attention_mask(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._can_compile_fullgraph:
+                self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            set_config_for_less_flaky_test(config)
+            if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
+                self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
+            model = model_class(config).to(device=torch_device, dtype=torch.float32).eval()
+            set_model_for_less_flaky_test(model)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # model doesn't accept position ids and probably has special way to model positions
+
+            (
+                input_ids,
+                position_ids,
+                input_ids_shared_prefix,
+                mask_shared_prefix,
+                position_ids_shared_prefix,
+            ) = self._get_custom_4d_mask_test_data()
+
+            logits = model.forward(input_ids, position_ids=position_ids).logits
+            # logits.shape == torch.Size([3, 4, ...])
+
+            logits_shared_prefix = model(
+                input_ids_shared_prefix,
+                attention_mask=mask_shared_prefix,
+                position_ids=position_ids_shared_prefix,
+            )[0]
+            # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+            out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+            out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+            # comparing softmax-normalized logits:
+            normalized_0 = F.softmax(out_last_tokens, dim=-1)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens, dim=-1)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-3)
+
+    def test_forward_with_logits_to_keep(self):
+        for model_class in self.all_generative_model_classes:
+            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
+
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            batch_size, sequence_length = inputs["input_ids"].shape[:2]
+            vocab_size = config.get_text_config().vocab_size
+            model = model_class(config).to(device=torch_device).eval()
+            # some models have labels but `logits_to_keep` should not be used in train mode
+            _ = inputs.pop("labels", None)
+
+            # logits_to_keep=0 is a special case meaning "keep all logits"
+            all_logits = model(**inputs, logits_to_keep=0).logits
+            last_token_logits = model(**inputs, logits_to_keep=1).logits
+
+            # Assert all shapes are correct
+            self.assertEqual(tuple(all_logits.shape), (batch_size, sequence_length, vocab_size))
+            self.assertEqual(tuple(last_token_logits.shape), (batch_size, 1, vocab_size))
+
+            # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
+            torch.testing.assert_close(all_logits[:, -1:, :], last_token_logits, rtol=1e-5, atol=1e-5)
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
@@ -2014,6 +2408,7 @@ class GenerationTesterMixin:
             "zamba",
             "zamba2",
             "lfm2",
+            "lfm2-vl",
         )
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
@@ -2131,12 +2526,12 @@ class GenerationTesterMixin:
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
         self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
 
-        # (batch, head, seq_length, head_features)
+        # (batch, # kv heads, seq_length, head_features)
         expected_shape = (
             batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            getattr(config, "num_key_value_heads", None) or config.num_attention_heads,
             cache_length,
-            config.hidden_size // config.num_attention_heads,
+            getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads,
         )
 
         if isinstance(decoder_past_key_values, Cache):
@@ -2878,7 +3273,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertNotEqual(out_with_temp.logits[-1].tolist(), out_with_temp.scores[-1].tolist())
 
     def test_eos_token_id_int_and_list_top_k_top_sampling(self):
-        # Has TF equivalent: this test relies on random sampling
         generation_kwargs = {
             "do_sample": True,
             "num_beams": 1,
@@ -2906,7 +3300,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(expectation == len(generated_tokens[0]))
 
     def test_model_kwarg_encoder_signature_filtering(self):
-        # Has TF equivalent: ample use of framework-specific code
         bart_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         article = """Hugging Face is a technology company based in New York and Paris."""
         input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)

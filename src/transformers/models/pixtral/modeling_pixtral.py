@@ -18,7 +18,6 @@ from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
