@@ -66,7 +66,11 @@ if __name__ == "__main__":
                     if to_fetch1:
                         job_test_summaries[node_index] = test_summary
                     elif to_fetch2:
-                        job_repo_id_files[node_index] = test_summary
+                        if node_index not in job_repo_id_files:
+                            job_repo_id_files[node_index] = ""
+                        if job_repo_id_files[node_index] != "":
+                            job_repo_id_files[node_index] += "\n"
+                        job_repo_id_files[node_index] += test_summary
 
             summary = {}
             for node_index, node_test_summary in job_test_summaries.items():
@@ -87,7 +91,6 @@ if __name__ == "__main__":
             # failed before passed
             summary = dict(sorted(summary.items(), key=lambda x: (x[1], x[0])))
             workflow_summary[job["name"]] = summary
-
 
             workflow_repo_ids[job["name"]] = [json.loads(x) for x in repo_ids]
             workflow_repo_ids_2.extend(repo_ids)
