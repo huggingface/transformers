@@ -112,7 +112,7 @@ as with `nvidia-smi` CLI:
 nvidia-smi
 ```
 
-```bash
+```text
 Tue Jan 11 08:58:05 2022
 +-----------------------------------------------------------------------------+
 | NVIDIA-SMI 460.91.03    Driver Version: 460.91.03    CUDA Version: 11.2     |
@@ -172,7 +172,7 @@ Let's use the [`Trainer`] and train the model without using any GPU performance 
 >>> print_summary(result)
 ```
 
-```
+```text
 Time: 57.82
 Samples/second: 8.86
 GPU memory occupied: 14949 MB.
