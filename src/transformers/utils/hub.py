@@ -265,6 +265,24 @@ def substitute_variables(call_text, local_vars):
                 try:
                     for attr in parts[1:]:
                         obj = getattr(obj, attr)
+
+                    ###
+                    if hasattr(obj, '__self__') and hasattr(obj, '__name__') and obj.__name__ == "from_pretrained":
+                        cls = obj.__self__
+                        method_name = obj.__name__
+
+                        if isinstance(cls, type):
+                            # Class method
+                            class_name = cls.__name__
+                            module_name = cls.__module__
+                        else:
+                            # Instance method
+                            class_name = cls.__class__.__name__
+                            module_name = cls.__class__.__module__
+
+                        # Return just class.method or full module.class.method
+                        return f"{class_name}.{method_name}"
+
                     return repr(obj)
                 except (AttributeError, TypeError):
                     return var_name
@@ -280,6 +298,7 @@ def substitute_variables(call_text, local_vars):
             else:
                 return repr(value)
 
+        breakpoint()
         return var_name
 
     # Find variable patterns - more comprehensive regex
@@ -326,6 +345,7 @@ def substitute_variables_ast(call_text, local_vars):
 # Usage example
 def debug_from_pretrained_call():
     """Call this from your test or debugging code"""
+    breakpoint()
     return extract_and_substitute_call()
 
 
