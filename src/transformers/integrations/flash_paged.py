@@ -13,7 +13,7 @@ try:
 
         FLASH_ATTN_VARLEN_FUNC = flash_attn_varlen_func
     else:
-        raise RuntimeError("is_flash_attn_2_available returned False")
+        raise RuntimeError("Flash Attention 2 is not installed. Please refer to https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install it")
 except Exception as e:
     msg = repr(e)
 
