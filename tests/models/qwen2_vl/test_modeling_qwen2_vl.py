@@ -103,6 +103,9 @@ class Qwen2VLVisionText2TextModelTester:
         self.bos_token_id = text_config["bos_token_id"]
         self.eos_token_id = text_config["eos_token_id"]
         self.pad_token_id = text_config["pad_token_id"]
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+        self.hidden_size = text_config["hidden_size"]
         self.vision_start_token_id = vision_start_token_id
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
@@ -201,27 +204,13 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         self.assertEqual(base_config.vocab_size, 55)
         self.assertEqual(base_config.text_config.vocab_size, 55)
 
-        # If we initialize config from old-format json, i.e. flat structure
-        # we will get nested config without duplicate value
+        # We can still initialize config from old-format json, i.e. flat structure
         text_config_dict = base_config_dict.pop("text_config")
         flat_config_dict = {**text_config_dict, **base_config_dict}
         config_from_flat_dict = Qwen2VLConfig(**flat_config_dict)
-        self.assertTrue("vocab_size" not in config_from_flat_dict.to_dict())
-        self.assertTrue("vocab_size" in flat_config_dict)
-        self.assertSetEqual(
-            set(config_from_flat_dict.to_dict().keys()),
-            {
-                "vision_config",
-                "text_config",
-                "image_token_id",
-                "video_token_id",
-                "vision_start_token_id",
-                "vision_end_token_id",
-                "vision_token_id",
-                "model_type",
-                "transformers_version",
-            },
-        )
+        config_from_flat_dict.vocab_size = 78
+        self.assertEqual(config_from_flat_dict.vocab_size, 78)
+        self.assertEqual(config_from_flat_dict.text_config.vocab_size, 78)
 
         # Vision config attributes are NOT force-set via vision config
         base_config.patch_size = 8

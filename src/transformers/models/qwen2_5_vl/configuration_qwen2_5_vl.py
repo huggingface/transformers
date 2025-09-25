@@ -281,6 +281,10 @@ class Qwen2_5_VLConfig(PretrainedConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 151656):
             The video token index to encode the image prompt.
+        vision_start_token_id (`int`, *optional*, defaults to 151652):
+            The token index to denote start of vision input.
+        vision_end_token_id (`int`, *optional*, defaults to 151653):
+            The token index to denote end of vision input.
 
     ```python
     >>> from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLConfig
@@ -307,9 +311,10 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         video_token_id=151656,
         vision_start_token_id=151652,
         vision_end_token_id=151653,
-        vision_token_id=151654,
         **kwargs,
     ):
+        super().__init__(**kwargs)
+
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
@@ -318,20 +323,19 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
         elif text_config is None:
-            # For BC use all kwargs to init `TextConfig` and filter afterwards
+            # For BC use all kwargs to init `TextConfig`
             self.text_config = self.sub_configs["text_config"](**kwargs)
-            kwargs = {key: value for key, value in kwargs.items() if not hasattr(text_config, key)}
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
-        self.vision_token_id = vision_token_id
-
-        super().__init__(**kwargs)
 
     def __setattr__(self, key, value):
-        if "text_config" in super().__getattribute__("__dict__"):
+        if "text_config" in super().__getattribute__("__dict__") and key not in [
+            "dtype",
+            "_attn_implementation_internal",
+        ]:
             text_config = super().__getattribute__("text_config")
             if key in text_config:
                 return setattr(text_config, key, value)
@@ -339,7 +343,10 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         return super().__setattr__(key, value)
 
     def __getattribute__(self, key):
-        if "text_config" in super().__getattribute__("__dict__"):
+        if "text_config" in super().__getattribute__("__dict__") and key not in [
+            "dtype",
+            "_attn_implementation_internal",
+        ]:
             text_config = super().__getattribute__("text_config")
             if key in text_config:
                 return getattr(text_config, key)
