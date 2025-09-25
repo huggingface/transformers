@@ -90,13 +90,11 @@ def write_model(model_path, safe_serialization=True):
         "tokenizer.output_layer.bias": "decoder.input_ff_layer.output_layer.bias",
         "tokenizer.residual_layer.weight": "decoder.input_ff_layer.residual_layer.weight",
         "tokenizer.residual_layer.bias": "decoder.input_ff_layer.residual_layer.bias",
-
         # Separate output projections for TimesFM 2.5 - these are at model level, not inside decoder
         # Point projection: 1280 -> 1280 -> 1280
         "output_projection_point.hidden_layer.weight": "output_projection_point.hidden_layer.weight",
         "output_projection_point.output_layer.weight": "output_projection_point.output_layer.weight",
         "output_projection_point.residual_layer.weight": "output_projection_point.residual_layer.weight",
-
         # Quantile projection: 1280 -> 1280 -> output_dims
         "output_projection_quantiles.hidden_layer.weight": "output_projection_quantiles.hidden_layer.weight",
         "output_projection_quantiles.output_layer.weight": "output_projection_quantiles.output_layer.weight",
@@ -109,18 +107,14 @@ def write_model(model_path, safe_serialization=True):
         "stacked_xf[{i}].attn.key.weight": "decoder.layers[{i}].self_attn.k_proj.weight",
         "stacked_xf[{i}].attn.value.weight": "decoder.layers[{i}].self_attn.v_proj.weight",
         "stacked_xf[{i}].attn.out.weight": "decoder.layers[{i}].self_attn.o_proj.weight",
-
         # QK normalization layers (RMS norm) - uses 'scale' instead of 'weight'
         "stacked_xf[{i}].attn.query_ln.scale": "decoder.layers[{i}].self_attn.query_ln.weight",
         "stacked_xf[{i}].attn.key_ln.scale": "decoder.layers[{i}].self_attn.key_ln.weight",
-
         # Per-dimension scaling parameter
         "stacked_xf[{i}].attn.per_dim_scale.per_dim_scale": "decoder.layers[{i}].self_attn.scaling",
-
         # MLP layers (feed forward)
         "stacked_xf[{i}].ff0.weight": "decoder.layers[{i}].mlp.ff0.weight",
         "stacked_xf[{i}].ff1.weight": "decoder.layers[{i}].mlp.ff1.weight",
-
         # Layer normalization (RMS norm) - uses 'scale' instead of 'weight'
         "stacked_xf[{i}].pre_attn_ln.scale": "decoder.layers[{i}].pre_attn_ln.weight",
         "stacked_xf[{i}].post_attn_ln.scale": "decoder.layers[{i}].post_attn_ln.weight",
@@ -214,10 +208,7 @@ def check_outputs(model_path):
     )
 
     # Convert inputs to sequence of tensors
-    forecast_input_tensor = [
-        torch.tensor(ts, dtype=torch.float32)
-        for ts in forecast_input
-    ]
+    forecast_input_tensor = [torch.tensor(ts, dtype=torch.float32) for ts in forecast_input]
     if torch.cuda.is_available():
         forecast_input_tensor = [ts.to("cuda") for ts in forecast_input_tensor]
 
@@ -297,7 +288,7 @@ def main():
     # Always check outputs
     max_point_diff, max_quantile_diff = check_outputs(args.output_dir)
 
-    print(f"\n🎉 TimesFM 2.5 conversion completed!")
+    print("\n🎉 TimesFM 2.5 conversion completed!")
     print(f"   Point forecast precision: {max_point_diff:.6f}")
     print(f"   Quantile forecast precision: {max_quantile_diff:.6f}")
 

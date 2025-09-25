@@ -65,8 +65,8 @@ class Timesfm2P5Config(PretrainedConfig):
         # Gemma2-compatible parameters for query scaling
         query_pre_attn_scalar: float = 256.0,  # This provides the per-dim scaling
         attn_logit_softcapping: Optional[float] = None,
-        layer_types: list = None,  # All layers are the same type
-        sliding_window: int = None,  # No sliding window
+        layer_types: Optional[list] = None,  # All layers are the same type
+        sliding_window: Optional[int] = None,  # No sliding window
         max_position_embeddings: int = 16384,  # Should match context_length
         rope_theta: float = 10000.0,  # RoPE theta parameter
         **kwargs,
