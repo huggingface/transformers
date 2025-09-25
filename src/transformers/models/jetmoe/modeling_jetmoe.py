@@ -26,8 +26,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from transformers.utils.generic import check_model_inputs
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -40,7 +38,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import OutputRecorder
+from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_jetmoe import JetMoeConfig
 
 
@@ -253,7 +251,7 @@ class JetMoeMoE(nn.Module):
         layer_output = zeros.index_add(0, batch_index, expert_outputs)
         layer_output = layer_output.view(bsz, length, self.input_size)
         layer_output = layer_output + self.bias
-        return layer_output, router_logits
+        return layer_output
 
 
 class JetMoeMoA(nn.Module):
@@ -403,18 +401,15 @@ class JetMoeAttention(nn.Module):
 
         self.kv_proj = torch.nn.Linear(config.hidden_size, self.kv_projection_size * 2, bias=False)
 
-        self.rotary_emb = JetMoeRotaryEmbedding(config)
-
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwarg: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -425,7 +420,7 @@ class JetMoeAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -460,9 +455,6 @@ class JetMoeAttention(nn.Module):
         attn_output = self.experts.reduce(attn_output, topo_info)
         attn_output = attn_output.view(bsz, q_len, -1)
 
-        if not output_attentions:
-            attn_weights = None
-
         return attn_output, attn_weights, router_logits
 
 
@@ -476,38 +468,43 @@ class JetMoeBlock(GradientCheckpointingLayer):
                 Configuration object with model hyperparameters.
         """
         super().__init__()
-        self.input_layernorm = JetMoeRMSNorm(config.hidden_size)
-        self.self_attention = JetMoeAttention(config, layer_idx)
-        self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = JetMoeAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = JetMoeMoE(config)
+        self.input_layernorm = JetMoeRMSNorm(config.hidden_size)
+        self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
+        self.self_attention = JetMoeAttention(config, layer_idx)
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
-        hidden_states: Optional[torch.FloatTensor],
-        position_ids: Optional[torch.LongTensor] = None,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple[torch.Tensor], Optional[tuple[torch.Tensor, tuple[torch.FloatTensor, ...]]]]:
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        attn_output, _, _ = self.self_attention(
-            hidden_states=self.input_layernorm(hidden_states),
+        hidden_states = self.self_attn(
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
             cache_position=cache_position,
-        )
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )[0]
+        hidden_states = residual + hidden_states
 
-        hidden_states = hidden_states + attn_output
-        x_mlp, mlp_router_logits = self.mlp(self.post_attention_layernorm(hidden_states))
-        hidden_states = hidden_states + x_mlp
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
         return hidden_states
 
 
@@ -590,47 +587,6 @@ class JetMoeSparseMoeBlock(nn.Module):
         return hidden_states
 
 
-class JetMoeDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: JetMoeConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = JetMoeAttention(config, layer_idx)
-
-        self.block_sparse_moe = JetMoeSparseMoeBlock(config)
-        self.input_layernorm = JetMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            cache_position=cache_position,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.block_sparse_moe(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states
-
-
 @auto_docstring
 class JetMoePreTrainedModel(PreTrainedModel):
     config: JetMoeConfig
@@ -645,7 +601,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(nn.Linear, layer_name="gate", index=1),
-        "hidden_states": JetMoeDecoderLayer,
+        "hidden_states": JetMoeBlock,
         "attentions": JetMoeAttention,
     }
 
@@ -697,8 +653,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
+        causal_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -717,7 +672,6 @@ class JetMoeModel(JetMoePreTrainedModel):
                 hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
-                position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -839,8 +793,6 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
@@ -853,12 +805,6 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -866,8 +812,6 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             cache_position=cache_position,
         )
 

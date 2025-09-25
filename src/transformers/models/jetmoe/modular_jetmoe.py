@@ -27,11 +27,11 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import (
     GenericForSequenceClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
+from ..llama.modeling_llama import LlamaDecoderLayer
 from ..mixtral.modeling_mixtral import (
     MixtralModel,
     MixtralPreTrainedModel,
@@ -319,17 +319,14 @@ class JetMoeAttention(nn.Module):
 
         self.kv_proj = torch.nn.Linear(config.hidden_size, self.kv_projection_size * 2, bias=False)
 
-        self.rotary_emb = JetMoeRotaryEmbedding(config)
-
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
-        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
@@ -341,7 +338,7 @@ class JetMoeAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -382,7 +379,7 @@ class JetMoeAttention(nn.Module):
         return attn_output, attn_weights, router_logits
 
 
-class JetMoeBlock(GradientCheckpointingLayer):
+class JetMoeBlock(LlamaDecoderLayer):
     def __init__(self, config: JetMoeConfig, layer_idx: Optional[int] = None):
         """
         Initialize the JetMoeBlock module.
@@ -397,34 +394,6 @@ class JetMoeBlock(GradientCheckpointingLayer):
         self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
 
         self.mlp = JetMoeMoE(config)
-
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
-    def forward(
-        self,
-        hidden_states: Optional[torch.FloatTensor],
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple[torch.Tensor], Optional[tuple[torch.Tensor, tuple[torch.FloatTensor, ...]]]]:
-        # Self Attention
-        attn_output, _, _ = self.self_attention(
-            hidden_states=self.input_layernorm(hidden_states),
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-        )
-
-        hidden_states = hidden_states + attn_output
-        x_mlp, mlp_router_logits = self.mlp(self.post_attention_layernorm(hidden_states))
-        hidden_states = hidden_states + x_mlp
-        return hidden_states
 
 
 @auto_docstring
