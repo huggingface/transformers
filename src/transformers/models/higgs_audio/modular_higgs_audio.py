@@ -490,9 +490,6 @@ class HiggsAudioModelOutputWithPast(ModelOutput):
         audio_in_mask (Optional[torch.BoolTensor]):
             Mask indicating which positions in the input correspond to audio features.
 
-        audio_in_discrete_codes_mask (Optional[torch.BoolTensor]):
-            Mask for discrete audio tokens in the input sequence.
-
         audio_out_mask (Optional[torch.BoolTensor]):
             Mask indicating which positions in the output correspond to audio predictions.
 
@@ -517,7 +514,6 @@ class HiggsAudioModelOutputWithPast(ModelOutput):
     expanded_input_ids: Optional[torch.LongTensor] = None
     expanded_labels: Optional[torch.LongTensor] = None
     audio_in_mask: Optional[torch.BoolTensor] = None
-    audio_in_discrete_codes_mask: Optional[torch.BoolTensor] = None
     audio_out_mask: Optional[torch.BoolTensor] = None
     attention_mask: Optional[torch.BoolTensor] = None
     past_key_values: Optional[Cache] = None
@@ -558,9 +554,6 @@ class HiggsAudioOutputWithPast(ModelOutput):
         audio_in_mask (Optional[torch.BoolTensor]):
             Mask indicating which positions in the input correspond to audio features.
 
-        audio_in_discrete_codes_mask (Optional[torch.BoolTensor]):
-            Mask for discrete audio tokens in the input sequence.
-
         audio_out_mask (Optional[torch.BoolTensor]):
             Mask indicating which positions in the output correspond to audio predictions.
 
@@ -593,7 +586,6 @@ class HiggsAudioOutputWithPast(ModelOutput):
     expanded_input_ids: Optional[torch.LongTensor] = None
     expanded_labels: Optional[torch.LongTensor] = None
     audio_in_mask: Optional[torch.BoolTensor] = None
-    audio_in_discrete_codes_mask: Optional[torch.BoolTensor] = None
     audio_out_mask: Optional[torch.BoolTensor] = None
     attention_mask: Optional[torch.BoolTensor] = None
     audio_logits: Optional[torch.FloatTensor] = None
@@ -843,8 +835,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
                 The final input_ids after merging audio embeddings with text embeddings.
             final_audio_in_mask
                 Mask for audio-in embeddings
-            final_audio_in_discrete_codes_mask
-                Mask for audio-in discrete tokens
             final_audio_out_mask
                 Mask for audio-out embeddings
 
@@ -962,9 +952,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             )
 
         final_audio_in_mask = torch.full((batch_size, max_token_num), False, dtype=torch.bool, device=inputs_embeds.device)
-        final_audio_in_discrete_codes_mask = torch.full(
-            (batch_size, max_token_num), False, dtype=torch.bool, device=inputs_embeds.device
-        )
         final_audio_out_mask = torch.full(
             (batch_size, max_token_num), False, dtype=torch.bool, device=inputs_embeds.device
         )
@@ -993,7 +980,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             if not skip_labels:
                 final_labels[batch_indices, col_indices] = ignore_index
             final_audio_in_mask[batch_indices, col_indices] = True
-            final_audio_in_discrete_codes_mask[batch_indices, col_indices] = True
 
         if audio_out_embed is not None:
             # Fill in the audio-out embeddings
@@ -1034,7 +1020,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
                     final_labels = final_labels[:, first_non_zero_loc:]
                 final_input_ids = final_input_ids[:, first_non_zero_loc:]
                 final_audio_in_mask = final_audio_in_mask[:, first_non_zero_loc:]
-                final_audio_in_discrete_codes_mask = final_audio_in_discrete_codes_mask[:, first_non_zero_loc:]
                 final_audio_out_mask = final_audio_out_mask[:, first_non_zero_loc:]
         else:
             # We have done right padding, so we need to trim the mask
@@ -1046,7 +1031,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
                     final_labels = final_labels[:, :last_non_zero_loc]
                 final_input_ids = final_input_ids[:, :last_non_zero_loc]
                 final_audio_in_mask = final_audio_in_mask[:, :last_non_zero_loc]
-                final_audio_in_discrete_codes_mask = final_audio_in_discrete_codes_mask[:, :last_non_zero_loc]
                 final_audio_out_mask = final_audio_out_mask[:, :last_non_zero_loc]
 
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
@@ -1057,7 +1041,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             position_ids,
             final_input_ids,
             final_audio_in_mask,
-            final_audio_in_discrete_codes_mask,
             final_audio_out_mask,
         )
 
@@ -1191,7 +1174,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             position_ids,
             input_ids,
             audio_in_mask,
-            audio_in_discrete_codes_mask,
             audio_out_mask,
         ) = self._merge_input_ids_with_audio_features(
             audio_in_embed,
@@ -1226,7 +1208,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        audio_discrete_codes_mask = audio_in_discrete_codes_mask | audio_out_mask
+        audio_discrete_codes_mask = audio_in_mask | audio_out_mask
         if cache_audio_discrete_codes_mask is not None and use_cache:
             audio_discrete_codes_mask = torch.concat(
                 [cache_audio_discrete_codes_mask, audio_discrete_codes_mask], dim=1
@@ -1273,7 +1255,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
             expanded_input_ids=input_ids,
             expanded_labels=labels,
             audio_in_mask=audio_in_mask,
-            audio_in_discrete_codes_mask=audio_in_discrete_codes_mask,
             audio_out_mask=audio_out_mask,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -1376,7 +1357,6 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         # Loss calculation when label_ids is not None
         labels = outputs.expanded_labels
         audio_in_mask = outputs.audio_in_mask
-        audio_in_discrete_codes_mask = outputs.audio_in_discrete_codes_mask
         audio_out_mask = outputs.audio_out_mask
         attention_mask = outputs.attention_mask
         past_key_values = outputs.past_key_values
@@ -1449,7 +1429,6 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
             expanded_input_ids=input_ids,
             expanded_labels=labels,
             audio_in_mask=audio_in_mask,
-            audio_in_discrete_codes_mask=audio_in_discrete_codes_mask,
             audio_out_mask=audio_out_mask,
             attention_mask=attention_mask,
             past_key_values=past_key_values,

@@ -256,7 +256,7 @@ class HiggsAudioProcessor(ProcessorMixin):
             for msg in messages:
                 if isinstance(msg.get("content"), list):
                     for ele in msg["content"]:
-                        if ele.get("type") == "audio" and "audio_url" in ele:
+                        if isinstance(ele, dict) and ele.get("type") == "audio" and "audio_url" in ele:
                             audio_data, _ = librosa.load(
                                 BytesIO(urlopen(ele["audio_url"]).read()),
                                 sr=self.audio_tokenizer.sampling_rate,
