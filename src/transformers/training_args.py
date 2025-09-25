@@ -1387,7 +1387,9 @@ class TrainingArguments:
 
     include_tokens_per_second: Optional[bool] = field(
         default=False,
-        metadata={"help": "This arg is deprecated and will be removed in v5 , use `include_num_input_tokens_seen` instead."}
+        metadata={
+            "help": "This arg is deprecated and will be removed in v5 , use `include_num_input_tokens_seen` instead."
+        },
     )
 
     include_num_input_tokens_seen: Union[str, bool] = field(
@@ -1933,11 +1935,13 @@ class TrainingArguments:
                 )
 
         if self.include_tokens_per_second is not None:
-            logger.warning("include_tokens_per_second is deprecated and will be removed in v5. Use `include_num_input_tokens_seen` instead !")
+            logger.warning(
+                "include_tokens_per_second is deprecated and will be removed in v5. Use `include_num_input_tokens_seen` instead. "
+            )
             self.include_num_input_tokens_seen = self.include_tokens_per_second
-        
+
         if isinstance(self.include_num_input_tokens_seen, bool):
-            if self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
+            self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
 
     def __str__(self):
         self_as_dict = asdict(self)
