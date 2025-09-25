@@ -852,13 +852,15 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
         if "max_size" in kwargs:
             logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in a future release. "
-                "Please use `size={'shortest_edge': <int>, 'longest_edge': <int>}` instead."
+                "The `max_size` parameter is deprecated and will be removed in v4.26. "
+                "Please specify in `size['longest_edge'] instead`.",
             )
-            kwargs.pop("max_size")  # ignore it
+            max_size = kwargs.pop("max_size")
+        else:
+            max_size = None if size is None else 1333
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        size = get_size_dict(size, default_to_square=False)
+        size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
         # Backwards compatibility
         if do_convert_annotations is None:
@@ -904,8 +906,8 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `ConditionalDetrImageProcessor.from_pretrained(checkpoint, size=600)`
-        Note: max_size is deprecated. Use size={'shortest_edge': <int>, 'longest_edge': <int>} instead.
+        created using from_dict and kwargs e.g. `ConditionalDetrImageProcessor.from_pretrained(checkpoint, size=600,
+        max_size=800)`
         """
         image_processor_dict = image_processor_dict.copy()
         if "max_size" in kwargs:
