@@ -5767,41 +5767,35 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
         """
+        # Old checkpoints may have keys for rotary_emb.inv_freq for each layer, however we moved this buffer to the main model
+        # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
+        # `_keys_to_ignore_on_load_unexpected` as it touches many models -> we add it manually to the existing patterns
+        has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in self.named_buffers())
+        additional_unexpected_patterns = [r"rotary_emb\.inv_freq"] if has_inv_freq_buffers else []
+
+        missing_patterns = self._keys_to_ignore_on_load_missing or []
+        unexpected_patterns = self._keys_to_ignore_on_load_unexpected or [] + additional_unexpected_patterns
         ignore_missing_regex, ignore_unexpected_regex = None, None
-        if self._keys_to_ignore_on_load_missing is not None:
-            ignore_missing_regex = re.compile("|".join(rf"({p})" for p in self._keys_to_ignore_on_load_missing))
-        if self._keys_to_ignore_on_load_unexpected is not None:
-            ignore_unexpected_regex = re.compile("|".join(rf"({p})" for p in self._keys_to_ignore_on_load_unexpected))
+        if len(missing_patterns) > 0:
+            ignore_missing_regex = re.compile("|".join(rf"({pattern})" for pattern in missing_patterns))
+        if len(unexpected_patterns) > 0:
+            ignore_unexpected_regex = re.compile("|".join(rf"({pattern})" for pattern in unexpected_patterns))
 
         # Clean-up missing keys
-        true_missing_keys = missing_keys
         if ignore_missing_regex is not None:
-            true_missing_keys = [key for key in missing_keys if ignore_missing_regex.search(key) is None]
+            missing_keys = [key for key in missing_keys if ignore_missing_regex.search(key) is None]
 
-        has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in self.named_buffers())
-        _prefix = f"{self.base_model_prefix}."
         # Clean-up unexpected keys
-        true_unexpected_keys = []
-        for key in unexpected_keys:
-            # Old checkpoints may have keys for rotary_emb.inv_freq for each layer, however we moved this buffer to the main model
-            # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
-            # `_keys_to_ignore_on_load_unexpected` as it touches many models
-            if has_inv_freq_buffers and "rotary_emb.inv_freq" in key:
-                continue
+        if ignore_missing_regex is not None:
+            unexpected_keys = [key for key in unexpected_keys if ignore_unexpected_regex.search(key) is None]
 
-            # Model-specific exceptions
-            if ignore_unexpected_regex is not None and ignore_unexpected_regex.search(key) is not None:
-                continue
+        # Note: only the unexpected keys should remove the added prefix here, to correctly display the original name
+        # in the warnings. For missing keys, we should show the prefix in the warning as it's part of the final model
+        if loading_task_model_from_base_state_dict:
+            _prefix = f"{self.base_model_prefix}."
+            unexpected_keys = [k[len(_prefix) :] if k.startswith(_prefix) else k for k in unexpected_keys]
 
-            # Note: only the unexpected keys should remove the added prefix here, to correctly display the original name
-            # in the warnings. For missing keys, we should show the prefix in the warning as it's part of the final model
-            if loading_task_model_from_base_state_dict:
-                key = key[len(_prefix) :] if key.startswith(_prefix) else key
-
-            # If it was not skipped at this point, add it
-            true_unexpected_keys.append(key)
-
-        return true_missing_keys, true_unexpected_keys
+        return missing_keys, unexpected_keys
 
     def get_parameter_or_buffer(self, target: str):
         """
