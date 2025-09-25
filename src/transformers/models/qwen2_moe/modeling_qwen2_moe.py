@@ -331,7 +331,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
 
 class Qwen2MoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+        super().__init__()
         self.self_attn = Qwen2MoeAttention(config, layer_idx)
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0

@@ -387,7 +387,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
             final_hidden_states = final_hidden_states + shared_output
 
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, self.hidden_dim)
-        return final_hidden_states, router_logits
+        return final_hidden_states
 
 
 class Ernie4_5_MoeDecoderLayer(GradientCheckpointingLayer):
