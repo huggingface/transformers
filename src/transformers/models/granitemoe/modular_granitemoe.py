@@ -17,8 +17,8 @@ from typing import Optional
 
 import torch
 from torch import nn
-from typing_extensions import Unpack
 
+from ...processing_utils import Unpack
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
@@ -125,12 +125,11 @@ class GraniteMoeDecoderLayer(MixtralDecoderLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-
-        hidden_states = residual + hidden_states * self.residual_multiplier
+        hidden_states = residual + hidden_states * self.residual_multiplier  # diff
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, _ = self.block_sparse_moe(hidden_states)
-        hidden_states = residual + hidden_states * self.residual_multiplier
+        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states = residual + hidden_states * self.residual_multiplier  # diff
         return hidden_states
 
 
