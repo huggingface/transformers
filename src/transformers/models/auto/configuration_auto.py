@@ -412,6 +412,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("upernet", "UperNetConfig"),
         ("van", "VanConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
+        ("video_llama_3", "VideoLlama3Config"),
+        ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
         ("videomae", "VideoMAEConfig"),
         ("vilt", "ViltConfig"),
@@ -865,6 +867,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("upernet", "UPerNet"),
         ("van", "VAN"),
         ("vaultgemma", "VaultGemma"),
+        ("video_llama_3", "VideoLlama3"),
+        ("video_llama_3_vision", "VideoLlama3Vision"),
         ("video_llava", "VideoLlava"),
         ("videomae", "VideoMAE"),
         ("vilt", "ViLT"),
@@ -984,6 +988,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("perception_encoder", "perception_lm"),
+        ("video_llama_3_vision", "video_llama_3"),
     ]
 )
 
