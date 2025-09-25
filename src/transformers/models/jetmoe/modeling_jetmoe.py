@@ -475,7 +475,6 @@ class JetMoeBlock(GradientCheckpointingLayer):
         self.mlp = JetMoeMoE(config)
         self.input_layernorm = JetMoeRMSNorm(config.hidden_size)
         self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
-        self.self_attention = JetMoeAttention(config, layer_idx)
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -489,7 +488,6 @@ class JetMoeBlock(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        # Self Attention
         hidden_states = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -499,91 +497,10 @@ class JetMoeBlock(GradientCheckpointingLayer):
             **kwargs,
         )[0]
         hidden_states = residual + hidden_states
-
-        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        return hidden_states
-
-
-class JetMoeMLP(nn.Module):
-    def __init__(self, config: JetMoeConfig):
-        super().__init__()
-        self.ffn_dim = config.intermediate_size
-        self.hidden_dim = config.hidden_size
-
-        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
-        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states):
-        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
-        current_hidden_states = self.w2(current_hidden_states)
-        return current_hidden_states
-
-
-class JetMoeExperts(nn.ModuleList):
-    """
-    ModuleList of experts.
-    """
-
-    def __init__(self, config: JetMoeConfig):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(JetMoeMLP(config))
-
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (batch_size * sequence_length, hidden_dim)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
-        Returns:
-            (batch_size * sequence_length, hidden_dim)
-        """
-        final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        return final_hidden_states
-
-
-class JetMoeSparseMoeBlock(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.jitter_noise = config.router_jitter_noise
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.experts = JetMoeExperts(config)
-
-    def route_tokens_to_experts(self, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        return top_k_index, top_k_weights
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        if self.training and self.jitter_noise > 0:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        router_logits = self.gate(hidden_states)
-        top_k_index, top_k_weights = self.route_tokens_to_experts(router_logits)
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights.to(hidden_states.dtype))
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
 
 
@@ -592,7 +509,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
     config: JetMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["JetMoeDecoderLayer"]
+    _no_split_modules = ["JetMoeBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -600,10 +517,27 @@ class JetMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="gate", index=1),
+        "router_logits": OutputRecorder(nn.Linear, layer_name="router.layer", index=1),
         "hidden_states": JetMoeBlock,
         "attentions": JetMoeAttention,
     }
+
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, (nn.Linear,)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, JetMoeRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, JetMoeParallelExperts):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, (JetMoeMoA, JetMoeMoE)):
+            module.bias.data.zero_()
 
 
 @auto_docstring
@@ -618,9 +552,6 @@ class JetMoeModel(JetMoePreTrainedModel):
         self.norm = JetMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = JetMoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self._attn_implementation = config._attn_implementation
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @check_model_inputs
@@ -813,6 +744,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
