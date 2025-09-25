@@ -112,7 +112,7 @@ as with `nvidia-smi` CLI:
 nvidia-smi
 ```
 
-```bash
+```text
 Tue Jan 11 08:58:05 2022
 +-----------------------------------------------------------------------------+
 | NVIDIA-SMI 460.91.03    Driver Version: 460.91.03    CUDA Version: 11.2     |
