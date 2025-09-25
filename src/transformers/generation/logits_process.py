@@ -639,9 +639,7 @@ class TopHLogitsWarper(LogitsProcessor):
         """
         batch_size, vocab_size = scores.shape
         device = scores.device
-
         keep_mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
-
         top_n = min(self.top_n, vocab_size)
 
         for b in range(batch_size):
