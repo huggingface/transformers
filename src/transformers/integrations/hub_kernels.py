@@ -25,7 +25,6 @@ try:
         LayerRepository,
         Mode,
         get_kernel,
-        load_kernel,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
@@ -117,7 +116,7 @@ try:
     register_kernel_mapping(_KERNEL_MAPPING)
 
     # Preload the rotary kernel as it's used in many models.
-    rotary_kernel = load_kernel(repo_id="kernels-community/rotary")
+    rotary_kernel = get_kernel(repo_id="kernels-community/rotary")
 
 except ImportError:
     _kernels_available = False
