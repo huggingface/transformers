@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 🤗 Transformers库提供了一个优化过的[`Trainer`]类，用于训练🤗 Transformers模型，相比于手动编写自己的训练循环，这更容易开始训练。[`Trainer`]提供了超参数搜索的API。本文档展示了如何在示例中启用它。
 
-
 ## 超参数搜索后端
 
 [`Trainer`] 目前支持四种超参数搜索后端：[optuna](https://optuna.org/)，[sigopt](https://sigopt.com/)，[raytune](https://docs.ray.io/en/latest/tune/index.html)，[wandb](https://wandb.ai/site/sweeps)
@@ -101,7 +100,7 @@ Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direc
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,
-...         use_auth_token=True if model_args.use_auth_token else None,
+...         token=model_args.token,
 ...     )
 ```
 
@@ -135,4 +134,5 @@ Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direc
 ```
 
 ## 针对DDP微调的超参数搜索
+
 目前，Optuna和Sigopt已启用针对DDP的超参数搜索。只有rank-zero进程会进行超参数搜索并将参数传递给其他进程。

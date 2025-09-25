@@ -18,7 +18,6 @@ import copy
 import importlib
 import json
 import os
-import warnings
 from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar, Union
@@ -259,7 +258,6 @@ class _BaseAutoModelClass:
             "proxies",
             "revision",
             "subfolder",
-            "use_auth_token",
             "token",
         ]
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
@@ -268,17 +266,6 @@ class _BaseAutoModelClass:
         adapter_kwargs = kwargs.pop("adapter_kwargs", None)
 
         token = hub_kwargs.pop("token", None)
-        use_auth_token = hub_kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         if token is not None:
             hub_kwargs["token"] = token

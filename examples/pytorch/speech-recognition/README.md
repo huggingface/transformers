@@ -394,7 +394,7 @@ python run_speech_recognition_seq2seq.py \
 	--do_train \
 	--do_eval \
 	--predict_with_generate \
-	--use_auth_token
+	--token
 ```
 On a single V100, training should take approximately 8 hours, with a final cross-entropy loss of **1e-4** and word error rate of **32.6%**.
 
@@ -435,7 +435,7 @@ torchrun \
 	--do_train \
 	--do_eval \
 	--predict_with_generate \
-	--use_auth_token
+	--token
 ```
 On two V100s, training should take approximately 4 hours, with a final cross-entropy loss of **1e-4** and word error rate of **32.6%**.
 

@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Hyperparameter search
 
-Hyperparameter search discovers an optimal set of hyperparameters that produces the best model performance. [`Trainer`] supports several hyperparameter search backends - [Optuna](https://optuna.readthedocs.io/en/stable/index.html), [SigOpt](https://docs.sigopt.com/), [Weights & Biases](https://docs.wandb.ai/), [Ray Tune](https://docs.ray.io/en/latest/tune/index.html) - through  [`~Trainer.hyperparameter_search`] to optimize an objective or even multiple objectives.
+Hyperparameter search discovers an optimal set of hyperparameters that produces the best model performance. [`Trainer`] supports several hyperparameter search backends - [Optuna](https://optuna.readthedocs.io/en/stable/index.html), [SigOpt](https://docs.sigopt.com/), [Weights & Biases](https://docs.wandb.ai/), [Ray Tune](https://docs.ray.io/en/latest/tune/index.html) - through [`~Trainer.hyperparameter_search`] to optimize an objective or even multiple objectives.
 
 This guide will go over how to set up a hyperparameter search for each of the backends.
 
@@ -40,7 +40,7 @@ def model_init(trial):
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
 ```
 
