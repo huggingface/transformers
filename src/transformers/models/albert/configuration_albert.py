@@ -68,12 +68,6 @@ class AlbertConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for attached classifiers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 2):
@@ -123,7 +117,6 @@ class AlbertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         classifier_dropout_prob=0.1,
-        position_embedding_type="absolute",
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
@@ -147,7 +140,6 @@ class AlbertConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout_prob = classifier_dropout_prob
-        self.position_embedding_type = position_embedding_type
 
 
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->Albert

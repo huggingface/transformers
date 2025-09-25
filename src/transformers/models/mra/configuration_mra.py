@@ -60,8 +60,6 @@ class MraConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`.
         block_per_row (`int`, *optional*, defaults to 4):
             Used to set the budget for the high resolution scale.
         approx_mode (`str`, *optional*, defaults to `"full"`):
@@ -103,7 +101,6 @@ class MraConfig(PretrainedConfig):
         type_vocab_size=1,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        position_embedding_type="absolute",
         block_per_row=4,
         approx_mode="full",
         initial_prior_first_n_blocks=0,
@@ -127,7 +124,6 @@ class MraConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.block_per_row = block_per_row
         self.approx_mode = approx_mode
         self.initial_prior_first_n_blocks = initial_prior_first_n_blocks

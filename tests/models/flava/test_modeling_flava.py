@@ -339,7 +339,6 @@ class FlavaTextModelTester:
         vocab_size=102,
         type_vocab_size=2,
         max_position_embeddings=512,
-        position_embedding_type="absolute",
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -361,7 +360,6 @@ class FlavaTextModelTester:
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.position_embedding_type = position_embedding_type
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -402,7 +400,6 @@ class FlavaTextModelTester:
             vocab_size=self.vocab_size,
             type_vocab_size=self.type_vocab_size,
             max_position_embeddings=self.max_position_embeddings,
-            position_embedding_type=self.position_embedding_type,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
