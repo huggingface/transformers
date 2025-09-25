@@ -93,7 +93,6 @@ if is_torchvision_available():
         )
         InterpolationMode = None
         pil_torch_interpolation_mapping = {}
-        _TORCHVISION_OK = False
 
 if is_torch_available():
     import torch
