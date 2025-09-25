@@ -15,7 +15,7 @@ RUN uv pip install --no-cache-dir librosa "git+https://github.com/huggingface/tr
 RUN mkdir test_data && cd test_data && curl -O https://raw.githubusercontent.com/huggingface/transformers/${REF}/utils/fetch_hub_objects_for_ci.py && python3 fetch_hub_objects_for_ci.py
 
 RUN curl -O https://raw.githubusercontent.com/huggingface/transformers/${REF}/call_from_pretrained.py
-RUN curl -O https://raw.githubusercontent.com/huggingface/transformers/${REF}/utils/calls.json
+RUN curl -O https://raw.githubusercontent.com/huggingface/transformers/${REF}/calls.json
 RUN python call_from_pretrained.py
 
 RUN uv pip uninstall transformers
