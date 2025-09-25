@@ -156,19 +156,11 @@ class Timesfm2P5MLP(nn.Module):
         self.ff0 = nn.Linear(hidden_size, intermediate_size, bias=use_bias)
         self.ff1 = nn.Linear(intermediate_size, hidden_size, bias=use_bias)
 
-        # Activation function
-        if config.activation == "relu":
-            self.activation = nn.ReLU()
-        elif config.activation == "swish" or config.activation == "silu":
-            self.activation = nn.SiLU()
-        elif config.activation == "none":
-            self.activation = nn.Identity()
-        else:
-            raise ValueError(f"Activation '{config.activation}' not supported.")
+        # No activation function - TimesFM 2.5 MLP has no activation between ff0 and ff1
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         hidden = self.ff0(x)
-        hidden = self.activation(hidden)
+        # No activation applied - TimesFM 2.5 MLP applies ff1 directly to ff0 output
         output = self.ff1(hidden)
         return output
 

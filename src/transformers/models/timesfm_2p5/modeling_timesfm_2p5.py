@@ -82,19 +82,11 @@ class Timesfm2P5MLP(nn.Module):
         self.ff0 = nn.Linear(hidden_size, intermediate_size, bias=use_bias)
         self.ff1 = nn.Linear(intermediate_size, hidden_size, bias=use_bias)
 
-        # Activation function
-        if config.activation == "relu":
-            self.activation = nn.ReLU()
-        elif config.activation == "swish" or config.activation == "silu":
-            self.activation = nn.SiLU()
-        elif config.activation == "none":
-            self.activation = nn.Identity()
-        else:
-            raise ValueError(f"Activation '{config.activation}' not supported.")
+        # No activation function - TimesFM 2.5 MLP has no activation between ff0 and ff1
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         hidden = self.ff0(x)
-        hidden = self.activation(hidden)
+        # No activation applied - TimesFM 2.5 MLP applies ff1 directly to ff0 output
         output = self.ff1(hidden)
         return output
 
@@ -800,26 +792,32 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Timesfm2P5OutputForPrediction:
-        r"""
-        return_dict (`bool`, *optional*):
-            Whether or not to return a ModelOutput instead of a plain tuple.
-        past_values (`Sequence[torch.Tensor]`):
-            Past values of the time series that serves as input to the model.
-            Each tensor is a 1D time series of variable length.
-        window_size (`int`, *optional*):
-            Window size of trend + residual decomposition. If None then we do not do decomposition.
-        future_values (`torch.Tensor`, *optional*):
-            Optional future time series values to be used for loss computation.
-        forecast_context_len (`int`, *optional*):
-            Optional max context length.
-        return_forecast_on_context (`bool`, *optional*):
-            True to return the forecast on the context when available.
-        truncate_negative (`bool`, *optional*):
-            Truncate to only non-negative values if any contexts have non-negative values.
-        output_attentions (`bool`, *optional*):
-            Whether to output the attentions.
-        output_hidden_states (`bool`, *optional*):
-            Whether to output the hidden states.
+        """
+        TimesFM 2.5 forward method matching original forecast operations.
+
+        TimesFM 2.5 simplified API - no frequency parameter needed as the model
+        automatically adapts to different time series frequencies.
+
+        Args:
+            past_values (`Sequence[torch.Tensor]`):
+                Past values of the time series that serves as input to the model.
+                Each tensor is a 1D time series of variable length.
+            window_size (`int`, *optional*):
+                Window size of trend + residual decomposition. If None then we do not do decomposition.
+            future_values (`torch.Tensor`, *optional*):
+                Optional future time series values to be used for loss computation.
+            forecast_context_len (`int`, *optional*):
+                Optional max context length.
+            return_forecast_on_context (`bool`, *optional*):
+                True to return the forecast on the context when available.
+            truncate_negative (`bool`, *optional*):
+                Truncate to only non-negative values if any contexts have non-negative values.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a ModelOutput instead of a plain tuple.
+            output_attentions (`bool`, *optional*):
+                Whether to output the attentions.
+            output_hidden_states (`bool`, *optional*):
+                Whether to output the hidden states.
 
         Returns:
             Timesfm2P5OutputForPrediction: Output with mean_predictions, full_predictions, and optional loss.
