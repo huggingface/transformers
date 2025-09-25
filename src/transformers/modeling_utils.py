@@ -173,9 +173,6 @@ _init_weights = True
 _is_quantized = False
 _is_ds_init_called = False
 
-# Initialize rotary_kernel as None, will be set when kernelize() is called
-rotary_kernel = None
-
 
 def is_local_dist_rank_0():
     return (
@@ -5791,13 +5788,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(
                 "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
             )
-        from kernels import Device, Mode, get_kernel, kernelize
+        from kernels import Device, Mode, kernelize
 
         mode = Mode.INFERENCE if not self.training else Mode.TRAINING
         kernelize(self, device=Device(type=self.device.type), mode=mode)
-        # Preload the rotary kernel as it's used in many models.
-        global rotary_kernel
-        rotary_kernel = get_kernel(repo_id="kernels-community/rotary")
         self._use_kernels = True
 
     @property
