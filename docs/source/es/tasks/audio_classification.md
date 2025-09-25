@@ -28,11 +28,8 @@ En esta guía te mostraremos como:
 2. Usar tu modelo ajustado para tareas de inferencia.
 
 
-<Tip>
-
-Consulta la [página de la tarea](https://huggingface.co/tasks/audio-classification) de clasificación de audio para acceder a más información sobre los modelos, datasets, y métricas asociados.
-
-</Tip>
+> [!TIP]
+> Consulta la [página de la tarea](https://huggingface.co/tasks/audio-classification) de clasificación de audio para acceder a más información sobre los modelos, datasets, y métricas asociados.
 
 Antes de comenzar, asegúrate de haber instalado todas las librerías necesarias:
 
@@ -187,11 +184,8 @@ Ahora tu función `compute_metrics` (computar métricas) está lista y podrás u
 
 ## Entrenamiento
 
-<Tip>
-
-¡Si no tienes experiencia haciéndo *fine-tuning* a un modelo con el [`Trainer`], échale un vistazo al tutorial básico [aquí](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> ¡Si no tienes experiencia haciéndo *fine-tuning* a un modelo con el [`Trainer`], échale un vistazo al tutorial básico [aquí](../training#train-with-pytorch-trainer)!
 
 ¡Ya puedes empezar a entrenar tu modelo! Carga Wav2Vec2 con [`AutoModelForAudioClassification`] junto con el especifica el número de etiquetas, y pasa al modelo los *mappings* entre el número entero de etiqueta y la clase de etiqueta.
 
@@ -245,11 +239,8 @@ Una vez que el entrenamiento haya sido completado, comparte tu modelo en el Hub 
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-Para ver un ejemplo más detallado de comó hacerle fine-tuning a un modelo para clasificación, échale un vistazo al correspondiente [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
-
-</Tip>
+> [!TIP]
+> Para ver un ejemplo más detallado de comó hacerle fine-tuning a un modelo para clasificación, échale un vistazo al correspondiente [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
 
 ## Inference
 

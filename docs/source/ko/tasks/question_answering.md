@@ -30,11 +30,8 @@ rendered properly in your Markdown viewer.
 1. 추출적 질의 응답을 하기 위해 [SQuAD](https://huggingface.co/datasets/squad) 데이터 세트에서 [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) 미세 조정하기
 2. 추론에 미세 조정된 모델 사용하기
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/question-answering)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/question-answering)를 확인하는 것이 좋습니다.
 
 시작하기 전에, 필요한 라이브러리가 모두 설치되어 있는지 확인하세요:
 
@@ -173,11 +170,8 @@ pip install transformers datasets evaluate
 
 ## 훈련[[train]]
 
-<Tip>
-
-[`Trainer`]를 이용해 모델을 미세 조정하는 것에 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기초 튜토리얼을 살펴보세요!
-
-</Tip>
+> [!TIP]
+> [`Trainer`]를 이용해 모델을 미세 조정하는 것에 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기초 튜토리얼을 살펴보세요!
 
 이제 모델 훈련을 시작할 준비가 되었습니다! [`AutoModelForQuestionAnswering`]으로 DistilBERT를 가져옵니다:
 
@@ -223,11 +217,8 @@ pip install transformers datasets evaluate
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-질의 응답을 위해 모델을 미세 조정하는 방법에 대한 더 자세한 예시는 [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb) 또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)을 참조하세요.
-
-</Tip>
+> [!TIP]
+> 질의 응답을 위해 모델을 미세 조정하는 방법에 대한 더 자세한 예시는 [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb) 또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)을 참조하세요.
 
 ## 평가[[evaluate]]
 

@@ -323,17 +323,11 @@ pip install pytest-flakefinder
 pytest --flake-finder --flake-runs=5 tests/test_failing_test.py
 ```
 
-<Tip>
+> [!TIP]
+> 이 플러그인은 `pytest-xdist`의 `-n` 플래그와 함께 작동하지 않습니다.
 
-이 플러그인은 `pytest-xdist`의 `-n` 플래그와 함께 작동하지 않습니다.
-
-</Tip>
-
-<Tip>
-
-`pytest-repeat`라는 또 다른 플러그인도 있지만 `unittest`와 함께 작동하지 않습니다.
-
-</Tip>
+> [!TIP]
+> `pytest-repeat`라는 또 다른 플러그인도 있지만 `unittest`와 함께 작동하지 않습니다.
 
 #### 테스트를 임의의 순서로 실행[[run-tests-in-a-random-order]]
 
@@ -787,20 +781,14 @@ def test_whatever(self):
   - `after=True`: 테스트 종료 시 임시 디렉터리가 항상 삭제됩니다.
   - `after=False`: 테스트 종료 시 임시 디렉터리가 항상 그대로 유지됩니다.
 
-<Tip>
+> [!TIP]
+> `rm -r`에 해당하는 명령을 안전하게 실행하기 위해,
+> 명시적인 `tmp_dir`을 사용하는 경우 프로젝트 저장소 체크 아웃의 하위 디렉터리만 허용됩니다.
+> 따라서 실수로 `/tmp`가 아닌 중요한 파일 시스템의 일부가 삭제되지 않도록 항상 `./`로 시작하는 경로를 전달해야 합니다.
 
-`rm -r`에 해당하는 명령을 안전하게 실행하기 위해,
-명시적인 `tmp_dir`을 사용하는 경우 프로젝트 저장소 체크 아웃의 하위 디렉터리만 허용됩니다.
-따라서 실수로 `/tmp`가 아닌 중요한 파일 시스템의 일부가 삭제되지 않도록 항상 `./`로 시작하는 경로를 전달해야 합니다.
-
-</Tip>
-
-<Tip>
-
-각 테스트는 여러 개의 임시 디렉터리를 등록할 수 있으며,
-별도로 요청하지 않는 한 모두 자동으로 제거됩니다.
-
-</Tip>
+> [!TIP]
+> 각 테스트는 여러 개의 임시 디렉터리를 등록할 수 있으며,
+> 별도로 요청하지 않는 한 모두 자동으로 제거됩니다.
 
 ### 임시 sys.path 오버라이드[[temporary-sys.path-override]]
 

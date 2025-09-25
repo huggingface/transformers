@@ -116,13 +116,10 @@ for out in pipe(KeyDataset(dataset, "text"), batch_size=8, truncation="only_firs
     # 이전과 동일한 출력이지만, 내용을 배치로 모델에 전달합니다.
 ```
 
-<Tip warning={true}>
-
-하지만 배치 처리가 항상 성능 향상을 보장하는 것은 아닙니다. 하드웨어, 데이터, 모델에 따라 속도가 10배로 빨라질수도, 5배 느려질 수 있습니다.
-
-주로 속도 향상이 있는 예시:
-
-</Tip>
+> [!WARNING]
+> 하지만 배치 처리가 항상 성능 향상을 보장하는 것은 아닙니다. 하드웨어, 데이터, 모델에 따라 속도가 10배로 빨라질수도, 5배 느려질 수 있습니다.
+>
+> 주로 속도 향상이 있는 예시:
 
 ```python
 from transformers import pipeline

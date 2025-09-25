@@ -32,11 +32,8 @@ rendered properly in your Markdown viewer.
  データセット。
  2. 微調整したモデルを推論に使用します。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/object-detection) を確認することをお勧めします。
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/object-detection) を確認することをお勧めします。
 
 始める前に、必要なライブラリがすべてインストールされていることを確認してください。
 

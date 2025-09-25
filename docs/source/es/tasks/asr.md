@@ -25,11 +25,8 @@ En esta guía te mostraremos como:
 1. Hacer fine-tuning al modelo [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) con el dataset [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) para transcribir audio a texto.
 2. Usar tu modelo ajustado para tareas de inferencia.
 
-<Tip>
-
-Revisa la [página de la tarea](https://huggingface.co/tasks/automatic-speech-recognition) de reconocimiento automático del habla para acceder a más información sobre los modelos, datasets y métricas asociados.
-
-</Tip>
+> [!TIP]
+> Revisa la [página de la tarea](https://huggingface.co/tasks/automatic-speech-recognition) de reconocimiento automático del habla para acceder a más información sobre los modelos, datasets y métricas asociados.
 
 Antes de comenzar, asegúrate de haber instalado todas las librerías necesarias:
 
@@ -224,11 +221,8 @@ Ahora tu función `compute_metrics` (computar métricas) está lista y podrás u
 
 ## Entrenamiento
 
-<Tip>
-
-Si no tienes experiencia haciéndole fine-tuning a un modelo con el [`Trainer`], ¡échale un vistazo al tutorial básico [aquí](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> Si no tienes experiencia haciéndole fine-tuning a un modelo con el [`Trainer`], ¡échale un vistazo al tutorial básico [aquí](../training#train-with-pytorch-trainer)!
 
 ¡Ya puedes empezar a entrenar tu modelo! Para ello, carga Wav2Vec2 con [`AutoModelForCTC`]. Especifica la reducción que quieres aplicar con el parámetro `ctc_loss_reduction`. A menudo, es mejor usar el promedio en lugar de la sumatoria que se hace por defecto.
 
@@ -288,11 +282,8 @@ Una vez que el entrenamiento haya sido completado, comparte tu modelo en el Hub 
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-Para ver un ejemplo más detallado de cómo hacerle fine-tuning a un modelo para reconocimiento automático del habla, échale un vistazo a esta [entrada de blog](https://huggingface.co/blog/fine-tune-wav2vec2-english) para ASR en inglés y a esta [entrada](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2) para ASR multilingüe.
-
-</Tip>
+> [!TIP]
+> Para ver un ejemplo más detallado de cómo hacerle fine-tuning a un modelo para reconocimiento automático del habla, échale un vistazo a esta [entrada de blog](https://huggingface.co/blog/fine-tune-wav2vec2-english) para ASR en inglés y a esta [entrada](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2) para ASR multilingüe.
 
 ## Inferencia
 
@@ -319,11 +310,8 @@ La manera más simple de probar tu modelo para hacer inferencia es usarlo en un 
 {'text': 'I WOUD LIKE O SET UP JOINT ACOUNT WTH Y PARTNER'}
 ```
 
-<Tip>
-
-La transcripción es decente, pero podría ser mejor. ¡Intenta hacerle fine-tuning a tu modelo con más ejemplos para obtener resultados aún mejores!
-
-</Tip>
+> [!TIP]
+> La transcripción es decente, pero podría ser mejor. ¡Intenta hacerle fine-tuning a tu modelo con más ejemplos para obtener resultados aún mejores!
 
 También puedes replicar de forma manual los resultados del `pipeline` si lo deseas:
 

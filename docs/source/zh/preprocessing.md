@@ -25,11 +25,8 @@ rendered properly in your Markdown viewer.
 * 图像输入使用[图像处理器](./main_classes/image)(`ImageProcessor`)将图像转换为张量。
 * 多模态输入，使用[处理器](./main_classes/processors)(`Processor`)结合了`Tokenizer`和`ImageProcessor`或`Processor`。
 
-<Tip>
-
-`AutoProcessor` **始终**有效的自动选择适用于您使用的模型的正确`class`，无论您使用的是`Tokenizer`、`ImageProcessor`、`Feature extractor`还是`Processor`。
-
-</Tip>
+> [!TIP]
+> `AutoProcessor` **始终**有效的自动选择适用于您使用的模型的正确`class`，无论您使用的是`Tokenizer`、`ImageProcessor`、`Feature extractor`还是`Processor`。
 
 在开始之前，请安装🤗 Datasets，以便您可以加载一些数据集来进行实验：
 
@@ -44,11 +41,8 @@ pip install datasets
 
 处理文本数据的主要工具是[Tokenizer](main_classes/tokenizer)。`Tokenizer`根据一组规则将文本拆分为`tokens`。然后将这些`tokens`转换为数字，然后转换为张量，成为模型的输入。模型所需的任何附加输入都由`Tokenizer`添加。
 
-<Tip>
-
-如果您计划使用预训练模型，重要的是使用与之关联的预训练`Tokenizer`。这确保文本的拆分方式与预训练语料库相同，并在预训练期间使用相同的标记-索引的对应关系（通常称为*词汇表*-`vocab`）。
-
-</Tip>
+> [!TIP]
+> 如果您计划使用预训练模型，重要的是使用与之关联的预训练`Tokenizer`。这确保文本的拆分方式与预训练语料库相同，并在预训练期间使用相同的标记-索引的对应关系（通常称为*词汇表*-`vocab`）。
 
 开始使用[`AutoTokenizer.from_pretrained`]方法加载一个预训练`tokenizer`。这将下载模型预训练的`vocab`：
 
@@ -161,11 +155,8 @@ pip install datasets
                     [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
-<Tip>
-
-查看[填充和截断](./pad_truncation)概念指南，了解更多有关填充和截断参数的信息。
-
-</Tip>
+> [!TIP]
+> 查看[填充和截断](./pad_truncation)概念指南，了解更多有关填充和截断参数的信息。
 
 ### 构建张量
 
@@ -312,24 +303,18 @@ pip install datasets
 
 对于计算机视觉任务，您需要一个[ image processor](main_classes/image_processor)来准备数据集以供模型使用。图像预处理包括多个步骤将图像转换为模型期望输入的格式。这些步骤包括但不限于调整大小、标准化、颜色通道校正以及将图像转换为张量。
 
-<Tip>
-
-图像预处理通常遵循某种形式的图像增强。图像预处理和图像增强都会改变图像数据，但它们有不同的目的：
-
-* 图像增强可以帮助防止过拟合并增加模型的鲁棒性。您可以在数据增强方面充分发挥创造性 - 调整亮度和颜色、裁剪、旋转、调整大小、缩放等。但要注意不要改变图像的含义。
-* 图像预处理确保图像与模型预期的输入格式匹配。在微调计算机视觉模型时，必须对图像进行与模型训练时相同的预处理。
-
-您可以使用任何您喜欢的图像增强库。对于图像预处理，请使用与模型相关联的`ImageProcessor`。
-
-</Tip>
+> [!TIP]
+> 图像预处理通常遵循某种形式的图像增强。图像预处理和图像增强都会改变图像数据，但它们有不同的目的：
+>
+> * 图像增强可以帮助防止过拟合并增加模型的鲁棒性。您可以在数据增强方面充分发挥创造性 - 调整亮度和颜色、裁剪、旋转、调整大小、缩放等。但要注意不要改变图像的含义。
+> * 图像预处理确保图像与模型预期的输入格式匹配。在微调计算机视觉模型时，必须对图像进行与模型训练时相同的预处理。
+>
+> 您可以使用任何您喜欢的图像增强库。对于图像预处理，请使用与模型相关联的`ImageProcessor`。
 
 加载[food101](https://huggingface.co/datasets/food101)数据集（有关如何加载数据集的更多详细信息，请参阅🤗 [Datasets教程](https://huggingface.co/docs/datasets/load_hub)）以了解如何在计算机视觉数据集中使用图像处理器：
 
-<Tip>
-
-因为数据集相当大，请使用🤗 Datasets的`split`参数加载训练集中的少量样本！
-
-</Tip>
+> [!TIP]
+> 因为数据集相当大，请使用🤗 Datasets的`split`参数加载训练集中的少量样本！
 
 
 ```py
@@ -384,13 +369,10 @@ pip install datasets
 ...     return examples
 ```
 
-<Tip>
-
-在上面的示例中，我们设置`do_resize=False`，因为我们已经在图像增强转换中调整了图像的大小，并利用了适当的`image_processor`的`size`属性。如果您在图像增强期间不调整图像的大小，请将此参数排除在外。默认情况下`ImageProcessor`将处理调整大小。
-
-如果希望将图像标准化步骤为图像增强的一部分，请使用`image_processor.image_mean`和`image_processor.image_std`。
-
-</Tip>
+> [!TIP]
+> 在上面的示例中，我们设置`do_resize=False`，因为我们已经在图像增强转换中调整了图像的大小，并利用了适当的`image_processor`的`size`属性。如果您在图像增强期间不调整图像的大小，请将此参数排除在外。默认情况下`ImageProcessor`将处理调整大小。
+>
+> 如果希望将图像标准化步骤为图像增强的一部分，请使用`image_processor.image_mean`和`image_processor.image_std`。
 
 3. 然后使用🤗 Datasets的[`set_transform`](https://huggingface.co/docs/datasets/process#format-transform)在运行时应用这些变换：
 
@@ -421,11 +403,8 @@ pip install datasets
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/preprocessed_image.png"/>
 </div>
 
-<Tip>
-
-对于诸如目标检测、语义分割、实例分割和全景分割等任务，`ImageProcessor`提供了训练后处理方法。这些方法将模型的原始输出转换为有意义的预测，如边界框或分割地图。
-
-</Tip>
+> [!TIP]
+> 对于诸如目标检测、语义分割、实例分割和全景分割等任务，`ImageProcessor`提供了训练后处理方法。这些方法将模型的原始输出转换为有意义的预测，如边界框或分割地图。
 
 ### 填充
 

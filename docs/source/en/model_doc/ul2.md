@@ -37,8 +37,5 @@ This model was contributed by [DanielHesslow](https://huggingface.co/Seledorn). 
 - UL2 has the same architecture as [T5v1.1](t5v1.1) but uses the Gated-SiLU activation function instead of Gated-GELU.
 - The authors release checkpoints of one architecture which can be seen [here](https://huggingface.co/google/ul2)
 
-<Tip>
-
-As UL2 has the same architecture as T5v1.1,  refer to [T5's documentation page](t5) for API reference, tips, code examples and notebooks.
-
-</Tip>
+> [!TIP]
+> As UL2 has the same architecture as T5v1.1,  refer to [T5's documentation page](t5) for API reference, tips, code examples and notebooks.

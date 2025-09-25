@@ -147,11 +147,8 @@ Zusätzliche Prüfungen betreffen PRs, die neue Modelle hinzufügen, vor allem, 
 
 Da die Transformers-Bibliothek in Bezug auf den Modellcode sehr eigenwillig ist und jedes Modell vollständig in einer einzigen Datei implementiert sein sollte, ohne sich auf andere Modelle zu stützen, haben wir einen Mechanismus hinzugefügt, der überprüft, ob eine Kopie des Codes einer Ebene eines bestimmten Modells mit dem Original übereinstimmt. Auf diese Weise können wir bei einer Fehlerbehebung alle anderen betroffenen Modelle sehen und entscheiden, ob wir die Änderung weitergeben oder die Kopie zerstören.
 
-<Tip>
-
-Wenn eine Datei eine vollständige Kopie einer anderen Datei ist, sollten Sie sie in der Konstante `FULL_COPIES` von `utils/check_copies.py` registrieren.
-
-</Tip>
+> [!TIP]
+> Wenn eine Datei eine vollständige Kopie einer anderen Datei ist, sollten Sie sie in der Konstante `FULL_COPIES` von `utils/check_copies.py` registrieren.
 
 Dieser Mechanismus stützt sich auf Kommentare der Form `# Kopiert von xxx`. Das `xxx` sollte den gesamten Pfad zu der Klasse der Funktion enthalten, die darunter kopiert wird. Zum Beispiel ist `RobertaSelfOutput` eine direkte Kopie der Klasse `BertSelfOutput`. Sie können also [hier](https://github.com/huggingface/transformers/blob/2bd7a27a671fd1d98059124024f580f8f5c0f3b5/src/transformers/models/roberta/modeling_roberta.py#L289) sehen, dass sie einen Kommentar hat:
 
@@ -181,11 +178,8 @@ Sie können mehrere Muster durch ein Komma getrennt hinzufügen. Zum Beispiel is
 
 Wenn die Reihenfolge eine Rolle spielt (weil eine der Ersetzungen mit einer vorherigen in Konflikt geraten könnte), werden die Ersetzungen von links nach rechts ausgeführt.
 
-<Tip>
-
-Wenn die Ersetzungen die Formatierung ändern (wenn Sie z.B. einen kurzen Namen durch einen sehr langen Namen ersetzen), wird die Kopie nach Anwendung des automatischen Formats überprüft.
-
-</Tip>
+> [!TIP]
+> Wenn die Ersetzungen die Formatierung ändern (wenn Sie z.B. einen kurzen Namen durch einen sehr langen Namen ersetzen), wird die Kopie nach Anwendung des automatischen Formats überprüft.
 
 Eine andere Möglichkeit, wenn es sich bei den Mustern nur um verschiedene Umschreibungen derselben Ersetzung handelt (mit einer groß- und einer kleingeschriebenen Variante), besteht darin, die Option `all-casing` hinzuzufügen. [Hier](https://github.com/huggingface/transformers/blob/15082a9dc6950ecae63a0d3e5060b2fc7f15050a/src/transformers/models/mobilebert/modeling_mobilebert.py#L1237) ist ein Beispiel in `MobileBertForSequenceClassification` mit dem Kommentar:
 

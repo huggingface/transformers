@@ -25,11 +25,8 @@ This guide will show you how to:
 1. Fine-tune [VideoMAE](https://huggingface.co/docs/transformers/main/en/model_doc/videomae) on a subset of the [UCF101](https://www.crcv.ucf.edu/data/UCF101.php) dataset.
 2. Use your fine-tuned model for inference.
 
-<Tip>
-
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/video-classification).
-
-</Tip>
+> [!TIP]
+> To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/video-classification).
 
 Before you begin, make sure you have all the necessary libraries installed:
 

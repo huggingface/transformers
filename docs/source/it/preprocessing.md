@@ -30,11 +30,8 @@ Prima di poter usare i dati in un modello, bisogna processarli in un formato acc
 
 Lo strumento principale per processare dati testuali è un [tokenizer](main_classes/tokenizer). Un tokenizer inizia separando il testo in *tokens* secondo una serie di regole. I tokens sono convertiti in numeri, questi vengono utilizzati per costruire i tensori di input del modello. Anche altri input addizionali se richiesti dal modello vengono aggiunti dal tokenizer.
 
-<Tip>
-
-Se stai pensando si utilizzare un modello preaddestrato, è importante utilizzare il tokenizer preaddestrato associato. Questo assicura che il testo sia separato allo stesso modo che nel corpus usato per l'addestramento, e venga usata la stessa mappatura tokens-to-index (solitamente indicato come il *vocabolario*) come nel preaddestramento.
-
-</Tip>
+> [!TIP]
+> Se stai pensando si utilizzare un modello preaddestrato, è importante utilizzare il tokenizer preaddestrato associato. Questo assicura che il testo sia separato allo stesso modo che nel corpus usato per l'addestramento, e venga usata la stessa mappatura tokens-to-index (solitamente indicato come il *vocabolario*) come nel preaddestramento.
 
 Iniziamo subito caricando un tokenizer preaddestrato con la classe [`AutoTokenizer`]. Questo scarica il *vocabolario* usato quando il modello è stato preaddestrato.
 

@@ -182,11 +182,8 @@ En ambos casos, observa cómo heredamos de `PreTrainedModel` y llamamos a la ini
 (un poco como cuando escribes `torch.nn.Module`). La línea que establece `config_class` no es obligatoria, a menos 
 que quieras registrar tu modelo con las clases automáticas (consulta la última sección).
 
-<Tip>
-
-Si tu modelo es muy similar a un modelo dentro de la biblioteca, puedes reutilizar la misma configuración de ese modelo.
-
-</Tip>
+> [!TIP]
+> Si tu modelo es muy similar a un modelo dentro de la biblioteca, puedes reutilizar la misma configuración de ese modelo.
 
 Puedes hacer que tu modelo devuelva lo que quieras, pero devolver un diccionario como lo hicimos para 
 `ResnetModelForImageClassification`, con el `loss` incluido cuando se pasan las etiquetas, hará que tu modelo se pueda 
@@ -219,11 +216,8 @@ se guarda el código del modelo.
 
 ## Enviar el código al _Hub_
 
-<Tip warning={true}>
-
-Esta _API_ es experimental y puede tener algunos cambios leves en las próximas versiones.
-
-</Tip>
+> [!WARNING]
+> Esta _API_ es experimental y puede tener algunos cambios leves en las próximas versiones.
 
 Primero, asegúrate de que tu modelo esté completamente definido en un archivo `.py`. Puedes basarte en importaciones 
 relativas a otros archivos, siempre que todos los archivos estén en el mismo directorio (aún no admitimos submódulos 
@@ -242,12 +236,9 @@ contiene el código de `ResnetConfig` y el archivo del modelo contiene el códig
 
 El `__init__.py`  puede estar vacío, solo está ahí para que Python detecte que `resnet_model` se puede usar como un módulo.
 
-<Tip warning={true}>
-
-Si copias archivos del modelo desde la biblioteca, deberás reemplazar todas las importaciones relativas en la parte superior 
-del archivo para importarlos desde el paquete `transformers`.
-
-</Tip>
+> [!WARNING]
+> Si copias archivos del modelo desde la biblioteca, deberás reemplazar todas las importaciones relativas en la parte superior 
+> del archivo para importarlos desde el paquete `transformers`.
 
 Ten en cuenta que puedes reutilizar (o subclasificar) una configuración o modelo existente.
 

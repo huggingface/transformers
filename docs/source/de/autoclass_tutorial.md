@@ -18,11 +18,8 @@ rendered properly in your Markdown viewer.
 
 Bei so vielen verschiedenen Transformator-Architekturen kann es eine Herausforderung sein, eine für Ihren Checkpoint zu erstellen. Als Teil der 🤗 Transformers Kernphilosophie, die Bibliothek leicht, einfach und flexibel nutzbar zu machen, leitet eine `AutoClass` automatisch die richtige Architektur aus einem gegebenen Checkpoint ab und lädt sie. Mit der Methode `from_pretrained()` kann man schnell ein vortrainiertes Modell für eine beliebige Architektur laden, so dass man keine Zeit und Ressourcen aufwenden muss, um ein Modell von Grund auf zu trainieren. Die Erstellung dieser Art von Checkpoint-agnostischem Code bedeutet, dass Ihr Code, wenn er für einen Checkpoint funktioniert, auch mit einem anderen Checkpoint funktionieren wird - solange er für eine ähnliche Aufgabe trainiert wurde - selbst wenn die Architektur unterschiedlich ist.
 
-<Tip>
-
-Denken Sie daran, dass sich die Architektur auf das Skelett des Modells bezieht und die Checkpoints die Gewichte für eine bestimmte Architektur sind. Zum Beispiel ist [BERT](https://huggingface.co/google-bert/bert-base-uncased) eine Architektur, während `google-bert/bert-base-uncased` ein Checkpoint ist. Modell ist ein allgemeiner Begriff, der entweder Architektur oder Prüfpunkt bedeuten kann.
-
-</Tip>
+> [!TIP]
+> Denken Sie daran, dass sich die Architektur auf das Skelett des Modells bezieht und die Checkpoints die Gewichte für eine bestimmte Architektur sind. Zum Beispiel ist [BERT](https://huggingface.co/google-bert/bert-base-uncased) eine Architektur, während `google-bert/bert-base-uncased` ein Checkpoint ist. Modell ist ein allgemeiner Begriff, der entweder Architektur oder Prüfpunkt bedeuten kann.
 
 In dieser Anleitung lernen Sie, wie man:
 
@@ -97,12 +94,9 @@ Sie können denselben Prüfpunkt problemlos wiederverwenden, um eine Architektur
 >>> model = AutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-<Tip warning={true}>
-
-Für PyTorch-Modelle verwendet die Methode `from_pretrained()` `torch.load()`, die intern `pickle` verwendet und als unsicher bekannt ist. Generell sollte man niemals ein Modell laden, das aus einer nicht vertrauenswürdigen Quelle stammen könnte, oder das manipuliert worden sein könnte. Dieses Sicherheitsrisiko wird für öffentliche Modelle, die auf dem Hugging Face Hub gehostet werden, teilweise gemildert, da diese bei jeder Übertragung [auf Malware](https://huggingface.co/docs/hub/security-malware) gescannt werden. Siehe die [Hub-Dokumentation](https://huggingface.co/docs/hub/security) für Best Practices wie [signierte Commit-Verifizierung](https://huggingface.co/docs/hub/security-gpg#signing-commits-with-gpg) mit GPG.
-
-TensorFlow- und Flax-Checkpoints sind nicht betroffen und können in PyTorch-Architekturen mit den Kwargs `from_tf` und `from_flax` für die Methode `from_pretrained` geladen werden, um dieses Problem zu umgehen.
-
-</Tip>
+> [!WARNING]
+> Für PyTorch-Modelle verwendet die Methode `from_pretrained()` `torch.load()`, die intern `pickle` verwendet und als unsicher bekannt ist. Generell sollte man niemals ein Modell laden, das aus einer nicht vertrauenswürdigen Quelle stammen könnte, oder das manipuliert worden sein könnte. Dieses Sicherheitsrisiko wird für öffentliche Modelle, die auf dem Hugging Face Hub gehostet werden, teilweise gemildert, da diese bei jeder Übertragung [auf Malware](https://huggingface.co/docs/hub/security-malware) gescannt werden. Siehe die [Hub-Dokumentation](https://huggingface.co/docs/hub/security) für Best Practices wie [signierte Commit-Verifizierung](https://huggingface.co/docs/hub/security-gpg#signing-commits-with-gpg) mit GPG.
+>
+> TensorFlow- und Flax-Checkpoints sind nicht betroffen und können in PyTorch-Architekturen mit den Kwargs `from_tf` und `from_flax` für die Methode `from_pretrained` geladen werden, um dieses Problem zu umgehen.
 
 Im Allgemeinen empfehlen wir die Verwendung der Klasse "AutoTokenizer" und der Klasse "AutoModelFor", um trainierte Instanzen von Modellen zu laden. Dadurch wird sichergestellt, dass Sie jedes Mal die richtige Architektur laden. Im nächsten [Tutorial] (Vorverarbeitung) erfahren Sie, wie Sie Ihren neu geladenen Tokenizer, Feature Extractor und Prozessor verwenden, um einen Datensatz für die Feinabstimmung vorzuverarbeiten.

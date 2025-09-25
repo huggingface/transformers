@@ -20,11 +20,8 @@ rendered properly in your Markdown viewer.
 
 However, if you want to use DeepSpeed without the [`Trainer`], Transformers provides a [`HfDeepSpeedConfig`] class.
 
-<Tip>
-
-Learn more about using DeepSpeed with [`Trainer`] in the [DeepSpeed](../deepspeed) guide.
-
-</Tip>
+> [!TIP]
+> Learn more about using DeepSpeed with [`Trainer`] in the [DeepSpeed](../deepspeed) guide.
 
 ## HfDeepSpeedConfig
 

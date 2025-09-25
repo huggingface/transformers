@@ -44,13 +44,10 @@
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-質問応答用のモデルを微調整する方法の詳細な例については、対応するドキュメントを参照してください。
-[PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)
-または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)。
-
-</Tip>
+> [!TIP]
+> 質問応答用のモデルを微調整する方法の詳細な例については、対応するドキュメントを参照してください。
+> [PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)
+> または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)。
 
 ## Evaluate
 

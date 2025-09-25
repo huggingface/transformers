@@ -69,11 +69,8 @@ pip install -U flash-attn --no-build-isolation
 
 플래시 어텐션2와 호환되는 하드웨어를 가지고 있는지 확인하세요. 이에 대한 자세한 내용은 flash-attn 리포지토리의 공식문서에서 확인할 수 있습니다. 또한 모델을 반정밀도(`torch.float16`)로 로드하는 것을 잊지 마세요.
 
-<Tip warning={true}>
-
-작은 배치 크기를 사용할 때, 플래시 어텐션을 사용하면 모델이 느려지는 것을 느낄 수 있습니다.아래의 [플래시 어텐션과 SDPA를 사용한 예상 속도 향상](#Expected-speedups-with-Flash-Attention-and-SDPA) 섹션을 참조하여 적절한 어텐션 구현을 선택하세요.
-
-</Tip>
+> [!WARNING]
+> 작은 배치 크기를 사용할 때, 플래시 어텐션을 사용하면 모델이 느려지는 것을 느낄 수 있습니다.아래의 [플래시 어텐션과 SDPA를 사용한 예상 속도 향상](#Expected-speedups-with-Flash-Attention-and-SDPA) 섹션을 참조하여 적절한 어텐션 구현을 선택하세요.
 
 플래시 어텐션2를 사용해서 모델을 로드하고 구동하기 위해서 다음 스니펫을 참고하세요:
 

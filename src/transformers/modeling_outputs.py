@@ -1207,13 +1207,10 @@ class SemanticSegmenterOutput(ModelOutput):
         logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, logits_height, logits_width)`):
             Classification scores for each pixel.
 
-            <Tip warning={true}>
-
-            The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
-            to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
-            original image size as post-processing. You should always check your logits shape and resize as needed.
-
-            </Tip>
+            > [!WARNING]
+            > The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
+            > to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
+            > original image size as post-processing. You should always check your logits shape and resize as needed.
 
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +

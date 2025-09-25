@@ -58,11 +58,8 @@ Here are some potential solutions you can try to lessen memory use:
 - Reduce the [`per_device_train_batch_size`](main_classes/trainer#transformers.TrainingArguments.per_device_train_batch_size) value in [`TrainingArguments`].
 - Try using [`gradient_accumulation_steps`](main_classes/trainer#transformers.TrainingArguments.gradient_accumulation_steps) in [`TrainingArguments`] to effectively increase overall batch size.
 
-<Tip>
-
-Refer to the Performance [guide](performance) for more details about memory-saving techniques.
-
-</Tip>
+> [!TIP]
+> Refer to the Performance [guide](performance) for more details about memory-saving techniques.
 
 ## ImportError
 
@@ -136,11 +133,8 @@ tensor([[-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
 
 Most of the time, you should provide an `attention_mask` to your model to ignore the padding tokens to avoid this silent error. Now the output of the second sequence matches its actual output:
 
-<Tip>
-
-By default, the tokenizer creates an `attention_mask` for you based on your specific tokenizer's defaults.
-
-</Tip>
+> [!TIP]
+> By default, the tokenizer creates an `attention_mask` for you based on your specific tokenizer's defaults.
 
 ```py
 >>> attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 0, 0]])

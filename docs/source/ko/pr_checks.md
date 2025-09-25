@@ -147,11 +147,8 @@ make fix-copies
 
 Transformers 라이브러리는 모델 코드에 대해 매우 완고하며, 각 모델은 다른 모델에 의존하지 않고 완전히 단일 파일로 구현되어야 합니다. 이렇게 하기 위해 특정 모델의 코드 복사본이 원본과 일관된 상태로 유지되는지 확인하는 메커니즘을 추가했습니다. 따라서 버그 수정이 필요한 경우 다른 모델에 영향을 주는 모든 모델을 볼 수 있으며 수정을 적용할지 수정된 사본을 삭제할지 선택할 수 있습니다.
 
-<Tip>
-
-파일이 다른 파일의 완전한 사본인 경우 해당 파일을 `utils/check_copies.py`의 `FULL_COPIES` 상수에 등록해야 합니다.
-
-</Tip>
+> [!TIP]
+> 파일이 다른 파일의 완전한 사본인 경우 해당 파일을 `utils/check_copies.py`의 `FULL_COPIES` 상수에 등록해야 합니다.
 
 이 메커니즘은 `# Copied from xxx` 형식의 주석을 기반으로 합니다. `xxx`에는 아래에 복사되는 클래스 또는 함수의 전체 경로가 포함되어야 합니다. 예를 들어 `RobertaSelfOutput`은 `BertSelfOutput` 클래스의 복사본입니다. 따라서 [여기](https://github.com/huggingface/transformers/blob/2bd7a27a671fd1d98059124024f580f8f5c0f3b5/src/transformers/models/roberta/modeling_roberta.py#L289)에서 주석이 있습니다:
 
@@ -182,11 +179,8 @@ Transformers 라이브러리는 모델 코드에 대해 매우 완고하며, 각
 
 순서가 중요한 경우(이전 수정과 충돌할 수 있는 경우) 수정은 왼쪽에서 오른쪽으로 실행됩니다.
 
-<Tip>
-
-새 변경이 서식을 변경하는 경우(짧은 이름을 매우 긴 이름으로 바꾸는 경우) 자동 서식 지정기를 적용한 후 복사본이 검사됩니다.
-
-</Tip>
+> [!TIP]
+> 새 변경이 서식을 변경하는 경우(짧은 이름을 매우 긴 이름으로 바꾸는 경우) 자동 서식 지정기를 적용한 후 복사본이 검사됩니다.
 
 패턴의 대소문자가 다른 경우(대문자와 소문자가 혼용된 대체 양식) `all-casing` 옵션을 추가하는 방법도 있습니다. [여기](https://github.com/huggingface/transformers/blob/15082a9dc6950ecae63a0d3e5060b2fc7f15050a/src/transformers/models/mobilebert/modeling_mobilebert.py#L1237)에서 `MobileBertForSequenceClassification`에서 사용된 예시를 볼 수 있습니다:
 

@@ -105,16 +105,13 @@ class XLNetConfig(PretrainedConfig):
         use_mems_train (`bool`, *optional*, defaults to `False`):
             Whether or not the model should make use of the recurrent memory mechanism in train mode.
 
-            <Tip>
-
-            For pretraining, it is recommended to set `use_mems_train` to `True`. For fine-tuning, it is recommended to
-            set `use_mems_train` to `False` as discussed
-            [here](https://github.com/zihangdai/xlnet/issues/41#issuecomment-505102587). If `use_mems_train` is set to
-            `True`, one has to make sure that the train batches are correctly pre-processed, *e.g.* `batch_1 = [[This
-            line is], [This is the]]` and `batch_2 = [[ the first line], [ second line]]` and that all batches are of
-            equal size.
-
-            </Tip>
+            > [!TIP]
+            > For pretraining, it is recommended to set `use_mems_train` to `True`. For fine-tuning, it is recommended to
+            > set `use_mems_train` to `False` as discussed
+            > [here](https://github.com/zihangdai/xlnet/issues/41#issuecomment-505102587). If `use_mems_train` is set to
+            > `True`, one has to make sure that the train batches are correctly pre-processed, *e.g.* `batch_1 = [[This
+            > line is], [This is the]]` and `batch_2 = [[ the first line], [ second line]]` and that all batches are of
+            > equal size.
 
     Examples:
 

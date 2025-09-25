@@ -22,11 +22,8 @@
 1. ضبط [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) على مجموعة بيانات [WNUT 17](https://huggingface.co/datasets/wnut_17) للكشف عن كيانات جديدة.
 2.  استخدام نموذجك المضبوط بدقة للاستدلال.
 
-<Tip>
-
-للاطلاع جميع البنى والنقاط المتوافقة مع هذه المهمة، نوصي بالرجوع من [صفحة المهمة](https://huggingface.co/tasks/token-classification).
-
-</Tip>
+> [!TIP]
+> للاطلاع جميع البنى والنقاط المتوافقة مع هذه المهمة، نوصي بالرجوع من [صفحة المهمة](https://huggingface.co/tasks/token-classification).
 
 قبل أن تبدأ، تأكد من تثبيت جميع المكتبات الضرورية:
 
@@ -235,11 +232,8 @@ pip install transformers datasets evaluate seqeval
 ... }
 ```
 
-<Tip>
-
-إذا لم تكن على دراية بتعديل نموذج باستخدام [`Trainer`], ألق نظرة على الدليل التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> إذا لم تكن على دراية بتعديل نموذج باستخدام [`Trainer`], ألق نظرة على الدليل التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
 
 أنت مستعد الآن لبدء تدريب نموذجك! قم بتحميل DistilBERT مع [`AutoModelForTokenClassification`] إلى جانب عدد التصنيفات المتوقعة، وخريطة التسميات:
 
@@ -290,13 +284,10 @@ pip install transformers datasets evaluate seqeval
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-للحصول على مثال أكثر تفصيلاً حول كيفية تعديل نموذج لتصنيف الرموز، ألق نظرة على الدفتر المقابل
-[دفتر PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
-أو [دفتر TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
-
-</Tip>
+> [!TIP]
+> للحصول على مثال أكثر تفصيلاً حول كيفية تعديل نموذج لتصنيف الرموز، ألق نظرة على الدفتر المقابل
+> [دفتر PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
+> أو [دفتر TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
 
 ## الاستدلال(Inference)
 

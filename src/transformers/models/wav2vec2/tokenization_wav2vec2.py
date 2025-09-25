@@ -469,25 +469,19 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 Whether or not to output character offsets. Character offsets can be used in combination with the
                 sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
 
-                <Tip>
-
-                Please take a look at the Example of [`~Wav2Vec2CTCTokenizer.decode`] to better understand how to make
-                use of `output_char_offsets`. [`~Wav2Vec2CTCTokenizer.batch_decode`] works the same way with batched
-                output.
-
-                </Tip>
+                > [!TIP]
+                > Please take a look at the Example of [`~Wav2Vec2CTCTokenizer.decode`] to better understand how to make
+                > use of `output_char_offsets`. [`~Wav2Vec2CTCTokenizer.batch_decode`] works the same way with batched
+                > output.
 
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
 
-                <Tip>
-
-                Please take a look at the Example of [`~Wav2Vec2CTCTokenizer.decode`] to better understand how to make
-                use of `output_word_offsets`. [`~Wav2Vec2CTCTokenizer.batch_decode`] works the same way with batched
-                output.
-
-                </Tip>
+                > [!TIP]
+                > Please take a look at the Example of [`~Wav2Vec2CTCTokenizer.decode`] to better understand how to make
+                > use of `output_word_offsets`. [`~Wav2Vec2CTCTokenizer.batch_decode`] works the same way with batched
+                > output.
 
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
@@ -542,21 +536,15 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 Whether or not to output character offsets. Character offsets can be used in combination with the
                 sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
 
-                <Tip>
-
-                Please take a look at the example below to better understand how to make use of `output_char_offsets`.
-
-                </Tip>
+                > [!TIP]
+                > Please take a look at the example below to better understand how to make use of `output_char_offsets`.
 
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
 
-                <Tip>
-
-                Please take a look at the example below to better understand how to make use of `output_word_offsets`.
-
-                </Tip>
+                > [!TIP]
+                > Please take a look at the example below to better understand how to make use of `output_word_offsets`.
 
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
@@ -665,18 +653,15 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not [`~Wav2Vec2Tokenizer.__call__`] should return `attention_mask`.
 
-            <Tip>
-
-            Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as
-            [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
-            `attention_mask`. For such models, `input_values` should simply be padded with 0 and no `attention_mask`
-            should be passed.
-
-            For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as
-            [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
-            passed for batched inference.
-
-            </Tip>
+            > [!TIP]
+            > Wav2Vec2 models that have set `config.feat_extract_norm == "group"`, such as
+            > [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), have **not** been trained using
+            > `attention_mask`. For such models, `input_values` should simply be padded with 0 and no `attention_mask`
+            > should be passed.
+            >
+            > For Wav2Vec2 models that have set `config.feat_extract_norm == "layer"`, such as
+            > [wav2vec2-lv60](https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self), `attention_mask` should be
+            > passed for batched inference.
 
         **kwargs
             Additional keyword arguments passed along to [`PreTrainedTokenizer`]

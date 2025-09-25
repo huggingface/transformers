@@ -25,11 +25,8 @@ pode usar eles mesmo assim com o [pipeline]! Este tutorial te ensinará a:
 * Utilizar um tokenizador ou model específico.
 * Utilizar um [`pipeline`] para tarefas de áudio e visão computacional.
 
-<Tip>
-
-    Acesse a documentação do [`pipeline`] para obter uma lista completa de tarefas possíveis.
-
-</Tip>
+> [!TIP]
+> Acesse a documentação do [`pipeline`] para obter uma lista completa de tarefas possíveis.
 
 ## Uso do pipeline
 

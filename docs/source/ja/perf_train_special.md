@@ -15,10 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Training on Specialized Hardware
 
-<Tip>
-
-注意: [単一GPUセクション](perf_train_gpu_one)で紹介されたほとんどの戦略（混合精度トレーニングや勾配蓄積など）および[マルチGPUセクション](perf_train_gpu_many)は一般的なトレーニングモデルに適用される汎用的なものですので、このセクションに入る前にそれを確認してください。
-
-</Tip>
+> [!TIP]
+> 注意: [単一GPUセクション](perf_train_gpu_one)で紹介されたほとんどの戦略（混合精度トレーニングや勾配蓄積など）および[マルチGPUセクション](perf_train_gpu_many)は一般的なトレーニングモデルに適用される汎用的なものですので、このセクションに入る前にそれを確認してください。
 
 このドキュメントは、専用ハードウェアでトレーニングする方法に関する情報を近日中に追加予定です。

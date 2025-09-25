@@ -29,11 +29,8 @@ rendered properly in your Markdown viewer.
 - [GPT2](model_doc/gpt2)：デコーダを使用するテキスト生成などのNLPタスク向け
 - [BART](model_doc/bart)：エンコーダ-デコーダを使用する要約および翻訳などのNLPタスク向け
 
-<Tip>
-
-さらに進む前に、元のTransformerアーキテクチャの基本的な知識を持つと良いです。エンコーダ、デコーダ、および注意力がどのように動作するかを知っておくと、異なるTransformerモデルがどのように動作するかを理解するのに役立ちます。始めているか、リフレッシュが必要な場合は、詳細な情報については当社の[コース](https://huggingface.co/course/chapter1/4?fw=pt)をチェックしてください！
-
-</Tip>
+> [!TIP]
+> さらに進む前に、元のTransformerアーキテクチャの基本的な知識を持つと良いです。エンコーダ、デコーダ、および注意力がどのように動作するかを知っておくと、異なるTransformerモデルがどのように動作するかを理解するのに役立ちます。始めているか、リフレッシュが必要な場合は、詳細な情報については当社の[コース](https://huggingface.co/course/chapter1/4?fw=pt)をチェックしてください！
 
 ## Speech and audio
 
@@ -74,11 +71,8 @@ rendered properly in your Markdown viewer.
 1. 画像をパッチのシーケンスに分割し、Transformerを使用して並列に処理します。
 2. [ConvNeXT](model_doc/convnext)などのモダンなCNNを使用します。これらは畳み込み層を使用しますが、モダンなネットワーク設計を採用しています。
 
-<Tip>
-
-サードアプローチでは、Transformerと畳み込みを組み合わせたものもあります（例：[Convolutional Vision Transformer](model_doc/cvt)または[LeViT](model_doc/levit)）。これらについては議論しませんが、これらはここで調べる2つのアプローチを組み合わせています。
-
-</Tip>
+> [!TIP]
+> サードアプローチでは、Transformerと畳み込みを組み合わせたものもあります（例：[Convolutional Vision Transformer](model_doc/cvt)または[LeViT](model_doc/levit)）。これらについては議論しませんが、これらはここで調べる2つのアプローチを組み合わせています。
 
 ViTとConvNeXTは画像分類によく使用されますが、オブジェクト検出、セグメンテーション、深度推定などの他のビジョンタスクに対しては、DETR、Mask2Former、GLPNなどが適しています。
 
@@ -109,11 +103,8 @@ ViTが導入した主な変更点は、画像をTransformerに供給する方法
 
 #### CNN
 
-<Tip>
-
-このセクションでは畳み込みについて簡単に説明していますが、画像の形状とサイズがどのように変化するかを事前に理解していると役立ちます。畳み込みに慣れていない場合は、fastaiの書籍から[Convolution Neural Networks chapter](https://github.com/fastai/fastbook/blob/master/13_convolutions.ipynb)をチェックしてみてください！
-
-</Tip>
+> [!TIP]
+> このセクションでは畳み込みについて簡単に説明していますが、画像の形状とサイズがどのように変化するかを事前に理解していると役立ちます。畳み込みに慣れていない場合は、fastaiの書籍から[Convolution Neural Networks chapter](https://github.com/fastai/fastbook/blob/master/13_convolutions.ipynb)をチェックしてみてください！
 
 [ConvNeXT](model_doc/convnext)は、性能を向上させるために新しいモダンなネットワーク設計を採用したCNNアーキテクチャです。ただし、畳み込みはモデルの中核にまだあります。高レベルから見た場合、[畳み込み（convolution）](glossary#convolution)は、小さな行列（*カーネル*）が画像のピクセルの小さなウィンドウに乗算される操作です。それは特定のテクスチャや線の曲率などの特徴を計算します。その後、次のピクセルのウィンドウに移動します。畳み込みが移動する距離は*ストライド*として知られています。
 
@@ -235,11 +226,8 @@ BERTを質問応答に使用するには、ベースのBERTモデルの上にス
 
 質問応答を試してみる準備はできましたか？DistilBERTを微調整し、推論に使用する方法を学ぶために、完全な[質問応答ガイド](tasks/question_answering)をチェックしてみてください！
 
-<Tip>
-
-💡 注意してください。一度事前トレーニングが完了したBERTを使用してさまざまなタスクに簡単に適用できることに注目してください。必要なのは、事前トレーニング済みモデルに特定のヘッドを追加して、隠れた状態を所望の出力に変換することだけです！
-
-</Tip>
+> [!TIP]
+> 💡 注意してください。一度事前トレーニングが完了したBERTを使用してさまざまなタスクに簡単に適用できることに注目してください。必要なのは、事前トレーニング済みモデルに特定のヘッドを追加して、隠れた状態を所望の出力に変換することだけです！
 
 ### Text generation
 
@@ -257,11 +245,8 @@ GPT-2の事前トレーニングの目標は完全に[因果言語モデリン�
 
 テキスト生成を試してみる準備はできましたか？DistilGPT-2を微調整し、推論に使用する方法を学ぶために、完全な[因果言語モデリングガイド](tasks/language_modeling#causal-language-modeling)をチェックしてみてください！
 
-<Tip>
-
-テキスト生成に関する詳細は、[テキスト生成戦略](generation_strategies)ガイドをチェックしてみてください！
-
-</Tip>
+> [!TIP]
+> テキスト生成に関する詳細は、[テキスト生成戦略](generation_strategies)ガイドをチェックしてみてください！
 
 
 ### Summarization
@@ -278,11 +263,8 @@ GPT-2の事前トレーニングの目標は完全に[因果言語モデリン�
 
 要約を試す準備はできましたか？T5を微調整して推論に使用する方法を学ぶために、完全な[要約ガイド](tasks/summarization)をご覧ください！
 
-<Tip>
-
-テキスト生成に関する詳細は、[テキスト生成戦略](generation_strategies)ガイドをチェックしてみてください！
-
-</Tip>
+> [!TIP]
+> テキスト生成に関する詳細は、[テキスト生成戦略](generation_strategies)ガイドをチェックしてみてください！
 
 ### Translation
 
@@ -294,8 +276,5 @@ BARTは、ソース言語をターゲット言語にデコードできるよう�
 
 翻訳を試す準備はできましたか？T5を微調整して推論に使用する方法を学ぶために、完全な[翻訳ガイド](tasks/summarization)をご覧ください！
 
-<Tip>
-
-テキスト生成に関する詳細は、[テキスト生成戦略](generation_strategies)ガイドをチェックしてみてください！
-
-</Tip>
+> [!TIP]
+> テキスト生成に関する詳細は、[テキスト生成戦略](generation_strategies)ガイドをチェックしてみてください！

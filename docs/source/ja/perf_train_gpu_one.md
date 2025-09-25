@@ -17,11 +17,8 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、メモリの利用効率を最適化し、トレーニングを高速化することで、モデルのトレーニング効率を向上させるために使用できる実用的なテクニックを紹介します。トレーニング中にGPUがどのように利用されるかを理解したい場合は、最初に「[モデルトレーニングの解剖学](model_memory_anatomy)」のコンセプトガイドを参照してください。このガイドは実用的なテクニックに焦点を当てています。
 
-<Tip>
-
-複数のGPUを搭載したマシンにアクセスできる場合、これらのアプローチは依然として有効です。さらに、[マルチGPUセクション](perf_train_gpu_many)で説明されている追加の方法を活用できます。
-
-</Tip>
+> [!TIP]
+> 複数のGPUを搭載したマシンにアクセスできる場合、これらのアプローチは依然として有効です。さらに、[マルチGPUセクション](perf_train_gpu_many)で説明されている追加の方法を活用できます。
 
 大規模なモデルをトレーニングする際、同時に考慮すべき2つの側面があります：
 
@@ -46,11 +43,8 @@ rendered properly in your Markdown viewer.
 | [DeepSpeed Zero](#deepspeed-zero)                          | No                      | Yes                          |
 | [torch.compile](#using-torchcompile)                       | Yes                     | No                           |
 
-<Tip>
-
-**注意**: 小さなモデルと大きなバッチサイズを使用する場合、メモリの節約が行われますが、大きなモデルと小さなバッチサイズを使用する場合、メモリの使用量が増加します。
-
-</Tip>
+> [!TIP]
+> **注意**: 小さなモデルと大きなバッチサイズを使用する場合、メモリの節約が行われますが、大きなモデルと小さなバッチサイズを使用する場合、メモリの使用量が増加します。
 
 これらのテクニックは、[`Trainer`]でモデルをトレーニングしている場合や、純粋なPyTorchループを記述している場合の両方で利用できます。詳細な最適化の設定については、🤗 Accelerateを使用して[これらの最適化を設定できます](#using--accelerate)。
 
@@ -108,11 +102,8 @@ training_args = TrainingArguments(
 
 代替手段として、🤗 Accelerateを使用することもできます - 🤗 Accelerateの例は[このガイドのさらに後ろにあります](#using--accelerate)。
 
-<Tip>
-
-勾配チェックポイントを使用することでメモリ効率が向上する場合がありますが、トレーニング速度は約20%遅くなることに注意してください。
-
-</Tip>
+> [!TIP]
+> 勾配チェックポイントを使用することでメモリ効率が向上する場合がありますが、トレーニング速度は約20%遅くなることに注意してください。
 
 ## Mixed precision training
 
@@ -169,11 +160,8 @@ torch.backends.cudnn.allow_tf32 = True
 TrainingArguments(tf32=True, **default_args)
 ```
 
-<Tip>
-
-tf32は`tensor.to(dtype=torch.tf32)`を介して直接アクセスできません。これは内部のCUDAデータ型です。tf32データ型を使用するには、`torch>=1.7`が必要です。
-
-</Tip>
+> [!TIP]
+> tf32は`tensor.to(dtype=torch.tf32)`を介して直接アクセスできません。これは内部のCUDAデータ型です。tf32データ型を使用するには、`torch>=1.7`が必要です。
 
 tf32と他の精度に関する詳細な情報については、以下のベンチマークを参照してください：
 [RTX-3090](https://github.com/huggingface/transformers/issues/14608#issuecomment-1004390803)および
@@ -426,12 +414,9 @@ model = model.to_bettertransformer()
 
 変換後、通常通りモデルをトレーニングしてください。
 
-<Tip warning={true}>
-
-PyTorchネイティブの`scaled_dot_product_attention`演算子は、`attention_mask`が提供されていない場合にのみFlash Attentionにディスパッチできます。
-
-デフォルトでは、トレーニングモードでBetterTransformer統合はマスクサポートを削除し、バッチトレーニングにパディングマスクが必要ないトレーニングにしか使用できません。これは、例えばマスク言語モデリングや因果言語モデリングのような、バッチトレーニングにパディングマスクが不要なトレーニングの場合に該当します。BetterTransformerはパディングマスクが必要なタスクに対するモデルの微調整には適していません。
-
-</Tip>
+> [!WARNING]
+> PyTorchネイティブの`scaled_dot_product_attention`演算子は、`attention_mask`が提供されていない場合にのみFlash Attentionにディスパッチできます。
+>
+> デフォルトでは、トレーニングモードでBetterTransformer統合はマスクサポートを削除し、バッチトレーニングにパディングマスクが必要ないトレーニングにしか使用できません。これは、例えばマスク言語モデリングや因果言語モデリングのような、バッチトレーニングにパディングマスクが不要なトレーニングの場合に該当します。BetterTransformerはパディングマスクが必要なタスクに対するモデルの微調整には適していません。
 
 SDPAを使用したアクセラレーションとメモリの節約について詳しく知りたい場合は、この[ブログ記事](https://pytorch.org/blog/out-of-the-box-acceleration/)をチェックしてください。

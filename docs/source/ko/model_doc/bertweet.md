@@ -56,11 +56,8 @@ BERTweet은 BERT-base(Devlin et al., 2019)와 동일한 아키텍처를 가지�
 >>> # bertweet = TFAutoModel.from_pretrained("vinai/bertweet-base")
 ```
 
-<Tip> 
-
-이 구현은 토큰화 방법을 제외하고는 BERT와 동일합니다. API 참조 정보는 [BERT 문서](bert) 를 참조하세요.
-
-</Tip>
+> [!TIP]
+> 이 구현은 토큰화 방법을 제외하고는 BERT와 동일합니다. API 참조 정보는 [BERT 문서](bert) 를 참조하세요.
 
 ## Bertweet 토큰화(BertweetTokenizer) [[transformers.BertweetTokenizer]]
 

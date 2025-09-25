@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 1. [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) データセットの [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) を微調整して、音声をテキストに書き起こします。
 2. 微調整したモデルを推論に使用します。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/automatic-speech-recognition) を確認することをお勧めします。
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/automatic-speech-recognition) を確認することをお勧めします。
 
 始める前に、必要なライブラリがすべてインストールされていることを確認してください。
 
@@ -228,11 +225,8 @@ MInDS-14 データセットのサンプリング レートは 8000kHz です (�
 
 ## Train
 
-<Tip>
-
-[`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
-
-</Tip>
+> [!TIP]
+> [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
 
 これでモデルのトレーニングを開始する準備が整いました。 [`AutoModelForCTC`] で Wav2Vec2 をロードします。 `ctc_loss_reduction` パラメータで適用する削減を指定します。多くの場合、デフォルトの合計ではなく平均を使用する方が適切です。
 
@@ -294,11 +288,8 @@ MInDS-14 データセットのサンプリング レートは 8000kHz です (�
 ```
 
 
-<Tip>
-
-自動音声認識用にモデルを微調整する方法のより詳細な例については、英語 ASR および英語のこのブログ [投稿](https://huggingface.co/blog/fine-tune-wav2vec2-english) を参照してください。多言語 ASR については、この [投稿](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2) を参照してください。
-
-</Tip>
+> [!TIP]
+> 自動音声認識用にモデルを微調整する方法のより詳細な例については、英語 ASR および英語のこのブログ [投稿](https://huggingface.co/blog/fine-tune-wav2vec2-english) を参照してください。多言語 ASR については、この [投稿](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2) を参照してください。
 
 ## Inference
 
@@ -325,11 +316,8 @@ MInDS-14 データセットのサンプリング レートは 8000kHz です (�
 {'text': 'I WOUD LIKE O SET UP JOINT ACOUNT WTH Y PARTNER'}
 ```
 
-<Tip>
-
-転写はまあまあですが、もっと良くなる可能性があります。さらに良い結果を得るには、より多くの例でモデルを微調整してみてください。
-
-</Tip>
+> [!TIP]
+> 転写はまあまあですが、もっと良くなる可能性があります。さらに良い結果を得るには、より多くの例でモデルを微調整してみてください。
 
 必要に応じて、「パイプライン」の結果を手動で複製することもできます。
 

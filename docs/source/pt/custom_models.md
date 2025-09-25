@@ -182,11 +182,8 @@ Em ambos os casos, observe como herdamos de `PreTrainedModel` e chamamos a inici
 (um pouco parecido quando você escreve um `torch.nn.Module`). A linha que define o `config_class` não é obrigatória, a menos que
 você deseje registrar seu modelo com as classes automáticas (consulte a última seção).
 
-<Tip>
-
-Se o seu modelo for muito semelhante a um modelo dentro da biblioteca, você poderá reutilizar a mesma configuração desse modelo.
-
-</Tip>
+> [!TIP]
+> Se o seu modelo for muito semelhante a um modelo dentro da biblioteca, você poderá reutilizar a mesma configuração desse modelo.
 
 Você pode fazer com que seu modelo retorne o que você quiser,porém retornando um dicionário como fizemos para
 `ResnetModelForImageClassification`, com a função de perda incluída quando os rótulos são passados, vai tornar seu modelo diretamente
@@ -219,11 +216,8 @@ código do modelo é salvo.
 
 ## Enviando o código para o Hub
 
-<Tip warning={true}>
-
-Esta API é experimental e pode ter algumas pequenas alterações nas próximas versões.
-
-</Tip>
+> [!WARNING]
+> Esta API é experimental e pode ter algumas pequenas alterações nas próximas versões.
 
 Primeiro, certifique-se de que seu modelo esteja totalmente definido em um arquivo `.py`. Ele pode contar com importações relativas para alguns outros arquivos 
 desde que todos os arquivos estejam no mesmo diretório (ainda não suportamos submódulos para este recurso). Para o nosso exemplo,
@@ -241,12 +235,9 @@ contém o código do `ResnetModel` e `ResnetModelForImageClassification`.
 
 O `__init__.py` pode estar vazio, apenas está lá para que o Python detecte que o `resnet_model` possa ser usado como um módulo.
 
-<Tip warning={true}>
-
-Se estiver copiando arquivos de modelagem da biblioteca, você precisará substituir todas as importações relativas na parte superior do arquivo
-para importar do pacote `transformers`.
-
-</Tip>
+> [!WARNING]
+> Se estiver copiando arquivos de modelagem da biblioteca, você precisará substituir todas as importações relativas na parte superior do arquivo
+> para importar do pacote `transformers`.
 
 Observe que você pode reutilizar (ou subclasse) uma configuração/modelo existente.
 

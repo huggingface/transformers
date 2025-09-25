@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 1. 영어 텍스트를 프랑스어로 번역하기 위해 [T5](https://huggingface.co/google-t5/t5-small) 모델을 OPUS Books 데이터세트의 영어-프랑스어 하위 집합으로 파인튜닝하는 방법과
 2. 파인튜닝된 모델을 추론에 사용하는 방법입니다.
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/translation)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/translation)를 확인하는 것이 좋습니다.
 
 시작하기 전에 필요한 라이브러리가 모두 설치되어 있는지 확인하세요:
 
@@ -167,11 +164,8 @@ pip install transformers datasets evaluate sacrebleu
 
 ## 훈련[[train]]
 
-<Tip>
-
-[`Trainer`]로 모델을 파인튜닝하는 방법에 익숙하지 않다면 [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 살펴보시기 바랍니다!
-
-</Tip>
+> [!TIP]
+> [`Trainer`]로 모델을 파인튜닝하는 방법에 익숙하지 않다면 [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 살펴보시기 바랍니다!
 
 모델을 훈련시킬 준비가 되었군요! [`AutoModelForSeq2SeqLM`]으로 T5를 로드하세요:
 
@@ -221,11 +215,8 @@ pip install transformers datasets evaluate sacrebleu
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-번역을 위해 모델을 파인튜닝하는 방법에 대한 보다 자세한 예제는 해당 [PyTorch 노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb) 또는 [TensorFlow 노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)을 참조하세요.
-
-</Tip>
+> [!TIP]
+> 번역을 위해 모델을 파인튜닝하는 방법에 대한 보다 자세한 예제는 해당 [PyTorch 노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb) 또는 [TensorFlow 노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)을 참조하세요.
 
 ## 추론[[inference]]
 

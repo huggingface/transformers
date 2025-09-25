@@ -29,11 +29,8 @@ rendered properly in your Markdown viewer.
 1. [ELI5](https://huggingface.co/datasets/eli5) 데이터 세트에서 [r/askscience](https://www.reddit.com/r/askscience/) 부분을 사용해 [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) 모델을 미세 조정합니다.
 2. 추론 시에 직접 미세 조정한 모델을 사용합니다.
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/fill-mask)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/fill-mask)를 확인하는 것이 좋습니다.
 
 시작하기 전에 필요한 라이브러리가 모두 설치되어 있는지 확인하세요:
 
@@ -191,10 +188,8 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 
 ## 훈련[[train]]
 
-<Tip>
-
-[`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)를 살펴보세요!
-</Tip>
+> [!TIP]
+> [`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)를 살펴보세요!
 
 이제 모델 훈련을 시작할 준비가 되었습니다! [`AutoModelForMaskedLM`]를 사용해 DistilRoBERTa 모델을 가져옵니다:
 
@@ -247,12 +242,10 @@ Perplexity: 8.76
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-마스킹된 언어 모델링을 위해 모델을 미세 조정하는 방법에 대한 보다 심층적인 예제는
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
-또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)을 참조하세요.
-</Tip>
+> [!TIP]
+> 마스킹된 언어 모델링을 위해 모델을 미세 조정하는 방법에 대한 보다 심층적인 예제는
+> [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
+> 또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)을 참조하세요.
 
 ## 추론[[inference]]
 

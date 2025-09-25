@@ -54,8 +54,5 @@ follow the OpenAI GPT-2 to model a multiturn dialogue session as a long text and
 modeling. We first concatenate all dialog turns within a dialogue session into a long text x_1,..., x_N (N is the
 sequence length), ended by the end-of-text token.* For more information please confer to the original paper.
 
-<Tip>
-
-DialoGPT's architecture is based on the GPT2 model, refer to [GPT2's documentation page](gpt2) for API reference and examples.
-
-</Tip>
+> [!TIP]
+> DialoGPT's architecture is based on the GPT2 model, refer to [GPT2's documentation page](gpt2) for API reference and examples.

@@ -118,11 +118,8 @@ pip install -e .
 
 위 명령은 리포지터리를 복제한 위치의 폴더와 Python 라이브러리의 경로를 연결시킵니다. Python이 일반 라이브러리 경로 외에 복제한 폴더 내부를 확인할 것입니다. 예를 들어 Python 패키지가 일반적으로 `~/anaconda3/envs/main/lib/python3.7/site-packages/`에 설치되어 있는데, 명령을 받은 Python이 이제 복제한 폴더인 `~/transformers/`도 검색하게 됩니다.
 
-<Tip warning={true}>
-
-라이브러리를 계속 사용하려면 `transformers` 폴더를 꼭 유지해야 합니다.
-
-</Tip>
+> [!WARNING]
+> 라이브러리를 계속 사용하려면 `transformers` 폴더를 꼭 유지해야 합니다.
 
 복제본은 최신 버전의 🤗 Transformers로 쉽게 업데이트할 수 있습니다.
 
@@ -149,21 +146,15 @@ conda install conda-forge::transformers
 2. 셸 환경 변수: `HF_HOME`
 3. 셸 환경 변수: `XDG_CACHE_HOME` + `/huggingface`
 
-<Tip>
-
-과거 🤗 Transformers에서 쓰였던 셸 환경 변수 `PYTORCH_TRANSFORMERS_CACHE` 또는 `PYTORCH_PRETRAINED_BERT_CACHE`이 설정되있다면, 셸 환경 변수 `TRANSFORMERS_CACHE`을 지정하지 않는 한 우선 사용됩니다.
-
-</Tip>
+> [!TIP]
+> 과거 🤗 Transformers에서 쓰였던 셸 환경 변수 `PYTORCH_TRANSFORMERS_CACHE` 또는 `PYTORCH_PRETRAINED_BERT_CACHE`이 설정되있다면, 셸 환경 변수 `TRANSFORMERS_CACHE`을 지정하지 않는 한 우선 사용됩니다.
 
 ## 오프라인 모드[[offline-mode]]
 
 🤗 Transformers를 로컬 파일만 사용하도록 해서 방화벽 또는 오프라인 환경에서 실행할 수 있습니다. 활성화하려면 `HF_HUB_OFFLINE=1` 환경 변수를 설정하세요.
 
-<Tip>
-
-`HF_DATASETS_OFFLINE=1` 환경 변수를 설정하여 오프라인 훈련 과정에 [🤗 Datasets](https://huggingface.co/docs/datasets/)을 추가할 수 있습니다.
-
-</Tip>
+> [!TIP]
+> `HF_DATASETS_OFFLINE=1` 환경 변수를 설정하여 오프라인 훈련 과정에 [🤗 Datasets](https://huggingface.co/docs/datasets/)을 추가할 수 있습니다.
 
 예를 들어 외부 기기 사이에 방화벽을 둔 일반 네트워크에서 평소처럼 프로그램을 다음과 같이 실행할 수 있습니다.
 
@@ -238,8 +229,5 @@ Another option for using 🤗 Transformers offline is to download the files ahea
 >>> config = AutoConfig.from_pretrained("./your/path/bigscience_t0/config.json")
 ```
 
-<Tip>
-
-Hub에 저장된 파일을 다운로드하는 방법을 더 자세히 알아보려면 [Hub에서 파일 다운로드하기](https://huggingface.co/docs/hub/how-to-downstream) 섹션을 참고해주세요.
-
-</Tip>
+> [!TIP]
+> Hub에 저장된 파일을 다운로드하는 방법을 더 자세히 알아보려면 [Hub에서 파일 다운로드하기](https://huggingface.co/docs/hub/how-to-downstream) 섹션을 참고해주세요.

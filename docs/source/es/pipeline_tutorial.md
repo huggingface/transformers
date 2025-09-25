@@ -22,11 +22,8 @@ Un [`pipeline`] simplifica el uso de cualquier modelo del [Hub](https://huggingf
 * Utilizar un tokenizador o modelo específico.
 * Utilizar un [`pipeline`] para tareas de audio y visión.
 
-<Tip>
-
-Echa un vistazo a la documentación de [`pipeline`] para obtener una lista completa de tareas admitidas.
-
-</Tip>
+> [!TIP]
+> Echa un vistazo a la documentación de [`pipeline`] para obtener una lista completa de tareas admitidas.
 
 ## Uso del pipeline
 
@@ -198,9 +195,8 @@ for out in pipe(KeyDataset(dataset, "audio")):
 
 ## Uso de pipelines para un servidor web
 
-<Tip>
-Crear un motor de inferencia es un tema complejo que merece su propia página.
-</Tip>
+> [!TIP]
+> Crear un motor de inferencia es un tema complejo que merece su propia página.
 
 [Link](./pipeline_webserver)
 
@@ -260,16 +256,13 @@ Por ejemplo, si usas esta [imagen de factura](https://huggingface.co/spaces/impi
 [{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
 ```
 
-<Tip>
-
-Para ejecutar el ejemplo anterior, debe tener instalado [`pytesseract`](https://pypi.org/project/pytesseract/) además de 🤗 Transformers:
-
-```bash
-sudo apt install -y tesseract-ocr
-pip install pytesseract
-```
-
-</Tip>
+> [!TIP]
+> Para ejecutar el ejemplo anterior, debe tener instalado [`pytesseract`](https://pypi.org/project/pytesseract/) además de 🤗 Transformers:
+>
+> ```bash
+> sudo apt install -y tesseract-ocr
+> pip install pytesseract
+> ```
 
 ## Uso de `pipeline` en modelos grandes con 🤗 `accelerate`:
 

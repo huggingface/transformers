@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 1. [WNUT 17](https://huggingface.co/datasets/wnut_17) 데이터 세트에서 [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased)를 파인 튜닝하여 새로운 개체를 탐지합니다.
 2. 추론을 위해 파인 튜닝 모델을 사용합니다.
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/token-classification)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/token-classification)를 확인하는 것이 좋습니다.
 
 시작하기 전에, 필요한 모든 라이브러리가 설치되어 있는지 확인하세요:
 
@@ -240,11 +237,8 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ... }
 ```
 
-<Tip>
-
-[`Trainer`]를 사용하여 모델을 파인 튜닝하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
-
-</Tip>
+> [!TIP]
+> [`Trainer`]를 사용하여 모델을 파인 튜닝하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
 
 이제 모델을 훈련시킬 준비가 되었습니다! [`AutoModelForSequenceClassification`]로 DistilBERT를 가져오고 예상되는 레이블 수와 레이블 매핑을 지정하세요:
 
@@ -295,13 +289,10 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-토큰 분류를 위한 모델을 파인 튜닝하는 자세한 예제는 다음
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
-또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)를 참조하세요.
-
-</Tip>
+> [!TIP]
+> 토큰 분류를 위한 모델을 파인 튜닝하는 자세한 예제는 다음
+> [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
+> 또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)를 참조하세요.
 
 ## 추론[[inference]]
 

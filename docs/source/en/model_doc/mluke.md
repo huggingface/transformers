@@ -62,12 +62,9 @@ from transformers import MLukeTokenizer
 tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/mluke-base")
 ```
 
-<Tip>
-
-As mLUKE's architecture is equivalent to that of LUKE, one can refer to [LUKE's documentation page](luke) for all
-tips, code examples and notebooks.
-
-</Tip>
+> [!TIP]
+> As mLUKE's architecture is equivalent to that of LUKE, one can refer to [LUKE's documentation page](luke) for all
+> tips, code examples and notebooks.
 
 ## MLukeTokenizer
 

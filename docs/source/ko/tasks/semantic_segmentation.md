@@ -28,11 +28,8 @@ rendered properly in your Markdown viewer.
 1. [SceneParse150](https://huggingface.co/datasets/scene_parse_150) 데이터 세트를 이용해 [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer#segformer) 미세 조정하기.
 2. 미세 조정된 모델을 추론에 사용하기.
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/image-segmentation)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/image-segmentation)를 확인하는 것이 좋습니다.
 
 시작하기 전에 필요한 모든 라이브러리가 설치되었는지 확인하세요:
 
@@ -186,11 +183,8 @@ pip install -q datasets transformers evaluate
 이제 `compute_metrics` 함수를 사용할 준비가 되었습니다. 트레이닝을 설정할 때 이 함수로 돌아가게 됩니다.
 
 ## 학습하기[[train]]
-<Tip>
-
-만약 [`Trainer`]를 사용해 모델을 미세 조정하는 것에 익숙하지 않다면, [여기](../training#finetune-with-trainer)에서 기본 튜토리얼을 살펴보세요!
-
-</Tip>
+> [!TIP]
+> 만약 [`Trainer`]를 사용해 모델을 미세 조정하는 것에 익숙하지 않다면, [여기](../training#finetune-with-trainer)에서 기본 튜토리얼을 살펴보세요!
 
 이제 모델 학습을 시작할 준비가 되었습니다! [`AutoModelForSemanticSegmentation`]로 SegFormer를 불러오고, 모델에 레이블 ID와 레이블 클래스 간의 매핑을 전달합니다:
 

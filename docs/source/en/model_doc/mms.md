@@ -71,18 +71,15 @@ processor = AutoProcessor.from_pretrained(model_id, target_lang=target_lang)
 model = Wav2Vec2ForCTC.from_pretrained(model_id, target_lang=target_lang, ignore_mismatched_sizes=True)
 ```
 
-<Tip>
-
-You can safely ignore a warning such as:
-
-```text
-Some weights of Wav2Vec2ForCTC were not initialized from the model checkpoint at facebook/mms-1b-all and are newly initialized because the shapes did not match:
-- lm_head.bias: found shape torch.Size([154]) in the checkpoint and torch.Size([314]) in the model instantiated
-- lm_head.weight: found shape torch.Size([154, 1280]) in the checkpoint and torch.Size([314, 1280]) in the model instantiated
-You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
-```
-
-</Tip>
+> [!TIP]
+> You can safely ignore a warning such as:
+>
+> ```text
+> Some weights of Wav2Vec2ForCTC were not initialized from the model checkpoint at facebook/mms-1b-all and are newly initialized because the shapes did not match:
+> - lm_head.bias: found shape torch.Size([154]) in the checkpoint and torch.Size([314]) in the model instantiated
+> - lm_head.weight: found shape torch.Size([154, 1280]) in the checkpoint and torch.Size([314, 1280]) in the model instantiated
+> You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+> ```
 
 If you want to use the ASR pipeline, you can load your chosen target language as such:
 
@@ -386,10 +383,8 @@ processor.id2label.values()
 Pretrained models are available for two different sizes - [300M](https://huggingface.co/facebook/mms-300m) ,
 [1Bil](https://huggingface.co/facebook/mms-1b).
 
-<Tip>
-
-The MMS for ASR architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for further
-details on how to finetune with models for various downstream tasks.
-
-MMS-TTS uses the same model architecture as VITS, refer to [VITS's documentation page](vits) for API reference.
-</Tip>
+> [!TIP]
+> The MMS for ASR architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for further
+> details on how to finetune with models for various downstream tasks.
+>
+> MMS-TTS uses the same model architecture as VITS, refer to [VITS's documentation page](vits) for API reference.

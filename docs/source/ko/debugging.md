@@ -48,23 +48,14 @@ NCCL_DEBUG=INFO python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 to
 ## 언더플로 및 오버플로 감지 [[underflow-and-overflow-detection]]
 
 
-<Tip>
+> [!TIP]
+> 이 기능은 현재 PyTorch에서만 사용할 수 있습니다.
 
-이 기능은 현재 PyTorch에서만 사용할 수 있습니다.
+> [!TIP]
+> 다중 GPU 훈련을 위해서는 DDP (`torch.distributed.launch`)가 필요합니다.
 
-</Tip>
-
-<Tip>
-
-다중 GPU 훈련을 위해서는 DDP (`torch.distributed.launch`)가 필요합니다.
-
-</Tip>
-
-<Tip>
-
-이 기능은 `nn.Module`을 기반으로 하는 모델과 함께 사용할 수 있습니다.
-
-</Tip>
+> [!TIP]
+> 이 기능은 `nn.Module`을 기반으로 하는 모델과 함께 사용할 수 있습니다.
 
 `loss=NaN`이 나타나거나 모델이 `inf` 또는 `nan`으로 인해 다른 이상한 동작을 하는 경우, 언더플로 또는 오버플로의 첫 번째 발생 위치와 그 원인을 파악해야 합니다. 다행히도 이를 자동으로 감지하는 특수 모듈을 활성화하여 쉽게 알아낼 수 있습니다.
 

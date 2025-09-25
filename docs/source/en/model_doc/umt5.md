@@ -67,10 +67,8 @@ The conversion script is also different because the model was saved in t5x's lat
 ['<pad><extra_id_0>nyone who<extra_id_1> drink<extra_id_2> a<extra_id_3> alcohol<extra_id_4> A<extra_id_5> A. This<extra_id_6> I<extra_id_7><extra_id_52><extra_id_53></s>']
 ```
 
-<Tip>
-
-Refer to [T5's documentation page](t5) for more tips, code examples and notebooks.
-</Tip>
+> [!TIP]
+> Refer to [T5's documentation page](t5) for more tips, code examples and notebooks.
 
 ## UMT5Config
 

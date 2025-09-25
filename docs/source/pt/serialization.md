@@ -21,14 +21,11 @@ exporta-los para um formato serializado que pode ser carregado e executado em
 tempos de execução e hardware. Neste guia, mostraremos como exportar modelos 🤗 Transformers
 para [ONNX (Open Neural Network eXchange)](http://onnx.ai).
 
-<Tip>
-
-Uma vez exportado, um modelo pode ser otimizado para inferência por meio de técnicas como
-quantização e poda. Se você estiver interessado em otimizar seus modelos para serem executados com
-máxima eficiência, confira a biblioteca [🤗 Optimum
-](https://github.com/huggingface/optimum).
-
-</Tip>
+> [!TIP]
+> Uma vez exportado, um modelo pode ser otimizado para inferência por meio de técnicas como
+> quantização e poda. Se você estiver interessado em otimizar seus modelos para serem executados com
+> máxima eficiência, confira a biblioteca [🤗 Optimum
+> ](https://github.com/huggingface/optimum).
 
 ONNX é um padrão aberto que define um conjunto comum de operadores e um formato de arquivo comum
 para representar modelos de aprendizado profundo em uma ampla variedade de estruturas, incluindo PyTorch e
@@ -290,20 +287,14 @@ Observe que, neste caso, os nomes de saída do modelo ajustado são `logits`
 em vez do `last_hidden_state` que vimos com o checkpoint `distilbert/distilbert-base-uncased`
 mais cedo. Isso é esperado, pois o modelo ajustado (fine-tuned) possui uma cabeça de classificação de sequência.
 
-<Tip>
+> [!TIP]
+> Os recursos que têm um sufixo `with-pass` (como `causal-lm-with-pass`) correspondem a
+> classes de modelo com estados ocultos pré-computados (chave e valores nos blocos de atenção)
+> que pode ser usado para decodificação autorregressiva rápida.
 
-Os recursos que têm um sufixo `with-pass` (como `causal-lm-with-pass`) correspondem a
-classes de modelo com estados ocultos pré-computados (chave e valores nos blocos de atenção)
-que pode ser usado para decodificação autorregressiva rápida.
-
-</Tip>
-
-<Tip>
-
-Para modelos do tipo `VisionEncoderDecoder`, as partes do codificador e do decodificador são
-exportados separadamente como dois arquivos ONNX chamados `encoder_model.onnx` e `decoder_model.onnx` respectivamente.
-
-</Tip>
+> [!TIP]
+> Para modelos do tipo `VisionEncoderDecoder`, as partes do codificador e do decodificador são
+> exportados separadamente como dois arquivos ONNX chamados `encoder_model.onnx` e `decoder_model.onnx` respectivamente.
 
 ## Exportando um modelo para uma arquitetura sem suporte
 
@@ -326,12 +317,9 @@ você deve herdar, dependendo do tipo de arquitetura de modelo que deseja export
 * Modelos baseados em decodificador herdam de [`~onnx.config.OnnxConfigWithPast`]
 * Os modelos codificador-decodificador herdam de [`~onnx.config.OnnxSeq2SeqConfigWithPast`]
 
-<Tip>
-
-Uma boa maneira de implementar uma configuração ONNX personalizada é observar as
-implementação no arquivo `configuration_<model_name>.py` de uma arquitetura semelhante.
-
-</Tip>
+> [!TIP]
+> Uma boa maneira de implementar uma configuração ONNX personalizada é observar as
+> implementação no arquivo `configuration_<model_name>.py` de uma arquitetura semelhante.
 
 Como o DistilBERT é um modelo baseado em codificador, sua configuração é herdada de
 `OnnxConfig`:
@@ -358,20 +346,17 @@ dessa entrada. Para o DistilBERT, podemos ver que duas entradas são necessária
 `attention_mask`. Essas entradas têm a mesma forma de `(batch_size, sequence_length)`
 é por isso que vemos os mesmos eixos usados na configuração.
 
-<Tip>
-
-Notice that `inputs` property for `DistilBertOnnxConfig` returns an `OrderedDict`. This
-ensures that the inputs are matched with their relative position within the
-`PreTrainedModel.forward()` method when tracing the graph. We recommend using an
-`OrderedDict` for the `inputs` and `outputs` properties when implementing custom ONNX
-configurations.
-
-Observe que a propriedade `inputs` para `DistilBertOnnxConfig` retorna um `OrderedDict`. Este
-garante que as entradas sejam combinadas com sua posição relativa dentro do
-método `PreTrainedModel.forward()` ao traçar o grafo. Recomendamos o uso de um
-`OrderedDict` para as propriedades `inputs` e `outputs` ao implementar configurações personalizadas ONNX.
-
-</Tip>
+> [!TIP]
+> Notice that `inputs` property for `DistilBertOnnxConfig` returns an `OrderedDict`. This
+> ensures that the inputs are matched with their relative position within the
+> `PreTrainedModel.forward()` method when tracing the graph. We recommend using an
+> `OrderedDict` for the `inputs` and `outputs` properties when implementing custom ONNX
+> configurations.
+>
+> Observe que a propriedade `inputs` para `DistilBertOnnxConfig` retorna um `OrderedDict`. Este
+> garante que as entradas sejam combinadas com sua posição relativa dentro do
+> método `PreTrainedModel.forward()` ao traçar o grafo. Recomendamos o uso de um
+> `OrderedDict` para as propriedades `inputs` e `outputs` ao implementar configurações personalizadas ONNX.
 
 Depois de implementar uma configuração ONNX, você pode instanciá-la fornecendo a
 configuração do modelo base da seguinte forma:
@@ -416,13 +401,10 @@ de classificação, poderíamos usar:
 OrderedDict([('logits', {0: 'batch'})])
 ```
 
-<Tip>
-
-Todas as propriedades e métodos básicos associados a [`~onnx.config.OnnxConfig`] e
-as outras classes de configuração podem ser substituídas se necessário. Confira [`BartOnnxConfig`]
-para um exemplo avançado.
-
-</Tip>
+> [!TIP]
+> Todas as propriedades e métodos básicos associados a [`~onnx.config.OnnxConfig`] e
+> as outras classes de configuração podem ser substituídas se necessário. Confira [`BartOnnxConfig`]
+> para um exemplo avançado.
 
 ### Exportando um modelo
 
@@ -455,16 +437,13 @@ modelo é exportado, você pode testar se o modelo está bem formado da seguinte
 >>> onnx.checker.check_model(onnx_model)
 ```
 
-<Tip>
-
-Se o seu modelo for maior que 2GB, você verá que muitos arquivos adicionais são criados
-durante a exportação. Isso é _esperado_ porque o ONNX usa [Protocol
-Buffers](https://developers.google.com/protocol-buffers/) para armazenar o modelo e estes
-têm um limite de tamanho de 2GB. Veja a [ONNX
-documentação](https://github.com/onnx/onnx/blob/master/docs/ExternalData.md) para
-instruções sobre como carregar modelos com dados externos.
-
-</Tip>
+> [!TIP]
+> Se o seu modelo for maior que 2GB, você verá que muitos arquivos adicionais são criados
+> durante a exportação. Isso é _esperado_ porque o ONNX usa [Protocol
+> Buffers](https://developers.google.com/protocol-buffers/) para armazenar o modelo e estes
+> têm um limite de tamanho de 2GB. Veja a [ONNX
+> documentação](https://github.com/onnx/onnx/blob/master/docs/ExternalData.md) para
+> instruções sobre como carregar modelos com dados externos.
 
 ### Validando a saída dos modelos
 

@@ -748,11 +748,8 @@ Tests erfolgreich sind, führen Sie
 RUN_SLOW=1 pytest -sv tests/models/brand_new_bert/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
 ```
 
-<Tip>
-
-Falls Sie Windows verwenden, sollten Sie `RUN_SLOW=1` durch `SET RUN_SLOW=1` ersetzen.
-
-</Tip>
+> [!TIP]
+> Falls Sie Windows verwenden, sollten Sie `RUN_SLOW=1` durch `SET RUN_SLOW=1` ersetzen.
 
 Zweitens sollten alle Funktionen, die speziell für *brand_new_bert* sind, zusätzlich in einem separaten Test getestet werden unter
 `BrandNewBertModelTester`/`BrandNewBertModelTest`. Dieser Teil wird oft vergessen, ist aber in zweierlei Hinsicht äußerst nützlich

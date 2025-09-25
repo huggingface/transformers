@@ -30,11 +30,8 @@ rendered properly in your Markdown viewer.
 1. ضبط [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) على مجموعة بيانات [SQuAD](https://huggingface.co/datasets/squad) للإجابة على الأسئلة الاستخراجية.
 2. استخدام النموذج المضبوط للاستدلال.
 
-<Tip>
-
-لمشاهدة جميع الهياكل والنسخ المتوافقة مع هذه المهمة، نوصي بالرجوع إلى [صفحة المهمة](https://huggingface.co/tasks/question-answering)
-
-</Tip>
+> [!TIP]
+> لمشاهدة جميع الهياكل والنسخ المتوافقة مع هذه المهمة، نوصي بالرجوع إلى [صفحة المهمة](https://huggingface.co/tasks/question-answering)
 
 قبل البدء، تأكد من تثبيت جميع المكتبات الضرورية:
 
@@ -177,11 +174,8 @@ pip install transformers datasets evaluate
 ## التدريب (Train)
 
 
-<Tip>
-
-إذا لم تكن معتادًا على ضبط نموذج باستخدام [`Trainer`], ألق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> إذا لم تكن معتادًا على ضبط نموذج باستخدام [`Trainer`], ألق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
 
 أنت جاهز لبدء تدريب نموذجك الآن! قم بتحميل DistilBERT باستخدام [`AutoModelForQuestionAnswering`]:
 
@@ -228,12 +222,9 @@ pip install transformers datasets evaluate
 ```
 
 
-<Tip>
-
-للحصول على مثال أكثر تعمقًا حول كيفية ضبط نموذج للإجابة على الأسئلة، ألق نظرة على [دفتر ملاحظات PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb) المقابل
-أو [دفتر ملاحظات TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
-
-</Tip>
+> [!TIP]
+> للحصول على مثال أكثر تعمقًا حول كيفية ضبط نموذج للإجابة على الأسئلة، ألق نظرة على [دفتر ملاحظات PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb) المقابل
+> أو [دفتر ملاحظات TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
 
 ## التقييم (Evaluate)
 

@@ -81,11 +81,8 @@ Inizia caricando il tuo modello e specificando il numero di etichette (labels) a
 >>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
-<Tip>
-
-Potresti vedere un warning dato che alcuni dei pesi pre-addestrati non sono stati utilizzati e altri pesi sono stati inizializzati casualmente. Non preoccuparti, è completamente normale! L'head pre-addestrata del modello BERT viene scartata e rimpiazzata da una classification head inizializzata casualmente. Farai il fine-tuning di questa nuova head del modello sul tuo compito di classificazione, trasferendogli la conoscenza del modello pre-addestrato.
-
-</Tip>
+> [!TIP]
+> Potresti vedere un warning dato che alcuni dei pesi pre-addestrati non sono stati utilizzati e altri pesi sono stati inizializzati casualmente. Non preoccuparti, è completamente normale! L'head pre-addestrata del modello BERT viene scartata e rimpiazzata da una classification head inizializzata casualmente. Farai il fine-tuning di questa nuova head del modello sul tuo compito di classificazione, trasferendogli la conoscenza del modello pre-addestrato.
 
 ### Iperparametri per il training
 
@@ -241,11 +238,8 @@ Infine specifica come `device` da usare una GPU se ne hai una. Altrimenti, l'add
 >>> model.to(device)
 ```
 
-<Tip>
-
-Ottieni l'accesso gratuito a una GPU sul cloud se non ne possiedi una usando un notebook sul web come [Colaboratory](https://colab.research.google.com/) o [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
-
-</Tip>
+> [!TIP]
+> Ottieni l'accesso gratuito a una GPU sul cloud se non ne possiedi una usando un notebook sul web come [Colaboratory](https://colab.research.google.com/) o [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
 
 Ottimo, adesso possiamo addestrare! 🥳 
 

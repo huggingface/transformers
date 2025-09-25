@@ -643,11 +643,8 @@ length of key-value cache 24
 
 > 더 긴 입력 시퀀스에 대해 동일한 결과와 큰 속도 향상을 가져오기 때문에 키-값 캐시를 *항상* 사용해야 합니다. Transformers는 텍스트 파이프라인이나 [`generate` 메서드](https://huggingface.co/docs/transformers/main_classes/text_generation)를 사용할 때 기본적으로 키-값 캐시를 활성화합니다.
 
-<Tip warning={true}>
-
-참고로, 키-값 캐시를 사용할 것을 권장하지만, 이를 사용할 때 LLM 출력이 약간 다를 수 있습니다. 이것은 행렬 곱셈 커널 자체의 특성 때문입니다 -- 더 자세한 내용은 [여기](https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)에서 읽어볼 수 있습니다.
-
-</Tip>
+> [!WARNING]
+> 참고로, 키-값 캐시를 사용할 것을 권장하지만, 이를 사용할 때 LLM 출력이 약간 다를 수 있습니다. 이것은 행렬 곱셈 커널 자체의 특성 때문입니다 -- 더 자세한 내용은 [여기](https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)에서 읽어볼 수 있습니다.
 
 #### 3.2.1 멀티 라운드 대화 [[321-multi-round-conversation]]
 

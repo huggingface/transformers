@@ -290,11 +290,8 @@ class FeatureExtractionMixin(PushToHubMixin):
                 identifier allowed by git.
 
 
-                <Tip>
-
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-                </Tip>
+                > [!TIP]
+                > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final feature extractor object. If `True`, then this

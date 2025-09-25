@@ -21,34 +21,31 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-<Tip warning={true}>
-
-This model is in maintenance mode only, so we won't accept any new PRs changing its code. This model was deprecated due to security issues linked to `pickle.load`.
-
-We recommend switching to more recent models for improved security.
-
-In case you would still like to use `TransfoXL` in your experiments, we recommend using the [Hub checkpoint](https://huggingface.co/transfo-xl/transfo-xl-wt103) with a specific revision to ensure you are downloading safe files from the Hub.
-
-You will need to set the environment variable `TRUST_REMOTE_CODE` to `True` in order to allow the
-usage of `pickle.load()`:
-
-```python
-import os
-from transformers import TransfoXLTokenizer, TransfoXLLMHeadModel
-
-os.environ["TRUST_REMOTE_CODE"] = "True"
-
-checkpoint = 'transfo-xl/transfo-xl-wt103'
-revision = '40a186da79458c9f9de846edfaea79c412137f97'
-
-tokenizer = TransfoXLTokenizer.from_pretrained(checkpoint, revision=revision)
-model = TransfoXLLMHeadModel.from_pretrained(checkpoint, revision=revision)
-```
-
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.35.0.
-You can do so by running the following command: `pip install -U transformers==4.35.0`.
-
-</Tip>
+> [!WARNING]
+> This model is in maintenance mode only, so we won't accept any new PRs changing its code. This model was deprecated due to security issues linked to `pickle.load`.
+>
+> We recommend switching to more recent models for improved security.
+>
+> In case you would still like to use `TransfoXL` in your experiments, we recommend using the [Hub checkpoint](https://huggingface.co/transfo-xl/transfo-xl-wt103) with a specific revision to ensure you are downloading safe files from the Hub.
+>
+> You will need to set the environment variable `TRUST_REMOTE_CODE` to `True` in order to allow the
+> usage of `pickle.load()`:
+>
+> ```python
+> import os
+> from transformers import TransfoXLTokenizer, TransfoXLLMHeadModel
+>
+> os.environ["TRUST_REMOTE_CODE"] = "True"
+>
+> checkpoint = 'transfo-xl/transfo-xl-wt103'
+> revision = '40a186da79458c9f9de846edfaea79c412137f97'
+>
+> tokenizer = TransfoXLTokenizer.from_pretrained(checkpoint, revision=revision)
+> model = TransfoXLLMHeadModel.from_pretrained(checkpoint, revision=revision)
+> ```
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.35.0.
+> You can do so by running the following command: `pip install -U transformers==4.35.0`.
 
 <div class="flex flex-wrap space-x-1">
 <a href="https://huggingface.co/models?filter=transfo-xl">
@@ -90,11 +87,8 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 - Basically, the hidden states of the previous segment are concatenated to the current input to compute the attention scores. This allows the model to pay attention to information that was in the previous segment as well as the current one. By stacking multiple attention layers, the receptive field can be increased to multiple previous segments.
 - This changes the positional embeddings to positional relative embeddings (as the regular positional embeddings would give the same results in the current input and the current hidden state at a given position) and needs to make some adjustments in the way attention scores are computed.
 
-<Tip warning={true}>
-
-TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035)
-
-</Tip>
+> [!WARNING]
+> TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035)
 
 ## Resources
 

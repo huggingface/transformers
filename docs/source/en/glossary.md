@@ -296,12 +296,9 @@ These labels are different according to the model head, for example:
 - For automatic speech recognition models, ([`Wav2Vec2ForCTC`]), the model expects a tensor of dimension `(batch_size,
   target_length)` with each value corresponding to the expected label of each individual token.
 
-<Tip>
-
-Each model's labels may be different, so be sure to always check the documentation of each model for more information
-about their specific labels!
-
-</Tip>
+> [!TIP]
+> Each model's labels may be different, so be sure to always check the documentation of each model for more information
+> about their specific labels!
 
 The base models ([`BertModel`]) do not accept labels, as these are the base transformer models, simply outputting
 features.

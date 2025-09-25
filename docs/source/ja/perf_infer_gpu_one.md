@@ -19,11 +19,8 @@ rendered properly in your Markdown viewer.
 
 ## Flash Attention 2
 
-<Tip>
-
-この機能は実験的であり、将来のバージョンで大幅に変更される可能性があります。たとえば、Flash Attention 2 APIは近い将来`BetterTransformer` APIに移行するかもしれません。
-
-</Tip>
+> [!TIP]
+> この機能は実験的であり、将来のバージョンで大幅に変更される可能性があります。たとえば、Flash Attention 2 APIは近い将来`BetterTransformer` APIに移行するかもしれません。
 
 Flash Attention 2は、トランスフォーマーベースのモデルのトレーニングと推論速度を大幅に高速化できます。Flash Attention 2は、Tri Dao氏によって[公式のFlash Attentionリポジトリ](https://github.com/Dao-AILab/flash-attention)で導入されました。Flash Attentionに関する科学論文は[こちら](https://huggingface.co/papers/2205.14135)で見ることができます。
 
@@ -36,11 +33,8 @@ Flash Attention 2を正しくインストールするには、上記のリポジ
 
 さらに多くのモデルにFlash Attention 2のサポートを追加することをGitHubで提案することもでき、変更を統合するためにプルリクエストを開くこともできます。サポートされているモデルは、パディングトークンを使用してトレーニングを含む、推論とトレーニングに使用できます（現在の`BetterTransformer` APIではサポートされていない）。
 
-<Tip>
-
-Flash Attention 2は、モデルのdtypeが`fp16`または`bf16`の場合にのみ使用でき、NVIDIA-GPUデバイスでのみ実行されます。この機能を使用する前に、モデルを適切なdtypeにキャストし、サポートされているデバイスにロードしてください。
-
-</Tip>
+> [!TIP]
+> Flash Attention 2は、モデルのdtypeが`fp16`または`bf16`の場合にのみ使用でき、NVIDIA-GPUデバイスでのみ実行されます。この機能を使用する前に、モデルを適切なdtypeにキャストし、サポートされているデバイスにロードしてください。
 
 ### Quick usage
 
@@ -170,11 +164,8 @@ model.add_adapter(lora_config)
 
 BetterTransformerは、テキスト、画像、およびオーディオモデルの単一およびマルチGPUでの高速な推論をサポートしています。
 
-<Tip>
-
-Flash Attentionは、fp16またはbf16のdtypeを使用するモデルにのみ使用できます。BetterTransformerを使用する前に、モデルを適切なdtypeにキャストしてください。
-
-</Tip>
+> [!TIP]
+> Flash Attentionは、fp16またはbf16のdtypeを使用するモデルにのみ使用できます。BetterTransformerを使用する前に、モデルを適切なdtypeにキャストしてください。
 
 ### Encoder models
 
@@ -264,13 +255,10 @@ You can install `bitsandbytes` and benefit from easy model compression on GPUs. 
 
 `bitsandbytes`をインストールし、GPUで簡単なモデルの圧縮を利用できます。FP4量子化を使用すると、ネイティブのフルプレシジョンバージョンと比較してモデルサイズを最大8倍削減できることが期待できます。以下を確認して、どのように始めるかをご覧ください。
 
-<Tip>
-
-Note that this feature can also be used in a multi GPU setup.
-
-この機能は、マルチGPUセットアップでも使用できることに注意してください。
-
-</Tip>
+> [!TIP]
+> Note that this feature can also be used in a multi GPU setup.
+>
+> この機能は、マルチGPUセットアップでも使用できることに注意してください。
 
 ### Requirements [[requirements-for-fp4-mixedprecision-inference]]
 
@@ -326,11 +314,8 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 
 ## `bitsandbytes` integration for Int8 mixed-precision matrix decomposition
 
-<Tip>
-
-この機能は、マルチGPU環境でも使用できます。
-
-</Tip>
+> [!TIP]
+> この機能は、マルチGPU環境でも使用できます。
 
 論文[`LLM.int8()：スケーラブルなTransformer向けの8ビット行列乗算`](https://huggingface.co/papers/2208.07339)によれば、Hugging Face統合がHub内のすべてのモデルでわずか数行のコードでサポートされています。このメソッドは、半精度（`float16`および`bfloat16`）の重みの場合に`nn.Linear`サイズを2倍、単精度（`float32`）の重みの場合は4倍に縮小し、外れ値に対してほとんど影響を与えません。
 

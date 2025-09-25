@@ -51,7 +51,5 @@ The experiments repository can be found [here](https://github.com/stefan-it/xlm-
 
 A XLM-V (base size) model is available under the [`facebook/xlm-v-base`](https://huggingface.co/facebook/xlm-v-base) identifier.
 
-<Tip>
-
-XLM-V architecture is the same as XLM-RoBERTa, refer to [XLM-RoBERTa documentation](xlm-roberta) for API reference, and examples.
-</Tip>
+> [!TIP]
+> XLM-V architecture is the same as XLM-RoBERTa, refer to [XLM-RoBERTa documentation](xlm-roberta) for API reference, and examples.

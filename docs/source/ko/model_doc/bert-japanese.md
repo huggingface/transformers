@@ -66,12 +66,9 @@ MeCab과 WordPiece 토큰화를 사용하는 모델 예시:
 >>> outputs = bertjapanese(**inputs)
 ```
 
-<Tip> 
-
-이는 토큰화 방법을 제외하고는 BERT와 동일합니다. API 참조 정보는 [BERT 문서](https://huggingface.co/docs/transformers/main/en/model_doc/bert)를 참조하세요.
-이 모델은 [cl-tohoku](https://huggingface.co/cl-tohoku)께서 기여하였습니다.
-
-</Tip> 
+> [!TIP]
+> 이는 토큰화 방법을 제외하고는 BERT와 동일합니다. API 참조 정보는 [BERT 문서](https://huggingface.co/docs/transformers/main/en/model_doc/bert)를 참조하세요.
+> 이 모델은 [cl-tohoku](https://huggingface.co/cl-tohoku)께서 기여하였습니다. 
 
 
 ## BertJapaneseTokenizer

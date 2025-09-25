@@ -45,12 +45,9 @@ dove `{pytorch_version}` deve essere la tua versione di PyTorch, per l'stanza 1.
 Verifica altri approcci per [oneccl_bind_pt installation](https://github.com/intel/torch-ccl).
 Le versioni di oneCCL e PyTorch devono combaciare.
 
-<Tip warning={true}>
-
-oneccl_bindings_for_pytorch 1.12.0 prebuilt wheel does not work with PyTorch 1.12.1 (it is for PyTorch 1.12.0)
-PyTorch 1.12.1 should work with oneccl_bindings_for_pytorch 1.12.100
-
-</Tip>
+> [!WARNING]
+> oneccl_bindings_for_pytorch 1.12.0 prebuilt wheel does not work with PyTorch 1.12.1 (it is for PyTorch 1.12.0)
+> PyTorch 1.12.1 should work with oneccl_bindings_for_pytorch 1.12.100
 
 ## Intel® MPI library
 

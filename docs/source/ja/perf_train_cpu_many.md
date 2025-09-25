@@ -46,20 +46,14 @@ where `{pytorch_version}` should be your PyTorch version, for instance 1.13.0.
 Check more approaches for [oneccl_bind_pt installation](https://github.com/intel/torch-ccl).
 Versions of oneCCL and PyTorch must match.
 
-<Tip warning={true}>
-
-oneccl_bindings_for_pytorch 1.12.0 prebuilt wheel does not work with PyTorch 1.12.1 (it is for PyTorch 1.12.0)
-PyTorch 1.12.1 should work with oneccl_bindings_for_pytorch 1.12.100
-
-</Tip>
+> [!WARNING]
+> oneccl_bindings_for_pytorch 1.12.0 prebuilt wheel does not work with PyTorch 1.12.1 (it is for PyTorch 1.12.0)
+> PyTorch 1.12.1 should work with oneccl_bindings_for_pytorch 1.12.100
 
 `{pytorch_version}` は、あなたのPyTorchのバージョン（例：1.13.0）に置き換える必要があります。重要なのは、oneCCLとPyTorchのバージョンが一致していることです。[oneccl_bind_ptのインストール](https://github.com/intel/torch-ccl)に関するさらなるアプローチを確認できます。
 
-<Tip warning={true}>
-
-`oneccl_bindings_for_pytorch`の1.12.0プリビルトホイールはPyTorch 1.12.1と互換性がありません（これはPyTorch 1.12.0用です）。PyTorch 1.12.1を使用する場合は、`oneccl_bindings_for_pytorch`バージョン1.12.100を使用する必要があります。
-
-</Tip>
+> [!WARNING]
+> `oneccl_bindings_for_pytorch`の1.12.0プリビルトホイールはPyTorch 1.12.1と互換性がありません（これはPyTorch 1.12.0用です）。PyTorch 1.12.1を使用する場合は、`oneccl_bindings_for_pytorch`バージョン1.12.100を使用する必要があります。
 
 ## Intel® MPI library
 

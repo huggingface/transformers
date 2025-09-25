@@ -104,11 +104,8 @@ pip install -e .
 
 这些命令将会链接你克隆的仓库以及你的 Python 库路径。现在，Python 不仅会在正常的库路径中搜索库，也会在你克隆到的文件夹中进行查找。例如，如果你的 Python 包通常本应安装在 `~/anaconda3/envs/main/lib/python3.7/site-packages/` 目录中，在这种情况下 Python 也会搜索你克隆到的文件夹：`~/transformers/`。
 
-<Tip warning={true}>
-
-如果你想继续使用这个库，必须保留 `transformers` 文件夹。
-
-</Tip>
+> [!WARNING]
+> 如果你想继续使用这个库，必须保留 `transformers` 文件夹。
 
 现在，你可以使用以下命令，将你克隆的 🤗 Transformers 库轻松更新至最新版本：
 
@@ -135,21 +132,15 @@ conda install conda-forge::transformers
 2. 环境变量 `HF_HOME`。
 3. 环境变量 `XDG_CACHE_HOME` + `/huggingface`。
 
-<Tip>
-
-除非你明确指定了环境变量 `TRANSFORMERS_CACHE`，🤗 Transformers 将可能会使用较早版本设置的环境变量 `PYTORCH_TRANSFORMERS_CACHE` 或 `PYTORCH_PRETRAINED_BERT_CACHE`。
-
-</Tip>
+> [!TIP]
+> 除非你明确指定了环境变量 `TRANSFORMERS_CACHE`，🤗 Transformers 将可能会使用较早版本设置的环境变量 `PYTORCH_TRANSFORMERS_CACHE` 或 `PYTORCH_PRETRAINED_BERT_CACHE`。
 
 ## 离线模式
 
 🤗 Transformers 可以仅使用本地文件在防火墙或离线环境中运行。设置环境变量 `HF_HUB_OFFLINE=1` 以启用该行为。
 
-<Tip>
-
-通过设置环境变量 `HF_DATASETS_OFFLINE=1` 将 [🤗 Datasets](https://huggingface.co/docs/datasets/) 添加至你的离线训练工作流程中。
-
-</Tip>
+> [!TIP]
+> 通过设置环境变量 `HF_DATASETS_OFFLINE=1` 将 [🤗 Datasets](https://huggingface.co/docs/datasets/) 添加至你的离线训练工作流程中。
 
 例如，你通常会使用以下命令对外部实例进行防火墙保护的的普通网络上运行程序：
 
@@ -223,8 +214,5 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path goog
 >>> config = AutoConfig.from_pretrained("./your/path/bigscience_t0/config.json")
 ```
 
-<Tip>
-
-请参阅 [如何从 Hub 下载文件](https://huggingface.co/docs/hub/how-to-downstream) 部分，获取有关下载存储在 Hub 上文件的更多详细信息。
-
-</Tip>
+> [!TIP]
+> 请参阅 [如何从 Hub 下载文件](https://huggingface.co/docs/hub/how-to-downstream) 部分，获取有关下载存储在 Hub 上文件的更多详细信息。
