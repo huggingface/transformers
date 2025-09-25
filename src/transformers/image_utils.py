@@ -44,8 +44,7 @@ from .utils.constants import (  # noqa: F401
 )
 
 
-# Fallback values for torchvision-dependent variables.
-# These are used when torchvision is unavailable or fails to import.
+# Safe import of torchvision transforms (avoid crashing text-only users if torchvision is broken)
 InterpolationMode = None
 pil_torch_interpolation_mapping = {}
 
@@ -64,12 +63,7 @@ if is_torchvision_available():
             PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
         }
-<<<<<<< HEAD
     except Exception as e:
-=======
-        _TORCHVISION_OK = True
-    except (ImportError, ModuleNotFoundError, AttributeError) as e:
->>>>>>> 1d9ebde18c45821d6245dd671d5389804aff4c1c
         logger.warning(
             "Torchvision is installed but failed to import (%s). "
             "Continuing without torchvision; image pipelines that require it "
