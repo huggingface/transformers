@@ -22,7 +22,7 @@ from tokenizers.models import BPE, Unigram
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging, requires_backends
-from ...create_fast_tokenizer import _get_prepend_scheme
+from ...create_fast_tokenizer import _get_prepend_scheme, generate_merges
 
 
 logger = logging.get_logger(__name__)
@@ -144,8 +144,8 @@ class LlamaTokenizer(PreTrainedTokenizerFast):
         # Set add_prefix_space attribute for use in override methods
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
 
-        self._vocab = vocab
-        self._merges = merges
+        self._vocab = vocab if vocab is not None else self._vocab()
+        self._merges = merges if merges is not None else generate_merges(self._vocab)
 
         # Prepare base-class construction helpers
         metaspace_override = None
@@ -199,12 +199,11 @@ class LlamaTokenizer(PreTrainedTokenizerFast):
 
     def _vocab(self):
         """Vocabulary handling for this tokenizer."""
-        # First 3 special pieces are fixed for LLaMA
-        vocab = [
-            ("<unk>", 0.0),
-            ("<s>", 0.0),
-            ("</s>", 0.0),
-        ]
+        vocab = {
+            "<unk>": 0,
+            "<s>": 1,
+            "</s>": 2,
+        }
         return vocab
 
     def _decoder(self, replacement, add_prefix_space):

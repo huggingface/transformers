@@ -32,7 +32,7 @@ def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     return prepend_scheme
 
 
-def generate_merges(vocab, vocab_scores):
+def generate_merges(vocab, vocab_scores: Optional[dict[str, float]] = None):
     reverse = vocab_scores is not None
     vocab_scores = dict(vocab_scores) if reverse else vocab
 
