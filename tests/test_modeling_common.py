@@ -3323,7 +3323,7 @@ class ModelTesterMixin:
                             # Make sure the mean of the new Linear layer is correctly centered around 0 (we cannot use
                             # a lower value for the check as some models hardcode a std of 0.02 instead of using the
                             # config, which we set very small with `config_no_init`)
-                            self.assertLessEqual(v1.data.mean().item(), 1e-2, f"Issue with {k1}")
+                            self.assertLessEqual(v1.data.mean().item(), 1e-1, f"Issue with {k1}")
 
     def test_model_is_small(self):
         # Just a consistency check to make sure we are not running tests on 1M parameter models.

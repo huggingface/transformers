@@ -5106,7 +5106,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _prefix = f"{prefix}."
 
         if loading_task_model_from_base_state_dict:
-            task_specific_expected_keys = [key for key in self.state_dict() if not key.startswith(_prefix)]
+            all_keys = list(self.state_dict().keys())
+            task_specific_expected_keys = [key for key in all_keys if not key.startswith(_prefix)]
+            base_model_keys = [key[len(_prefix) :] for key in all_keys if key.startswith(_prefix)]
 
         renamed_keys = {}
         key_renaming_mapping = {}
@@ -5125,9 +5127,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # In this case, we need to add the prefix to the keys, to match them to the expected keys
             if loading_task_model_from_base_state_dict:
-                # small sanity check: if a key has the same name as a task-specific key, it's ambiguous and we raise
-                # (we cannot know which key it refers to, the one from base model or the one from task-specific?)
-                if new_key in task_specific_expected_keys:
+                # small sanity check: if we find a key that is only part of the task-specific keys, we raise
+                # (if it's also part of the base model, we do not raise and assume it comes from there)
+                if new_key in task_specific_expected_keys and new_key not in base_model_keys:
                     raise ValueError(
                         "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
                         "properly saved?"
