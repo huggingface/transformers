@@ -47,7 +47,6 @@ from .utils.constants import (  # noqa: F401
 # Safe import of torchvision transforms (avoid crashing text-only users if torchvision is broken)
 InterpolationMode = None
 pil_torch_interpolation_mapping = {}
-_TORCHVISION_OK = False
 
 if is_torchvision_available():
     try:
@@ -64,12 +63,12 @@ if is_torchvision_available():
             PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
         }
-        _TORCHVISION_OK = True
     except Exception as e:
         logger.warning(
             "Torchvision is installed but failed to import (%s). "
             "Continuing without torchvision; image pipelines that require it "
-            "will raise at runtime.", e
+            "will raise at runtime.",
+            e,
         )
         InterpolationMode = None
         pil_torch_interpolation_mapping = {}
