@@ -5769,13 +5769,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         ignore_missing_regex, ignore_unexpected_regex = None, None
         if self._keys_to_ignore_on_load_missing is not None:
-            ignore_missing_regex = re.compile(
-                "|".join(rf"({re.escape(pattern)})" for pattern in self._keys_to_ignore_on_load_missing)
-            )
+            ignore_missing_regex = re.compile("|".join(rf"({p})" for p in self._keys_to_ignore_on_load_missing))
         if self._keys_to_ignore_on_load_unexpected is not None:
-            ignore_unexpected_regex = re.compile(
-                "|".join(rf"({re.escape(pattern)})" for pattern in self._keys_to_ignore_on_load_unexpected)
-            )
+            ignore_unexpected_regex = re.compile("|".join(rf"({p})" for p in self._keys_to_ignore_on_load_unexpected))
 
         # Clean-up missing keys
         true_missing_keys = missing_keys
