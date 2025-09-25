@@ -85,8 +85,11 @@ def write_model(model_path, safe_serialization=True):
     MODEL_LAYER_MAPPING = {
         # Input projection (tokenizer) - ResidualBlock: 64 -> 1280 -> 1280
         "tokenizer.hidden_layer.weight": "decoder.input_ff_layer.hidden_layer.weight",
+        "tokenizer.hidden_layer.bias": "decoder.input_ff_layer.hidden_layer.bias",
         "tokenizer.output_layer.weight": "decoder.input_ff_layer.output_layer.weight",
+        "tokenizer.output_layer.bias": "decoder.input_ff_layer.output_layer.bias",
         "tokenizer.residual_layer.weight": "decoder.input_ff_layer.residual_layer.weight",
+        "tokenizer.residual_layer.bias": "decoder.input_ff_layer.residual_layer.bias",
 
         # Separate output projections for TimesFM 2.5 - these are at model level, not inside decoder
         # Point projection: 1280 -> 1280 -> 1280
@@ -110,6 +113,9 @@ def write_model(model_path, safe_serialization=True):
         # QK normalization layers (RMS norm) - uses 'scale' instead of 'weight'
         "stacked_xf[{i}].attn.query_ln.scale": "decoder.layers[{i}].self_attn.query_ln.weight",
         "stacked_xf[{i}].attn.key_ln.scale": "decoder.layers[{i}].self_attn.key_ln.weight",
+
+        # Per-dimension scaling parameter
+        "stacked_xf[{i}].attn.per_dim_scale.per_dim_scale": "decoder.layers[{i}].self_attn.scaling",
 
         # MLP layers (feed forward)
         "stacked_xf[{i}].ff0.weight": "decoder.layers[{i}].mlp.ff0.weight",
@@ -188,7 +194,7 @@ def check_outputs(model_path):
     # Load converted model
     converted_model = Timesfm2P5ModelForPrediction.from_pretrained(
         model_path,
-        torch_dtype=torch.float32,
+        dtype=torch.float32,
     )
     if torch.cuda.is_available():
         converted_model = converted_model.to("cuda")

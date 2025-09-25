@@ -25,7 +25,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2RotaryEmbedding
+from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2RotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..timesfm.modeling_timesfm import (
     TimesFmDecoderLayer,
@@ -170,6 +170,7 @@ class Timesfm2P5MLP(nn.Module):
         return output
 
 
+
 class Timesfm2P5ResidualBlock(nn.Module):
     """
     TimesFM 2.5 residual block with configurable activation and bias.
@@ -239,16 +240,11 @@ class Timesfm2P5RotaryEmbedding(Gemma2RotaryEmbedding):
 
 class Timesfm2P5Attention(Gemma2Attention):
     """
-    TimesFM 2.5 attention inherits from Gemma2Attention which provides:
-    - Rotary position embeddings
-    - Query scaling (per-dimension scaling equivalent)
-    - Efficient attention implementation
-
-    We only add QK normalization on top of Gemma2's implementation.
+    TimesFM 2.5 attention extends Gemma2Attention but overrides the forward to implement
+    the exact TimesFM 2.5 operations: QK normalization + per-dimension scaling
     """
 
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
-        # Convert TimesFM config to Gemma2-like config for compatibility
         super().__init__(config, layer_idx)
 
         # Add QK normalization specific to TimesFM 2.5
@@ -256,6 +252,76 @@ class Timesfm2P5Attention(Gemma2Attention):
         if self.use_qk_norm:
             self.query_ln = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.key_ln = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
+        # Add per-dimension scaling parameter (same as TimesFmAttention)
+        self.use_per_dim_scale = getattr(config, 'use_per_dim_scale', True)
+        if self.use_per_dim_scale:
+            self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
+
+    def _scale_query(self, query: torch.Tensor) -> torch.Tensor:
+        """Per-dimension scaling - exact copy from TimesFmAttention."""
+        if not self.use_per_dim_scale:
+            return query
+        scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
+        return query * scale[None, None, None, :]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ):
+        """Forward with TimesFM 2.5 specific QK normalization and per-dimension scaling."""
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        # Linear projections
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        # Apply QK normalization (TimesFM 2.5 specific)
+        if self.use_qk_norm:
+            query_states = self.query_ln(query_states)
+            key_states = self.key_ln(key_states)
+
+        # Apply per-dimension scaling to query (TimesFM 2.5 specific)
+        query_states = self._scale_query(query_states)
+
+        # Apply rotary position embeddings
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        # Handle past key/value for caching
+        if past_key_values is not None:
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        # Use the standard attention computation from Gemma2
+        attention_interface = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        # Attention computation with custom scaling disabled (we use per_dim_scale instead)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=None,  # Disable default scaling, we use per_dim_scale
+            sliding_window=getattr(self, 'sliding_window', None),
+            softcap=getattr(self, 'attn_logit_softcapping', None),
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Timesfm2P5DecoderLayer(nn.Module):
@@ -631,7 +697,15 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
 
         normalization_stats = (torch.stack(loc_list), torch.stack(scale_list))
 
-        final_out = input_ts
+        # Keep track of normalization stats
+        loc, scale = normalization_stats
+
+        # Normalize the entire input sequence at once
+        # This ensures consistent normalization throughout
+        normalized_input_ts = self._revin(input_ts, loc, scale, reverse=False)
+
+        # Start with normalized inputs
+        final_out = normalized_input_ts
         context_len = final_out.shape[1]
         full_outputs = []
 
@@ -646,6 +720,7 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
 
         for step_index in range(num_decode_patches):
             current_padding = input_padding[:, 0 : final_out.shape[1]]
+            # final_out is already normalized, so use it directly
             input_ts = final_out[:, -fcontext_len:]
             input_padding = current_padding[:, -fcontext_len:]
 
@@ -674,8 +749,13 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
             # (full batch, last patch, output_patch_len, index of mean forecast = 0)
             new_ts = fprop_outputs[:, -1, :output_patch_len, 0]
             new_full_ts = fprop_outputs[:, -1, :output_patch_len, :]
+
             # (full batch, last patch, output_patch_len, all output indices)
+            # Keep everything normalized until final denormalization
             full_outputs.append(new_full_ts)
+
+            # Append normalized outputs for the next iteration
+            # Everything stays normalized throughout the loop
             final_out = torch.concatenate([final_out, new_ts], axis=-1)
 
         if return_forecast_on_context:
@@ -688,6 +768,12 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
             full_outputs = torch.concatenate(full_outputs, axis=1)[:, 0 : self.horizon_len, :]
 
         mean_outputs = full_outputs[:, :, 0]
+
+        # Apply denormalization using revin
+        loc, scale = normalization_stats
+        mean_outputs = self._revin(mean_outputs, loc, scale, reverse=True)
+        full_outputs = self._revin(full_outputs, loc, scale, reverse=True)
+
         if window_size is not None:
             mean_outputs = mean_outputs[0::2, ...] + mean_outputs[1::2, ...]
             full_outputs = full_outputs[0::2, ...] + full_outputs[1::2, ...]
@@ -709,6 +795,28 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
             full_predictions=full_outputs,
             loss=loss,
         )
+
+    @staticmethod
+    def _revin(
+        x: torch.Tensor,
+        mu: torch.Tensor,
+        sigma: torch.Tensor,
+        reverse: bool = False,
+    ) -> torch.Tensor:
+        """Reversible instance normalization - exact copy from original TimesFM."""
+        _TOLERANCE = 1e-6
+
+        if len(mu.shape) == len(x.shape) - 1:
+            mu = mu[..., None]
+            sigma = sigma[..., None]
+        elif len(mu.shape) == len(x.shape) - 2:
+            mu = mu[..., None, None]
+            sigma = sigma[..., None, None]
+
+        if reverse:
+            return x * sigma + mu
+        else:
+            return (x - mu) / torch.where(sigma < _TOLERANCE, 1.0, sigma)
 
     @staticmethod
     def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
