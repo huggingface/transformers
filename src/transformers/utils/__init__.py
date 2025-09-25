@@ -107,7 +107,6 @@ from .hub import (
     is_offline_mode,
     is_remote_url,
     list_repo_templates,
-    send_example_telemetry,
     try_to_load_from_cache,
 )
 from .import_utils import (
