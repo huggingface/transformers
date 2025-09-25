@@ -75,11 +75,8 @@ This implementation has two main aims:
 1. quickly test model generation by simplifying the original API
 2. simplify training. A training guide will come soon, but user contributions are welcomed!
 
-<Tip>
-
-It is designed for intermediate use. We strongly recommend using the original [implementation](https://github.com/kyutai-labs/moshi) to infer the model in real-time streaming.
-
-</Tip>
+> [!TIP]
+> It is designed for intermediate use. We strongly recommend using the original [implementation](https://github.com/kyutai-labs/moshi) to infer the model in real-time streaming.
 
 **1. Model generation**
 
@@ -98,13 +95,10 @@ You can dynamically use the 3 inputs depending on what you want to test:
 1. Simply check the model response to an user prompt - in that case, `input_ids` can be filled with pad tokens and `user_input_values` can be a zero tensor of the same shape than the user prompt.
 2. Test more complex behaviour - in that case, you must be careful about how the input tokens are synchronized with the audios.
 
-<Tip>
-
-The original model is synchronized text with audio by padding the text in between each token enunciation.
-
-To follow the example of the following image, `"Hello, I'm Moshi"` could be transformed to `"Hello,<pad><unk>I'm Moshi"`.
-
-</Tip>
+> [!TIP]
+> The original model is synchronized text with audio by padding the text in between each token enunciation.
+>
+> To follow the example of the following image, `"Hello, I'm Moshi"` could be transformed to `"Hello,<pad><unk>I'm Moshi"`.
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ylacombe/benchmark-comparison/resolve/main/moshi_text_sync.png">

@@ -24,11 +24,8 @@ specific language governing permissions and limitations under the License.
 - 特定のトークナイザやモデルの使用方法。
 - オーディオ、ビジョン、マルチモーダルタスクのための[`pipeline`]の使用方法。
 
-<Tip>
-
-サポートされているタスクと利用可能なパラメータの完全な一覧については、[`pipeline`]のドキュメンテーションをご覧ください。
-
-</Tip>
+> [!TIP]
+> サポートされているタスクと利用可能なパラメータの完全な一覧については、[`pipeline`]のドキュメンテーションをご覧ください。
 
 ## Pipeline usage
 
@@ -192,9 +189,8 @@ for out in pipe(KeyDataset(dataset, "audio")):
 
 ## Using pipelines for a webserver
 
-<Tip>
-推論エンジンを作成することは複雑なトピックで、独自のページが必要です。
-</Tip>
+> [!TIP]
+> 推論エンジンを作成することは複雑なトピックで、独自のページが必要です。
 
 [リンク](./pipeline_webserver)
 
@@ -255,16 +251,13 @@ for out in pipe(KeyDataset(dataset, "audio")):
 [{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
 ```
 
-<Tip>
-
-上記の例を実行するには、🤗 Transformersに加えて [`pytesseract`](https://pypi.org/project/pytesseract/) がインストールされている必要があります。
-
-```bash
-sudo apt install -y tesseract-ocr
-pip install pytesseract
-```
-
-</Tip>
+> [!TIP]
+> 上記の例を実行するには、🤗 Transformersに加えて [`pytesseract`](https://pypi.org/project/pytesseract/) がインストールされている必要があります。
+>
+> ```bash
+> sudo apt install -y tesseract-ocr
+> pip install pytesseract
+> ```
 
 ## Using `pipeline` on large models with 🤗 `accelerate`:
 

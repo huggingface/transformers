@@ -704,12 +704,9 @@ class EfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
     state of the [CLS] token and a linear layer on top of the final hidden state of the distillation token) e.g. for
     ImageNet.
 
-    <Tip warning={true}>
-
-           This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
-           supported.
-
-    </Tip>
+    > [!WARNING]
+    > This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
+    >        supported.
     """,
     EFFICIENTFORMER_START_DOCSTRING,
 )

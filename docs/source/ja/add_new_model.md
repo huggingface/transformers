@@ -628,11 +628,8 @@ pytest tests/models/brand_new_bert/test_modeling_brand_new_bert.py
 RUN_SLOW=1 pytest -sv tests/models/brand_new_bert/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
 ```
 
-<Tip>
-
-Windowsを使用している場合、`RUN_SLOW=1`を`SET RUN_SLOW=1`に置き換えてください。
-
-</Tip>
+> [!TIP]
+> Windowsを使用している場合、`RUN_SLOW=1`を`SET RUN_SLOW=1`に置き換えてください。
 
 次に、*brand_new_bert*に特有のすべての特徴は、別個のテスト内で追加されるべきです。
 `BrandNewBertModelTester`/`BrandNewBertModelTest`の下に。この部分はよく忘れられますが、2つの点で非常に役立ちます：

@@ -251,11 +251,8 @@ class AutoProcessor:
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
 
-        <Tip>
-
-        Passing `token=True` is required when you want to use a private model.
-
-        </Tip>
+        > [!TIP]
+        > Passing `token=True` is required when you want to use a private model.
 
         Examples:
 

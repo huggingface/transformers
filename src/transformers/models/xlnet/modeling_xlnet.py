@@ -433,12 +433,9 @@ class XLNetPoolerEndLogits(nn.Module):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
 
-        <Tip>
-
-        One of `start_states` or `start_positions` should be not `None`. If both are set, `start_positions` overrides
-        `start_states`.
-
-        </Tip>
+        > [!TIP]
+        > One of `start_states` or `start_positions` should be not `None`. If both are set, `start_positions` overrides
+        > `start_states`.
 
         Returns:
             `torch.FloatTensor`: The end logits for SQuAD.
@@ -500,12 +497,9 @@ class XLNetPoolerAnswerClass(nn.Module):
             cls_index (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 Position of the CLS token for each sentence in the batch. If `None`, takes the last token.
 
-        <Tip>
-
-        One of `start_states` or `start_positions` should be not `None`. If both are set, `start_positions` overrides
-        `start_states`.
-
-        </Tip>
+        > [!TIP]
+        > One of `start_states` or `start_positions` should be not `None`. If both are set, `start_positions` overrides
+        > `start_states`.
 
         Returns:
             `torch.FloatTensor`: The SQuAD 2.0 answer class.

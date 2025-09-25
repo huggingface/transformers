@@ -20,11 +20,8 @@ Quantization techniques reduce memory and computational costs by representing we
 
 Quantization techniques that aren't supported in Transformers can be added with the [`HfQuantizer`] class.
 
-<Tip>
-
-Learn how to quantize models in the [Quantization](../quantization) guide.
-
-</Tip>
+> [!TIP]
+> Learn how to quantize models in the [Quantization](../quantization) guide.
 
 ## QuantoConfig
 

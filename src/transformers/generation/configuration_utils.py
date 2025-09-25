@@ -93,13 +93,10 @@ class GenerationConfig(PushToHubMixin):
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
-    <Tip>
-
-    A large number of these flags control the logits or the stopping criteria of the generation. Make sure you check
-    the [generate-related classes](https://huggingface.co/docs/transformers/internal/generation_utils) for a full
-    description of the possible manipulations, as well as examples of their usage.
-
-    </Tip>
+    > [!TIP]
+    > A large number of these flags control the logits or the stopping criteria of the generation. Make sure you check
+    > the [generate-related classes](https://huggingface.co/docs/transformers/internal/generation_utils) for a full
+    > description of the possible manipulations, as well as examples of their usage.
 
     Arg:
         > Parameters that control the length of the output
@@ -810,11 +807,8 @@ class GenerationConfig(PushToHubMixin):
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
 
-                <Tip>
-
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-                </Tip>
+                > [!TIP]
+                > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final configuration object.

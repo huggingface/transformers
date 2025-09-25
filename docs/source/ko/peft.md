@@ -63,11 +63,8 @@ peft_model_id = "ybelkada/opt-350m-lora"
 model = AutoModelForCausalLM.from_pretrained(peft_model_id)
 ```
 
-<Tip>
-
-`AutoModelFor` 클래스나 기본 모델 클래스(예: `OPTForCausalLM` 또는 `LlamaForCausalLM`) 중 하나를 사용하여 PEFT 어댑터를 가져올 수 있습니다.
-
-</Tip>
+> [!TIP]
+> `AutoModelFor` 클래스나 기본 모델 클래스(예: `OPTForCausalLM` 또는 `LlamaForCausalLM`) 중 하나를 사용하여 PEFT 어댑터를 가져올 수 있습니다.
 
 `load_adapter` 메소드를 호출하여 PEFT 어댑터를 가져올 수도 있습니다.
 
@@ -168,11 +165,8 @@ output = model.generate(**inputs)
 
 PEFT 어댑터는 [`Trainer`] 클래스에서 지원되므로 특정 사용 사례에 맞게 어댑터를 훈련할 수 있습니다. 몇 줄의 코드를 추가하기만 하면 됩니다. 예를 들어 LoRA 어댑터를 훈련하려면:
 
-<Tip>
-
-[`Trainer`]를 사용하여 모델을 미세 조정하는 것이 익숙하지 않다면 [사전훈련된 모델을 미세 조정하기](training) 튜토리얼을 확인하세요.
-
-</Tip>
+> [!TIP]
+> [`Trainer`]를 사용하여 모델을 미세 조정하는 것이 익숙하지 않다면 [사전훈련된 모델을 미세 조정하기](training) 튜토리얼을 확인하세요.
 
 1. 작업 유형 및 하이퍼파라미터를 지정하여 어댑터 구성을 정의합니다. 하이퍼파라미터에 대한 자세한 내용은 [`~peft.LoraConfig`]를 참조하세요.
 

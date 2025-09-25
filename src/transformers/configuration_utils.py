@@ -56,12 +56,9 @@ class PretrainedConfig(PushToHubMixin):
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
     methods for loading/downloading/saving configurations.
 
-    <Tip>
-
-    A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to
-    initialize a model does **not** load the model weights. It only affects the model's configuration.
-
-    </Tip>
+    > [!TIP]
+    > A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to
+    > initialize a model does **not** load the model weights. It only affects the model's configuration.
 
     Class attributes (overridden by derived classes):
 
@@ -89,14 +86,11 @@ class PretrainedConfig(PushToHubMixin):
       model.
     - **num_hidden_layers** (`int`) -- The number of blocks in the model.
 
-    <Tip warning={true}>
-
-    Setting parameters for sequence generation in the model config is deprecated. For backward compatibility, loading
-    some of them will still be possible, but attempting to overwrite them will throw an exception -- you should set
-    them in a [~transformers.GenerationConfig]. Check the documentation of [~transformers.GenerationConfig] for more
-    information about the individual parameters.
-
-    </Tip>
+    > [!WARNING]
+    > Setting parameters for sequence generation in the model config is deprecated. For backward compatibility, loading
+    > some of them will still be possible, but attempting to overwrite them will throw an exception -- you should set
+    > them in a [~transformers.GenerationConfig]. Check the documentation of [~transformers.GenerationConfig] for more
+    > information about the individual parameters.
 
     Arg:
         name_or_path (`str`, *optional*, defaults to `""`):
@@ -563,11 +557,8 @@ class PretrainedConfig(PushToHubMixin):
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
 
-                <Tip>
-
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-                </Tip>
+                > [!TIP]
+                > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final configuration object.

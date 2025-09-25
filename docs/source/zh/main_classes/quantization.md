@@ -189,9 +189,8 @@ model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quanti
 请注意，不支持磁盘卸载。此外，如果由于数据集而内存不足，您可能需要在`from_pretrained`中设置`max_memory`。查看这个[指南](https://huggingface.co/docs/accelerate/usage_guides/big_modeling#designing-a-device-map)以了解有关`device_map`和`max_memory`的更多信息。
 
 
-<Tip warning={true}>
-目前，GPTQ量化仅适用于文本模型。此外，量化过程可能会花费很多时间，具体取决于硬件性能（175B模型在NVIDIA A100上需要4小时）。请在Hub上检查是否有模型的GPTQ量化版本。如果没有，您可以在GitHub上提交需求。 
-</Tip>
+> [!WARNING]
+> 目前，GPTQ量化仅适用于文本模型。此外，量化过程可能会花费很多时间，具体取决于硬件性能（175B模型在NVIDIA A100上需要4小时）。请在Hub上检查是否有模型的GPTQ量化版本。如果没有，您可以在GitHub上提交需求。
 
 ### 推送量化模型到 🤗 Hub
 
@@ -347,11 +346,8 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", load_in_4bit=True)
 ```
 
-<Tip warning={true}>
-
-需要注意的是，一旦模型以 4 位量化方式加载，就无法将量化后的权重推送到 Hub 上。此外，您不能训练 4 位量化权重，因为目前尚不支持此功能。但是，您可以使用 4 位量化模型来训练额外参数，这将在下一部分中介绍。
-
-</Tip>
+> [!WARNING]
+> 需要注意的是，一旦模型以 4 位量化方式加载，就无法将量化后的权重推送到 Hub 上。此外，您不能训练 4 位量化权重，因为目前尚不支持此功能。但是，您可以使用 4 位量化模型来训练额外参数，这将在下一部分中介绍。
 
 ### 加载 8 位量化的大模型
 
@@ -379,14 +375,10 @@ print(model.get_memory_footprint())
 
 通过这种集成，我们能够在较小的设备上加载大模型并运行它们而没有任何问题。
 
-<Tip warning={true}>
-
-需要注意的是，一旦模型以 8 位量化方式加载，除了使用最新的 `transformers` 和 `bitsandbytes` 之外，目前尚无法将量化后的权重推送到 Hub 上。此外，您不能训练 8 位量化权重，因为目前尚不支持此功能。但是，您可以使用 8 位量化模型来训练额外参数，这将在下一部分中介绍。
-
-注意，`device_map` 是可选的，但设置 `device_map = 'auto'` 更适合用于推理，因为它将更有效地调度可用资源上的模型。
-
-
-</Tip>
+> [!WARNING]
+> 需要注意的是，一旦模型以 8 位量化方式加载，除了使用最新的 `transformers` 和 `bitsandbytes` 之外，目前尚无法将量化后的权重推送到 Hub 上。此外，您不能训练 8 位量化权重，因为目前尚不支持此功能。但是，您可以使用 8 位量化模型来训练额外参数，这将在下一部分中介绍。
+>
+> 注意，`device_map` 是可选的，但设置 `device_map = 'auto'` 更适合用于推理，因为它将更有效地调度可用资源上的模型。
 
 #### 高级用例
 
@@ -449,11 +441,8 @@ tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-560m")
 model.push_to_hub("bloom-560m-8bit")
 ```
 
-<Tip warning={true}>
-
-对大模型，强烈鼓励将 8 位量化模型推送到 Hub 上，以便让社区能够从内存占用减少和加载中受益，例如在 Google Colab 上加载大模型。
-
-</Tip>
+> [!WARNING]
+> 对大模型，强烈鼓励将 8 位量化模型推送到 Hub 上，以便让社区能够从内存占用减少和加载中受益，例如在 Google Colab 上加载大模型。
 
 ### 从🤗 Hub加载量化模型
 

@@ -63,11 +63,8 @@ peft_model_id = "ybelkada/opt-350m-lora"
 model = AutoModelForCausalLM.from_pretrained(peft_model_id)
 ```
 
-<Tip>
-
-Sie können einen PEFT-Adapter entweder mit einer `AutoModelFor`-Klasse oder der Basismodellklasse wie `OPTForCausalLM` oder `LlamaForCausalLM` laden.
-
-</Tip>
+> [!TIP]
+> Sie können einen PEFT-Adapter entweder mit einer `AutoModelFor`-Klasse oder der Basismodellklasse wie `OPTForCausalLM` oder `LlamaForCausalLM` laden.
 
 Sie können einen PEFT-Adapter auch laden, indem Sie die Methode `load_adapter` aufrufen:
 
@@ -168,11 +165,8 @@ output = model.generate(**inputs)
 
 PEFT-Adapter werden von der Klasse [`Trainer`] unterstützt, so dass Sie einen Adapter für Ihren speziellen Anwendungsfall trainieren können. Dazu müssen Sie nur ein paar weitere Codezeilen hinzufügen. Zum Beispiel, um einen LoRA-Adapter zu trainieren:
 
-<Tip>
-
-Wenn Sie mit der Feinabstimmung eines Modells mit [`Trainer`] noch nicht vertraut sind, werfen Sie einen Blick auf das Tutorial [Feinabstimmung eines vortrainierten Modells](Training).
-
-</Tip>
+> [!TIP]
+> Wenn Sie mit der Feinabstimmung eines Modells mit [`Trainer`] noch nicht vertraut sind, werfen Sie einen Blick auf das Tutorial [Feinabstimmung eines vortrainierten Modells](Training).
 
 1. Definieren Sie Ihre Adapterkonfiguration mit dem Aufgabentyp und den Hyperparametern (siehe [`~peft.LoraConfig`] für weitere Details darüber, was die Hyperparameter tun).
 

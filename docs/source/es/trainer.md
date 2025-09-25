@@ -18,15 +18,12 @@ rendered properly in your Markdown viewer.
 
 El [`Trainer`] es un bucle completo de entrenamiento y evaluación para modelos de PyTorch implementado en la biblioteca Transformers. Solo necesitas pasarle las piezas necesarias para el entrenamiento (modelo, tokenizador, conjunto de datos, función de evaluación, hiperparámetros de entrenamiento, etc.), y la clase [`Trainer`] se encarga del resto. Esto facilita comenzar a entrenar más rápido sin tener que escribir manualmente tu propio bucle de entrenamiento. Pero al mismo tiempo, [`Trainer`] es muy personalizable y ofrece una gran cantidad de opciones de entrenamiento para que puedas adaptarlo a tus necesidades exactas de entrenamiento.
 
-<Tip>
-
-Además de la clase [`Trainer`], Transformers también proporciona una clase [`Seq2SeqTrainer`] para tareas de secuencia a secuencia como traducción o resumen. También está la clase [~trl.SFTTrainer] de la biblioteca [TRL](https://hf.co/docs/trl) que envuelve la clase [`Trainer`] y está optimizada para entrenar modelos de lenguaje como Llama-2 y Mistral con técnicas autoregresivas. [`~trl.SFTTrainer`] también admite funciones como el empaquetado de secuencias, LoRA, cuantización y DeepSpeed para escalar eficientemente a cualquier tamaño de modelo.
-
-<br>
-
-Siéntete libre de consultar [la referencia de API](./main_classes/trainer) para estas otras clases tipo [`Trainer`] para aprender más sobre cuándo usar cada una. En general, [`Trainer`] es la opción más versátil y es apropiada para una amplia gama de tareas. [`Seq2SeqTrainer`] está diseñado para tareas de secuencia a secuencia y [`~trl.SFTTrainer`] está diseñado para entrenar modelos de lenguaje.
-
-</Tip>
+> [!TIP]
+> Además de la clase [`Trainer`], Transformers también proporciona una clase [`Seq2SeqTrainer`] para tareas de secuencia a secuencia como traducción o resumen. También está la clase [~trl.SFTTrainer] de la biblioteca [TRL](https://hf.co/docs/trl) que envuelve la clase [`Trainer`] y está optimizada para entrenar modelos de lenguaje como Llama-2 y Mistral con técnicas autoregresivas. [`~trl.SFTTrainer`] también admite funciones como el empaquetado de secuencias, LoRA, cuantización y DeepSpeed para escalar eficientemente a cualquier tamaño de modelo.
+>
+> <br>
+>
+> Siéntete libre de consultar [la referencia de API](./main_classes/trainer) para estas otras clases tipo [`Trainer`] para aprender más sobre cuándo usar cada una. En general, [`Trainer`] es la opción más versátil y es apropiada para una amplia gama de tareas. [`Seq2SeqTrainer`] está diseñado para tareas de secuencia a secuencia y [`~trl.SFTTrainer`] está diseñado para entrenar modelos de lenguaje.
 
 Antes de comenzar, asegúrate de tener instalado [Accelerate](https://hf.co/docs/accelerate), una biblioteca para habilitar y ejecutar el entrenamiento de PyTorch en entornos distribuidos.
 
@@ -178,21 +175,15 @@ trainer = Trainer(
 
 ## Logging
 
-<Tip>
-
-Comprueba el API referencia [logging](./main_classes/logging) para mas información sobre los niveles differentes de logging.
-
-</Tip>
+> [!TIP]
+> Comprueba el API referencia [logging](./main_classes/logging) para mas información sobre los niveles differentes de logging.
 
 El [`Trainer`] está configurado a `logging.INFO` de forma predeterminada el cual informa errores, advertencias y otra información basica. Un [`Trainer`] réplica - en entornos distributos - está configurado a `logging.WARNING` el cual solamente informa errores y advertencias. Puedes cambiar el nivel de logging con los parametros [`log_level`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level) y [`log_level_replica`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level_replica) en [`TrainingArguments`].
 
 Para configurar el nivel de registro para cada nodo, usa el parámetro [`log_on_each_node`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.log_on_each_node) para determinar si deseas utilizar el nivel de registro en cada nodo o solo en el nodo principal.
 
-<Tip>
-
-[`Trainer`] establece el nivel de registro por separado para cada nodo en el método [`Trainer.init`], por lo que es posible que desees considerar establecer esto antes si estás utilizando otras funcionalidades de Transformers antes de crear el objeto [`Trainer`].
-
-</Tip>
+> [!TIP]
+> [`Trainer`] establece el nivel de registro por separado para cada nodo en el método [`Trainer.init`], por lo que es posible que desees considerar establecer esto antes si estás utilizando otras funcionalidades de Transformers antes de crear el objeto [`Trainer`].
 
 Por ejemplo, para establecer que tu código principal y los módulos utilicen el mismo nivel de registro según cada nodo:
 
@@ -253,11 +244,8 @@ NEFTune se desactiva después del entrenamiento para restaurar la capa de incrus
 
 La clase [`Trainer`] está impulsada por [Accelerate](https://hf.co/docs/accelerate), una biblioteca para entrenar fácilmente modelos de PyTorch en entornos distribuidos con soporte para integraciones como [FullyShardedDataParallel (FSDP)](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) y [DeepSpeed](https://www.deepspeed.ai/).
 
-<Tip>
-
-Aprende más sobre las estrategias de fragmentación FSDP, descarga de CPU y más con el [`Trainer`] en la guía [Paralela de Datos Completamente Fragmentados](fsdp).
-
-</Tip>
+> [!TIP]
+> Aprende más sobre las estrategias de fragmentación FSDP, descarga de CPU y más con el [`Trainer`] en la guía [Paralela de Datos Completamente Fragmentados](fsdp).
 
 Para usar Accelerate con [`Trainer`], ejecuta el comando [`accelerate.config`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-config) para configurar el entrenamiento para tu entorno de entrenamiento. Este comando crea un `config_file.yaml` que se utilizará cuando inicies tu script de entrenamiento. Por ejemplo, algunas configuraciones de ejemplo que puedes configurar son:
 

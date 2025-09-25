@@ -62,12 +62,8 @@ peft_model_id = "ybelkada/opt-350m-lora"
 model = AutoModelForCausalLM.from_pretrained(peft_model_id)
 ```
 
-<Tip>
-
-你可以使用`AutoModelFor`类或基础模型类（如`OPTForCausalLM`或`LlamaForCausalLM`）来加载一个PEFT adapter。
-
-
-</Tip>
+> [!TIP]
+> 你可以使用`AutoModelFor`类或基础模型类（如`OPTForCausalLM`或`LlamaForCausalLM`）来加载一个PEFT adapter。
 
 您也可以通过`load_adapter`方法来加载 PEFT adapter。
 
@@ -167,11 +163,8 @@ output = model.generate(**inputs)
 PEFT适配器受[`Trainer`]类支持，因此您可以为您的特定用例训练适配器。它只需要添加几行代码即可。例如，要训练一个LoRA adapter：
 
 
-<Tip>
-
-如果你不熟悉如何使用[`Trainer`]微调模型，请查看[微调预训练模型](training)教程。
-
-</Tip>
+> [!TIP]
+> 如果你不熟悉如何使用[`Trainer`]微调模型，请查看[微调预训练模型](training)教程。
 
 1. 使用任务类型和超参数定义adapter配置（参见[`~peft.LoraConfig`]以了解超参数的详细信息）。
 

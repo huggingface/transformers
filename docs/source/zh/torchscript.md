@@ -16,13 +16,10 @@ rendered properly in your Markdown viewer.
 
 # 导出为 TorchScript
 
-<Tip>
-
-这是开始使用 TorchScript 进行实验的起点，我们仍在探索其在变量输入大小模型中的能力。
-这是我们关注的焦点，我们将在即将发布的版本中深入分析，提供更多的代码示例、更灵活的实现以及比较
-Python 代码与编译 TorchScript 的性能基准。
-
-</Tip>
+> [!TIP]
+> 这是开始使用 TorchScript 进行实验的起点，我们仍在探索其在变量输入大小模型中的能力。
+> 这是我们关注的焦点，我们将在即将发布的版本中深入分析，提供更多的代码示例、更灵活的实现以及比较
+> Python 代码与编译 TorchScript 的性能基准。
 
 根据 [TorchScript 文档](https://pytorch.org/docs/stable/jit.html)：
 

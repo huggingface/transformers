@@ -32,11 +32,8 @@ rendered properly in your Markdown viewer.
 1. [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) 모델을 [ELI5](https://huggingface.co/datasets/eli5) 데이터 세트의 [r/askscience](https://www.reddit.com/r/askscience/) 하위 집합으로 미세 조정
 2. 미세 조정된 모델을 추론에 사용
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/text-generation)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/text-generation)를 확인하는 것이 좋습니다.
 
 시작하기 전에 필요한 라이브러리가 모두 설치되어 있는지 확인하세요:
 
@@ -188,11 +185,8 @@ pip install transformers datasets evaluate
 
 ## 훈련[[train]]
 
-<Tip>
-
-[`Trainer`]를 사용하여 모델을 미세 조정하는 방법을 잘 모르신다면 [기본 튜토리얼](../training#train-with-pytorch-trainer)을 확인해보세요!
-
-</Tip>
+> [!TIP]
+> [`Trainer`]를 사용하여 모델을 미세 조정하는 방법을 잘 모르신다면 [기본 튜토리얼](../training#train-with-pytorch-trainer)을 확인해보세요!
 
 이제 모델을 훈련하기 준비가 되었습니다! [`AutoModelForCausalLM`]를 사용하여 DistilGPT2를 불러옵니다:
 
@@ -244,11 +238,8 @@ Perplexity: 49.61
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-인과 언어 모델링을 위해 모델을 미세 조정하는 더 자세한 예제는 해당하는 [PyTorch 노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb) 또는 [TensorFlow 노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)을 참조하세요.
-
-</Tip>
+> [!TIP]
+> 인과 언어 모델링을 위해 모델을 미세 조정하는 더 자세한 예제는 해당하는 [PyTorch 노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb) 또는 [TensorFlow 노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)을 참조하세요.
 
 ## 추론[[inference]]
 

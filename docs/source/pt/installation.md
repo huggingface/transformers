@@ -127,11 +127,8 @@ O Python agora buscará dentro dos arquivos que foram clonados além dos caminho
 Por exemplo, se os pacotes do Python se encontram instalados no caminho `~/anaconda3/envs/main/lib/python3.7/site-packages/`,
 o Python também buscará módulos no diretório onde clonamos o repositório `~/transformers/`.
 
-<Tip warning={true}>
-
-É necessário manter o diretório `transformers` se desejas continuar usando a biblioteca.
-
-</Tip>
+> [!WARNING]
+> É necessário manter o diretório `transformers` se desejas continuar usando a biblioteca.
 
 Assim, É possível atualizar sua cópia local para com a última versão do 🤗 Transformers com o seguinte comando:
 
@@ -161,13 +158,10 @@ No Windows, este diretório pré-definido é dado por `C:\Users\username\.cache\
 2. Variável de ambiente do shell:`HF_HOME` + `transformers/`.
 3. Variável de ambiente do shell: `XDG_CACHE_HOME` + `/huggingface/transformers`.
 
-<Tip>
-
-    O 🤗 Transformers usará as variáveis de ambiente do shell `PYTORCH_TRANSFORMERS_CACHE` ou `PYTORCH_PRETRAINED_BERT_CACHE`
-    se estiver vindo de uma versão anterior da biblioteca que tenha configurado essas variáveis de ambiente, a menos que
-    você especifique a variável de ambiente do shell `TRANSFORMERS_CACHE`.
-
-</Tip>
+> [!TIP]
+> O 🤗 Transformers usará as variáveis de ambiente do shell `PYTORCH_TRANSFORMERS_CACHE` ou `PYTORCH_PRETRAINED_BERT_CACHE`
+>     se estiver vindo de uma versão anterior da biblioteca que tenha configurado essas variáveis de ambiente, a menos que
+>     você especifique a variável de ambiente do shell `TRANSFORMERS_CACHE`.
 
 
 ## Modo Offline
@@ -175,12 +169,9 @@ No Windows, este diretório pré-definido é dado por `C:\Users\username\.cache\
 O 🤗 Transformers também pode ser executado num ambiente de firewall ou fora da rede (offline) usando arquivos locais.
 Para tal, configure a variável de ambiente de modo que `HF_HUB_OFFLINE=1`.
 
-<Tip>
-
-Você pode adicionar o [🤗 Datasets](https://huggingface.co/docs/datasets/) ao pipeline de treinamento offline declarando
-    a variável de ambiente `HF_DATASETS_OFFLINE=1`.
-
-</Tip>
+> [!TIP]
+> Você pode adicionar o [🤗 Datasets](https://huggingface.co/docs/datasets/) ao pipeline de treinamento offline declarando
+>     a variável de ambiente `HF_DATASETS_OFFLINE=1`.
 
 Segue um exemplo de execução do programa numa rede padrão com firewall para instâncias externas, usando o seguinte comando:
 
@@ -255,8 +246,5 @@ Depois que o arquivo for baixado e armazenado no cachê local, especifique seu c
 >>> config = AutoConfig.from_pretrained("./your/path/bigscience_t0/config.json")
 ```
 
-<Tip>
-
-Para obter mais detalhes sobre como baixar arquivos armazenados no Hub, consulte a seção [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream).
-
-</Tip>
+> [!TIP]
+> Para obter mais detalhes sobre como baixar arquivos armazenados no Hub, consulte a seção [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream).

@@ -54,9 +54,8 @@ DeepMind によって最初に開発された最先端の視覚言語モデル�
 pip install -q bitsandbytes sentencepiece accelerate transformers
 ```
 
-<Tip>
-量子化されていないバージョンのモデル チェックポイントを使用して次の例を実行するには、少なくとも 20GB の GPU メモリが必要です。
-</Tip>
+> [!TIP]
+> 量子化されていないバージョンのモデル チェックポイントを使用して次の例を実行するには、少なくとも 20GB の GPU メモリが必要です。
 
 ## Loading the model
 
@@ -144,13 +143,11 @@ BOS (Beginning-of-sequence) トークンによりキャプションが作成さ�
 A puppy in a flower bed
 ```
 
-<Tip>
-
-増加時に発生するエラーを避けるために、`generate`の呼び出しに`bad_words_ids`を含めることをお勧めします。
-`max_new_tokens`: モデルは、新しい `<image>` または `<fake_token_around_image>` トークンを生成する必要があります。
-モデルによって画像が生成されていません。
-このガイドのようにオンザフライで設定することも、[テキスト生成戦略](../generation_strategies) ガイドで説明されているように `GenerationConfig` に保存することもできます。
-</Tip>
+> [!TIP]
+> 増加時に発生するエラーを避けるために、`generate`の呼び出しに`bad_words_ids`を含めることをお勧めします。
+> `max_new_tokens`: モデルは、新しい `<image>` または `<fake_token_around_image>` トークンを生成する必要があります。
+> モデルによって画像が生成されていません。
+> このガイドのようにオンザフライで設定することも、[テキスト生成戦略](../generation_strategies) ガイドで説明されているように `GenerationConfig` に保存することもできます。
 
 ## Prompted image captioning
 
@@ -335,13 +332,10 @@ The little girl ran
 
 IDEFICS は玄関先にあるカボチャに気づき、幽霊に関する不気味なハロウィーンの話をしたようです。
 
-<Tip>
-
-このような長い出力の場合、テキスト生成戦略を微調整すると大きなメリットが得られます。これは役に立ちます
-生成される出力の品質が大幅に向上します。 [テキスト生成戦略](../generation_strategies) を確認してください。
-詳しく知ることができ。
-
-</Tip>
+> [!TIP]
+> このような長い出力の場合、テキスト生成戦略を微調整すると大きなメリットが得られます。これは役に立ちます
+> 生成される出力の品質が大幅に向上します。 [テキスト生成戦略](../generation_strategies) を確認してください。
+> 詳しく知ることができ。
 
 ## Running inference in batch mode
 

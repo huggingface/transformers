@@ -1150,13 +1150,10 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         Padding side (left/right) padding token ids are defined at the tokenizer level (with `self.padding_side`,
         `self.pad_token_id`).
-        <Tip>
-
-        If the `encoded_inputs` passed are dictionary of numpy arrays, PyTorch tensors, the
-        result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
-        PyTorch tensors, you will lose the specific device of your tensors however.
-
-        </Tip>
+        > [!TIP]
+        > If the `encoded_inputs` passed are dictionary of numpy arrays, PyTorch tensors, the
+        > result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
+        > PyTorch tensors, you will lose the specific device of your tensors however.
 
         Args:
             encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, List[int]]`, `Dict[str, List[List[int]]` or `List[Dict[str, List[int]]]`):

@@ -37,11 +37,8 @@ AltCLIP은 멀티모달 비전 및 언어 모델입니다. 이미지와 텍스�
 >>> logits_per_image = outputs.logits_per_image  # 이미지-텍스트 유사도 점수
 >>> probs = logits_per_image.softmax(dim=1)  # 라벨 마다 확률을 얻기 위해 softmax 적용
 ```
-<Tip>
-
-이 모델은 `CLIPModel`을 기반으로 하므로, 원래 CLIP처럼 사용할 수 있습니다.
-
-</Tip>
+> [!TIP]
+> 이 모델은 `CLIPModel`을 기반으로 하므로, 원래 CLIP처럼 사용할 수 있습니다.
 
 ## AltCLIPConfig
 

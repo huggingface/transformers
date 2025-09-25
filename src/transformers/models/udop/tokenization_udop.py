@@ -163,12 +163,9 @@ class UdopTokenizer(PreTrainedTokenizer):
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
-            <Tip>
-
-            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
-            The token used is the `sep_token`.
-
-            </Tip>
+            > [!TIP]
+            > When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            > The token used is the `sep_token`.
 
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
@@ -833,11 +830,8 @@ class UdopTokenizer(PreTrainedTokenizer):
         """
         Tokenize and prepare for the model a sequence or a pair of sequences.
 
-        <Tip warning={true}>
-
-        This method is deprecated, `__call__` should be used instead.
-
-        </Tip>
+        > [!WARNING]
+        > This method is deprecated, `__call__` should be used instead.
 
         Args:
             text (`str`, `list[str]` or (for non-fast tokenizers) `list[int]`):

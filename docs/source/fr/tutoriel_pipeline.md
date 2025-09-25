@@ -10,11 +10,8 @@ L'objet [`pipeline`] rend simple l'utilisation de n'importe quel modèle du [Hub
 * Utiliser un tokenizer ou modèle spécifique.
 * Utiliser un [`pipeline`] pour des tâches audio, de vision et multimodales.
 
-<Tip>
-
-Consultez la documentation du [`pipeline`] pour une liste complète des tâches prises en charge et des paramètres disponibles.
-
-</Tip>
+> [!TIP]
+> Consultez la documentation du [`pipeline`] pour une liste complète des tâches prises en charge et des paramètres disponibles.
 
 ## Utilisation du pipeline
 
@@ -186,9 +183,8 @@ for out in pipe(KeyDataset(dataset, "audio")):
 
 ## Utilisation des pipelines pour un serveur web
 
-<Tip>
-Créer un moteur d'inférence est un sujet complexe qui mérite sa propre page.
-</Tip>
+> [!TIP]
+> Créer un moteur d'inférence est un sujet complexe qui mérite sa propre page.
 
 [Lien](./pipeline_webserver)
 
@@ -250,16 +246,13 @@ Par exemple, si vous utilisez cette [image de facture](https://huggingface.co/sp
 [{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
 ```
 
-<Tip>
-
-Pour exécuter l'exemple ci-dessus, vous devez avoir [`pytesseract`](https://pypi.org/project/pytesseract/) installé en plus de 🤗 Transformers :
-
-```bash
-sudo apt install -y tesseract-ocr
-pip install pytesseract
-```
-
-</Tip>
+> [!TIP]
+> Pour exécuter l'exemple ci-dessus, vous devez avoir [`pytesseract`](https://pypi.org/project/pytesseract/) installé en plus de 🤗 Transformers :
+>
+> ```bash
+> sudo apt install -y tesseract-ocr
+> pip install pytesseract
+> ```
 
 ## Utilisation de `pipeline` sur de grands modèles avec 🤗 `accelerate` :
 

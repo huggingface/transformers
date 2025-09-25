@@ -139,12 +139,9 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default. [What are attention masks?](../glossary#attention-mask)
 
-                <Tip>
-
-                For TvltTransformer models, `attention_mask` should always be passed for batched inference, to avoid
-                subtle bugs.
-
-                </Tip>
+                > [!TIP]
+                > For TvltTransformer models, `attention_mask` should always be passed for batched inference, to avoid
+                > subtle bugs.
 
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass

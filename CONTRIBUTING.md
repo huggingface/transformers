@@ -329,11 +329,8 @@ By default, slow tests are skipped but you can set the `RUN_SLOW` environment va
 `yes` to run them. This will download many gigabytes of models so make sure you
 have enough disk space, a good internet connection or a lot of patience!
 
-<Tip warning={true}>
-
-Remember to specify a *path to a subfolder or a test file* to run the test. Otherwise, you'll run all the tests in the `tests` or `examples` folder, which will take a very long time!
-
-</Tip>
+> [!WARNING]
+> Remember to specify a *path to a subfolder or a test file* to run the test. Otherwise, you'll run all the tests in the `tests` or `examples` folder, which will take a very long time!
 
 ```bash
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model

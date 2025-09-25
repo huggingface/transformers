@@ -101,11 +101,8 @@ Para reusar o arquivo de configurações, carregue com [`~PretrainedConfig.from_
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
 ```
 
-<Tip>
-
-Você pode também salvar seu arquivo de configurações como um dicionário ou até mesmo com a diferença entre as seus atributos de configuração customizados e os atributos de configuração padrões! Olhe a documentação [configuration](main_classes/configuration) para mais detalhes.
-
-</Tip>
+> [!TIP]
+> Você pode também salvar seu arquivo de configurações como um dicionário ou até mesmo com a diferença entre as seus atributos de configuração customizados e os atributos de configuração padrões! Olhe a documentação [configuration](main_classes/configuration) para mais detalhes.
 
 ## Modelo
 
@@ -163,11 +160,8 @@ A útlima classe base que você precisa antes de usar um modelo para dados textu
 
 Os dois tokenizers suporta métodos comuns como os de codificar e decodificar, adicionar novos tokens, e gerenciar tokens especiais.
 
-<Tip warning={true}>
-
-Nem todo modelo suporta um 'fast tokenizer'. De uma olhada aqui [table](index#supported-frameworks) pra checar se um modelo suporta 'fast tokenizer'.
-
-</Tip>
+> [!WARNING]
+> Nem todo modelo suporta um 'fast tokenizer'. De uma olhada aqui [table](index#supported-frameworks) pra checar se um modelo suporta 'fast tokenizer'.
 
 Se você treinou seu prórpio tokenizer, você pode criar um a partir do seu arquivo *vocabulary*:
 
@@ -193,11 +187,8 @@ Criando um 'fast tokenizer' com a classe [`DistilBertTokenizerFast`]:
 >>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-<Tip>
-
-Pos padrão, [`AutoTokenizer`] tentará carregar um 'fast tokenizer'. Você pode disabilitar esse comportamento colocando `use_fast=False` no `from_pretrained`.
-
-</Tip>
+> [!TIP]
+> Pos padrão, [`AutoTokenizer`] tentará carregar um 'fast tokenizer'. Você pode disabilitar esse comportamento colocando `use_fast=False` no `from_pretrained`.
 
 ## Extrator de features
 
@@ -229,11 +220,8 @@ ViTFeatureExtractor {
 }
 ```
 
-<Tip>
-
-Se você não estiver procurando por nenhuma customização, apenas use o método `from_pretrained` para carregar parâmetros do modelo de extrator de features padrão.
-
-</Tip>
+> [!TIP]
+> Se você não estiver procurando por nenhuma customização, apenas use o método `from_pretrained` para carregar parâmetros do modelo de extrator de features padrão.
 
 Modifique qualquer parâmetro dentre os [`ViTFeatureExtractor`] para criar seu extrator de features customizado.
 

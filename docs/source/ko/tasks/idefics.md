@@ -42,9 +42,8 @@ rendered properly in your Markdown viewer.
 pip install -q bitsandbytes sentencepiece accelerate transformers
 ```
 
-<Tip>
-다음 예제를 비양자화된 버전의 모델 체크포인트로 실행하려면 최소 20GB의 GPU 메모리가 필요합니다.
-</Tip>
+> [!TIP]
+> 다음 예제를 비양자화된 버전의 모델 체크포인트로 실행하려면 최소 20GB의 GPU 메모리가 필요합니다.
 
 ## 모델 로드[[loading-the-model]]
 
@@ -122,11 +121,9 @@ IDEFICS는 텍스트 및 이미지 프롬프트를 모두 수용합니다. 그�
 A puppy in a flower bed
 ```
 
-<Tip>
-
-`max_new_tokens`의 크기를 증가시킬 때 발생할 수 있는 오류를 피하기 위해 `generate` 호출 시 `bad_words_ids`를 포함하는 것이 좋습니다. 모델로부터 생성된 이미지가 없을 때 새로운 `<image>` 또는 `<fake_token_around_image>` 토큰을 생성하려고 하기 때문입니다.
-이 가이드에서처럼 `bad_words_ids`를 함수 호출 시에 매개변수로 설정하거나, [텍스트 생성 전략](../generation_strategies) 가이드에 설명된 대로 `GenerationConfig`에 저장할 수도 있습니다.
-</Tip>
+> [!TIP]
+> `max_new_tokens`의 크기를 증가시킬 때 발생할 수 있는 오류를 피하기 위해 `generate` 호출 시 `bad_words_ids`를 포함하는 것이 좋습니다. 모델로부터 생성된 이미지가 없을 때 새로운 `<image>` 또는 `<fake_token_around_image>` 토큰을 생성하려고 하기 때문입니다.
+> 이 가이드에서처럼 `bad_words_ids`를 함수 호출 시에 매개변수로 설정하거나, [텍스트 생성 전략](../generation_strategies) 가이드에 설명된 대로 `GenerationConfig`에 저장할 수도 있습니다.
 
 ## 프롬프트 이미지 캡셔닝[[prompted-image-captioning]]
 
@@ -302,10 +299,8 @@ The little girl ran
 
 IDEFICS가 문 앞에 있는 호박을 보고 유령에 대한 으스스한 할로윈 이야기를 만든 것 같습니다.
 
-<Tip>
-
-이처럼 긴 텍스트를 생성할 때는 텍스트 생성 전략을 조정하는 것이 좋습니다. 이렇게 하면 생성된 결과물의 품질을 크게 향상시킬 수 있습니다. 자세한 내용은 [텍스트 생성 전략](../generation_strategies)을 참조하세요.
-</Tip>
+> [!TIP]
+> 이처럼 긴 텍스트를 생성할 때는 텍스트 생성 전략을 조정하는 것이 좋습니다. 이렇게 하면 생성된 결과물의 품질을 크게 향상시킬 수 있습니다. 자세한 내용은 [텍스트 생성 전략](../generation_strategies)을 참조하세요.
 
 ## 배치 모드에서 추론 실행[[running-inference-in-batch-mode]]
 

@@ -22,11 +22,8 @@ A classificação de tokens atribui um rótulo a tokens individuais em uma frase
 
 Este guia mostrará como realizar o fine-tuning do [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) no conjunto de dados [WNUT 17](https://huggingface.co/datasets/wnut_17) para detectar novas entidades.
 
-<Tip>
-
-Consulte a [página de tarefas de classificação de tokens](https://huggingface.co/tasks/token-classification) para obter mais informações sobre outras formas de classificação de tokens e seus modelos, conjuntos de dados e métricas associadas.
-
-</Tip>
+> [!TIP]
+> Consulte a [página de tarefas de classificação de tokens](https://huggingface.co/tasks/token-classification) para obter mais informações sobre outras formas de classificação de tokens e seus modelos, conjuntos de dados e métricas associadas.
 
 ## Carregando o conjunto de dados WNUT 17
 
@@ -152,11 +149,8 @@ Carregue o DistilBERT com o [`AutoModelForTokenClassification`] junto com o núm
 >>> model = AutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased", num_labels=14)
 ```
 
-<Tip>
-
-Se você não estiver familiarizado com o fine-tuning de um modelo com o [`Trainer`], dê uma olhada no tutorial básico [aqui](../training#finetune-with-trainer)!
-
-</Tip>
+> [!TIP]
+> Se você não estiver familiarizado com o fine-tuning de um modelo com o [`Trainer`], dê uma olhada no tutorial básico [aqui](../training#finetune-with-trainer)!
 
 Nesse ponto, restam apenas três passos:
 
@@ -187,8 +181,5 @@ Nesse ponto, restam apenas três passos:
 >>> trainer.train()
 ```
 
-<Tip>
-
-Para obter um exemplo mais aprofundado de como executar o fine-tuning de um modelo para classificação de tokens, dê uma olhada nesse [notebook utilizando PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb) ou nesse [notebook utilizando TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
-
-</Tip>
+> [!TIP]
+> Para obter um exemplo mais aprofundado de como executar o fine-tuning de um modelo para classificação de tokens, dê uma olhada nesse [notebook utilizando PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb) ou nesse [notebook utilizando TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).

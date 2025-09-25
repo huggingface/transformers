@@ -68,11 +68,8 @@ MeCab および WordPiece トークン化でモデルを使用する例:
 >>> outputs = bertjapanese(**inputs)
 ```
 
-<Tip>
-
-- この実装はトークン化方法を除いて BERT と同じです。その他の使用例については、[BERT のドキュメント](bert) を参照してください。
-
-</Tip>
+> [!TIP]
+> - この実装はトークン化方法を除いて BERT と同じです。その他の使用例については、[BERT のドキュメント](bert) を参照してください。
 
 このモデルは[cl-tohaku](https://huggingface.co/cl-tohaku)から提供されました。
 

@@ -16,10 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Exportar a TorchScript
 
-<Tip>
-Este es el comienzo de nuestros experimentos con TorchScript y todavía estamos explorando sus capacidades con modelos de variables de entrada. Es un tema de interés para nosotros y profundizaremos en nuestro análisis en las próximas versiones, con más ejemplos de código, una implementación más flexible y comparativas de rendimiento comparando códigos basados en Python con TorchScript compilado.  
-
-</Tip>
+> [!TIP]
+> Este es el comienzo de nuestros experimentos con TorchScript y todavía estamos explorando sus capacidades con modelos de variables de entrada. Es un tema de interés para nosotros y profundizaremos en nuestro análisis en las próximas versiones, con más ejemplos de código, una implementación más flexible y comparativas de rendimiento comparando códigos basados en Python con TorchScript compilado.
 
 De acuerdo con la documentación de TorchScript: 
 

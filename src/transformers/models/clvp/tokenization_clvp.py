@@ -96,11 +96,8 @@ class ClvpTokenizer(PreTrainedTokenizer):
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
     call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
 
-    <Tip>
-
-    When used with `is_split_into_words=True`, this tokenizer will add a space before each word (even the first one).
-
-    </Tip>
+    > [!TIP]
+    > When used with `is_split_into_words=True`, this tokenizer will add a space before each word (even the first one).
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.

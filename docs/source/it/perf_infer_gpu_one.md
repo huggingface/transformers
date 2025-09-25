@@ -23,11 +23,8 @@ Abbiamo recentemente integrato `BetterTransformer` per velocizzare l'inferenza s
 
 ## Integrazione di `bitsandbytes` per Int8 mixed-precision matrix decomposition
 
-<Tip>
-
-Nota che questa funzione può essere utilizzata anche nelle configurazioni multi GPU.
-
-</Tip>
+> [!TIP]
+> Nota che questa funzione può essere utilizzata anche nelle configurazioni multi GPU.
 
 Dal paper [`LLM.int8() : 8-bit Matrix Multiplication for Transformers at Scale`](https://huggingface.co/papers/2208.07339), noi supportiamo l'integrazione di Hugging Face per tutti i modelli dell'Hub con poche righe di codice.
 Il metodo `nn.Linear` riduce la dimensione di 2 per i pesi `float16` e `bfloat16` e di 4 per i pesi `float32`, con un impatto quasi nullo sulla qualità, operando sugli outlier in half-precision.

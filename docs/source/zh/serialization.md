@@ -120,11 +120,8 @@ optimum-cli export onnx --model local_path --task question-answering distilbert_
 
 ### 使用 `transformers.onnx` 导出模型
 
-<Tip warning={true}>
-
-`transformers.onnx` 不再进行维护，请如上所述，使用 🤗 Optimum 导出模型。这部分内容将在未来版本中删除。
-
-</Tip>
+> [!WARNING]
+> `transformers.onnx` 不再进行维护，请如上所述，使用 🤗 Optimum 导出模型。这部分内容将在未来版本中删除。
 
 要使用 `transformers.onnx` 将 🤗 Transformers 模型导出为 ONNX，请安装额外的依赖项：
 

@@ -113,11 +113,8 @@ pip install -e .
 
 Questi comandi collegheranno la cartella in cui è stato clonato il repository e i path delle librerie Python. Python guarderà ora all'interno della cartella clonata, oltre ai normali path delle librerie. Per esempio, se i tuoi pacchetti Python sono installati tipicamente in `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python cercherà anche nella cartella clonata: `~/transformers/`.
 
-<Tip warning={true}>
-
-Devi tenere la cartella `transformers` se vuoi continuare ad utilizzare la libreria.
-
-</Tip>
+> [!WARNING]
+> Devi tenere la cartella `transformers` se vuoi continuare ad utilizzare la libreria.
 
 Ora puoi facilmente aggiornare il tuo clone all'ultima versione di 🤗 Transformers con il seguente comando:
 
@@ -144,21 +141,15 @@ I modelli pre-allenati sono scaricati e memorizzati localmente nella cache in: `
 2. Variabile d'ambiente della shell: `HF_HOME` + `transformers/`.
 3. Variabile d'ambiente della shell: `XDG_CACHE_HOME` + `/huggingface/transformers`.
 
-<Tip>
-
-🤗 Transformers utilizzerà le variabili d'ambiente della shell `PYTORCH_TRANSFORMERS_CACHE` o `PYTORCH_PRETRAINED_BERT_CACHE` se si proviene da un'iterazione precedente di questa libreria e sono state impostate queste variabili d'ambiente, a meno che non si specifichi la variabile d'ambiente della shell `TRANSFORMERS_CACHE`.
-
-</Tip>
+> [!TIP]
+> 🤗 Transformers utilizzerà le variabili d'ambiente della shell `PYTORCH_TRANSFORMERS_CACHE` o `PYTORCH_PRETRAINED_BERT_CACHE` se si proviene da un'iterazione precedente di questa libreria e sono state impostate queste variabili d'ambiente, a meno che non si specifichi la variabile d'ambiente della shell `TRANSFORMERS_CACHE`.
 
 ## Modalità Offline
 
 🤗 Transformers può essere eseguita in un ambiente firewalled o offline utilizzando solo file locali. Imposta la variabile d'ambiente `HF_HUB_OFFLINE=1` per abilitare questo comportamento.
 
-<Tip>
-
-Aggiungi [🤗 Datasets](https://huggingface.co/docs/datasets/) al tuo flusso di lavoro offline di training impostando la variabile d'ambiente `HF_DATASETS_OFFLINE=1`.
-
-</Tip>
+> [!TIP]
+> Aggiungi [🤗 Datasets](https://huggingface.co/docs/datasets/) al tuo flusso di lavoro offline di training impostando la variabile d'ambiente `HF_DATASETS_OFFLINE=1`.
 
 Ad esempio, in genere si esegue un programma su una rete normale, protetta da firewall per le istanze esterne, con il seguente comando:
 
@@ -232,8 +223,5 @@ Una volta che il tuo file è scaricato e salvato in cache localmente, specifica 
 >>> config = AutoConfig.from_pretrained("./il/tuo/path/bigscience_t0/config.json")
 ```
 
-<Tip>
-
-Fai riferimento alla sezione [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream) per avere maggiori dettagli su come scaricare modelli presenti sull Hub.
-
-</Tip>
+> [!TIP]
+> Fai riferimento alla sezione [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream) per avere maggiori dettagli su come scaricare modelli presenti sull Hub.

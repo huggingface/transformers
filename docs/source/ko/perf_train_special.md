@@ -17,15 +17,12 @@ rendered properly in your Markdown viewer.
 
 이전에는 Mac에서 모델을 학습할 때 CPU만 사용할 수 있었습니다. 그러나 이제 PyTorch v1.12의 출시로 Apple의 실리콘 GPU를 사용하여 훨씬 더 빠른 성능으로 모델을 학습할 수 있게 되었습니다. 이는 Pytorch에서 Apple의 Metal Performance Shaders (MPS)를 백엔드로 통합하면서 가능해졌습니다. [MPS 백엔드](https://pytorch.org/docs/stable/notes/mps.html)는 Pytorch 연산을 Metal 세이더로 구현하고 이 모듈들을 mps 장치에서 실행할 수 있도록 지원합니다.
 
-<Tip warning={true}>
-
-일부 Pytorch 연산들은 아직 MPS에서 지원되지 않아 오류가 발생할 수 있습니다. 이를 방지하려면 환경 변수 `PYTORCH_ENABLE_MPS_FALLBACK=1` 를 설정하여 CPU 커널을 대신 사용하도록 해야 합니다(이때 `UserWarning`이 여전히 표시될 수 있습니다). 
-
-<br>
-
-다른 오류가 발생할 경우 [PyTorch](https://github.com/pytorch/pytorch/issues) 리포지토리에 이슈를 등록해주세요. 현재 [`Trainer`]는 MPS 백엔드만 통합하고 있습니다.
-
-</Tip>
+> [!WARNING]
+> 일부 Pytorch 연산들은 아직 MPS에서 지원되지 않아 오류가 발생할 수 있습니다. 이를 방지하려면 환경 변수 `PYTORCH_ENABLE_MPS_FALLBACK=1` 를 설정하여 CPU 커널을 대신 사용하도록 해야 합니다(이때 `UserWarning`이 여전히 표시될 수 있습니다). 
+>
+> <br>
+>
+> 다른 오류가 발생할 경우 [PyTorch](https://github.com/pytorch/pytorch/issues) 리포지토리에 이슈를 등록해주세요. 현재 [`Trainer`]는 MPS 백엔드만 통합하고 있습니다.
 
 `mps` 장치를 이용하면 다음과 같은 이점들을 얻을 수 있습니다:
 

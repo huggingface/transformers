@@ -38,12 +38,9 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         eos_token (`str`, *optional*, defaults to `"[EOS]"`):
             The end of sequence token (reserved in the vocab, but not actually used).
 
-            <Tip>
-
-            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
-            The token used is the `sep_token`.
-
-            </Tip>
+            > [!TIP]
+            > When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            > The token used is the `sep_token`.
 
         mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The MASK token, useful for masked language modeling.

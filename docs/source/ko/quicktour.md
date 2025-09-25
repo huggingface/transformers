@@ -39,11 +39,8 @@ pip install torch
 
 [`pipeline`](./main_classes/pipelines)은 사전 훈련된 모델로 추론하기에 가장 쉽고 빠른 방법입니다. [`pipeline`]은 여러 모달리티에서 다양한 과업을 쉽게 처리할 수 있으며, 아래 표에 표시된 몇 가지 과업을 기본적으로 지원합니다:
 
-<Tip>
-
-사용 가능한 작업의 전체 목록은 [Pipelines API 참조](./main_classes/pipelines)를 확인하세요.
-
-</Tip>
+> [!TIP]
+> 사용 가능한 작업의 전체 목록은 [Pipelines API 참조](./main_classes/pipelines)를 확인하세요.
 
 | **태스크**      | **설명**                                                             | **모달리티**     | **파이프라인 ID**                             |
 |-----------------|----------------------------------------------------------------------|------------------|-----------------------------------------------|
@@ -197,11 +194,8 @@ label: NEGATIVE, with score: 0.5309
 ... )
 ```
 
-<Tip>
-
-[전처리](./preprocessing) 튜토리얼을 참조하시면 토큰화에 대한 자세한 설명과 함께 이미지, 오디오와 멀티모달 입력을 전처리하기 위한 [`AutoImageProcessor`]와 [`AutoFeatureExtractor`], [`AutoProcessor`]의 사용방법도 알 수 있습니다.
-
-</Tip>
+> [!TIP]
+> [전처리](./preprocessing) 튜토리얼을 참조하시면 토큰화에 대한 자세한 설명과 함께 이미지, 오디오와 멀티모달 입력을 전처리하기 위한 [`AutoImageProcessor`]와 [`AutoFeatureExtractor`], [`AutoProcessor`]의 사용방법도 알 수 있습니다.
 
 ### AutoModel [[automodel]]
 
@@ -214,11 +208,8 @@ label: NEGATIVE, with score: 0.5309
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
 ```
 
-<Tip>
-
-[`AutoModel`] 클래스에서 지원하는 과업에 대해서는 [과업 요약](./task_summary)을 참조하세요.
-
-</Tip>
+> [!TIP]
+> [`AutoModel`] 클래스에서 지원하는 과업에 대해서는 [과업 요약](./task_summary)을 참조하세요.
 
 이제 전처리된 입력 묶음을 직접 모델에 전달해야 합니다. 아래처럼 `**`를 앞에 붙여 딕셔너리를 풀어주면 됩니다:
 
@@ -237,11 +228,8 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
 
-<Tip>
-
-모든 🤗 Transformers 모델(PyTorch 또는 TensorFlow)은 (softmax와 같은) 최종 활성화 함수 *이전에* 텐서를 출력합니다. 왜냐하면 최종 활성화 함수의 출력은 종종 손실 함수 출력과 결합되기 때문입니다. 모델 출력은 특수한 데이터 클래스이므로 IDE에서 자동 완성됩니다. 모델 출력은 튜플이나 딕셔너리처럼 동작하며 (정수, 슬라이스 또는 문자열로 인덱싱 가능), None인 속성은 무시됩니다.
-
-</Tip>
+> [!TIP]
+> 모든 🤗 Transformers 모델(PyTorch 또는 TensorFlow)은 (softmax와 같은) 최종 활성화 함수 *이전에* 텐서를 출력합니다. 왜냐하면 최종 활성화 함수의 출력은 종종 손실 함수 출력과 결합되기 때문입니다. 모델 출력은 특수한 데이터 클래스이므로 IDE에서 자동 완성됩니다. 모델 출력은 튜플이나 딕셔너리처럼 동작하며 (정수, 슬라이스 또는 문자열로 인덱싱 가능), None인 속성은 무시됩니다.
 
 ### 모델 저장하기 [[save-a-model]]
 
@@ -377,11 +365,8 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> trainer.train()  # doctest: +SKIP
 ```
 
-<Tip>
-
-번역이나 요약과 같이 시퀀스-시퀀스 모델을 사용하는 과업에는 [`Seq2SeqTrainer`] 및 [`Seq2SeqTrainingArguments`] 클래스를 사용하세요.
-
-</Tip>
+> [!TIP]
+> 번역이나 요약과 같이 시퀀스-시퀀스 모델을 사용하는 과업에는 [`Seq2SeqTrainer`] 및 [`Seq2SeqTrainingArguments`] 클래스를 사용하세요.
 
 [`Trainer`] 내의 메서드를 서브클래스화하여 훈련 루프를 바꿀 수도 있습니다. 이러면 손실 함수, 옵티마이저, 스케줄러와 같은 기능 또한 바꿀 수 있게 됩니다. 변경 가능한 메소드에 대해서는 [`Trainer`] 문서를 참고하세요.
 

@@ -183,11 +183,8 @@ Nota come, in entrambi i casi, ereditiamo da `PreTrainedModel` e chiamiamo l'ini
 con il metodo `config` (un po' come quando scrivi un normale `torch.nn.Module`). La riga che imposta la  `config_class`
 non è obbligatoria, a meno che tu non voglia registrare il modello con le classi Auto (vedi l'ultima sezione).
 
-<Tip>
-
-Se il tuo modello è molto simile a un modello all'interno della libreria, puoi ri-usare la stessa configurazione di quel modello.
-
-</Tip>
+> [!TIP]
+> Se il tuo modello è molto simile a un modello all'interno della libreria, puoi ri-usare la stessa configurazione di quel modello.
 
 Puoi fare in modo che il tuo modello restituisca in output qualunque cosa tu voglia, ma far restituire un dizionario 
 come abbiamo fatto per `ResnetModelForImageClassification`, con la funzione di perdita inclusa quando vengono passate le labels,
@@ -220,11 +217,8 @@ il codice del modello venga salvato.
 
 ## Inviare il codice all'Hub
 
-<Tip warning={true}>
-
-Questa API è sperimentale e potrebbe avere alcuni cambiamenti nei prossimi rilasci.
-
-</Tip>
+> [!WARNING]
+> Questa API è sperimentale e potrebbe avere alcuni cambiamenti nei prossimi rilasci.
 
 Innanzitutto, assicurati che il tuo modello sia completamente definito in un file `.py`. Può sfruttare import relativi
 ad altri file, purchè questi siano nella stessa directory (non supportiamo ancora sotto-moduli per questa funzionalità).
@@ -242,12 +236,9 @@ contiene il codice di `ResnetModel` e `ResnetModelForImageClassification`.
 
 Il file `__init__.py` può essere vuoto, serve solo perchè Python capisca che `resnet_model` può essere utilizzato come un modulo.
 
-<Tip warning={true}>
-
-Se stai copiando i file relativi alla modellazione della libreria, dovrai sostituire tutti gli import relativi in cima al file con import del 
-    pacchetto `transformers`.
-
-</Tip>
+> [!WARNING]
+> Se stai copiando i file relativi alla modellazione della libreria, dovrai sostituire tutti gli import relativi in cima al file con import del 
+>     pacchetto `transformers`.
 
 Nota che puoi ri-utilizzare (o usare come sottoclassi) un modello/configurazione esistente.
 

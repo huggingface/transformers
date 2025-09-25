@@ -313,17 +313,11 @@ And then run every test multiple times (50 by default):
 pytest --flake-finder --flake-runs=5 tests/test_failing_test.py
 ```
 
-<Tip>
+> [!TIP]
+> This plugin doesn't work with `-n` flag from `pytest-xdist`.
 
-This plugin doesn't work with `-n` flag from `pytest-xdist`.
-
-</Tip>
-
-<Tip>
-
-There is another plugin `pytest-repeat`, but it doesn't work with `unittest`.
-
-</Tip>
+> [!TIP]
+> There is another plugin `pytest-repeat`, but it doesn't work with `unittest`.
 
 #### Run tests in a random order
 
@@ -809,20 +803,14 @@ leave any data in there.
   - `after=True`: the temporary dir will always be deleted at the end of the test.
   - `after=False`: the temporary dir will always be left intact at the end of the test.
 
-<Tip>
+> [!TIP]
+> In order to run the equivalent of `rm -r` safely, only subdirs of the project repository checkout are allowed if
+> an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the filesystem will
+> get nuked. i.e. please always pass paths that start with `./`.
 
-In order to run the equivalent of `rm -r` safely, only subdirs of the project repository checkout are allowed if
-an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the filesystem will
-get nuked. i.e. please always pass paths that start with `./`.
-
-</Tip>
-
-<Tip>
-
-Each test can register multiple temporary directories and they all will get auto-removed, unless requested
-otherwise.
-
-</Tip>
+> [!TIP]
+> Each test can register multiple temporary directories and they all will get auto-removed, unless requested
+> otherwise.
 
 ### Temporary sys.path override
 

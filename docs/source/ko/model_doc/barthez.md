@@ -38,12 +38,9 @@ CamemBERT 및 FlauBERT와 동등하거나 이를 능가함을 보였습니다.*
 
 이 모델은 [moussakam](https://huggingface.co/moussakam)이 기여했습니다. 저자의 코드는 [여기](https://github.com/moussaKam/BARThez)에서 찾을 수 있습니다.
 
-<Tip>
-
-BARThez 구현은 🤗 BART와 동일하나, 토큰화에서 차이가 있습니다. 구성 클래스와 그 매개변수에 대한 정보는 [BART 문서](bart)를 참조하십시오. 
-BARThez 전용 토크나이저는 아래에 문서화되어 있습니다.
-
-</Tip>
+> [!TIP]
+> BARThez 구현은 🤗 BART와 동일하나, 토큰화에서 차이가 있습니다. 구성 클래스와 그 매개변수에 대한 정보는 [BART 문서](bart)를 참조하십시오. 
+> BARThez 전용 토크나이저는 아래에 문서화되어 있습니다.
 
 ## 리소스 [[resources]]
 

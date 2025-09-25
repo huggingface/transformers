@@ -69,12 +69,9 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
             [What are attention masks?](../glossary#attention-mask)
 
-            <Tip>
-
-            For Whisper models, `attention_mask` should always be passed for batched inference, to avoid subtle
-            bugs.
-
-            </Tip>
+            > [!TIP]
+            > For Whisper models, `attention_mask` should always be passed for batched inference, to avoid subtle
+            > bugs.
         stem_indices (`list[int]`, *optional*, defaults to `[3, 2]`):
             Stem channels to extract if demucs outputs are passed.
     """
@@ -219,9 +216,8 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-                <Tip>
-                For Musicgen Melody models, audio `attention_mask` is not necessary.
-                </Tip>
+                > [!TIP]
+                > For Musicgen Melody models, audio `attention_mask` is not necessary.
 
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding

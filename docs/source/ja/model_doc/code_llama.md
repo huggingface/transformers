@@ -29,17 +29,14 @@ Code Llama モデルはによって [Code Llama: Open Foundation Models for Code
 
 ## Usage tips and examples
 
-<Tip warning={true}>
-
-Code Llama のベースとなる`Llama2`ファミリー モデルは、`bfloat16`を使用してトレーニングされましたが、元の推論では`float16`を使用します。さまざまな精度を見てみましょう。
-
-* `float32`: モデルの初期化に関する PyTorch の規約では、モデルの重みがどの `dtype` で格納されたかに関係なく、モデルを `float32` にロードします。 「transformers」も、PyTorch との一貫性を保つためにこの規則に従っています。これはデフォルトで選択されます。 `AutoModel` API でストレージの重み付けタイプを使用してチェックポイントのロードをキャストする場合は、`dtype="auto"` を指定する必要があります。 `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`。
-* `bfloat16`: コード Llama はこの精度でトレーニングされているため、さらなるトレーニングや微調整に使用することをお勧めします。
-* `float16`: この精度を使用して推論を実行することをお勧めします。通常は `bfloat16` より高速であり、評価メトリクスには `bfloat16` と比べて明らかな低下が見られないためです。 bfloat16 を使用して推論を実行することもできます。微調整後、float16 と bfloat16 の両方で推論結果を確認することをお勧めします。
-
-上で述べたように、モデルを初期化するときに `dtype="auto"` を使用しない限り、ストレージの重みの `dtype` はほとんど無関係です。その理由は、モデルが最初にダウンロードされ (オンラインのチェックポイントの `dtype` を使用)、次に `torch` のデフォルトの `dtype` にキャストされるためです (`torch.float32` になります)。指定された `dtype` がある場合は、代わりにそれが使用されます。
-
-</Tip>
+> [!WARNING]
+> Code Llama のベースとなる`Llama2`ファミリー モデルは、`bfloat16`を使用してトレーニングされましたが、元の推論では`float16`を使用します。さまざまな精度を見てみましょう。
+>
+> * `float32`: モデルの初期化に関する PyTorch の規約では、モデルの重みがどの `dtype` で格納されたかに関係なく、モデルを `float32` にロードします。 「transformers」も、PyTorch との一貫性を保つためにこの規則に従っています。これはデフォルトで選択されます。 `AutoModel` API でストレージの重み付けタイプを使用してチェックポイントのロードをキャストする場合は、`dtype="auto"` を指定する必要があります。 `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`。
+> * `bfloat16`: コード Llama はこの精度でトレーニングされているため、さらなるトレーニングや微調整に使用することをお勧めします。
+> * `float16`: この精度を使用して推論を実行することをお勧めします。通常は `bfloat16` より高速であり、評価メトリクスには `bfloat16` と比べて明らかな低下が見られないためです。 bfloat16 を使用して推論を実行することもできます。微調整後、float16 と bfloat16 の両方で推論結果を確認することをお勧めします。
+>
+> 上で述べたように、モデルを初期化するときに `dtype="auto"` を使用しない限り、ストレージの重みの `dtype` はほとんど無関係です。その理由は、モデルが最初にダウンロードされ (オンラインのチェックポイントの `dtype` を使用)、次に `torch` のデフォルトの `dtype` にキャストされるためです (`torch.float32` になります)。指定された `dtype` がある場合は、代わりにそれが使用されます。
 
 チップ：
 - 充填タスクはすぐにサポートされます。入力を埋めたい場所には `tokenizer.fill_token` を使用する必要があります。
@@ -102,11 +99,9 @@ def remove_non_ascii(s: str) -> str:
 
 LLaMA トークナイザーは、[sentencepiece](https://github.com/google/sentencepiece) に基づく BPE モデルです。センテンスピースの癖の 1 つは、シーケンスをデコードするときに、最初のトークンが単語の先頭 (例: 「Banana」) である場合、トークナイザーは文字列の先頭にプレフィックス スペースを追加しないことです。
 
-<Tip>
-
-コード Llama は、`Llama2` モデルと同じアーキテクチャを持っています。API リファレンスについては、[Llama2 のドキュメント ページ](llama2) を参照してください。
-以下の Code Llama トークナイザーのリファレンスを見つけてください。
-</Tip>
+> [!TIP]
+> コード Llama は、`Llama2` モデルと同じアーキテクチャを持っています。API リファレンスについては、[Llama2 のドキュメント ページ](llama2) を参照してください。
+> 以下の Code Llama トークナイザーのリファレンスを見つけてください。
 
 ## CodeLlamaTokenizer
 

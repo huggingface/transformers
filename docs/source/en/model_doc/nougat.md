@@ -94,11 +94,8 @@ into a single instance to both extract the input features and decode the predict
 
 See the [model hub](https://huggingface.co/models?filter=nougat) to look for Nougat checkpoints.
 
-<Tip>
-
-The model is identical to [Donut](donut) in terms of architecture.
-
-</Tip>
+> [!TIP]
+> The model is identical to [Donut](donut) in terms of architecture.
 
 ## NougatImageProcessor
 

@@ -23,11 +23,8 @@ rendered properly in your Markdown viewer.
 조명 조건, 가려짐, 텍스처와 같은 요소의 영향을 받을 수 있는 장면 내 물체와 해당 깊이 정보 간의 복잡한 관계를 모델이 이해해야 하므로 까다로운 작업입니다.
 
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/depth-estimation)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/depth-estimation)를 확인하는 것이 좋습니다.
 
 이번 가이드에서 배울 내용은 다음과 같습니다:
 

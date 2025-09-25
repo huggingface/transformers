@@ -167,10 +167,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - A blog post on how to [Deploy Serverless XLM RoBERTa on AWS Lambda](https://www.philschmid.de/multilingual-serverless-xlm-roberta-with-huggingface).
 
-<Tip>
-
-This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples as well as the information relative to the inputs and outputs.
-</Tip>
+> [!TIP]
+> This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples as well as the information relative to the inputs and outputs.
 
 ## XLMRobertaConfig
 

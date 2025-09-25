@@ -87,12 +87,9 @@ Beginnen Sie mit dem Laden Ihres Modells und geben Sie die Anzahl der erwarteten
 >>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
-<Tip>
-
-Es wird eine Warnung angezeigt, dass einige der trainierten Parameter nicht verwendet werden und einige Parameter zufällig
-initialisiert werden. Machen Sie sich keine Sorgen, das ist völlig normal! Der vorher trainierte Kopf des BERT-Modells wird verworfen und durch einen zufällig initialisierten Klassifikationskopf ersetzt. Sie werden diesen neuen Modellkopf in Ihrer Sequenzklassifizierungsaufgabe feinabstimmen, indem Sie das Wissen des vortrainierten Modells auf ihn übertragen.
-
-</Tip>
+> [!TIP]
+> Es wird eine Warnung angezeigt, dass einige der trainierten Parameter nicht verwendet werden und einige Parameter zufällig
+> initialisiert werden. Machen Sie sich keine Sorgen, das ist völlig normal! Der vorher trainierte Kopf des BERT-Modells wird verworfen und durch einen zufällig initialisierten Klassifikationskopf ersetzt. Sie werden diesen neuen Modellkopf in Ihrer Sequenzklassifizierungsaufgabe feinabstimmen, indem Sie das Wissen des vortrainierten Modells auf ihn übertragen.
 
 ### Hyperparameter für das Training
 
@@ -248,11 +245,8 @@ Geben Sie schließlich `device` an, um einen Grafikprozessor zu verwenden, wenn 
 >>> model.to(device)
 ```
 
-<Tip>
-
-Holen Sie sich mit einem gehosteten Notebook wie [Colaboratory](https://colab.research.google.com/) oder [SageMaker StudioLab](https://studiolab.sagemaker.aws/) kostenlosen Zugang zu einem Cloud-GPU, wenn Sie noch keinen haben.
-
-</Tip>
+> [!TIP]
+> Holen Sie sich mit einem gehosteten Notebook wie [Colaboratory](https://colab.research.google.com/) oder [SageMaker StudioLab](https://studiolab.sagemaker.aws/) kostenlosen Zugang zu einem Cloud-GPU, wenn Sie noch keinen haben.
 
 Großartig, Sie sind bereit für das Training! 🥳 
 

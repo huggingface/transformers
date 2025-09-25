@@ -311,13 +311,10 @@ class Trainer:
         model ([`PreTrainedModel`] or `torch.nn.Module`, *optional*):
             The model to train, evaluate or use for predictions. If not provided, a `model_init` must be passed.
 
-            <Tip>
-
-            [`Trainer`] is optimized to work with the [`PreTrainedModel`] provided by the library. You can still use
-            your own models defined as `torch.nn.Module` as long as they work the same way as the 🤗 Transformers
-            models.
-
-            </Tip>
+            > [!TIP]
+            > [`Trainer`] is optimized to work with the [`PreTrainedModel`] provided by the library. You can still use
+            > your own models defined as `torch.nn.Module` as long as they work the same way as the 🤗 Transformers
+            > models.
 
         args ([`TrainingArguments`], *optional*):
             The arguments to tweak for training. Will default to a basic instance of [`TrainingArguments`] with the
@@ -3541,14 +3538,11 @@ class Trainer:
         by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
         the sum of all metrics otherwise.
 
-        <Tip warning={true}>
-
-        To use this method, you need to have provided a `model_init` when initializing your [`Trainer`]: we need to
-        reinitialize the model at each new run. This is incompatible with the `optimizers` argument, so you need to
-        subclass [`Trainer`] and override the method [`~Trainer.create_optimizer_and_scheduler`] for custom
-        optimizer/scheduler.
-
-        </Tip>
+        > [!WARNING]
+        > To use this method, you need to have provided a `model_init` when initializing your [`Trainer`]: we need to
+        > reinitialize the model at each new run. This is incompatible with the `optimizers` argument, so you need to
+        > subclass [`Trainer`] and override the method [`~Trainer.create_optimizer_and_scheduler`] for custom
+        > optimizer/scheduler.
 
         Args:
             hp_space (`Callable[["optuna.Trial"], dict[str, float]]`, *optional*):
@@ -4268,17 +4262,14 @@ class Trainer:
                 evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
                 `__len__` method.
 
-                <Tip>
-
-                If you pass a dictionary with names of datasets as keys and datasets as values, evaluate will run
-                separate evaluations on each dataset. This can be useful to monitor how training affects other
-                datasets or simply to get a more fine-grained evaluation.
-                When used with `load_best_model_at_end`, make sure `metric_for_best_model` references exactly one
-                of the datasets. If you, for example, pass in `{"data1": data1, "data2": data2}` for two datasets
-                `data1` and `data2`, you could specify `metric_for_best_model="eval_data1_loss"` for using the
-                loss on `data1` and `metric_for_best_model="eval_data2_loss"` for the loss on `data2`.
-
-                </Tip>
+                > [!TIP]
+                > If you pass a dictionary with names of datasets as keys and datasets as values, evaluate will run
+                > separate evaluations on each dataset. This can be useful to monitor how training affects other
+                > datasets or simply to get a more fine-grained evaluation.
+                > When used with `load_best_model_at_end`, make sure `metric_for_best_model` references exactly one
+                > of the datasets. If you, for example, pass in `{"data1": data1, "data2": data2}` for two datasets
+                > `data1` and `data2`, you could specify `metric_for_best_model="eval_data1_loss"` for using the
+                > loss on `data1` and `metric_for_best_model="eval_data2_loss"` for the loss on `data2`.
 
             ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
@@ -4370,13 +4361,10 @@ class Trainer:
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "test_bleu" if the prefix is "test" (default)
 
-        <Tip>
-
-        If your predictions or labels have different sequence length (for instance because you're doing dynamic padding
-        in a token classification task) the predictions will be padded (on the right) to allow for concatenation into
-        one array. The padding index is -100.
-
-        </Tip>
+        > [!TIP]
+        > If your predictions or labels have different sequence length (for instance because you're doing dynamic padding
+        > in a token classification task) the predictions will be padded (on the right) to allow for concatenation into
+        > one array. The padding index is -100.
 
         Returns: *NamedTuple* A namedtuple with the following keys:
 

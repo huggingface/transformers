@@ -254,12 +254,9 @@ class TrainingArguments:
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
-            <Tip warning={true}>
-
-            When using gradient accumulation, one step is counted as one step with backward pass. Therefore, logging,
-            evaluation, save will be conducted every `gradient_accumulation_steps * xxx_step` training examples.
-
-            </Tip>
+            > [!WARNING]
+            > When using gradient accumulation, one step is counted as one step with backward pass. Therefore, logging,
+            > evaluation, save will be conducted every `gradient_accumulation_steps * xxx_step` training examples.
 
         eval_accumulation_steps (`int`, *optional*):
             Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU. If
@@ -271,11 +268,8 @@ class TrainingArguments:
         torch_empty_cache_steps (`int`, *optional*):
             Number of steps to wait before calling `torch.<device>.empty_cache()`. If left unset or set to None, cache will not be emptied.
 
-            <Tip>
-
-            This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372).
-
-            </Tip>
+            > [!TIP]
+            > This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372).
 
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for [`AdamW`] optimizer.
@@ -333,12 +327,9 @@ class TrainingArguments:
             Whether to filter `nan` and `inf` losses for logging. If set to `True` the loss of every step that is `nan`
             or `inf` is filtered and the average loss of the current logging window is taken instead.
 
-            <Tip>
-
-            `logging_nan_inf_filter` only influences the logging of loss values, it does not change the behavior the
-            gradient is computed or applied to the model.
-
-            </Tip>
+            > [!TIP]
+            > `logging_nan_inf_filter` only influences the logging of loss values, it does not change the behavior the
+            > gradient is computed or applied to the model.
 
         save_strategy (`str` or [`~trainer_utils.SaveStrategy`], *optional*, defaults to `"steps"`):
             The checkpoint save strategy to adopt during training. Possible values are:
@@ -449,12 +440,9 @@ class TrainingArguments:
             [`save_total_limit`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.save_total_limit)
             for more.
 
-            <Tip>
-
-            When set to `True`, the parameters `save_strategy` needs to be the same as `eval_strategy`, and in
-            the case it is "steps", `save_steps` must be a round multiple of `eval_steps`.
-
-            </Tip>
+            > [!TIP]
+            > When set to `True`, the parameters `save_strategy` needs to be the same as `eval_strategy`, and in
+            > the case it is "steps", `save_steps` must be a round multiple of `eval_steps`.
 
         metric_for_best_model (`str`, *optional*):
             Use in conjunction with `load_best_model_at_end` to specify the metric to use to compare two different
@@ -550,10 +538,9 @@ class TrainingArguments:
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
             `ds_config.json`) or an already loaded json file as a `dict`"
 
-            <Tip warning={true}>
-                If enabling any Zero-init, make sure that your model is not initialized until
-                *after* initializing the `TrainingArguments`, else it will not be applied.
-            </Tip>
+            > [!WARNING]
+            > If enabling any Zero-init, make sure that your model is not initialized until
+            >     *after* initializing the `TrainingArguments`, else it will not be applied.
 
         accelerator_config (`str`, `dict`, or `AcceleratorConfig`, *optional*):
             Config to be used with the internal `Accelerator` implementation. The value is either a location of
@@ -643,12 +630,9 @@ class TrainingArguments:
             will be pushed each time a save is triggered (depending on your `save_strategy`). Calling
             [`~Trainer.save_model`] will also trigger a push.
 
-            <Tip warning={true}>
-
-            If `output_dir` exists, it needs to be a local clone of the repository to which the [`Trainer`] will be
-            pushed.
-
-            </Tip>
+            > [!WARNING]
+            > If `output_dir` exists, it needs to be a local clone of the repository to which the [`Trainer`] will be
+            > pushed.
 
         resume_from_checkpoint (`str`, *optional*):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
@@ -2332,11 +2316,8 @@ class TrainingArguments:
         """
         A method that regroups all basic arguments linked to the training.
 
-        <Tip>
-
-        Calling this method will automatically set `self.do_train` to `True`.
-
-        </Tip>
+        > [!TIP]
+        > Calling this method will automatically set `self.do_train` to `True`.
 
         Args:
             learning_rate (`float`, *optional*, defaults to 5e-5):
@@ -2356,13 +2337,10 @@ class TrainingArguments:
             gradient_accumulation_steps (`int`, *optional*, defaults to 1):
                 Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
-                <Tip warning={true}>
-
-                When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
-                logging, evaluation, save will be conducted every `gradient_accumulation_steps * xxx_step` training
-                examples.
-
-                </Tip>
+                > [!WARNING]
+                > When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
+                > logging, evaluation, save will be conducted every `gradient_accumulation_steps * xxx_step` training
+                > examples.
 
             seed (`int`, *optional*, defaults to 42):
                 Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use
@@ -2463,11 +2441,8 @@ class TrainingArguments:
         """
         A method that regroups all basic arguments linked to testing on a held-out dataset.
 
-        <Tip>
-
-        Calling this method will automatically set `self.do_predict` to `True`.
-
-        </Tip>
+        > [!TIP]
+        > Calling this method will automatically set `self.do_predict` to `True`.
 
         Args:
             batch_size (`int` *optional*, defaults to 8):
@@ -2582,12 +2557,9 @@ class TrainingArguments:
                 Whether to filter `nan` and `inf` losses for logging. If set to `True` the loss of every step that is
                 `nan` or `inf` is filtered and the average loss of the current logging window is taken instead.
 
-                <Tip>
-
-                `nan_inf_filter` only influences the logging of loss values, it does not change the behavior the
-                gradient is computed or applied to the model.
-
-                </Tip>
+                > [!TIP]
+                > `nan_inf_filter` only influences the logging of loss values, it does not change the behavior the
+                > gradient is computed or applied to the model.
 
             on_each_node (`bool`, *optional*, defaults to `True`):
                 In multinode distributed training, whether to log using `log_level` once per node, or only on the main
@@ -2630,13 +2602,10 @@ class TrainingArguments:
         """
         A method that regroups all arguments linked to synchronizing checkpoints with the Hub.
 
-        <Tip>
-
-        Calling this method will set `self.push_to_hub` to `True`, which means the `output_dir` will begin a git
-        directory synced with the repo (determined by `model_id`) and the content will be pushed each time a save is
-        triggered (depending on your `self.save_strategy`). Calling [`~Trainer.save_model`] will also trigger a push.
-
-        </Tip>
+        > [!TIP]
+        > Calling this method will set `self.push_to_hub` to `True`, which means the `output_dir` will begin a git
+        > directory synced with the repo (determined by `model_id`) and the content will be pushed each time a save is
+        > triggered (depending on your `self.save_strategy`). Calling [`~Trainer.save_model`] will also trigger a push.
 
         Args:
             model_id (`str`):

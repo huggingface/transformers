@@ -66,11 +66,8 @@ peft_model_id = "ybelkada/opt-350m-lora"
 model = AutoModelForCausalLM.from_pretrained(peft_model_id)
 ```
 
-<Tip>
-
-PEFTアダプターを`AutoModelFor`クラスまたは基本モデルクラス（`OPTForCausalLM`または`LlamaForCausalLM`など）で読み込むことができます。
-
-</Tip>
+> [!TIP]
+> PEFTアダプターを`AutoModelFor`クラスまたは基本モデルクラス（`OPTForCausalLM`または`LlamaForCausalLM`など）で読み込むことができます。
 
 また、`load_adapter`メソッドを呼び出すことで、PEFTアダプターを読み込むこともできます：
 
@@ -176,11 +173,8 @@ output = model.generate(**inputs)
 
 PEFTアダプターは[`Trainer`]クラスでサポートされており、特定のユースケースに対してアダプターをトレーニングすることができます。数行のコードを追加するだけで済みます。たとえば、LoRAアダプターをトレーニングする場合:
 
-<Tip>
-
-[`Trainer`]を使用したモデルの微調整に慣れていない場合は、[事前トレーニング済みモデルの微調整](training)チュートリアルをご覧ください。
-
-</Tip>
+> [!TIP]
+> [`Trainer`]を使用したモデルの微調整に慣れていない場合は、[事前トレーニング済みモデルの微調整](training)チュートリアルをご覧ください。
 
 1. タスクタイプとハイパーパラメータに対するアダプターの構成を定義します（ハイパーパラメータの詳細については[`~peft.LoraConfig`]を参照してください）。
 

@@ -18,11 +18,8 @@ rendered properly in your Markdown viewer.
 
 Con così tante architetture Transformer differenti, può essere sfidante crearne una per il tuo checkpoint. Come parte della filosofia centrale di 🤗 Transformers per rendere la libreria facile, semplice e flessibile da utilizzare, una `AutoClass` inferisce e carica automaticamente l'architettura corretta da un dato checkpoint. Il metodo `from_pretrained` ti permette di caricare velocemente un modello pre-allenato per qualsiasi architettura, così non devi utilizzare tempo e risorse per allenare un modello da zero. Produrre questo codice agnostico ai checkpoint significa che se il tuo codice funziona per un checkpoint, funzionerà anche per un altro checkpoint, purché sia stato allenato per un compito simile, anche se l'architettura è differente.
 
-<Tip>
-
-Ricorda, con architettura ci si riferisce allo scheletro del modello e con checkpoint ai pesi di una determinata architettura. Per esempio, [BERT](https://huggingface.co/google-bert/bert-base-uncased) è un'architettura, mentre `google-bert/bert-base-uncased` è un checkpoint. Modello è un termine generale che può significare sia architettura che checkpoint.
-
-</Tip>
+> [!TIP]
+> Ricorda, con architettura ci si riferisce allo scheletro del modello e con checkpoint ai pesi di una determinata architettura. Per esempio, [BERT](https://huggingface.co/google-bert/bert-base-uncased) è un'architettura, mentre `google-bert/bert-base-uncased` è un checkpoint. Modello è un termine generale che può significare sia architettura che checkpoint.
 
 In questo tutorial, imparerai a:
 

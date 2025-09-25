@@ -54,14 +54,11 @@ def init_empty_weights(include_buffers: bool = False):
         tst = nn.Sequential(*[nn.Linear(10000, 10000) for _ in range(1000)])
     ```
 
-    <Tip warning={true}>
-
-    Any model created under this context manager has no weights. As such you can't do something like
-    `model.to(some_device)` with it. To load weights inside your empty model, see [`load_checkpoint_and_dispatch`].
-    Make sure to overwrite the default device_map param for [`load_checkpoint_and_dispatch`], otherwise dispatch is not
-    called.
-
-    </Tip>
+    > [!WARNING]
+    > Any model created under this context manager has no weights. As such you can't do something like
+    > `model.to(some_device)` with it. To load weights inside your empty model, see [`load_checkpoint_and_dispatch`].
+    > Make sure to overwrite the default device_map param for [`load_checkpoint_and_dispatch`], otherwise dispatch is not
+    > called.
     """
     with init_on_device(torch.device("meta"), include_buffers=include_buffers) as f:
         yield f
@@ -145,12 +142,9 @@ def find_tied_parameters(model: "nn.Module", **kwargs):
     """
     Find the tied parameters in a given model.
 
-    <Tip warning={true}>
-
-    The signature accepts keyword arguments, but they are for the recursive part of this function and you should ignore
-    them.
-
-    </Tip>
+    > [!WARNING]
+    > The signature accepts keyword arguments, but they are for the recursive part of this function and you should ignore
+    > them.
 
     Args:
         model (`torch.nn.Module`): The model to inspect.

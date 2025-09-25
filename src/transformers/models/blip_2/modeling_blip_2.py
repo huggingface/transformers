@@ -1627,11 +1627,8 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     One can optionally pass `input_ids` to the model, which serve as a text prompt, to make the language model continue
     the prompt. Otherwise, the language model starts generating text from the [BOS] (beginning-of-sequence) token.
 
-    <Tip>
-
-    Note that Flan-T5 checkpoints cannot be cast to float16. They are pre-trained using bfloat16.
-
-    </Tip>
+    > [!TIP]
+    > Note that Flan-T5 checkpoints cannot be cast to float16. They are pre-trained using bfloat16.
     """
 )
 class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):

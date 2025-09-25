@@ -298,18 +298,11 @@ pip install pytest-flakefinder
 pytest --flake-finder --flake-runs=5 tests/test_failing_test.py
 ```
 
-<Tip>
+> [!TIP]
+> このプラグインは、`pytest-xdist` の `-n` フラグでは動作しません。
 
-このプラグインは、`pytest-xdist` の `-n` フラグでは動作しません。
-
-</Tip>
-
-<Tip>
-
-
-別のプラグイン `pytest-repeat` もありますが、これは `unittest` では動作しません。
-
-</Tip>
+> [!TIP]
+> 別のプラグイン `pytest-repeat` もありますが、これは `unittest` では動作しません。
 
 #### Run tests in a random order
 
@@ -758,17 +751,11 @@ def test_whatever(self):
   - `after=True`：テストの終了時に常に一時ディレクトリが削除されます。
   - `after=False`：テストの終了時に常に一時ディレクトリはそのままになります。
 
-<Tip>
+> [!TIP]
+> `rm -r`の相当を安全に実行するために、明示的な `tmp_dir` が使用される場合、プロジェクトリポジトリのチェックアウトのサブディレクトリのみが許可されます。誤って `/tmp` などのファイルシステムの重要な部分が削除されないように、常に `./` から始まるパスを渡してください。
 
-`rm -r`の相当を安全に実行するために、明示的な `tmp_dir` が使用される場合、プロジェクトリポジトリのチェックアウトのサブディレクトリのみが許可されます。誤って `/tmp` などのファイルシステムの重要な部分が削除されないように、常に `./` から始まるパスを渡してください。
-
-</Tip>
-
-<Tip>
-
-各テストは複数の一時ディレクトリを登録でき、要求がない限りすべて自動で削除されます。
-
-</Tip>
+> [!TIP]
+> 各テストは複数の一時ディレクトリを登録でき、要求がない限りすべて自動で削除されます。
 
 ### Temporary sys.path override
 

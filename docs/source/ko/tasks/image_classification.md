@@ -29,11 +29,8 @@ rendered properly in your Markdown viewer.
 1. [Food-101](https://huggingface.co/datasets/food101) 데이터 세트에서 [ViT](model_doc/vit)를 미세 조정하여 이미지에서 식품 항목을 분류합니다.
 2. 추론을 위해 미세 조정 모델을 사용합니다.
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/image-classification)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/image-classification)를 확인하는 것이 좋습니다.
 
 시작하기 전에, 필요한 모든 라이브러리가 설치되어 있는지 확인하세요:
 
@@ -176,11 +173,8 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 ## 훈련[[train]]
 
-<Tip>
-
-[`Trainer`]를 사용하여 모델을 미세 조정하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
-
-</Tip>
+> [!TIP]
+> [`Trainer`]를 사용하여 모델을 미세 조정하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
 
 이제 모델을 훈련시킬 준비가 되었습니다! [`AutoModelForImageClassification`]로 ViT를 가져옵니다. 예상되는 레이블 수, 레이블 매핑 및 레이블 수를 지정하세요:
 
@@ -239,11 +233,8 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ```
 
 
-<Tip>
-
-이미지 분류를 위한 모델을 미세 조정하는 자세한 예제는 다음 [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)을 참조하세요.
-
-</Tip>
+> [!TIP]
+> 이미지 분류를 위한 모델을 미세 조정하는 자세한 예제는 다음 [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)을 참조하세요.
 
 ## 추론[[inference]]
 

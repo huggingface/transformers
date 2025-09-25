@@ -263,13 +263,10 @@ Ten en cuenta que, en este caso, los nombres de salida del modelo ajustado son `
 que vimos anteriormente con el checkpoint `distilbert/distilbert-base-uncased`. Esto es de esperarse ya que el modelo ajustado 
 tiene un cabezal de clasificación secuencial.
 
-<Tip>
-
-Las características que tienen un sufijo 'with-past' (por ejemplo, 'causal-lm-with-past') corresponden a topologías 
-de modelo con estados ocultos precalculados (clave y valores en los bloques de atención) que se pueden usar para una 
-decodificación autorregresiva más rápida.
-
-</Tip>
+> [!TIP]
+> Las características que tienen un sufijo 'with-past' (por ejemplo, 'causal-lm-with-past') corresponden a topologías 
+> de modelo con estados ocultos precalculados (clave y valores en los bloques de atención) que se pueden usar para una 
+> decodificación autorregresiva más rápida.
 
 
 ### Exportar un modelo para una arquitectura no compatible
@@ -293,12 +290,9 @@ de las que debe heredar, según el tipo de arquitectura del modelo que quieras e
 * Modelos basados en el _Decoder_ inherente de [`~onnx.config.OnnxConfigWithPast`]
 * Modelos _Encoder-decoder_ inherente de [`~onnx.config.OnnxSeq2SeqConfigWithPast`]
 
-<Tip>
-
-Una buena manera de implementar una configuración personalizada en ONNX es observar la implementación 
-existente en el archivo `configuration_<model_name>.py` de una arquitectura similar.
-
-</Tip>
+> [!TIP]
+> Una buena manera de implementar una configuración personalizada en ONNX es observar la implementación 
+> existente en el archivo `configuration_<model_name>.py` de una arquitectura similar.
 
 Dado que DistilBERT es un modelo de tipo _encoder_, su configuración se hereda de `OnnxConfig`:
 
@@ -324,14 +318,11 @@ Para DistilBERT, podemos ver que se requieren dos entradas: `input_ids` y `atten
 Estas entradas tienen la misma forma de `(batch_size, sequence_length)`, es por lo que vemos 
 los mismos ejes utilizados en la configuración.
 
-<Tip>
-
-Observa que la propiedad `inputs` para `DistilBertOnnxConfig` devuelve un `OrderedDict`.
-Esto nos asegura que las entradas coincidan con su posición relativa dentro del método 
-`PreTrainedModel.forward()` al rastrear el grafo. Recomendamos usar un `OrderedDict` 
-para las propiedades `inputs` y `outputs` al implementar configuraciones ONNX personalizadas.
-
-</Tip>
+> [!TIP]
+> Observa que la propiedad `inputs` para `DistilBertOnnxConfig` devuelve un `OrderedDict`.
+> Esto nos asegura que las entradas coincidan con su posición relativa dentro del método 
+> `PreTrainedModel.forward()` al rastrear el grafo. Recomendamos usar un `OrderedDict` 
+> para las propiedades `inputs` y `outputs` al implementar configuraciones ONNX personalizadas.
 
 Una vez que hayas implementado una configuración ONNX, puedes crear una 
 instancia proporcionando la configuración del modelo base de la siguiente manera:
@@ -376,13 +367,10 @@ exportar DistilBERT con un cabezal de clasificación de secuencias, podríamos u
 OrderedDict([('logits', {0: 'batch'})])
 ```
 
-<Tip>
-
-Todas las propiedades base y métodos asociados con [`~onnx.config.OnnxConfig`] y las 
-otras clases de configuración se pueden sobreescribir si es necesario.
-Consulte [`BartOnnxConfig`] para ver un ejemplo avanzado.
-
-</Tip>
+> [!TIP]
+> Todas las propiedades base y métodos asociados con [`~onnx.config.OnnxConfig`] y las 
+> otras clases de configuración se pueden sobreescribir si es necesario.
+> Consulte [`BartOnnxConfig`] para ver un ejemplo avanzado.
 
 #### Exportar el modelo
 
@@ -415,15 +403,12 @@ Una vez exportado el modelo, puedes probar que el modelo está bien formado de l
 >>> onnx.checker.check_model(onnx_model)
 ```
 
-<Tip>
-
-Si tu modelo tiene más de 2GB, verás que se crean muchos archivos adicionales durante la exportación.
-Esto es _esperado_ porque ONNX usa [Búferes de protocolo](https://developers.google.com/protocol-buffers/) 
-para almacenar el modelo y éstos tienen un límite de tamaño de 2 GB. Consulta la 
-[documentación de ONNX](https://github.com/onnx/onnx/blob/master/docs/ExternalData.md) para obtener 
-instrucciones sobre cómo cargar modelos con datos externos.
-
-</Tip>
+> [!TIP]
+> Si tu modelo tiene más de 2GB, verás que se crean muchos archivos adicionales durante la exportación.
+> Esto es _esperado_ porque ONNX usa [Búferes de protocolo](https://developers.google.com/protocol-buffers/) 
+> para almacenar el modelo y éstos tienen un límite de tamaño de 2 GB. Consulta la 
+> [documentación de ONNX](https://github.com/onnx/onnx/blob/master/docs/ExternalData.md) para obtener 
+> instrucciones sobre cómo cargar modelos con datos externos.
 
 #### Validar los resultados del modelo
 
@@ -457,14 +442,11 @@ y así tener una idea de lo que necesito.
 
 ## TorchScript
 
-<Tip>
-
-Este es el comienzo de nuestros experimentos con TorchScript y todavía estamos explorando sus capacidades con modelos de 
-tamaño de entrada variable. Es un tema de interés y profundizaremos nuestro análisis en las próximas 
-versiones,  con más ejemplos de código, una implementación más flexible y puntos de referencia que comparen códigos 
-basados en Python con TorchScript compilado.
-
-</Tip>
+> [!TIP]
+> Este es el comienzo de nuestros experimentos con TorchScript y todavía estamos explorando sus capacidades con modelos de 
+> tamaño de entrada variable. Es un tema de interés y profundizaremos nuestro análisis en las próximas 
+> versiones,  con más ejemplos de código, una implementación más flexible y puntos de referencia que comparen códigos 
+> basados en Python con TorchScript compilado.
 
 Según la documentación de PyTorch: "TorchScript es una forma de crear modelos serializables y optimizables a partir del 
 código de PyTorch". Los dos módulos de Pytorch [JIT y TRACE](https://pytorch.org/docs/stable/jit.html) permiten al 

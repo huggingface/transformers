@@ -30,11 +30,8 @@ GPU가 제한된 환경에서 ZeRO는 최적화 메모리와 계산을 GPU에서
 
 DeepSpeed는 PyPI 또는 Transformers에서 설치할 수 있습니다(자세한 설치 옵션은 DeepSpeed [설치 상세사항](https://www.deepspeed.ai/tutorials/advanced-install/) 또는 GitHub [README](https://github.com/deepspeedai/DeepSpeed#installation)를 참조하세요).
 
-<Tip>
-
-DeepSpeed를 설치하는 데 문제가 있는 경우 [DeepSpeed CUDA 설치](../debugging#deepspeed-cuda-installation) 가이드를 확인하세요. DeepSpeed에는 pip 설치 가능한 PyPI 패키지로 설치할 수 있지만, 하드웨어에 가장 잘 맞고 PyPI 배포판에서는 제공되지 않는 1비트 Adam과 같은 특정 기능을 지원하려면 [소스에서 설치하기](https://www.deepspeed.ai/tutorials/advanced-install/#install-deepspeed-from-source)를 적극 권장합니다.
-
-</Tip>
+> [!TIP]
+> DeepSpeed를 설치하는 데 문제가 있는 경우 [DeepSpeed CUDA 설치](../debugging#deepspeed-cuda-installation) 가이드를 확인하세요. DeepSpeed에는 pip 설치 가능한 PyPI 패키지로 설치할 수 있지만, 하드웨어에 가장 잘 맞고 PyPI 배포판에서는 제공되지 않는 1비트 Adam과 같은 특정 기능을 지원하려면 [소스에서 설치하기](https://www.deepspeed.ai/tutorials/advanced-install/#install-deepspeed-from-source)를 적극 권장합니다.
 
 <hfoptions id="install">
 <hfoption id="PyPI">
@@ -112,19 +109,16 @@ DeepSpeed를 설치하고 메모리 요구 사항을 더 잘 파악했다면 다
 
 DeepSpeed는 트레이닝 실행 방법을 구성하는 모든 매개변수가 포함된 구성 파일을 통해 [`Trainer`] 클래스와 함께 작동합니다. 트레이닝 스크립트를 실행하면 DeepSpeed는 [`Trainer`]로부터 받은 구성을 콘솔에 기록하므로 어떤 구성이 사용되었는지 정확히 확인할 수 있습니다.
 
-<Tip>
-
-DeepSpeed 구성 옵션의 전체 목록은 [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/)에서 확인할 수 있습니다. 또한 [DeepSpeedExamples](https://github.com/deepspeedai/DeepSpeedExamples) 리포지토리 또는 기본 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 리포지토리에서 다양한 DeepSpeed 구성 예제에 대한 보다 실용적인 예제를 찾을 수 있습니다. 구체적인 예제를 빠르게 찾으려면 다음과 같이 하세요:
-
-```bash
-git clone https://github.com/deepspeedai/DeepSpeedExamples
-cd DeepSpeedExamples
-find . -name '*json'
-# Lamb 옵티마이저 샘플 찾기
-grep -i Lamb $(find . -name '*json')
-```
-
-</Tip>
+> [!TIP]
+> DeepSpeed 구성 옵션의 전체 목록은 [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/)에서 확인할 수 있습니다. 또한 [DeepSpeedExamples](https://github.com/deepspeedai/DeepSpeedExamples) 리포지토리 또는 기본 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 리포지토리에서 다양한 DeepSpeed 구성 예제에 대한 보다 실용적인 예제를 찾을 수 있습니다. 구체적인 예제를 빠르게 찾으려면 다음과 같이 하세요:
+>
+> ```bash
+> git clone https://github.com/deepspeedai/DeepSpeedExamples
+> cd DeepSpeedExamples
+> find . -name '*json'
+> # Lamb 옵티마이저 샘플 찾기
+> grep -i Lamb $(find . -name '*json')
+> ```
 
 명령줄 인터페이스에서 트레이닝하는 경우 DeepSpeed 구성 파일은 JSON 파일의 경로로 전달되거나 노트북 설정에서 [`Trainer`]를 사용하는 경우 중첩된 `dict` 객체로 전달됩니다.
 
@@ -168,10 +162,8 @@ DeepSpeed 구성을 수정하고 [`TrainingArguments`]를 편집할 수도 있�
 
 세 가지 구성이 있으며, 각 구성은 서로 다른 ZeRO 단계에 해당합니다. 1단계는 확장성 측면에서 그다지 눈여겨볼만하지 않으므로 이 가이드에서는 2단계와 3단계에 중점을 둡니다. `zero_optimization` 구성에는 활성화할 항목과 구성 방법에 대한 모든 옵션이 포함되어 있습니다. 각 매개변수에 대한 자세한 설명은 [DeepSpeed 구성 JSON](https://www.deepspeed.ai/docs/config-json/) 참조를 참조하세요.
 
-<Tip warning={true}>
-DeepSpeed는 매개변수 이름의 유효성을 검사하지 않으며 오타가 있으면 매개변수의 기본 설정으로 대체합니다. DeepSpeed 엔진 시작 로그 메시지를 보고 어떤 값을 사용할지 확인할 수 있습니다.
-
-</Tip>
+> [!WARNING]
+> DeepSpeed는 매개변수 이름의 유효성을 검사하지 않으며 오타가 있으면 매개변수의 기본 설정으로 대체합니다. DeepSpeed 엔진 시작 로그 메시지를 보고 어떤 값을 사용할지 확인할 수 있습니다.
 
 [`Trainer`]는 동등한 명령줄 인수를 제공하지 않으므로 다음 구성은 DeepSpeed로 설정해야 합니다.
 
@@ -290,11 +282,8 @@ ZeRO-3의 또 다른 고려 사항은 여러 개의 GPU를 사용하는 경우 �
 tensor([1.0], device="cuda:0", dtype=torch.float16, requires_grad=True)
 ```
 
-<Tip>
-
-ZeRO-3로 대규모 모델을 초기화하고 매개변수에 액세스하는 방법에 대한 자세한 내용은 [Constructing Massive Models](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models) 및 [Gathering Parameters](https://deepspeed.readthedocs.io/en/latest/zero3.html#gathering-parameters) 가이드를 참조하세요.
-
-</Tip>
+> [!TIP]
+> ZeRO-3로 대규모 모델을 초기화하고 매개변수에 액세스하는 방법에 대한 자세한 내용은 [Constructing Massive Models](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models) 및 [Gathering Parameters](https://deepspeed.readthedocs.io/en/latest/zero3.html#gathering-parameters) 가이드를 참조하세요.
 
 </hfoption>
 </hfoptions>
@@ -396,11 +385,8 @@ ZeRO-3로 대규모 모델을 초기화하고 매개변수에 액세스하는 �
 
 `offload_optimizer`를 활성화하지 않는 한 DeepSpeed와 트랜스포머 옵티마이저 및 스케줄러를 혼합하여 사용할 수 있습니다. `offload_optimizer`를 활성화하면 CPU와 GPU 구현이 모두 있는 경우 DeepSpeed가 아닌 최적화기(LAMB 제외)를 사용할 수 있습니다.
 
-<Tip warning={true}>
-
-구성 파일의 최적화 프로그램 및 스케줄러 매개변수는 명령줄에서 설정할 수 있으므로 오류를 찾기 어렵지 않습니다. 예를 들어 학습 속도가 다른 곳에서 다른 값으로 설정된 경우 명령줄에서 이를 재정의할 수 있습니다. 최적화 프로그램 및 스케줄러 매개변수 외에도 [`Trainer`] 명령줄 인수가 DeepSpeed 구성과 일치하는지 확인해야 합니다.
-
-</Tip>
+> [!WARNING]
+> 구성 파일의 최적화 프로그램 및 스케줄러 매개변수는 명령줄에서 설정할 수 있으므로 오류를 찾기 어렵지 않습니다. 예를 들어 학습 속도가 다른 곳에서 다른 값으로 설정된 경우 명령줄에서 이를 재정의할 수 있습니다. 최적화 프로그램 및 스케줄러 매개변수 외에도 [`Trainer`] 명령줄 인수가 DeepSpeed 구성과 일치하는지 확인해야 합니다.
 
 <hfoptions id="opt-sched">
 <hfoption id="optimizer">
@@ -616,11 +602,8 @@ DeepSpeed는 단 하나의 GPU로도 여전히 유용합니다:
 1. 일부 계산과 메모리를 CPU로 오프로드하여 더 큰 배치 크기를 사용하거나 일반적으로 맞지 않는 매우 큰 모델을 맞추기 위해 모델에 더 많은 GPU 리소스를 사용할 수 있도록 합니다.
 2. 스마트 GPU 메모리 관리 시스템으로 메모리 조각화를 최소화하여 더 큰 모델과 데이터 배치에 맞출 수 있습니다.
 
-<Tip>
-
-단일 GPU에서 더 나은 성능을 얻으려면 [ZeRO-2](#zero-configuration) 구성 파일에서 `allgather_bucket_size` 및 `reduce_bucket_size` 값을 2e8로 설정하세요.
-
-</Tip>
+> [!TIP]
+> 단일 GPU에서 더 나은 성능을 얻으려면 [ZeRO-2](#zero-configuration) 구성 파일에서 `allgather_bucket_size` 및 `reduce_bucket_size` 값을 2e8로 설정하세요.
 
 </hfoption>
 </hfoptions>
@@ -849,11 +832,8 @@ trainer.deepspeed.save_checkpoint(checkpoint_dir)
 fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 ```
 
-<Tip>
-
-`load_state_dict_from_zero_checkpoint`가 실행되면 동일한 애플리케이션의 컨텍스트에서 모델을 더 이상 DeepSpeed에서 사용할 수 없습니다. `model.load_state_dict(state_dict)`는 모든 딥스피드 마법을 제거하므로 딥스피드 엔진을 다시 초기화해야 합니다. 이 기능은 훈련이 끝날 때만 사용하세요.
-
-</Tip>
+> [!TIP]
+> `load_state_dict_from_zero_checkpoint`가 실행되면 동일한 애플리케이션의 컨텍스트에서 모델을 더 이상 DeepSpeed에서 사용할 수 없습니다. `model.load_state_dict(state_dict)`는 모든 딥스피드 마법을 제거하므로 딥스피드 엔진을 다시 초기화해야 합니다. 이 기능은 훈련이 끝날 때만 사용하세요.
 
 fp32 가중치의 state_dict를 추출하여 로드할 수도 있습니다:
 
@@ -893,11 +873,8 @@ drwxrwxr-x 2 stas stas 4.0K Mar 25 19:52 global_step1/
 python zero_to_fp32.py . pytorch_model.bin
 ```
 
-<Tip>
-
-자세한 사용법은 `python zero_to_fp32.py -h`를 실행하세요. 이 스크립트에는 최종 fp32 가중치의 2배의 일반 RAM이 필요합니다.
-
-</Tip>
+> [!TIP]
+> 자세한 사용법은 `python zero_to_fp32.py -h`를 실행하세요. 이 스크립트에는 최종 fp32 가중치의 2배의 일반 RAM이 필요합니다.
 
 </hfoption>
 </hfoptions>
@@ -918,11 +895,8 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --do_eval --deepspeed ds
 
 DeepSpeed는 [`Trainer`] 클래스가 없는 트랜스포머에서도 작동합니다. 이는 [`~PreTrainedModel.from_pretrained`]를 호출할 때 ZeRO-3 매개변수를 수집하고 모델을 여러 GPU에 분할하는 작업만 처리하는 [`HfDeepSpeedConfig`]가 처리합니다.
 
-<Tip>
-
-모든 것이 자동으로 처리되기를 원한다면, [`Trainer`]와 함께 DeepSpeed를 사용해 보세요! [DeepSpeed 문서](https://www.deepspeed.ai/)를 참조하여 설정 파일에서 매개변수 값을 수동으로 구성해야 합니다(`"auto"` 값은 사용할 수 없음).
-
-</Tip>
+> [!TIP]
+> 모든 것이 자동으로 처리되기를 원한다면, [`Trainer`]와 함께 DeepSpeed를 사용해 보세요! [DeepSpeed 문서](https://www.deepspeed.ai/)를 참조하여 설정 파일에서 매개변수 값을 수동으로 구성해야 합니다(`"auto"` 값은 사용할 수 없음).
 
 ZeRO-3를 효율적으로 배포하려면 모델 앞에 [`HfDeepSpeedConfig`] 객체를 인스턴스화하고 해당 객체를 유지해야 합니다:
 

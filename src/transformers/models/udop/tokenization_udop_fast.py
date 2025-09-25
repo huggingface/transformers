@@ -162,12 +162,9 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
-            <Tip>
-
-            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
-            The token used is the `sep_token`.
-
-            </Tip>
+            > [!TIP]
+            > When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            > The token used is the `sep_token`.
 
         sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
@@ -465,11 +462,8 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
         """
         Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
 
-        <Tip warning={true}>
-
-        This method is deprecated, `__call__` should be used instead.
-
-        </Tip>
+        > [!WARNING]
+        > This method is deprecated, `__call__` should be used instead.
 
         Args:
             batch_text_or_text_pairs (`list[str]`, `list[tuple[str, str]]`, `list[list[str]]`, `list[tuple[list[str], list[str]]]`, and for not-fast tokenizers, also `list[list[int]]`, `list[tuple[list[int], list[int]]]`):
@@ -812,11 +806,8 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
         """
         Tokenize and prepare for the model a sequence or a pair of sequences.
 
-        <Tip warning={true}>
-
-        This method is deprecated, `__call__` should be used instead.
-
-        </Tip>
+        > [!WARNING]
+        > This method is deprecated, `__call__` should be used instead.
 
         Args:
             text (`str`, `list[str]` or (for non-fast tokenizers) `list[int]`):

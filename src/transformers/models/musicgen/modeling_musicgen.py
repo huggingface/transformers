@@ -488,16 +488,13 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
 
-            <Tip warning={true}>
-
-            The `input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
-            target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
-            you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
-            frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
-            target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
-            `input_ids`.
-
-            </Tip>
+            > [!WARNING]
+            > The `input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
+            > target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
+            > you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
+            > frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
+            > target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
+            > `input_ids`.
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
             the decoder.
@@ -729,16 +726,13 @@ class MusicgenModel(MusicgenPreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
 
-            <Tip warning={true}>
-
-            The `input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
-            target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
-            you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
-            frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
-            target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
-            `input_ids`.
-
-            </Tip>
+            > [!WARNING]
+            > The `input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
+            > target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
+            > you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
+            > frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
+            > target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
+            > `input_ids`.
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
             the decoder.
@@ -848,16 +842,13 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
 
             [What are input IDs?](../glossary#input-ids)
 
-            <Tip warning={true}>
-
-            The `input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
-            target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
-            you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
-            frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
-            target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
-            `input_ids`.
-
-            </Tip>
+            > [!WARNING]
+            > The `input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
+            > target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
+            > you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
+            > frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
+            > target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
+            > `input_ids`.
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
             the decoder.
@@ -1077,16 +1068,13 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
 
         Generates sequences of token ids for models with a language modeling head.
 
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
-
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
-
-        </Tip>
+        > [!WARNING]
+        > Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        > model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        > parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+        >
+        > For an overview of generation strategies and code examples, check out the [following
+        > guide](./generation_strategies).
 
         Parameters:
             inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
@@ -1664,16 +1652,13 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            <Tip warning={true}>
-
-            The `decoder_input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
-            target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
-            you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
-            frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
-            target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
-            `decoder_input_ids`.
-
-            </Tip>
+            > [!WARNING]
+            > The `decoder_input_ids` will automatically be converted from shape `(batch_size * num_codebooks,
+            > target_sequence_length)` to `(batch_size, num_codebooks, target_sequence_length)` in the forward pass. If
+            > you obtain audio codes from an audio encoding model, such as [`EncodecModel`], ensure that the number of
+            > frames is equal to 1, and that you reshape the audio codes from `(frames, batch_size, num_codebooks,
+            > target_sequence_length)` to `(batch_size * num_codebooks, target_sequence_length)` prior to passing them as
+            > `decoder_input_ids`.
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
@@ -2116,16 +2101,13 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
 
         Generates sequences of token ids for models with a language modeling head.
 
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
-
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
-
-        </Tip>
+        > [!WARNING]
+        > Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        > model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        > parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+        >
+        > For an overview of generation strategies and code examples, check out the [following
+        > guide](./generation_strategies).
 
         Parameters:
             inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):

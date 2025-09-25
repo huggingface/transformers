@@ -50,29 +50,26 @@ class TextToAudioPipeline(Pipeline):
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
-    <Tip>
-
-    You can specify parameters passed to the model by using [`TextToAudioPipeline.__call__.forward_params`] or
-    [`TextToAudioPipeline.__call__.generate_kwargs`].
-
-    Example:
-
-    ```python
-    >>> from transformers import pipeline
-
-    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small")
-
-    >>> # diversify the music generation by adding randomness with a high temperature and set a maximum music length
-    >>> generate_kwargs = {
-    ...     "do_sample": True,
-    ...     "temperature": 0.7,
-    ...     "max_new_tokens": 35,
-    ... }
-
-    >>> outputs = music_generator("Techno music with high melodic riffs", generate_kwargs=generate_kwargs)
-    ```
-
-    </Tip>
+    > [!TIP]
+    > You can specify parameters passed to the model by using [`TextToAudioPipeline.__call__.forward_params`] or
+    > [`TextToAudioPipeline.__call__.generate_kwargs`].
+    >
+    > Example:
+    >
+    > ```python
+    > >>> from transformers import pipeline
+    >
+    > >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small")
+    >
+    > >>> # diversify the music generation by adding randomness with a high temperature and set a maximum music length
+    > >>> generate_kwargs = {
+    > ...     "do_sample": True,
+    > ...     "temperature": 0.7,
+    > ...     "max_new_tokens": 35,
+    > ... }
+    >
+    > >>> outputs = music_generator("Techno music with high melodic riffs", generate_kwargs=generate_kwargs)
+    > ```
 
     This pipeline can currently be loaded from [`pipeline`] using the following task identifiers: `"text-to-speech"` or
     `"text-to-audio"`.

@@ -32,11 +32,8 @@ In this guide, you will learn how to:
  dataset.
  2. Use your finetuned model for inference.
 
-<Tip>
-
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/object-detection)
-
-</Tip>
+> [!TIP]
+> To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/object-detection)
 
 Before you begin, make sure you have all the necessary libraries installed:
 

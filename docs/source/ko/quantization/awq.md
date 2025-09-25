@@ -16,11 +16,8 @@ rendered properly in your Markdown viewer.
 
 # AWQ [[awq]]
 
-<Tip>
-
-이 [노트북](https://colab.research.google.com/drive/1HzZH89yAXJaZgwJDhQj9LqSBux932BvY) 으로 AWQ 양자화를 실습해보세요 !
-
-</Tip>
+> [!TIP]
+> 이 [노트북](https://colab.research.google.com/drive/1HzZH89yAXJaZgwJDhQj9LqSBux932BvY) 으로 AWQ 양자화를 실습해보세요 !
 
 [Activation-aware Weight Quantization (AWQ)](https://hf.co/papers/2306.00978)은 모델의 모든 가중치를 양자화하지 않고, LLM 성능에 중요한 가중치를 유지합니다. 이로써 4비트 정밀도로 모델을 실행해도 성능 저하 없이 양자화 손실을 크게 줄일 수 있습니다.
 
@@ -83,11 +80,8 @@ model = AutoModelForCausalLM.from_pretrained("TheBloke/zephyr-7B-alpha-AWQ", att
 
 퓨즈된 모듈은 정확도와 성능을 개선합니다. 퓨즈된 모듈은 [Llama](https://huggingface.co/meta-llama) 아키텍처와 [Mistral](https://huggingface.co/mistralai/Mistral-7B-v0.1) 아키텍처의 AWQ모듈에 기본적으로 지원됩니다. 그러나 지원되지 않는 아키텍처에 대해서도 AWQ 모듈을 퓨즈할 수 있습니다.
 
-<Tip warning={true}>
-
-퓨즈된 모듈은 FlashAttention-2와 같은 다른 최적화 기술과 결합할 수 없습니다.
-
-</Tip>
+> [!WARNING]
+> 퓨즈된 모듈은 FlashAttention-2와 같은 다른 최적화 기술과 결합할 수 없습니다.
 
 
 <hfoptions id="fuse">
@@ -226,8 +220,5 @@ output = model.generate(input_ids, do_sample=True, max_length=50, pad_token_id=5
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-<Tip warning={true}>
-
-이 기능은 AMD GPUs에서 지원됩니다.
-
-</Tip>
+> [!WARNING]
+> 이 기능은 AMD GPUs에서 지원됩니다.

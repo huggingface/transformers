@@ -545,13 +545,10 @@ class VivitModel(VivitPreTrainedModel):
         ViViT Transformer model with a video classification head on top (a linear layer on top of the final hidden state of the
     [CLS] token) e.g. for Kinetics-400.
 
-        <Tip>
-
-            Note that it's possible to fine-tune ViT on higher resolution images than the ones it has been trained on, by
-            setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
-            position embeddings to the higher resolution.
-
-        </Tip>
+        > [!TIP]
+        > Note that it's possible to fine-tune ViT on higher resolution images than the ones it has been trained on, by
+        >     setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+        >     position embeddings to the higher resolution.
     """
 )
 class VivitForVideoClassification(VivitPreTrainedModel):

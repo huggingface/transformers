@@ -59,11 +59,8 @@ CUDA out of memory. Tried to allocate 256.00 MiB (GPU 0; 11.17 GiB total capacit
 - [`TrainingArguments`]의 [`per_device_train_batch_size`](main_classes/trainer#transformers.TrainingArguments.per_device_train_batch_size) 값을 줄이세요.
 - [`TrainingArguments`]의 [`gradient_accumulation_steps`](main_classes/trainer#transformers.TrainingArguments.gradient_accumulation_steps)은 전체 배치 크기를 효과적으로 늘리세요.
 
-<Tip>
-
-메모리 절약 기술에 대한 자세한 내용은 성능 [가이드](performance)를 참조하세요.
-
-</Tip>
+> [!TIP]
+> 메모리 절약 기술에 대한 자세한 내용은 성능 [가이드](performance)를 참조하세요.
 
 ## 저장된 TensorFlow 모델을 가져올 수 없습니다(Unable to load a saved TensorFlow model)[[unable-to-load-a-saved-uensorFlow-model]]
 
@@ -160,11 +157,8 @@ tensor([[-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
 
 대부분의 경우 모델에 `attention_mask`를 제공하여 패딩 토큰을 무시해야 이러한 조용한 오류를 방지할 수 있습니다. 이제 두 번째 시퀀스의 출력이 실제 출력과 일치합니다:
 
-<Tip>
-
-일반적으로 토크나이저는 특정 토크나이저의 기본 값을 기준으로 사용자에 대한 'attention_mask'를 만듭니다.
-
-</Tip>
+> [!TIP]
+> 일반적으로 토크나이저는 특정 토크나이저의 기본 값을 기준으로 사용자에 대한 'attention_mask'를 만듭니다.
 
 ```py
 >>> attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 0, 0]])

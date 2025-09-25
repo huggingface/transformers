@@ -1168,23 +1168,17 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
 
-                <Tip>
-
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-                </Tip>
+                > [!TIP]
+                > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
             mirror (`str`, *optional*):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
                 Please refer to the mirror site for more information.
 
-        <Tip>
-
-        Activate the special ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode) to
-        use this method in a firewalled environment.
-
-        </Tip>
+        > [!TIP]
+        > Activate the special ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode) to
+        > use this method in a firewalled environment.
 
         Examples:
 

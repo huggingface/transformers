@@ -37,12 +37,9 @@ Bi-direction Encoders for Transformers (BERT) のフランス語版である Cam
 このモデルは [camembert](https://huggingface.co/camembert) によって提供されました。元のコードは [ここ](https://camembert-model.fr/) にあります。
 
 
-<Tip>
-
-この実装はRoBERTaと同じです。使用例については[RoBERTaのドキュメント](roberta)も参照してください。
-入力と出力に関する情報として。
-
-</Tip>
+> [!TIP]
+> この実装はRoBERTaと同じです。使用例については[RoBERTaのドキュメント](roberta)も参照してください。
+> 入力と出力に関する情報として。
 
 ## Resources
 

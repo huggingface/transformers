@@ -16,13 +16,9 @@ rendered properly in your Markdown viewer.
 
 # 궤적 트랜스포머[[trajectory-transformer]]
 
-<Tip warning={true}>
-
-
-이 모델은 유지 보수 모드로만 운영되며, 코드를 변경하는 새로운 PR(Pull Request)은 받지 않습니다.
-이 모델을 실행하는 데 문제가 발생한다면, 이 모델을 지원하는 마지막 버전인 v4.30.0를 다시 설치해 주세요. 다음 명령어를 실행하여 재설치할 수 있습니다: `pip install -U transformers==4.30.0`.
-
-</Tip>
+> [!WARNING]
+> 이 모델은 유지 보수 모드로만 운영되며, 코드를 변경하는 새로운 PR(Pull Request)은 받지 않습니다.
+> 이 모델을 실행하는 데 문제가 발생한다면, 이 모델을 지원하는 마지막 버전인 v4.30.0를 다시 설치해 주세요. 다음 명령어를 실행하여 재설치할 수 있습니다: `pip install -U transformers==4.30.0`.
 
 ## 개요[[overview]]
 

@@ -34,11 +34,8 @@ outputs = model(**inputs, labels=labels)
 
 `outputs` 对象是 [`~modeling_outputs.SequenceClassifierOutput`]，如下面该类的文档中所示，它表示它有一个可选的 `loss`，一个 `logits`，一个可选的 `hidden_states` 和一个可选的 `attentions` 属性。在这里，我们有 `loss`，因为我们传递了 `labels`，但我们没有 `hidden_states` 和 `attentions`，因为我们没有传递 `output_hidden_states=True` 或 `output_attentions=True`。
 
-<Tip>
-
-当传递 `output_hidden_states=True` 时，您可能希望 `outputs.hidden_states[-1]` 与 `outputs.last_hidden_states` 完全匹配。然而，这并不总是成立。一些模型在返回最后的 hidden state时对其应用归一化或其他后续处理。
-
-</Tip>
+> [!TIP]
+> 当传递 `output_hidden_states=True` 时，您可能希望 `outputs.hidden_states[-1]` 与 `outputs.last_hidden_states` 完全匹配。然而，这并不总是成立。一些模型在返回最后的 hidden state时对其应用归一化或其他后续处理。
 
 
 您可以像往常一样访问每个属性，如果模型未返回该属性，您将得到 `None`。在这里，例如，`outputs.loss` 是模型计算的损失，而 `outputs.attentions` 是 `None`。

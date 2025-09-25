@@ -29,11 +29,8 @@ Voici comment différents modèles résolvent des tâches spécifiques :
 - [GPT2](model_doc/gpt2) pour les tâches de traitement du language naturel telles que la génération de texte utilisant un décodeur
 - [BART](model_doc/bart) pour les tâches de traitement du language naturel telles que le résumé de texte et la traduction utilisant un encodeur-décodeur
 
-<Tip>
-
-Avant de poursuivre, il est utile d'avoir quelques connaissances de base sur l'architecture des Transformers. Comprendre le fonctionnement des encodeurs, des décodeurs et du mécanisme d'attention vous aidera à saisir comment les différents modèles Transformer fonctionnent. Si vous débutez ou avez besoin d'un rappel, consultez notre [cours](https://huggingface.co/course/chapter1/4?fw=pt) pour plus d'informations !
-
-</Tip>
+> [!TIP]
+> Avant de poursuivre, il est utile d'avoir quelques connaissances de base sur l'architecture des Transformers. Comprendre le fonctionnement des encodeurs, des décodeurs et du mécanisme d'attention vous aidera à saisir comment les différents modèles Transformer fonctionnent. Si vous débutez ou avez besoin d'un rappel, consultez notre [cours](https://huggingface.co/course/chapter1/4?fw=pt) pour plus d'informations !
 
 ## Paroles et audio
 
@@ -74,11 +71,8 @@ Il existe deux façons d'aborder les tâches de vision par ordinateur :
 1. **Diviser une image en une séquence de patches** et les traiter en parallèle avec un Transformer.
 2. **Utiliser un CNN moderne**, comme [ConvNeXT](model_doc/convnext), qui repose sur des couches convolutionnelles mais adopte des conceptions de réseau modernes.
 
-<Tip>
-
-Une troisième approche combine les Transformers avec des convolutions (par exemple, [Convolutional Vision Transformer](model_doc/cvt) ou [LeViT](model_doc/levit)). Nous ne discuterons pas de ces approches ici, car elles mélangent simplement les deux approches que nous examinons.
-
-</Tip>
+> [!TIP]
+> Une troisième approche combine les Transformers avec des convolutions (par exemple, [Convolutional Vision Transformer](model_doc/cvt) ou [LeViT](model_doc/levit)). Nous ne discuterons pas de ces approches ici, car elles mélangent simplement les deux approches que nous examinons.
 
 ViT et ConvNeXT sont couramment utilisés pour la classification d'images. Pour d'autres tâches de vision par ordinateur comme la détection d'objets, la segmentation et l'estimation de la profondeur, nous examinerons respectivement DETR, Mask2Former et GLPN, qui sont mieux adaptés à ces tâches.
 
@@ -108,11 +102,8 @@ Prêt à vous essayer à la classification d'images ? Consultez notre [guide com
 
 #### CNN
 
-<Tip>
-
-Cette section explique brièvement les convolutions, mais il serait utile d'avoir une compréhension préalable de la façon dont elles modifient la forme et la taille d'une image. Si vous n'êtes pas familier avec les convolutions, consultez le [chapitre sur les réseaux de neurones convolutionnels](https://github.com/fastai/fastbook/blob/master/13_convolutions.ipynb) du livre fastai !
-
-</Tip>
+> [!TIP]
+> Cette section explique brièvement les convolutions, mais il serait utile d'avoir une compréhension préalable de la façon dont elles modifient la forme et la taille d'une image. Si vous n'êtes pas familier avec les convolutions, consultez le [chapitre sur les réseaux de neurones convolutionnels](https://github.com/fastai/fastbook/blob/master/13_convolutions.ipynb) du livre fastai !
 
 [ConvNeXT](model_doc/convnext) est une architecture CNN qui adopte des conceptions de réseau modernes pour améliorer les performances. Cependant, les convolutions restent au cœur du modèle. D'un point de vue général, une [convolution](glossary#convolution) est une opération où une matrice plus petite (*noyau*) est multipliée par une petite fenêtre de pixels de l'image. Elle calcule certaines caractéristiques à partir de cette fenêtre, comme une texture particulière ou la courbure d'une ligne. Ensuite, elle se déplace vers la fenêtre suivante de pixels ; la distance parcourue par la convolution est appelée le *stride*.
 
@@ -229,11 +220,8 @@ Pour utiliser BERT pour la réponse aux questions, ajoutez une tête de classifi
 
 Prêt à essayer la réponse aux questions ? Consultez notre [guide complet sur la réponse aux questions](tasks/question_answering) pour découvrir comment effectuer un réglagle fin (*fine-tuning*) de DistilBERT et l'utiliser pour l'inférence !
 
-<Tip>
-
-💡 Une fois BERT préentraîné, il est incroyablement facile de l’adapter à diverses tâches ! Il vous suffit d’ajouter une tête spécifique au modèle préentraîné pour transformer les états cachés en la sortie souhaitée.
-
-</Tip>
+> [!TIP]
+> 💡 Une fois BERT préentraîné, il est incroyablement facile de l’adapter à diverses tâches ! Il vous suffit d’ajouter une tête spécifique au modèle préentraîné pour transformer les états cachés en la sortie souhaitée.
 
 ### Génération de texte
 
@@ -251,11 +239,8 @@ L'objectif de préentraînement de GPT-2 est basé sur la [modélisation du lang
 
 Prêt à essayer la génération de texte ? Consultez notre [guide complet sur la modélisation du langage causale](tasks/language_modeling#causal-language-modeling) pour découvrir comment effectuer un réglagle fin (*fine-tuning*) de DistilGPT-2 et l'utiliser pour l'inférence !
 
-<Tip>
-
-Pour plus d'informations sur la génération de texte, consultez le guide sur les [stratégies de génération de texte](generation_strategies) !
-
-</Tip>
+> [!TIP]
+> Pour plus d'informations sur la génération de texte, consultez le guide sur les [stratégies de génération de texte](generation_strategies) !
 
 ### Résumé de texte
 
@@ -271,11 +256,8 @@ Les modèles encodeur-décodeur tels que [BART](model_doc/bart) et [T5](model_do
 
 Prêt à essayer le résumé ? Consultez notre [guide complet sur le résumé](tasks/summarization) pour apprendre à effectuer un réglage fin (*fine-tuning*) de T5 et l'utiliser pour l'inférence !
 
-<Tip>
-
-Pour plus d'informations sur la génération de texte, consultez le guide sur les [stratégies de génération de texte](generation_strategies) !
-
-</Tip>
+> [!TIP]
+> Pour plus d'informations sur la génération de texte, consultez le guide sur les [stratégies de génération de texte](generation_strategies) !
 
 ### Traduction
 
@@ -287,8 +269,5 @@ BART a été suivi par une version multilingue, mBART, qui est spécifiquement c
 
 Prêt à essayer la traduction ? Consultez notre [guide complet sur la traduction](tasks/translation) pour apprendre à affiner T5 et l'utiliser pour l'inférence !
 
-<Tip>
-
-Pour plus d'informations sur la génération de texte, consultez le guide sur les [stratégies de génération de texte](generation_strategies) !
-
-</Tip>
+> [!TIP]
+> Pour plus d'informations sur la génération de texte, consultez le guide sur les [stratégies de génération de texte](generation_strategies) !

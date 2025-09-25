@@ -3688,12 +3688,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 We default it to 5GB in order for models to be able to run easily on free-tier google colab instances
                 without CPU OOM issues.
 
-                <Tip warning={true}>
-
-                If a single weight of the model is bigger than `max_shard_size`, it will be in its own checkpoint shard
-                which will be bigger than `max_shard_size`.
-
-                </Tip>
+                > [!WARNING]
+                > If a single weight of the model is bigger than `max_shard_size`, it will be in its own checkpoint shard
+                > which will be bigger than `max_shard_size`.
 
             safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
@@ -4346,11 +4343,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
 
-                <Tip>
-
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-                </Tip>
+                > [!TIP]
+                > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
             attn_implementation (`str`, *optional*):
                 The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)), or `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
@@ -4388,13 +4382,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 3. A string that is a valid `torch.dtype`. E.g. "float32" loads the model in `torch.float32`, "float16" loads in `torch.float16` etc.
 
-                <Tip>
-
-                For some models the `dtype` they were trained in is unknown - you may try to check the model's paper or
-                reach out to the authors and ask them to add this information to the model's card and to insert the
-                `dtype` or `torch_dtype` entry in `config.json` on the hub.
-
-                </Tip>
+                > [!TIP]
+                > For some models the `dtype` they were trained in is unknown - you may try to check the model's paper or
+                > reach out to the authors and ask them to add this information to the model's card and to insert the
+                > `dtype` or `torch_dtype` entry in `config.json` on the hub.
 
             device_map (`str` or `dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
@@ -4457,12 +4448,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                       supplied `kwargs` value. Remaining keys that do not correspond to any configuration attribute
                       will be passed to the underlying model's `__init__` function.
 
-        <Tip>
-
-        Activate the special ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode) to
-        use this method in a firewalled environment.
-
-        </Tip>
+        > [!TIP]
+        > Activate the special ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode) to
+        > use this method in a firewalled environment.
 
         Examples:
 

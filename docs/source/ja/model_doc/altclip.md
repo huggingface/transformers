@@ -56,11 +56,8 @@ Transformerエンコーダーに画像を与えるには、各画像を固定サ
 >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
 ```
 
-<Tip>
-
-このモデルは`CLIPModel`をベースにしており、オリジナルの[CLIP](clip)と同じように使用してください。
-
-</Tip>
+> [!TIP]
+> このモデルは`CLIPModel`をベースにしており、オリジナルの[CLIP](clip)と同じように使用してください。
 
 ## AltCLIPConfig
 

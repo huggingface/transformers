@@ -101,11 +101,8 @@ Para volver a usar el archivo de configuración, puedes cargarlo usando [`~Pretr
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
 ```
 
-<Tip>
-  
-También puedes guardar los archivos de configuración como un diccionario; o incluso guardar solo la diferencia entre tu archivo personalizado y la configuración por defecto. Consulta la [documentación sobre configuración](main_classes/configuration) para ver más detalles.
-
-</Tip>
+> [!TIP]
+> También puedes guardar los archivos de configuración como un diccionario; o incluso guardar solo la diferencia entre tu archivo personalizado y la configuración por defecto. Consulta la [documentación sobre configuración](main_classes/configuration) para ver más detalles.
 
 ## Modelo
 
@@ -167,11 +164,8 @@ La ultima clase base que debes conocer antes de usar un modelo con datos textual
 
 Ambos *tokenizers* son compatibles con los métodos comunes, como los de encodificación y decodificación, los métodos para añadir tokens y aquellos que manejan tokens especiales. 
 
-<Tip warning={true}>
-
-No todos los modelos son compatibles con un *tokenizer* rápido. Échale un vistazo a esta [tabla](index#supported-frameworks) para comprobar si un modelo específico es compatible con un *tokenizer* rápido.
-
-</Tip>
+> [!WARNING]
+> No todos los modelos son compatibles con un *tokenizer* rápido. Échale un vistazo a esta [tabla](index#supported-frameworks) para comprobar si un modelo específico es compatible con un *tokenizer* rápido.
 
 Si has entrenado tu propio *tokenizer*, puedes crear uno desde tu archivo de “vocabulario”:
 
@@ -199,12 +193,8 @@ Crea un *tokenizer* rápido con la clase [`DistilBertTokenizerFast`]:
 >>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-<Tip>
-
-Por defecto, el [`AutoTokenizer`] intentará cargar un *tokenizer* rápido. Puedes desactivar este comportamiento cambiando el parámetro `use_fast=False` de `from_pretrained`.
-
-
-</Tip>
+> [!TIP]
+> Por defecto, el [`AutoTokenizer`] intentará cargar un *tokenizer* rápido. Puedes desactivar este comportamiento cambiando el parámetro `use_fast=False` de `from_pretrained`.
 
 ## Extractor de Características 
 
@@ -236,11 +226,8 @@ ViTFeatureExtractor {
 }
 ```
 
-<Tip>
-
-Si no estás buscando ninguna personalización en específico, usa el método `from_pretrained` para cargar los parámetros del extractor de características por defecto del modelo.
-
-</Tip>
+> [!TIP]
+> Si no estás buscando ninguna personalización en específico, usa el método `from_pretrained` para cargar los parámetros del extractor de características por defecto del modelo.
 
 Puedes modificar cualquier parámetro de [`ViTFeatureExtractor`] para crear tu extractor de características personalizado:
 

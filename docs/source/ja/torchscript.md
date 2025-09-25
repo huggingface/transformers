@@ -16,11 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Export to TorchScript
 
-<Tip>
-
-これはTorchScriptを使用した実験の最初であり、可変入力サイズのモデルに対するその能力をまだ探求中です。これは私たちの関心の焦点であり、今後のリリースでは、より柔軟な実装や、PythonベースのコードとコンパイルされたTorchScriptを比較するベンチマークを含む、より多くのコード例で詳細な分析を行います。
-
-</Tip>
+> [!TIP]
+> これはTorchScriptを使用した実験の最初であり、可変入力サイズのモデルに対するその能力をまだ探求中です。これは私たちの関心の焦点であり、今後のリリースでは、より柔軟な実装や、PythonベースのコードとコンパイルされたTorchScriptを比較するベンチマークを含む、より多くのコード例で詳細な分析を行います。
 
 [TorchScriptのドキュメント](https://pytorch.org/docs/stable/jit.html)によれば：
 

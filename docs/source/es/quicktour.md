@@ -20,12 +20,9 @@ rendered properly in your Markdown viewer.
 
 ¡Entra en marcha con los 🤗 Transformers! Comienza usando [`pipeline`] para una inferencia veloz, carga un modelo preentrenado y un tokenizador con una [AutoClass](./model_doc/auto) para resolver tu tarea de texto, visión o audio.
 
-<Tip>
-
-Todos los ejemplos de código presentados en la documentación tienen un botón arriba a la derecha para elegir si quieres ocultar o mostrar el código en Pytorch o TensorFlow.
-Si no fuese así, se espera que el código funcione para ambos backends sin ningún cambio.
-
-</Tip>
+> [!TIP]
+> Todos los ejemplos de código presentados en la documentación tienen un botón arriba a la derecha para elegir si quieres ocultar o mostrar el código en Pytorch o TensorFlow.
+> Si no fuese así, se espera que el código funcione para ambos backends sin ningún cambio.
 
 ## Pipeline
 
@@ -54,11 +51,8 @@ El [`pipeline`] soporta muchas tareas comunes listas para usar:
 * Clasificación de Audios (Audio Classification, en inglés): asigna una etiqueta a un segmento de audio.
 * Reconocimiento de Voz Automático (Automatic Speech Recognition o ASR, en inglés): transcribe datos de audio a un texto.
 
-<Tip>
-
-Para más detalles acerca del [`pipeline`] y tareas asociadas, consulta la documentación [aquí](./main_classes/pipelines).
-
-</Tip>
+> [!TIP]
+> Para más detalles acerca del [`pipeline`] y tareas asociadas, consulta la documentación [aquí](./main_classes/pipelines).
 
 ### Uso del Pipeline
 
@@ -223,11 +217,8 @@ Lee el tutorial de [preprocessing](./preprocessing) para más detalles acerca de
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
 ```
 
-<Tip>
-
-Ve el [task summary](./task_summary) para revisar qué clase del [`AutoModel`] deberías usar para cada tarea.
-
-</Tip>
+> [!TIP]
+> Ve el [task summary](./task_summary) para revisar qué clase del [`AutoModel`] deberías usar para cada tarea.
 
 Ahora puedes pasar tu lote (batch) preprocesado de inputs directamente al modelo. Solo tienes que desempacar el diccionario añadiendo `**`:
 
@@ -246,21 +237,15 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
 
-<Tip>
-
-Todos los modelos de 🤗 Transformers (PyTorch o TensorFlow) producirán los tensores *antes* de la función de activación
-final (como softmax) porque la función de activación final es comúnmente fusionada con la pérdida.
-
-</Tip>
+> [!TIP]
+> Todos los modelos de 🤗 Transformers (PyTorch o TensorFlow) producirán los tensores *antes* de la función de activación
+> final (como softmax) porque la función de activación final es comúnmente fusionada con la pérdida.
 
 Los modelos son [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) o [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) estándares así que podrás usarlos en tu training loop usual. Sin embargo, para facilitar las cosas, 🤗 Transformers provee una clase [`Trainer`] para PyTorch que añade funcionalidades para entrenamiento distribuido, precición mixta, y más. Para TensorFlow, puedes usar el método `fit` desde [Keras](https://keras.io/). Consulta el [tutorial de entrenamiento](./training) para más detalles.
 
-<Tip>
-
-Los outputs del modelo de 🤗 Transformers son dataclasses especiales por lo que sus atributos pueden ser completados en un IDE.
-Los outputs del modelo también se comportan como tuplas o diccionarios (e.g., puedes indexar con un entero, un slice o una cadena) en cuyo caso los atributos que son `None` son ignorados.
-
-</Tip>
+> [!TIP]
+> Los outputs del modelo de 🤗 Transformers son dataclasses especiales por lo que sus atributos pueden ser completados en un IDE.
+> Los outputs del modelo también se comportan como tuplas o diccionarios (e.g., puedes indexar con un entero, un slice o una cadena) en cuyo caso los atributos que son `None` son ignorados.
 
 ### Guarda un modelo
 

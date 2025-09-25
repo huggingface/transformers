@@ -28,11 +28,8 @@ Siri와 Alexa와 같은 가상 어시스턴트는 ASR 모델을 사용하여 일
 1. [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터 세트에서 [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base)를 미세 조정하여 오디오를 텍스트로 변환합니다.
 2. 미세 조정한 모델을 추론에 사용합니다.
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/automatic-speech-recognition)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/automatic-speech-recognition)를 확인하는 것이 좋습니다.
 
 시작하기 전에 필요한 모든 라이브러리가 설치되어 있는지 확인하세요:
 
@@ -232,11 +229,8 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 
 ## 훈련하기[[train]]
 
-<Tip>
-
-[`Trainer`]로 모델을 미세 조정하는 것이 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인해보세요!
-
-</Tip>
+> [!TIP]
+> [`Trainer`]로 모델을 미세 조정하는 것이 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인해보세요!
 
 이제 모델 훈련을 시작할 준비가 되었습니다! [`AutoModelForCTC`]로 Wav2Vec2를 가져오세요. `ctc_loss_reduction` 매개변수로 CTC 손실에 적용할 축소(reduction) 방법을 지정하세요. 기본값인 합계 대신 평균을 사용하는 것이 더 좋은 경우가 많습니다:
 
@@ -297,11 +291,8 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-자동 음성 인식을 위해 모델을 미세 조정하는 더 자세한 예제는 영어 자동 음성 인식을 위한 [블로그 포스트](https://huggingface.co/blog/fine-tune-wav2vec2-english)와 다국어 자동 음성 인식을 위한 [포스트](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2)를 참조하세요.
-
-</Tip>
+> [!TIP]
+> 자동 음성 인식을 위해 모델을 미세 조정하는 더 자세한 예제는 영어 자동 음성 인식을 위한 [블로그 포스트](https://huggingface.co/blog/fine-tune-wav2vec2-english)와 다국어 자동 음성 인식을 위한 [포스트](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2)를 참조하세요.
 
 ## 추론하기[[inference]]
 
@@ -328,11 +319,8 @@ MInDS-14 데이터 세트의 샘플링 레이트는 8000kHz이므로([데이터 
 {'text': 'I WOUD LIKE O SET UP JOINT ACOUNT WTH Y PARTNER'}
 ```
 
-<Tip>
-
-텍스트로 변환된 결과가 꽤 괜찮지만 더 좋을 수도 있습니다! 더 나은 결과를 얻으려면 더 많은 예제로 모델을 미세 조정하세요!
-
-</Tip>
+> [!TIP]
+> 텍스트로 변환된 결과가 꽤 괜찮지만 더 좋을 수도 있습니다! 더 나은 결과를 얻으려면 더 많은 예제로 모델을 미세 조정하세요!
 
 `pipeline`의 결과를 수동으로 재현할 수도 있습니다:
 

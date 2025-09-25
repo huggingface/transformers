@@ -70,11 +70,8 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 让我们谈谈代码！
 
-<Tip>
-
-如果您对基本的LLM使用感兴趣，我们高级的[`Pipeline`](pipeline_tutorial)接口是一个很好的起点。然而，LLMs通常需要像`quantization`和`token选择步骤的精细控制`等高级功能，这最好通过[`~generation.GenerationMixin.generate`]来完成。使用LLM进行自回归生成也是资源密集型的操作，应该在GPU上执行以获得足够的吞吐量。
-
-</Tip>
+> [!TIP]
+> 如果您对基本的LLM使用感兴趣，我们高级的[`Pipeline`](pipeline_tutorial)接口是一个很好的起点。然而，LLMs通常需要像`quantization`和`token选择步骤的精细控制`等高级功能，这最好通过[`~generation.GenerationMixin.generate`]来完成。使用LLM进行自回归生成也是资源密集型的操作，应该在GPU上执行以获得足够的吞吐量。
 
 首先，您需要加载模型。
 

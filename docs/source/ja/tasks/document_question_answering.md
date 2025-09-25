@@ -28,11 +28,8 @@ rendered properly in your Markdown viewer.
 - [DocVQA データセット](https://huggingface.co/datasets/nielsr/docvqa_1200_examples_donut) の [LayoutLMv2](../model_doc/layoutlmv2) を微調整します。
 - 微調整されたモデルを推論に使用します。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/image-to-text) を確認することをお勧めします。
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/image-to-text) を確認することをお勧めします。
 
 LayoutLMv2 は、最後の非表示のヘッダーの上に質問応答ヘッドを追加することで、ドキュメントの質問応答タスクを解決します。
 トークンの状態を調べて、トークンの開始トークンと終了トークンの位置を予測します。

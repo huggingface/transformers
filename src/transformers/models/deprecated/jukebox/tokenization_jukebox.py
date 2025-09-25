@@ -63,11 +63,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
     call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
 
-    <Tip>
-
-    If nothing is provided, the genres and the artist will either be selected randomly or set to None
-
-    </Tip>
+    > [!TIP]
+    > If nothing is provided, the genres and the artist will either be selected randomly or set to None
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to:
     this superclass for more information regarding those methods.

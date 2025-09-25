@@ -32,11 +32,8 @@ This guide will show you how to:
 1. Finetune [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/dany0407/eli5_category) dataset.
 2. Use your finetuned model for inference.
 
-<Tip>
-
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/text-generation)
-
-</Tip>
+> [!TIP]
+> To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/text-generation)
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -200,11 +197,8 @@ Use the end-of-sequence token as the padding token and set `mlm=False`. This wil
 
 ## Train
 
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the [basic tutorial](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the [basic tutorial](../training#train-with-pytorch-trainer)!
 
 You're ready to start training your model now! Load DistilGPT2 with [`AutoModelForCausalLM`]:
 
@@ -257,12 +251,9 @@ Then share your model to the Hub with the [`~transformers.Trainer.push_to_hub`] 
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-For a more in-depth example of how to finetune a model for causal language modeling, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-
-</Tip>
+> [!TIP]
+> For a more in-depth example of how to finetune a model for causal language modeling, take a look at the corresponding
+> [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
 
 ## Inference
 

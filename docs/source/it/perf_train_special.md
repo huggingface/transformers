@@ -16,10 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Addestramento su Hardware Specializzato
 
-<Tip>
-
- Nota: Molte delle strategie introdotte nella [sezione sulla GPU singola](perf_train_gpu_one) (come mixed precision training o gradient accumulation) e [sezione multi-GPU](perf_train_gpu_many) sono generiche e applicabili all'addestramento di modelli in generale quindi assicurati di dargli un'occhiata prima di immergerti in questa sezione.
-
-</Tip>
+> [!TIP]
+> Nota: Molte delle strategie introdotte nella [sezione sulla GPU singola](perf_train_gpu_one) (come mixed precision training o gradient accumulation) e [sezione multi-GPU](perf_train_gpu_many) sono generiche e applicabili all'addestramento di modelli in generale quindi assicurati di dargli un'occhiata prima di immergerti in questa sezione.
 
 Questo documento sarà presto completato con informazioni su come effettuare la formazione su hardware specializzato.

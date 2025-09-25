@@ -110,11 +110,8 @@ Carga el modelo BERT con [`AutoModelForMultipleChoice`]:
 >>> model = AutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 ```
 
-<Tip>
-
-Para familiarizarte con el fine-tuning con [`Trainer`], ¡mira el tutorial básico [aquí](../training#finetune-with-trainer)!
-
-</Tip>
+> [!TIP]
+> Para familiarizarte con el fine-tuning con [`Trainer`], ¡mira el tutorial básico [aquí](../training#finetune-with-trainer)!
 
 En este punto, solo quedan tres pasos:
 

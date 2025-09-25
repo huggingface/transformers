@@ -2402,12 +2402,9 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked),
             the loss is only computed for the tokens with labels
 
-            <Tip warning={true}>
-
-            This example uses a false checkpoint since we don't have any available pretrained model for the masked language
-            modeling task with the Reformer architecture.
-
-            </Tip>
+            > [!WARNING]
+            > This example uses a false checkpoint since we don't have any available pretrained model for the masked language
+            > modeling task with the Reformer architecture.
 
         Example:
 

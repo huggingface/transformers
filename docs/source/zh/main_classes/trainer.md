@@ -18,11 +18,8 @@ rendered properly in your Markdown viewer.
 
 [`Trainer`] 类提供了一个 PyTorch 的 API，用于处理大多数标准用例的全功能训练。它在大多数[示例脚本](https://github.com/huggingface/transformers/tree/main/examples)中被使用。
 
-<Tip>
-
-如果你想要使用自回归技术在文本数据集上微调像 Llama-2 或 Mistral 这样的语言模型，考虑使用 [`trl`](https://github.com/huggingface/trl) 的 [`~trl.SFTTrainer`]。[`~trl.SFTTrainer`] 封装了 [`Trainer`]，专门针对这个特定任务进行了优化，并支持序列打包、LoRA、量化和 DeepSpeed，以有效扩展到任何模型大小。另一方面，[`Trainer`] 是一个更通用的选项，适用于更广泛的任务。
-
-</Tip>
+> [!TIP]
+> 如果你想要使用自回归技术在文本数据集上微调像 Llama-2 或 Mistral 这样的语言模型，考虑使用 [`trl`](https://github.com/huggingface/trl) 的 [`~trl.SFTTrainer`]。[`~trl.SFTTrainer`] 封装了 [`Trainer`]，专门针对这个特定任务进行了优化，并支持序列打包、LoRA、量化和 DeepSpeed，以有效扩展到任何模型大小。另一方面，[`Trainer`] 是一个更通用的选项，适用于更广泛的任务。
 
 在实例化你的 [`Trainer`] 之前，创建一个 [`TrainingArguments`]，以便在训练期间访问所有定制点。
 
@@ -43,15 +40,12 @@ rendered properly in your Markdown viewer.
 - **evaluate** -- 运行评估循环并返回指标。
 - **predict** -- 返回在测试集上的预测（如果有标签，则包括指标）。
 
-<Tip warning={true}>
-
-[`Trainer`] 类被优化用于 🤗 Transformers 模型，并在你在其他模型上使用时可能会有一些令人惊讶的结果。当在你自己的模型上使用时，请确保：
-
-- 你的模型始终返回元组或 [`~utils.ModelOutput`] 的子类。
-- 如果提供了 `labels` 参数，你的模型可以计算损失，并且损失作为元组的第一个元素返回（如果你的模型返回元组）。
-- 你的模型可以接受多个标签参数（在 [`TrainingArguments`] 中使用 `label_names` 将它们的名称指示给 [`Trainer`]），但它们中没有一个应该被命名为 `"label"`。
-
-</Tip>
+> [!WARNING]
+> [`Trainer`] 类被优化用于 🤗 Transformers 模型，并在你在其他模型上使用时可能会有一些令人惊讶的结果。当在你自己的模型上使用时，请确保：
+>
+> - 你的模型始终返回元组或 [`~utils.ModelOutput`] 的子类。
+> - 如果提供了 `labels` 参数，你的模型可以计算损失，并且损失作为元组的第一个元素返回（如果你的模型返回元组）。
+> - 你的模型可以接受多个标签参数（在 [`TrainingArguments`] 中使用 `label_names` 将它们的名称指示给 [`Trainer`]），但它们中没有一个应该被命名为 `"label"`。
 
 以下是如何自定义 [`Trainer`] 以使用加权损失的示例（在训练集不平衡时很有用）：
 

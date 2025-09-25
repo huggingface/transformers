@@ -38,12 +38,9 @@ GPT-3 の言語は主に英語であり、パラメーターは公開されて�
 ここ: https://github.com/TsinghuaAI/CPM-Generate
 
 
-<Tip>
-
-CPM のアーキテクチャは、トークン化方法を除いて GPT-2 と同じです。詳細については、[GPT-2 ドキュメント](openai-community/gpt2) を参照してください。
-API リファレンス情報。
-
-</Tip>
+> [!TIP]
+> CPM のアーキテクチャは、トークン化方法を除いて GPT-2 と同じです。詳細については、[GPT-2 ドキュメント](openai-community/gpt2) を参照してください。
+> API リファレンス情報。
 
 ## CpmTokenizer
 

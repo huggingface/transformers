@@ -49,8 +49,5 @@ The original code can be found [here](https://github.com/pytorch/fairseq/tree/ma
 - XLS-R model was trained using connectionist temporal classification (CTC) so the model output has to be decoded using
   [`Wav2Vec2CTCTokenizer`].
 
-<Tip>
-
-XLS-R's architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for API reference.
-
-</Tip>
+> [!TIP]
+> XLS-R's architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for API reference.

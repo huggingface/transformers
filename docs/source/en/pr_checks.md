@@ -148,11 +148,8 @@ Additional checks concern PRs that add new models, mainly that:
 
 Since the Transformers library is very opinionated with respect to model code, and each model should fully be implemented in a single file without relying on other models, we have added a mechanism that checks whether a copy of the code of a layer of a given model stays consistent with the original. This way, when there is a bug fix, we can see all other impacted models and choose to trickle down the modification or break the copy.
 
-<Tip>
-
-If a file is a full copy of another file, you should register it in the constant `FULL_COPIES` of `utils/check_copies.py`.
-
-</Tip>
+> [!TIP]
+> If a file is a full copy of another file, you should register it in the constant `FULL_COPIES` of `utils/check_copies.py`.
 
 This mechanism relies on comments of the form `# Copied from xxx`. The `xxx` should contain the whole path to the class of function which is being copied below. For instance, `RobertaSelfOutput` is a direct copy of the `BertSelfOutput` class, so you can see [here](https://github.com/huggingface/transformers/blob/2bd7a27a671fd1d98059124024f580f8f5c0f3b5/src/transformers/models/roberta/modeling_roberta.py#L289) it has a comment:
 
@@ -182,11 +179,8 @@ You can add several patterns separated by a comma. For instance here `CamemberFo
 
 If the order matters (because one of the replacements might conflict with a previous one), the replacements are executed from left to right.
 
-<Tip>
-
-If the replacements change the formatting (if you replace a short name by a very long name for instance), the copy is checked after applying the auto-formatter.
-
-</Tip>
+> [!TIP]
+> If the replacements change the formatting (if you replace a short name by a very long name for instance), the copy is checked after applying the auto-formatter.
 
 Another way when the patterns are just different casings of the same replacement (with an uppercased and a lowercased variants) is just to add the option `all-casing`. [Here](https://github.com/huggingface/transformers/blob/15082a9dc6950ecae63a0d3e5060b2fc7f15050a/src/transformers/models/mobilebert/modeling_mobilebert.py#L1237) is an example in `MobileBertForSequenceClassification` with the comment:
 

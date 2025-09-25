@@ -30,11 +30,8 @@ Antes de que puedas utilizar los datos en un modelo, debes procesarlos en un for
 
 La principal herramienta para procesar datos textuales es un [tokenizador](main_classes/tokenizer). Un tokenizador comienza dividiendo el texto en *tokens* según un conjunto de reglas. Los tokens se convierten en números, que se utilizan para construir tensores como entrada a un modelo. El tokenizador también añade cualquier entrada adicional que requiera el modelo.
 
-<Tip>
-
-Si tienes previsto utilizar un modelo pre-entrenado, es importante que utilices el tokenizador pre-entrenado asociado. Esto te asegura que el texto se divide de la misma manera que el corpus de pre-entrenamiento y utiliza el mismo índice de tokens correspondiente (usualmente referido como el *vocab*) durante el pre-entrenamiento.
-
-</Tip>
+> [!TIP]
+> Si tienes previsto utilizar un modelo pre-entrenado, es importante que utilices el tokenizador pre-entrenado asociado. Esto te asegura que el texto se divide de la misma manera que el corpus de pre-entrenamiento y utiliza el mismo índice de tokens correspondiente (usualmente referido como el *vocab*) durante el pre-entrenamiento.
 
 Comienza rápidamente cargando un tokenizador pre-entrenado con la clase [`AutoTokenizer`]. Esto descarga el *vocab* utilizado cuando un modelo es pre-entrenado.
 

@@ -22,11 +22,8 @@ rendered properly in your Markdown viewer.
 - 如何使用特定的`tokenizer`(分词器)或模型。
 - 如何使用[`pipeline`] 进行音频、视觉和多模态任务的推理。
 
-<Tip>
-
-请查看[`pipeline`]文档以获取已支持的任务和可用参数的完整列表。
-
-</Tip>
+> [!TIP]
+> 请查看[`pipeline`]文档以获取已支持的任务和可用参数的完整列表。
 
 ## Pipeline使用
 
@@ -203,9 +200,8 @@ for out in pipe(KeyDataset(dataset, "audio")):
 
 ## 在Web服务器上使用pipelines
 
-<Tip>
-创建推理引擎是一个复杂的主题，值得有自己的页面。
-</Tip>
+> [!TIP]
+> 创建推理引擎是一个复杂的主题，值得有自己的页面。
 
 [链接](./pipeline_webserver)
 
@@ -266,17 +262,14 @@ for out in pipe(KeyDataset(dataset, "audio")):
 [{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
 ```
 
-<Tip>
-
-要运行上面的示例，除了🤗 Transformers之外，您需要安装[`pytesseract`](https://pypi.org/project/pytesseract/)。
-
-
-```bash
-sudo apt install -y tesseract-ocr
-pip install pytesseract
-```
-
-</Tip>
+> [!TIP]
+> 要运行上面的示例，除了🤗 Transformers之外，您需要安装[`pytesseract`](https://pypi.org/project/pytesseract/)。
+>
+>
+> ```bash
+> sudo apt install -y tesseract-ocr
+> pip install pytesseract
+> ```
 
 ## 在大模型上使用🤗 `accelerate`和`pipeline`：
 

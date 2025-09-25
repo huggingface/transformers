@@ -101,11 +101,8 @@ Per riutilizzare la configurazione del file, caricalo con [`~PretrainedConfig.fr
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
 ```
 
-<Tip>
-
-Puoi anche salvare il file di configurazione come dizionario oppure come la differenza tra gli attributi della tua configurazione personalizzata e gli attributi della configurazione predefinita! Guarda la documentazione [configuration](main_classes/configuration) per più dettagli.
-
-</Tip>
+> [!TIP]
+> Puoi anche salvare il file di configurazione come dizionario oppure come la differenza tra gli attributi della tua configurazione personalizzata e gli attributi della configurazione predefinita! Guarda la documentazione [configuration](main_classes/configuration) per più dettagli.
 
 ## Modello
 
@@ -163,11 +160,8 @@ L'ultima classe base di cui hai bisogno prima di utilizzare un modello per i dat
 
 Entrambi i tokenizer supportano metodi comuni come la codifica e la decodifica, l'aggiunta di nuovi token e la gestione di token speciali.
 
-<Tip warning={true}>
-
-Non tutti i modelli supportano un tokenizer veloce. Dai un'occhiata a questo [tabella](index#supported-frameworks) per verificare se un modello ha il supporto per tokenizer veloce. 
-
-</Tip>
+> [!WARNING]
+> Non tutti i modelli supportano un tokenizer veloce. Dai un'occhiata a questo [tabella](index#supported-frameworks) per verificare se un modello ha il supporto per tokenizer veloce.
 
 Se hai addestrato il tuo tokenizer, puoi crearne uno dal tuo file *vocabolario*: 
 
@@ -193,11 +187,8 @@ Crea un tokenizer veloce con la classe [`DistilBertTokenizerFast`]:
 >>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-<Tip>
-
-Per l'impostazione predefinita, [`AutoTokenizer`] proverà a caricare un tokenizer veloce. Puoi disabilitare questo comportamento impostando `use_fast=False` in `from_pretrained`.
-
-</Tip>
+> [!TIP]
+> Per l'impostazione predefinita, [`AutoTokenizer`] proverà a caricare un tokenizer veloce. Puoi disabilitare questo comportamento impostando `use_fast=False` in `from_pretrained`.
 
 ## Estrattore Di Feature
 
@@ -229,11 +220,8 @@ ViTFeatureExtractor {
 }
 ```
 
-<Tip>
-
-Se non stai cercando alcuna personalizzazione, usa il metodo `from_pretrained` per caricare i parametri di default dell'estrattore di caratteristiche di un modello.
-
-</Tip>
+> [!TIP]
+> Se non stai cercando alcuna personalizzazione, usa il metodo `from_pretrained` per caricare i parametri di default dell'estrattore di caratteristiche di un modello.
 
 Modifica uno qualsiasi dei parametri [`ViTFeatureExtractor`] per creare il tuo estrattore di caratteristiche personalizzato:
 

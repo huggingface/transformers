@@ -114,13 +114,10 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 모델은 8비트 또는 4비트로 로드할 수 있으며, 이는 원본 모델의 성능을 유지하면서 메모리 요구 사항을 크게 줄여줍니다. 먼저 bitsandbytes를 설치하고(`pip install bitsandbytes`), 라이브러리가 지원하는 GPU/가속기를 사용 중인지 확인하십시오.
 
-<Tip>
-
-bitsandbytes는 CUDA 이외의 여러 백엔드를 지원하도록 리팩터링되고 있습니다. 현재 ROCm(AMD GPU) 및 Intel CPU 구현이 성숙 단계이며, Intel XPU는 진행 중이고 Apple Silicon 지원은 Q4/Q1에 예상됩니다. 설치 지침 및 최신 백엔드 업데이트는 [이 링크](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend)를 방문하세요.
-
-전체 공개 전에 버그를 식별하는 데 도움이 되는 피드백을 환영합니다! 자세한 내용과 피드백은 [이 문서](https://huggingface.co/docs/bitsandbytes/main/en/non_cuda_backends)를 확인하세요.
-
-</Tip>
+> [!TIP]
+> bitsandbytes는 CUDA 이외의 여러 백엔드를 지원하도록 리팩터링되고 있습니다. 현재 ROCm(AMD GPU) 및 Intel CPU 구현이 성숙 단계이며, Intel XPU는 진행 중이고 Apple Silicon 지원은 Q4/Q1에 예상됩니다. 설치 지침 및 최신 백엔드 업데이트는 [이 링크](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend)를 방문하세요.
+>
+> 전체 공개 전에 버그를 식별하는 데 도움이 되는 피드백을 환영합니다! 자세한 내용과 피드백은 [이 문서](https://huggingface.co/docs/bitsandbytes/main/en/non_cuda_backends)를 확인하세요.
 
 위의 코드 스니펫을 다음과 같이 변경하면 됩니다:
 

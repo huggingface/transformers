@@ -22,11 +22,8 @@ La clasificación de imágenes asigna una etiqueta o clase a una imagen. A difer
 
 Esta guía te mostrará como hacer fine-tune al [ViT](https://huggingface.co/docs/transformers/v4.16.2/en/model_doc/vit) en el dataset [Food-101](https://huggingface.co/datasets/food101) para clasificar un alimento en una imagen.
 
-<Tip>
-
-Consulta la [página de la tarea](https://huggingface.co/tasks/audio-classification) de clasificación de imágenes para obtener más información sobre sus modelos, datasets y métricas asociadas.
-
-</Tip>
+> [!TIP]
+> Consulta la [página de la tarea](https://huggingface.co/tasks/audio-classification) de clasificación de imágenes para obtener más información sobre sus modelos, datasets y métricas asociadas.
 
 ## Carga el dataset Food-101
 
@@ -127,11 +124,8 @@ Carga ViT con [`AutoModelForImageClassification`]. Especifica el número de labe
 ... )
 ```
 
-<Tip>
-
-Si no estás familiarizado con el fine-tuning de un modelo con el [`Trainer`], echa un vistazo al tutorial básico [aquí](../training#finetune-with-trainer)!
-
-</Tip>
+> [!TIP]
+> Si no estás familiarizado con el fine-tuning de un modelo con el [`Trainer`], echa un vistazo al tutorial básico [aquí](../training#finetune-with-trainer)!
 
 Al llegar a este punto, solo quedan tres pasos:
 
@@ -166,8 +160,5 @@ Al llegar a este punto, solo quedan tres pasos:
 >>> trainer.train()
 ```
 
-<Tip>
-
-Para ver un ejemplo más a profundidad de cómo hacer fine-tune a un modelo para clasificación de imágenes, echa un vistazo al correspondiente [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-
-</Tip>
+> [!TIP]
+> Para ver un ejemplo más a profundidad de cómo hacer fine-tune a un modelo para clasificación de imágenes, echa un vistazo al correspondiente [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).

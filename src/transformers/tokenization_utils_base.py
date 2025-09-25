@@ -1855,11 +1855,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 `eos_token`, `unk_token`, `sep_token`, `pad_token`, `cls_token`, `mask_token`,
                 `additional_special_tokens`. See parameters in the `__init__` for more details.
 
-        <Tip>
-
-        Passing `token=True` is required when you want to use a private model.
-
-        </Tip>
+        > [!TIP]
+        > Passing `token=True` is required when you want to use a private model.
 
         Examples:
 
@@ -3051,11 +3048,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Tokenize and prepare for the model a sequence or a pair of sequences.
 
-        <Tip warning={true}>
-
-        This method is deprecated, `__call__` should be used instead.
-
-        </Tip>
+        > [!WARNING]
+        > This method is deprecated, `__call__` should be used instead.
 
         Args:
             text (`str`, `list[str]` or (for non-fast tokenizers) `list[int]`):
@@ -3158,11 +3152,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
 
-        <Tip warning={true}>
-
-        This method is deprecated, `__call__` should be used instead.
-
-        </Tip>
+        > [!WARNING]
+        > This method is deprecated, `__call__` should be used instead.
 
         Args:
             batch_text_or_text_pairs (`list[str]`, `list[tuple[str, str]]`, `list[list[str]]`, `list[tuple[list[str], list[str]]]`, and for not-fast tokenizers, also `list[list[int]]`, `list[tuple[list[int], list[int]]]`):
@@ -3261,13 +3252,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the
         text followed by a call to the `pad` method to get a padded encoding.
 
-        <Tip>
-
-        If the `encoded_inputs` passed are dictionary of numpy arrays, or PyTorch tensors, the
-        result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
-        PyTorch tensors, you will lose the specific device of your tensors however.
-
-        </Tip>
+        > [!TIP]
+        > If the `encoded_inputs` passed are dictionary of numpy arrays, or PyTorch tensors, the
+        > result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
+        > PyTorch tensors, you will lose the specific device of your tensors however.
 
         Args:
             encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `dict[str, list[int]]`, `dict[str, list[list[int]]` or `list[dict[str, list[int]]]`):

@@ -648,35 +648,32 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         seed (`int`, *optional*):
             The seed to use for the random number generator for masking. If not provided, the global RNG will be used.
 
-    <Tip>
-
-    For best performance, this data collator should be used with a dataset having items that are dictionaries or
-    BatchEncoding, with the `"special_tokens_mask"` key, as returned by a [`PreTrainedTokenizer`] or a
-    [`PreTrainedTokenizerFast`] with the argument `return_special_tokens_mask=True`.
-
-    <Example Options and Expectations>
-
-    1. Default Behavior:
-        - `mask_replace_prob=0.8`, `random_replace_prob=0.1`.
-        - Expect 80% of masked tokens replaced with `[MASK]`, 10% replaced with random tokens, and 10% left unchanged.
-
-    2. All masked tokens replaced by `[MASK]`:
-        - `mask_replace_prob=1.0`, `random_replace_prob=0.0`.
-        - Expect all masked tokens to be replaced with `[MASK]`. No tokens are left unchanged or replaced with random tokens.
-
-    3. No `[MASK]` replacement, only random tokens:
-        - `mask_replace_prob=0.0`, `random_replace_prob=1.0`.
-        - Expect all masked tokens to be replaced with random tokens. No `[MASK]` replacements or unchanged tokens.
-
-    4. Balanced replacement:
-        - `mask_replace_prob=0.5`, `random_replace_prob=0.4`.
-        - Expect 50% of masked tokens replaced with `[MASK]`, 40% replaced with random tokens, and 10% left unchanged.
-
-    Note:
-        The sum of `mask_replace_prob` and `random_replace_prob` must not exceed 1. If their sum is less than 1, the
-        remaining proportion will consist of masked tokens left unchanged.
-
-    </Tip>
+    > [!TIP]
+    > For best performance, this data collator should be used with a dataset having items that are dictionaries or
+    > BatchEncoding, with the `"special_tokens_mask"` key, as returned by a [`PreTrainedTokenizer`] or a
+    > [`PreTrainedTokenizerFast`] with the argument `return_special_tokens_mask=True`.
+    >
+    > <Example Options and Expectations>
+    >
+    > 1. Default Behavior:
+    >     - `mask_replace_prob=0.8`, `random_replace_prob=0.1`.
+    >     - Expect 80% of masked tokens replaced with `[MASK]`, 10% replaced with random tokens, and 10% left unchanged.
+    >
+    > 2. All masked tokens replaced by `[MASK]`:
+    >     - `mask_replace_prob=1.0`, `random_replace_prob=0.0`.
+    >     - Expect all masked tokens to be replaced with `[MASK]`. No tokens are left unchanged or replaced with random tokens.
+    >
+    > 3. No `[MASK]` replacement, only random tokens:
+    >     - `mask_replace_prob=0.0`, `random_replace_prob=1.0`.
+    >     - Expect all masked tokens to be replaced with random tokens. No `[MASK]` replacements or unchanged tokens.
+    >
+    > 4. Balanced replacement:
+    >     - `mask_replace_prob=0.5`, `random_replace_prob=0.4`.
+    >     - Expect 50% of masked tokens replaced with `[MASK]`, 40% replaced with random tokens, and 10% left unchanged.
+    >
+    > Note:
+    >     The sum of `mask_replace_prob` and `random_replace_prob` must not exceed 1. If their sum is less than 1, the
+    >     remaining proportion will consist of masked tokens left unchanged.
     """
 
     tokenizer: PreTrainedTokenizerBase
@@ -1371,12 +1368,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - optionally returns the kwargs contained in FlashAttentionKwargs
     - optionally returns seq_idx indicating which sequence each token belongs to
 
-    <Tip warning={true}>
-
-    Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence.
-    Make sure your attention computation is able to handle it!
-
-    </Tip>
+    > [!WARNING]
+    > Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence.
+    > Make sure your attention computation is able to handle it!
     """
 
     def __init__(

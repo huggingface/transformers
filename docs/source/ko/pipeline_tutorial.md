@@ -22,11 +22,8 @@ rendered properly in your Markdown viewer.
 * 특정 토크나이저 또는 모델을 사용하는 방법
 * 언어, 컴퓨터 비전, 오디오 및 멀티모달 태스크에서 [`pipeline`]을 사용하는 방법
 
-<Tip>
-
-지원하는 모든 태스크와 쓸 수 있는 매개변수를 담은 목록은 [`pipeline`] 설명서를 참고해주세요.
-
-</Tip>
+> [!TIP]
+> 지원하는 모든 태스크와 쓸 수 있는 매개변수를 담은 목록은 [`pipeline`] 설명서를 참고해주세요.
 
 ## Pipeline 사용하기[[pipeline-usage]]
 
@@ -182,9 +179,8 @@ for out in pipe(KeyDataset(dataset["audio"])):
 
 ## 웹서버에서 Pipeline 사용하기[[using-pipelines-for-a-webserver]]
 
-<Tip>
-추론 엔진을 만드는 과정은 따로 페이지를 작성할만한 복잡한 주제입니다.
-</Tip>
+> [!TIP]
+> 추론 엔진을 만드는 과정은 따로 페이지를 작성할만한 복잡한 주제입니다.
 
 [Link](./pipeline_webserver)
 

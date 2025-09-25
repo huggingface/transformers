@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
 picture-in-picture" allowfullscreen></iframe>
 
-<Tip>
-
-要与社区共享模型，您需要在[huggingface.co](https://huggingface.co/join)上拥有一个帐户。您还可以加入现有的组织或创建一个新的组织。
-
-</Tip>
+> [!TIP]
+> 要与社区共享模型，您需要在[huggingface.co](https://huggingface.co/join)上拥有一个帐户。您还可以加入现有的组织或创建一个新的组织。
 
 ## 仓库功能
 

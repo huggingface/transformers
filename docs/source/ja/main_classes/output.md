@@ -40,12 +40,9 @@ outputs = model(**inputs, labels=labels)
 `output_hidden_states=True`や`output_attentions=True`を渡していないので、`hidden_states`と`attentions`はない。
 `output_attentions=True`を渡さなかったからだ。
 
-<Tip>
-
-`output_hidden_states=True`を渡すと、`outputs.hidden_states[-1]`が `outputs.last_hidden_states` と正確に一致することを期待するかもしれない。
-しかし、必ずしもそうなるとは限りません。モデルによっては、最後に隠された状態が返されたときに、正規化やその後の処理を適用するものもあります。
-
-</Tip>
+> [!TIP]
+> `output_hidden_states=True`を渡すと、`outputs.hidden_states[-1]`が `outputs.last_hidden_states` と正確に一致することを期待するかもしれない。
+> しかし、必ずしもそうなるとは限りません。モデルによっては、最後に隠された状態が返されたときに、正規化やその後の処理を適用するものもあります。
 
 
 通常と同じように各属性にアクセスできます。その属性がモデルから返されなかった場合は、

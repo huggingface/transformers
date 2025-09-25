@@ -42,11 +42,8 @@ PyTorch 2.0부터는 어텐션 패스트패스가 인코더와 디코더 모두�
 
 `bitsandbytes`를 설치하면 GPU에서 손쉽게 모델을 압축할 수 있습니다. FP4 양자화를 사용하면 원래의 전체 정밀도 버전과 비교하여 모델 크기를 최대 8배 줄일 수 있습니다. 아래에서 시작하는 방법을 확인하세요.
 
-<Tip>
-
-이 기능은 다중 GPU 설정에서도 사용할 수 있습니다.
-
-</Tip>
+> [!TIP]
+> 이 기능은 다중 GPU 설정에서도 사용할 수 있습니다.
 
 ### 요구 사항 [[requirements-for-fp4-mixedprecision-inference]]
 
@@ -95,11 +92,8 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 
 ## Int8 혼합 정밀도 행렬 분해를 위한 `bitsandbytes` 통합 [[bitsandbytes-integration-for-int8-mixedprecision-matrix-decomposition]]
 
-<Tip>
-
-이 기능은 다중 GPU 설정에서도 사용할 수 있습니다.
-
-</Tip>
+> [!TIP]
+> 이 기능은 다중 GPU 설정에서도 사용할 수 있습니다.
 
 [`LLM.int8() : 8-bit Matrix Multiplication for Transformers at Scale`](https://huggingface.co/papers/2208.07339) 논문에서 우리는 몇 줄의 코드로 Hub의 모든 모델에 대한 Hugging Face 통합을 지원합니다.
 이 방법은 `float16` 및 `bfloat16` 가중치에 대해 `nn.Linear` 크기를 2배로 줄이고, `float32` 가중치에 대해 4배로 줄입니다. 이는 절반 정밀도에서 이상치를 처리함으로써 품질에 거의 영향을 미치지 않습니다.

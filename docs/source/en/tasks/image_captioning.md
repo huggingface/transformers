@@ -65,11 +65,8 @@ DatasetDict({
 
 The dataset has two features, `image` and `text`.
 
-<Tip>
-
-Many image captioning datasets contain multiple captions per image. In those cases, a common strategy is to randomly sample a caption amongst the available ones during training.
-
-</Tip>
+> [!TIP]
+> Many image captioning datasets contain multiple captions per image. In those cases, a common strategy is to randomly sample a caption amongst the available ones during training.
 
 Split the dataset's train split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
 

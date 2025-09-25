@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 1. ضبط دقيق [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) على مجموعة فرعية [r/askscience](https://www.reddit.com/r/askscience/) من مجموعة بيانات [ELI5](https://huggingface.co/datasets/eli5).
 2.  استخدام النموذج المدرب الخاص بك للاستنتاج.
 
-<Tip>
-
-لرؤية جميع العمارات ونقاط التحقق المتوافقة مع هذه المهمة، نوصي بالتحقق من [task-page](https://huggingface.co/tasks/text-generation)
-
-</Tip>
+> [!TIP]
+> لرؤية جميع العمارات ونقاط التحقق المتوافقة مع هذه المهمة، نوصي بالتحقق من [task-page](https://huggingface.co/tasks/text-generation)
 
 قبل أن تبدأ، تأكد من تثبيت جميع المكتبات الضرورية:
 
@@ -195,11 +192,8 @@ pip install transformers datasets evaluate
 ## التدريب (Train)
 
 
-<Tip>
-
-إذا لم تكن على دراية بتدريب نموذج باستخدام [`Trainer`], اطلع على [البرنامج التعليمي الأساسي](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> إذا لم تكن على دراية بتدريب نموذج باستخدام [`Trainer`], اطلع على [البرنامج التعليمي الأساسي](../training#train-with-pytorch-trainer)!
 
 أنت جاهز الآن لبدء تدريب نموذجك! قم بتحميل DistilGPT2 باستخدام [`AutoModelForCausalLM`]:
 
@@ -252,13 +246,10 @@ Perplexity: 49.61
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-للحصول على مثال أكثر تعمقًا حول كيفية تدريب نموذج للنمذجة اللغوية السببية، اطلع على الدفتر المقابل
-[دفتر PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
-أو [دفتر TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-
-</Tip>
+> [!TIP]
+> للحصول على مثال أكثر تعمقًا حول كيفية تدريب نموذج للنمذجة اللغوية السببية، اطلع على الدفتر المقابل
+> [دفتر PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
+> أو [دفتر TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
 
 ## الاستدلال (Inference)
 

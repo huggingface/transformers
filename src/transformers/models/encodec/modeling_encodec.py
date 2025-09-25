@@ -737,13 +737,10 @@ class EncodecModel(EncodecPreTrainedModel):
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            <Tip warning={true}>
-
-            `padding_mask` should always be passed, unless the input was truncated or not padded. This is because in
-            order to process tensors effectively, the input audio should be padded so that `input_length % stride =
-            step` with `step = chunk_length-stride`. This ensures that all chunks are of the same shape
-
-            </Tip>
+            > [!WARNING]
+            > `padding_mask` should always be passed, unless the input was truncated or not padded. This is because in
+            > order to process tensors effectively, the input audio should be padded so that `input_length % stride =
+            > step` with `step = chunk_length-stride`. This ensures that all chunks are of the same shape
         bandwidth (`float`, *optional*):
             The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
             bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
