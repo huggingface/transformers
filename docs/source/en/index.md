@@ -34,6 +34,18 @@ There are over 1M+ Transformers [model checkpoints](https://huggingface.co/model
 
 Explore the [Hub](https://huggingface.com/) today to find a model and use Transformers to help you get started right away.
 
+Here is an interactive timeline to explore the different model architectures supported by Transformers ([check it out directly on HF Spaces](https://huggingface.co/spaces/yonigozlan/Transformers-Timeline))
+
+<iframe
+	src="https://yonigozlan-transformers-timeline.hf.space"
+	frameborder="0"
+	width="125%"
+	height="1200"
+	style="transform: scale(0.8); transform-origin: top left; max-width: calc(100%/0.8); height: 1150px; margin-bottom: calc(-0.2*1150px);"
+></iframe>
+
+
+
 ## Features
 
 Transformers provides everything you need for inference or training with state-of-the-art pretrained models. Some of the main features include:
