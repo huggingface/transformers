@@ -438,10 +438,10 @@ def cached_files(
             "repo_type": repo_type,
             "revision": revision,
         }
-        json.dumps(info, ensure_ascii=False, sort_keys=True)
+        info_str = json.dumps(info, ensure_ascii=False, sort_keys=True)
 
         with open(file_path, "a", encoding="utf-8") as fp:
-            fp.write(f"{path_or_repo_id_str}\n")
+            fp.write(f"{info_str}\n")
 
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
