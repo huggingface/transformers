@@ -29,6 +29,8 @@ if is_torch_available():
     import torch
 
 if is_hqq_available():
+    from hqq.core.quantize import HQQLinear
+
     # This is a compatibility hack. HQQ-quantized linear layers do not have a `weight` attribute,
     # but some models attempt to access `weight.dtype` during the forward pass. To prevent runtime errors,
     # we patch HQQLinear with a dummy `weight` property that returns an empty tensor with the correct dtype and device.
@@ -36,11 +38,7 @@ if is_hqq_available():
     def weight(_self):
         return torch.empty(0, dtype=_self.compute_dtype, device=_self.device)
 
-    import hqq
-
-    hqq.core.quantize.HQQLinear.weight = weight
-
-    from hqq.core.quantize import HQQLinear
+    HQQLinear.weight = weight
 
 logger = logging.get_logger(__name__)
 
