@@ -298,7 +298,7 @@ def substitute_variables(call_text, local_vars):
             else:
                 return repr(value)
 
-        breakpoint()
+        # breakpoint()
         return var_name
 
     # Find variable patterns - more comprehensive regex
@@ -345,7 +345,6 @@ def substitute_variables_ast(call_text, local_vars):
 # Usage example
 def debug_from_pretrained_call():
     """Call this from your test or debugging code"""
-    breakpoint()
     return extract_and_substitute_call()
 
 
@@ -723,6 +722,7 @@ def cached_files(
         }
         info_str = json.dumps(info, ensure_ascii=False, sort_keys=True)
 
+        breakpoint()
         with open(file_path, "a", encoding="utf-8") as fp:
             fp.write(f"{info_str}\n")
 
