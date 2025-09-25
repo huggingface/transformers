@@ -258,7 +258,7 @@ needs to maintain multiple copies of inputs and outputs.
 
 For convolutions and linear layers there are 2x flops in the backward compared to the forward, which generally translates
 into ~2x slower (sometimes more, because sizes in the backward tend to be more awkward). Activations are usually
-bandwidth-limited, and it’s typical for an activation to have to read more data in the backward than in the forward
+bandwidth-limited, and it's typical for an activation to have to read more data in the backward than in the forward
 (e.g. activation forward reads once, writes once, activation backward reads twice, gradOutput and output of the forward,
 and writes once, gradInput).
 
