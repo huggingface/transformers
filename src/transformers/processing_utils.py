@@ -147,6 +147,10 @@ class TextKwargs(TypedDict, total=False):
             The side on which padding will be applied.
         return_mm_token_type_ids (`bool`, *optional*):
             Whether to return multimodal token type ids indicating mm placeholder token positions.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
     text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
@@ -209,20 +213,24 @@ class ImagesKwargs(TypedDict, total=False):
             The channel dimension format for the input image.
         device (`str`, *optional*):
             The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
     do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
-    size: Annotated[Optional[dict[str, int]], image_size_validator()]
-    crop_size: Annotated[Optional[dict[str, int]], image_size_validator()]
+    size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
+    crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     resample: Annotated[Optional[Union["PILImageResampling", int]], resampling_validator()]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
     do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float], tuple[float, float, float]]]
-    image_std: Optional[Union[float, list[float], tuple[float, float, float]]]
+    image_mean: Optional[Union[float, list[float], tuple[float, ...]]]
+    image_std: Optional[Union[float, list[float], tuple[float, ...]]]
     do_pad: Optional[bool]
-    pad_size: Annotated[Optional[dict[str, int]], image_size_validator()]
+    pad_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     do_center_crop: Optional[bool]
     data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
@@ -271,23 +279,27 @@ class VideosKwargs(TypedDict, total=False):
             The channel dimension format for the output video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input video.
-        return_metadata (`ChannelDimension` or `str`, *optional*):
+        return_metadata (`bool`, *optional*):
             Whether to return video metadata or not.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
     do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
-    size: Annotated[Optional[dict[str, int]], image_size_validator()]
+    size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     default_to_square: Optional[bool]
     resample: Annotated[Optional[Union["PILImageResampling", int]], resampling_validator()]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
     do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float], tuple[float, float, float]]]
-    image_std: Optional[Union[float, list[float], tuple[float, float, float]]]
+    image_mean: Optional[Union[float, list[float], tuple[float, ...]]]
+    image_std: Optional[Union[float, list[float], tuple[float, ...]]]
     do_center_crop: Optional[bool]
-    crop_size: Annotated[Optional[dict[str, int]], image_size_validator()]
-    data_format: Optional[ChannelDimension]
+    crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
+    data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
     device: Annotated[Optional[str], device_validator()]
     do_sample_frames: Optional[bool]
@@ -326,6 +338,10 @@ class AudioKwargs(TypedDict, total=False):
             If set, will pad the sequence to a multiple of the provided value.
         return_attention_mask (`bool`, *optional*):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
     sampling_rate: Annotated[Optional[int], positive_int()]

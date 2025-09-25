@@ -220,8 +220,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 images=image,
                 trimaps=trimap,
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=(0.0, 0.0, 0.0, 0.0),
+                image_std=(1.0, 1.0, 1.0, 1.0),
                 return_tensors="pt",
             ).pixel_values
 

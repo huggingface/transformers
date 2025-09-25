@@ -176,8 +176,8 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_inputs[0],
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=(0.0, 0.0, 0.0, 0.0),
+                image_std=(1.0, 1.0, 1.0, 1.0),
             ).pixel_values
             self.assertEqual(tuple(encoded_images.shape), (10, 4, 30, 30))
 
@@ -186,7 +186,7 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_inputs,
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=(0.0, 0.0, 0.0, 0.0),
+                image_std=(1.0, 1.0, 1.0, 1.0),
             ).pixel_values
             self.assertEqual(tuple(encoded_images.shape), (70, 4, 30, 30))

@@ -15,7 +15,7 @@
 from collections.abc import Iterable
 from copy import deepcopy
 from functools import lru_cache, partial
-from typing import Any, Optional, TypedDict, Union
+from typing import Annotated, Any, Optional, TypedDict, Union
 
 import numpy as np
 
@@ -51,7 +51,7 @@ from .utils import (
     logging,
 )
 from .utils.import_utils import is_rocm_platform
-from .utils.type_validators import TypedDictAdapter
+from .utils.type_validators import TypedDictAdapter, device_validator, image_size_validator, tensor_type_validator
 
 
 if is_vision_available():
@@ -168,23 +168,23 @@ def divide_to_patches(
 
 class DefaultFastImageProcessorKwargs(TypedDict, total=False):
     do_resize: Optional[bool]
-    size: Optional[dict[str, int]]
+    size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     default_to_square: Optional[bool]
     resample: Optional[Union["PILImageResampling", "F.InterpolationMode", int]]
     do_center_crop: Optional[bool]
-    crop_size: Optional[dict[str, int]]
+    crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     do_rescale: Optional[bool]
     rescale_factor: Optional[Union[int, float]]
     do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float], tuple[float, float, float]]]
-    image_std: Optional[Union[float, list[float], tuple[float, float, float]]]
+    image_mean: Optional[Union[float, list[float], tuple[float, ...]]]
+    image_std: Optional[Union[float, list[float], tuple[float, ...]]]
     do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
+    crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     do_convert_rgb: Optional[bool]
-    return_tensors: Optional[Union[str, TensorType]]
-    data_format: Optional[ChannelDimension]
+    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
+    data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[Union[str, "torch.device"]]
+    device: Annotated[Optional[str], device_validator()]
     disable_grouping: Optional[bool]
 
 
