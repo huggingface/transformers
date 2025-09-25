@@ -17,13 +17,16 @@
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional, Union
+from io import BytesIO
+from urllib.request import urlopen
 
 import numpy as np
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import is_soundfile_available, is_torch_available, logging
+from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
+from ...utils import is_soundfile_available, is_torch_available, is_librosa_available, logging
+from ...utils.chat_template_utils import render_jinja_template
 
 
 if is_torch_available():
@@ -34,6 +37,8 @@ if is_torch_available():
 if is_soundfile_available():
     import soundfile as sf
 
+if is_librosa_available():
+    import librosa
 
 logger = logging.get_logger(__name__)
 
@@ -244,6 +249,145 @@ class HiggsAudioProcessor(ProcessorMixin):
             audio_tokenizer=audio_tokenizer,
             chat_template=chat_template,
         )
+
+    def _extract_audio(self, convos: list[list[dict]]) -> Optional[list]:
+        audio = []
+        for messages in convos:
+            for msg in messages:
+                if isinstance(msg.get("content"), list):
+                    for ele in msg["content"]:
+                        if ele.get("type") == "audio" and "audio_url" in ele:
+                            audio_data, _ = librosa.load(
+                                BytesIO(urlopen(ele["audio_url"]).read()),
+                                sr=self.audio_tokenizer.sampling_rate,
+                            )
+                            audio.append(audio_data)
+        return audio or None
+
+    def apply_chat_template(
+        self,
+        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        chat_template: Optional[str] = None,
+        **kwargs: Unpack[AllKwargsForChatTemplate],
+    ) -> str:
+        """
+        Apply the processor's chat template to a conversation and optionally tokenize the result.
+
+        This method resolves the correct chat template (from a string or a set of named templates),
+        renders the conversation into a formatted prompt, and—if `tokenize=True`—prepares model inputs
+        including audio features. Text formatting is handled via [`~render_jinja_template`], while audio
+        inputs are loaded with `librosa` and resampled to the processor's configured sampling rate.
+        for tokenization, it relies on HiggsAudioTokenizer's
+        [`~HiggsAudioTokenizer.apply_chat_template`] to prepare input ids to the model and on DacFeatureExtractor's
+        [`~DacFeatureExtractor.__call__`] to prepare input features to the model.
+
+        audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "audio_url": audio_url},
+                    {"type": "text", "text": "Transcribe this audio."},
+                ],
+            },
+        ]
+
+        Args:
+            conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
+                The conversation to format.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
+                chat template is used.
+        """
+        if chat_template is None:
+            if isinstance(self.chat_template, dict) and "default" in self.chat_template:
+                chat_template = self.chat_template["default"]
+            elif isinstance(self.chat_template, dict):
+                raise ValueError(
+                    'The processor has multiple chat templates but none of them are named "default". You need to specify'
+                    " which one to use by passing the `chat_template` argument. Available templates are: "
+                    f"{', '.join(self.chat_template.keys())}"
+                )
+            elif self.chat_template is not None:
+                chat_template = self.chat_template
+            else:
+                raise ValueError(
+                    "Cannot use apply_chat_template because this processor does not have a chat template."
+                )
+        else:
+            if isinstance(self.chat_template, dict) and chat_template in self.chat_template:
+                # It's the name of a template, not a full template string
+                chat_template = self.chat_template[chat_template]
+            else:
+                # It's a template string, render it directly
+                pass
+
+        is_tokenizers_fast = hasattr(self, "tokenizer") and self.tokenizer.__class__.__name__.endswith("Fast")
+
+        if kwargs.get("continue_final_message", False):
+            if kwargs.get("add_generation_prompt", False):
+                raise ValueError(
+                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
+                )
+            if kwargs.get("return_assistant_tokens_mask", False):
+                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        if kwargs.get("return_assistant_tokens_mask", False):
+            if not is_tokenizers_fast:
+                raise ValueError(
+                    "`return_assistant_tokens_mask` is not possible with slow tokenizers. Make sure you have `tokenizers` installed. "
+                    "If the error persists, open an issue to support a Fast tokenizer for your model."
+                )
+            else:
+                kwargs["return_offsets_mapping"] = True  # force offset mapping so we can infer token boundaries
+
+        # Fill sets of kwargs that should be used by different parts of template
+        processed_kwargs = {
+            "mm_load_kwargs": {},
+            "template_kwargs": {},
+        }
+
+        for kwarg_type in processed_kwargs:
+            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
+                kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
+                default_value = getattr(kwarg_type_defaults, key, None)
+                value = kwargs.pop(key, default_value)
+                if value is not None and not isinstance(value, dict):
+                    processed_kwargs[kwarg_type][key] = value
+
+        # Pass unprocessed custom kwargs
+        processed_kwargs["template_kwargs"].update(kwargs)
+
+        if isinstance(conversation, (list, tuple)) and (
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
+        ):
+            is_batched = True
+            conversations = conversation
+        else:
+            is_batched = False
+            conversations = [conversation]
+
+        tokenize = processed_kwargs["template_kwargs"].pop("tokenize", False)
+
+        prompt, _ = render_jinja_template(
+            conversations=conversations,
+            chat_template=chat_template,
+            **processed_kwargs["template_kwargs"],  # different flags such as `return_assistant_mask`
+            **self.tokenizer.special_tokens_map,  # tokenizer special tokens are used by some templates
+        )
+
+        if tokenize:
+            convos = conversation if isinstance(conversation[0], list) else [conversation]
+            audio = self._extract_audio(convos)
+            return self(
+                text=prompt,
+                audio=audio,
+                return_tensors="pt",
+                padding=True,
+                output_labels=True,
+            )
+
+        return prompt if is_batched else prompt[0]
 
     def __call__(
         self,

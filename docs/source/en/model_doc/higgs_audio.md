@@ -56,9 +56,7 @@ conversation = [
     {"role": "system", "content": "Generate audio following instruction.\n\n<|scene_desc_start|>\nAudio is recorded from a quiet room.\n<|scene_desc_end|>"},
     {"role": "user", "content": "The sun rises in the east and sets in the west. This simple fact has been observed by humans for thousands of years."},
 ]
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-
-inputs = processor(text=text, return_tensors="pt", padding=True).to(torch_device)
+inputs = processor.apply_chat_template(conversation, add_generation_prompt=True).to(torch_device)
 
 outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, tokenizer=processor.tokenizer, do_sample=True)
 
@@ -87,18 +85,7 @@ conversation = [
     {"role": "assistant", "content": [{"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"}]},
     {"role": "user", "content": "The sun rises in the east and sets in the west. This simple fact has been observed by humans for thousands of years."},
 ]
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-
-audio = []
-for message in conversation:
-    if isinstance(message["content"], list):
-        for ele in message["content"]:
-            if ele["type"] == "audio":
-                audio.append(librosa.load(
-                    BytesIO(urlopen(ele['audio_url']).read()), sr=processor.audio_tokenizer.sampling_rate)[0]
-                )
-
-inputs = processor(text=text, audio=audio, return_tensors="pt", padding=True).to(torch_device)
+inputs = processor.apply_chat_template(conversation, add_generation_prompt=True).to(torch_device)
 
 outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, tokenizer=processor.tokenizer, do_sample=True)
 
@@ -133,18 +120,7 @@ conversation = [
     {"role": "assistant", "content": [{"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"}]},
     {"role": "user", "content": "[SPEAKER0] It is a doctrine of comfort and complacency, and, like all gospels, it tells its followers precisely what they wish to hear."},
 ]
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-
-audio = []
-for message in conversation:
-    if isinstance(message["content"], list):
-        for ele in message["content"]:
-            if ele["type"] == "audio":
-                audio.append(librosa.load(
-                    BytesIO(urlopen(ele['audio_url']).read()), sr=processor.audio_tokenizer.sampling_rate)[0]
-                )
-
-inputs = processor(text=text, audio=audio, return_tensors="pt", padding=True).to(torch_device)
+inputs = processor.apply_chat_template(conversation, add_generation_prompt=True).to(torch_device)
 
 outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, tokenizer=processor.tokenizer, do_sample=True)
 
@@ -173,18 +149,7 @@ conversation = [
     {"role": "assistant", "content": [{"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"}]},
     {"role": "user", "content": "The sun rises in the east and sets in the west. This simple fact has been observed by humans for thousands of years."},
 ]
-text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-
-audio = []
-for message in conversation:
-    if isinstance(message["content"], list):
-        for ele in message["content"]:
-            if ele["type"] == "audio":
-                audio.append(librosa.load(
-                    BytesIO(urlopen(ele['audio_url']).read()), sr=processor.audio_tokenizer.sampling_rate)[0]
-                )
-
-inputs = processor(text=text, audio=audio, return_tensors="pt", padding=True, output_labels=True).to(torch_device)
+inputs = processor.apply_chat_template(conversation, add_generation_prompt=True).to(torch_device)
 
 out = model(**inputs)
 out.loss.backward()
