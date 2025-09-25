@@ -44,28 +44,36 @@ from .utils.constants import (  # noqa: F401
 )
 
 
-if is_vision_available():
-    import PIL.Image
-    import PIL.ImageOps
+# Safe import of torchvision transforms (avoid crashing text-only users if torchvision is broken)
+InterpolationMode = None
+pil_torch_interpolation_mapping = {}
+_TORCHVISION_OK = False
 
-    PILImageResampling = PIL.Image.Resampling
+if is_torchvision_available():
+    try:
+        from torchvision.transforms import InterpolationMode as _TVInterpolationMode
 
-    if is_torchvision_available():
-        from torchvision.transforms import InterpolationMode
-
+        InterpolationMode = _TVInterpolationMode
         pil_torch_interpolation_mapping = {
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT
-            if is_torchvision_v2_available()
-            else InterpolationMode.NEAREST,
+            PILImageResampling.NEAREST: (
+                InterpolationMode.NEAREST_EXACT if is_torchvision_v2_available() else InterpolationMode.NEAREST
+            ),
             PILImageResampling.BOX: InterpolationMode.BOX,
             PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
             PILImageResampling.HAMMING: InterpolationMode.HAMMING,
             PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
         }
-    else:
+        _TORCHVISION_OK = True
+    except Exception as e:
+        logger.warning(
+            "Torchvision is installed but failed to import (%s). "
+            "Continuing without torchvision; image pipelines that require it "
+            "will raise at runtime.", e
+        )
+        InterpolationMode = None
         pil_torch_interpolation_mapping = {}
-
+        _TORCHVISION_OK = False
 
 if is_torch_available():
     import torch
