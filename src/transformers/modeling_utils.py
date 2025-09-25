@@ -677,13 +677,11 @@ def _load_state_dict_into_meta_model(
     model: "PreTrainedModel",
     state_dict: dict,
     shard_file: str,
-    expected_keys: list[str],
     reverse_renaming_mapping: dict[str, str],
     device_map: Optional[dict] = None,
     disk_offload_folder: Optional[str] = None,
     disk_offload_index: Optional[dict] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
-    is_safetensors: bool = False,
     keep_in_fp32_regex: Optional[re.Pattern] = None,
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
 ) -> tuple[Optional[dict], Optional[dict]]:
@@ -705,7 +703,8 @@ def _load_state_dict_into_meta_model(
         QuantizationMethod.BITS_AND_BYTES,
         QuantizationMethod.TORCHAO,
     }
-    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_hqq_or_bnb_or_ao
+    is_safetensors = shard_file.endswith(".safetensors")
+    is_meta_state_dict = is_safetensors and not is_hqq_or_bnb_or_ao
     file_pointer = safe_open(shard_file, framework="pt", device=tensor_device) if is_meta_state_dict else None
     params_to_load = list(state_dict.keys())
 
@@ -831,11 +830,9 @@ def load_shard_file(args):
         key_renaming_mapping,
         weights_only,
         model,
-        expected_keys,
         reverse_key_renaming_mapping,
         disk_offload_folder,
         disk_offload_index,
-        is_offloaded_safetensors,
         keep_in_fp32_regex,
         device_mesh,
     ) = args
@@ -887,13 +884,11 @@ def load_shard_file(args):
             model,
             state_dict,
             shard_file,
-            expected_keys,
             reverse_key_renaming_mapping,
             device_map=device_map,
             disk_offload_folder=disk_offload_folder,
             disk_offload_index=disk_offload_index,
             hf_quantizer=hf_quantizer,
-            is_safetensors=is_offloaded_safetensors,
             keep_in_fp32_regex=keep_in_fp32_regex,
             device_mesh=device_mesh,
         )
@@ -5221,7 +5216,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
         prefix = model.base_model_prefix
-        _prefix = f"{prefix}."
         has_prefix_module = any(s.startswith(prefix) for s in original_checkpoint_keys) if len(prefix) > 0 else False
         expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
@@ -5348,11 +5342,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 key_renaming_mapping,
                 weights_only,
                 model,
-                expected_keys,
                 reverse_key_renaming_mapping,
                 disk_offload_folder,
                 disk_offload_index,
-                is_offloaded_safetensors,
                 keep_in_fp32_regex,
                 device_mesh,
             )

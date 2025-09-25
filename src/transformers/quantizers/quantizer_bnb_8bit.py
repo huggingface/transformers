@@ -226,6 +226,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 new_value = new_value.T
 
         kwargs = old_value.__dict__
+        kwargs.pop("_is_hf_initialized", None)
         new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(target_device)
 
         module._parameters[tensor_name] = new_value
