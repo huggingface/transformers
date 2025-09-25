@@ -136,7 +136,7 @@ The cache position tracks where to insert new tokens in the attention cache. It 
 
 Cache position is used internally for two purposes:
 
-1. Selecting new tokens to process in the input sequence and ensuring only tokens that haven’t been cached yet are passed to the model's `forward`.
+1. Selecting new tokens to process in the input sequence and ensuring only tokens that haven't been cached yet are passed to the model's `forward`.
 2. Storing key/value pairs at the correct positions in the cache. This is especially important for fixed-size caches, that pre-allocates a specific cache length.
 
 The generation loop usually takes care of the cache position, but if you're writing a custom generation method, it is important that cache positions are accurate since they are used to write and read key/value states into fixed slots.
