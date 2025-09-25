@@ -337,7 +337,7 @@ class Qwen2_5_VLConfig(PretrainedConfig):
             "_attn_implementation_internal",
         ]:
             text_config = super().__getattribute__("text_config")
-            if key in text_config:
+            if key in text_config.__dict__:
                 return setattr(text_config, key, value)
 
         return super().__setattr__(key, value)
@@ -348,7 +348,7 @@ class Qwen2_5_VLConfig(PretrainedConfig):
             "_attn_implementation_internal",
         ]:
             text_config = super().__getattribute__("text_config")
-            if key in text_config:
+            if key in text_config.__dict__:
                 return getattr(text_config, key)
 
         return super().__getattribute__(key)
