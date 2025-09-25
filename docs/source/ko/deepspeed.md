@@ -509,17 +509,6 @@ PyTorch AMP와 같은 fp16 혼합 정밀도를 구성하면 메모리 사용량�
 
 추가 딥스피드 fp16 훈련 옵션은 [fp16 훈련 옵션](https://www.deepspeed.ai/docs/config-json/#fp16-training-options) 참조를 참조하세요.
 
-Apex와 같은 fp16 혼합 정밀도를 구성하려면 아래 그림과 같이 `"auto"` 또는 직접 값을 설정합니다.[`Trainer`]는 `args.fp16_backend` 및 `args.fp16_opt_level`의 값에 따라 `amp`를 자동으로 구성합니다. 다음 인수를 전달하면 명령줄에서 활성화할 수도 있습니다: `fp16`, `--fp16_backend apex` 또는 `--fp16_opt_level 01`.
-
-```yaml
-{
-    "amp": {
-        "enabled": "auto",
-        "opt_level": "auto"
-    }
-}
-```
-
 </hfoption>
 <hfoption id="bf16">
 
