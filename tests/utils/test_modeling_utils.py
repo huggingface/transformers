@@ -29,7 +29,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, split_torch_state_dict_into_shards
 from parameterized import parameterized
 from pytest import mark
 
@@ -134,6 +134,32 @@ if is_torch_available():
             super().__init__(config)
             self.linear = nn.Linear(5, 5)
             self.linear_2 = nn.Linear(5, 5)
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+    class BaseModelWithUnexpectedKeys(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+        _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(50, 50)
+            self.linear_2 = nn.Linear(50, 50)
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+    class BaseModelWithMissingKeys(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+        _keys_to_ignore_on_load_missing = [r"^linear"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(50, 50)
+            self.linear_2 = nn.Linear(50, 50)
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
@@ -2028,6 +2054,92 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(MyModelB.config_class, MyConfigB)
         self.assertIs(MyModelC.config_class, MyConfigC)
         self.assertIs(MyModelD.config_class, MyConfigA)
+
+    def test_ignore_missing_key_works(self):
+        """Test that if a parameter (not buffer) is specified in `_keys_to_ignore_on_load_missing` and is actually
+        missing from the checkpoint, it will still be moved to cpu and initialized"""
+        temp = tempfile.TemporaryDirectory()
+        # Create dummy model
+        model = BaseModelWithMissingKeys(PretrainedConfig())
+
+        # Save the config
+        model.config.save_pretrained(temp.name)
+        # Get the state dict to save
+        state_dict = model.state_dict()
+        # Remove the layer that we should ignore if missing
+        del state_dict["linear.weight"], state_dict["linear.bias"]
+        # Save the state dict as a single shard
+        safe_save_file(state_dict, Path(temp.name) / "model.safetensors", metadata={"format": "pt"})
+
+        # Try loading back, with the missing key not present in the state_dict
+        model = BaseModelWithMissingKeys.from_pretrained(temp.name)
+
+        # Make sure the skipped missing key is not still on meta device!
+        for k, v in model.state_dict().items():
+            self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
+
+    def test_device_map_works_with_unexpected_keys(self):
+        """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
+        present in the checkpoint, it will correctly be removed from the weights we load, especially those
+        we use if the device map has offloading"""
+        temp = tempfile.TemporaryDirectory()
+
+        # Create dummy model
+        model = BaseModelWithUnexpectedKeys(PretrainedConfig())
+
+        # Save the config
+        model.config.save_pretrained(temp.name)
+
+        # Get the state dict to save
+        state_dict = model.state_dict()
+        # Add a layer that is in the "_keys_to_ignore_on_load_unexpected" list to ignore
+        state_dict["mtp"] = torch.randn(12, 12)
+        # Save the state dict as a single shard
+        safe_save_file(state_dict, Path(temp.name) / "model.safetensors", metadata={"format": "pt"})
+
+        # Load the model with entire shards placed on disk in order to trigger `get_disk_only_shard_files`.
+        # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
+        BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
+
+    def test_device_map_works_with_unexpected_keys_sharded(self):
+        """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
+        present in the checkpoint, it will correctly be removed from the weights we load, especially those
+        we use if the device map has offloading"""
+        temp = tempfile.TemporaryDirectory()
+
+        # Create dummy model
+        model = BaseModelWithUnexpectedKeys(PretrainedConfig())
+
+        # Save the config
+        model.config.save_pretrained(temp.name)
+
+        # Get the state dict to save
+        state_dict = model.state_dict()
+
+        # Add a layer that is in the "_keys_to_ignore_on_load_unexpected" list to ignore
+        state_dict["mtp"] = torch.randn(50, 50)
+
+        # Split the state dict in shards, save the index and the shards
+        shards = split_torch_state_dict_into_shards(state_dict, max_shard_size="1kb")
+        index = {
+            "metadata": {"total_parameters": model.num_parameters(), **shards.metadata},
+            "weight_map": shards.tensor_to_filename,
+        }
+        with open(Path(temp.name) / SAFE_WEIGHTS_INDEX_NAME, "w", encoding="utf-8") as f:
+            content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+            f.write(content)
+
+        # Save each shard
+        filename_to_tensors = shards.filename_to_tensors.items()
+        for shard_file, tensors in filename_to_tensors:
+            shard = {}
+            for tensor in tensors:
+                shard[tensor] = state_dict[tensor].contiguous()
+            safe_save_file(shard, Path(temp.name) / shard_file, metadata={"format": "pt"})
+
+        # Load the model with entire shards placed on disk in order to trigger `get_disk_only_shard_files`.
+        # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
+        BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
 
 
 @slow
