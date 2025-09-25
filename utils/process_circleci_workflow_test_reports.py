@@ -98,20 +98,30 @@ if __name__ == "__main__":
                     x = json.loads(x)
                     new_repo_ids.append(x)
                 except Exception as e:
+                    print(len(x))
+                    print(x)
                     print(e)
 
             workflow_repo_ids[job["name"]] = new_repo_ids
-            workflow_repo_ids_2.extend(new_repo_ids)
+            workflow_repo_ids_2.extend(repo_ids)
 
             # collected version
             with open(f"outputs/{job['name']}/test_summary.json", "w") as fp:
                 json.dump(summary, fp, indent=4)
 
             with open(f"outputs/{job['name']}/repo_ids.json", "w") as fp:
-                json.dump(workflow_repo_ids, fp, indent=4)
+                json.dump(workflow_repo_ids[job["name"]], fp, indent=4)
 
     workflow_repo_ids_2 = sorted(set(workflow_repo_ids_2))
-    workflow_repo_ids_2 = [json.loads(x) for x in workflow_repo_ids_2]
+
+    new_repo_ids = []
+    for x in workflow_repo_ids_2:
+        try:
+            x = json.loads(x)
+            new_repo_ids.append(x)
+        except Exception as e:
+            pass
+    workflow_repo_ids_2 = new_repo_ids
 
     with open(f"outputs/repo_ids.json", "w") as fp:
         json.dump(workflow_repo_ids_2, fp, indent=4)
