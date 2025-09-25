@@ -1221,7 +1221,7 @@ class ServeCommand(BaseTransformersCLICommand):
             if getattr(choice.delta, "content", None):
                 content.append(choice.delta.content)
             if choice.finish_reason:
-                finish_reason = choice.get(finish_reason, "stop")
+                finish_reason = choice.finish_reason
             if getattr(chunk, "usage", None):
                 usage = chunk.usage
 
