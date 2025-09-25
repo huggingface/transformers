@@ -405,26 +405,29 @@ def cached_files(
     ```
     """
     path_or_repo_id_str = str(path_or_repo_id)
-    dir_name = "hub_repos"
 
-    os.makedirs(dir_name, exist_ok=True)
+    if not path_or_repo_id_str.startswith("/tmp/"):
 
-    CIRCLE_NODE_INDEX = os.environ.get("CIRCLE_NODE_INDEX", "")
-    PYTEST_WORKER_INDEX = os.environ.get("PYTEST_XDIST_WORKER", "")
+        dir_name = "hub_repos"
 
-    if CIRCLE_NODE_INDEX == "":
-        CIRCLE_NODE_INDEX = "0"
+        os.makedirs(dir_name, exist_ok=True)
 
-    if PYTEST_WORKER_INDEX == "":
-        PYTEST_WORKER_INDEX = "0"
-    else:
-        PYTEST_WORKER_INDEX = PYTEST_WORKER_INDEX[2:]  # Extract from "gw0", "gw1", etc.
+        CIRCLE_NODE_INDEX = os.environ.get("CIRCLE_NODE_INDEX", "")
+        PYTEST_WORKER_INDEX = os.environ.get("PYTEST_XDIST_WORKER", "")
 
-    file_name = f"repo_ids_node_{CIRCLE_NODE_INDEX}_{PYTEST_WORKER_INDEX}.txt"
-    file_path = os.path.join(dir_name, file_name)
+        if CIRCLE_NODE_INDEX == "":
+            CIRCLE_NODE_INDEX = "0"
 
-    with open(file_path, "a", encoding="utf-8") as fp:
-        fp.write(f"{path_or_repo_id_str}\n")
+        if PYTEST_WORKER_INDEX == "":
+            PYTEST_WORKER_INDEX = "0"
+        else:
+            PYTEST_WORKER_INDEX = PYTEST_WORKER_INDEX[2:]  # Extract from "gw0", "gw1", etc.
+
+        file_name = f"repo_ids_node_{CIRCLE_NODE_INDEX}_{PYTEST_WORKER_INDEX}.txt"
+        file_path = os.path.join(dir_name, file_name)
+
+        with open(file_path, "a", encoding="utf-8") as fp:
+            fp.write(f"{path_or_repo_id_str}\n")
 
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
