@@ -168,7 +168,7 @@ class SwitchTransformersTop1Router(nn.Module):
 
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
-        expert_index = torch.argmax(router_probs, dim=-1)
+        router_logits, expert_index = torch.max(router_probs, dim=-1, keepdim=True)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
         token_priority = torch.cumsum(expert_index, dim=-2)
         # mask if the token routed to to the expert will overflow
@@ -203,7 +203,7 @@ class SwitchTransformersExperts(nn.ModuleDict):
         for expert_idx in expert_hit:
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[f"expert_{expert_idx[0]}"](current_state) * routing_weights[top_x, None]
+            current_hidden_states = self[f"expert_{expert_idx[0]}"](current_state) * routing_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
@@ -216,8 +216,8 @@ class SwitchTransformersSparseMLP(nn.Module):  # inherit from mixtral
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        _, selected_experts, routing_weights = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
+        _, selected_experts, routing_weights = self.router(hidden_states)
         hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
@@ -284,6 +284,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
 
         self.layer.append(SwitchTransformersLayerFF(config, is_sparse=self.is_sparse))
 
+    @check_model_inputs
     def forward(
         self,
         hidden_states,
@@ -316,7 +317,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
-            cross_attention_outputs = self.layer[1](
+            hidden_states, _ = self.layer[1](
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -327,7 +328,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 use_cache=use_cache,
                 cache_position=cache_position,
             )
-            hidden_states = cross_attention_outputs[0]
 
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -412,6 +412,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.gradient_checkpointing = False
 
+    @check_model_inputs
     def forward(
         self,
         input_ids=None,

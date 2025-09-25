@@ -19,7 +19,6 @@
 # limitations under the License.
 """PyTorch Qwen2MoE model."""
 
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -32,12 +31,10 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
     GenericForTokenClassification,
 )
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import auto_docstring
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import (
-    MixtralDecoderLayer,
     MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,

@@ -87,7 +87,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
 
-    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         r"""
         Computes router probabilities from input hidden states.
 
@@ -114,14 +114,14 @@ class GPTSanJapaneseTop1Router(nn.Module):
 
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
-        expert_index = torch.argmax(router_probs, dim=-1)
+        router_logits, expert_index = torch.max(router_probs, dim=-1, keepdim=True)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
         token_priority = torch.cumsum(expert_index, dim=-2)
         # mask if the token routed to to the expert will overflow
         expert_capacity_mask = token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        return expert_index, router_probs, router_logits
+        return router_probs, expert_index, router_logits
 
 
 class GPTSanExperts(nn.ModuleDict):
@@ -139,11 +139,11 @@ class GPTSanJapaneseSparseMLP(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        router_logits, selected_experts, routing_weights = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
+        _, selected_experts, routing_weights = self.router(hidden_states)
         hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states, router_logits
+        return hidden_states
 
 
 class GPTSanJapaneseLayerSparseFF(nn.Module):
