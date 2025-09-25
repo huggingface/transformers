@@ -606,6 +606,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 use_cache=use_cache,
                 cache_position=cache_position,
             )
+
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
@@ -703,7 +704,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         use_cache=None,
         cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPastAndCrossAttentions:
+    ):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -983,13 +984,13 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[MoEModelOutputWithPastAndCrossAttentions] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Seq2SeqMoEModelOutput:
+    ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(

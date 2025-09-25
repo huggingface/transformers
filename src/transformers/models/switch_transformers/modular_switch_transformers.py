@@ -284,7 +284,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
 
         self.layer.append(SwitchTransformersLayerFF(config, is_sparse=self.is_sparse))
 
-    @check_model_inputs
     def forward(
         self,
         hidden_states,
