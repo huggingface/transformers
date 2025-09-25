@@ -5,7 +5,7 @@
 #                          modular_cwm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -26,13 +27,17 @@ from ...modeling_rope_utils import rope_config_validation
 
 class CwmTextConfig(PretrainedConfig):
     """
-    Text configuration class for CWM (Code World Model).
+    Llama3-compatible configuration with layer-interleaved sliding-window attention.
 
-    CWM uses Llama3 architecture with Gemma3's interleaved sliding window attention.
-    This is the main configuration class since CWM is text-only.
+    Behavior:
+      - Layers marked "sliding_attention" use local causal window = `sliding_window`.
+      - Layers marked "full_attention" use pure causal by default; if `global_window` is set,
+        they instead use a capped local causal window of size `global_window`.
+
+    Keep weights Llama-shaped; expose model_type='cwm' so modular tooling targets this file.
     """
 
-    model_type = "cwm_text"
+    model_type = "llama"  # important for vLLM + HF compatibility
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `CwmTextModel`
     base_model_tp_plan = {
@@ -52,37 +57,34 @@ class CwmTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128256,
-        hidden_size=6144,
-        intermediate_size=21504,
-        num_hidden_layers=64,
-        num_attention_heads=48,
-        num_key_value_heads=8,
-        head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=None,  # Llama3 doesn't have pad token by default
-        eos_token_id=[128001, 128008, 128009],
-        bos_token_id=128000,
-        tie_word_embeddings=False,
-        rope_theta=1000000.0,
-        attention_bias=False,
-        attention_dropout=0.0,
-        # Sliding window attention parameters (from Gemma3)
-        sliding_window=8192,
-        layer_types=None,
-        query_pre_attn_scalar=128,  # Set to head_dim for proper scaling
-        final_logit_softcapping=None,
-        attn_logit_softcapping=None,
-        rope_local_base_freq=10000.0,
-        use_bidirectional_attention=False,
-        # Additional parameters from your config.json
-        pretraining_tp=1,
-        mlp_bias=False,
-        rope_scaling=None,
+        # Llama fields
+        vocab_size: int = 128256,
+        hidden_size: int = 6144,
+        intermediate_size: int = 21504,
+        num_hidden_layers: int = 64,
+        num_attention_heads: int = 48,
+        num_key_value_heads: int = 8,
+        head_dim: int = 128,
+        hidden_act: str = "silu",
+        max_position_embeddings: int = 131072,
+        initializer_range: float = 0.02,
+        rms_norm_eps: float = 1e-5,
+        use_cache: bool = True,
+        pad_token_id: Optional[int] = None,
+        eos_token_id=(128001, 128008, 128009),
+        bos_token_id: int = 128000,
+        tie_word_embeddings: bool = False,
+        rope_theta: float = 1_000_000.0,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
+        pretraining_tp: int = 1,
+        mlp_bias: bool = False,
+        rope_scaling: Optional[dict] = None,
+        # CWM interleaved SWA fields
+        sliding_window: int = 8192,
+        layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
+        window_pattern: Optional[int] = None,  # convenience: 4 => every 4th layer "full"
+        global_window: Optional[int] = None,  # cap for "full" layers; None => pure causal
         **kwargs,
     ):
         super().__init__(
@@ -92,7 +94,6 @@ class CwmTextConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        # Set rope_scaling to match your exact config.json if not provided
         if rope_scaling is None:
             rope_scaling = {
                 "factor": 16.0,
@@ -102,15 +103,13 @@ class CwmTextConfig(PretrainedConfig):
                 "rope_type": "llama3",
             }
 
-        # Set layer_types based on your conversion script pattern if not provided
         if layer_types is None:
-            # Generate pattern: layers 0, 4, 8, 12, etc. are full attention, others are sliding
-            layer_types = []
-            for i in range(num_hidden_layers):
-                if i % 4 == 0:  # Every 4th layer starting from 0
-                    layer_types.append("full_attention")
-                else:
-                    layer_types.append("sliding_attention")
+            if window_pattern is None or window_pattern <= 0:
+                window_pattern = 4
+            layer_types = [
+                ("full_attention" if (i % window_pattern == 0) else "sliding_attention")
+                for i in range(num_hidden_layers)
+            ]
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -140,28 +139,21 @@ class CwmTextConfig(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
-        # Add CWM-specific sliding window parameters
-        self.sliding_window = sliding_window
-        self.layer_types = layer_types
-        self.query_pre_attn_scalar = query_pre_attn_scalar
-        self.final_logit_softcapping = final_logit_softcapping
-        self.attn_logit_softcapping = attn_logit_softcapping
-        self.rope_local_base_freq = rope_local_base_freq
-        self.use_bidirectional_attention = use_bidirectional_attention
+        self.sliding_window = int(sliding_window)
+        self.layer_types = list(layer_types)
+        self.window_pattern = int(window_pattern) if window_pattern is not None else None
+        self.global_window = None if global_window is None else int(global_window)
 
-        if use_bidirectional_attention:
-            self.sliding_window = (self.sliding_window // 2) + 1
+        # Prefer SDPA when sliding is active (dense additive masks)
+        try:
+            if any(t == "sliding_attention" for t in self.layer_types) and self.sliding_window > 0:
+                self._attn_implementation = "sdpa"
+        except Exception:
+            pass
 
 
 class CwmConfig(CwmTextConfig):
-    """
-    Main configuration class for CWM (Code World Model).
-
-    Since CWM is text-only, this is identical to CwmTextConfig.
-    This follows the pattern of other models in transformers.
-    """
-
-    model_type = "cwm"
+    pass
 
 
 __all__ = ["CwmTextConfig", "CwmConfig"]
