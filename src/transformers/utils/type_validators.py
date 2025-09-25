@@ -135,11 +135,11 @@ def truncation_validator(value: Optional[Union[bool, str, TruncationStrategy]] =
 
 
 @as_validated_field
-def image_size_validator(value: Optional[dict[str, int]] = None):
+def image_size_validator(value: Optional[Union[int, Sequence[int], dict[str, int]]] = None):
     possible_keys = ["height", "width", "longest_edge", "shortest_edge", "max_height", "max_width"]
     if value is None:
         pass
-    elif not isinstance(value, dict) or any(k not in possible_keys for k in value.keys()):
+    elif isinstance(value, dict) and any(k not in possible_keys for k in value.keys()):
         raise ValueError(f"Value for size must be a dict with keys {possible_keys} but got size={value}")
 
 

@@ -276,8 +276,8 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_videos = image_processing(
                 test_inputs[0],
                 return_tensors="pt",
-                image_mean=(0.0, 0.0, 0.0, 0.0),
-                image_std=(1.0, 1.0, 1.0, 1.0),
+                image_mean=(0.0, 0.0, 0.0),
+                image_std=(1.0, 1.0, 1.0),
                 input_data_format="channels_first",
             ).pixel_values
             self.assertListEqual(
@@ -298,8 +298,8 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_videos = image_processing(
                 test_inputs,
                 return_tensors="pt",
-                image_mean=(0.0, 0.0, 0.0, 0.0),
-                image_std=(1.0, 1.0, 1.0, 1.0),
+                image_mean=(0.0, 0.0, 0.0),
+                image_std=(1.0, 1.0, 1.0),
                 input_data_format="channels_first",
             ).pixel_values
             self.assertListEqual(

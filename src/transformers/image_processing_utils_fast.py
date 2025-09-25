@@ -179,7 +179,7 @@ class DefaultFastImageProcessorKwargs(TypedDict, total=False):
     image_mean: Optional[Union[float, list[float], tuple[float, ...]]]
     image_std: Optional[Union[float, list[float], tuple[float, ...]]]
     do_pad: Optional[bool]
-    crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
+    pad_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     do_convert_rgb: Optional[bool]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
     data_format: Optional[Union[str, ChannelDimension]]

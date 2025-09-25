@@ -81,8 +81,6 @@ class Lfm2VlProcessor(ProcessorMixin):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
         chat_template (`str`, *optional*):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-        use_image_special_tokens (`bool`, *optional*, defaults to `True`):
-            Whether to use image special tokens or not when processing.
     """
 
     attributes = ["image_processor", "tokenizer"]
