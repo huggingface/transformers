@@ -52,6 +52,7 @@ Through photosynthesis, plants capture energy from sunlight using a green pigmen
 These ingredients are then transformed into glucose, a type of sugar that serves as a source of chemical energy, and oxygen, which is released as a byproduct into the atmosphere. The glucose produced during photosynthesis is not just used immediately; plants also store it as starch or convert it into other organic compounds like cellulose, which is essential for building their cellular structure.
 This energy reserve allows them to grow, develop leaves, produce flowers, bear fruit, and carry out various physiological processes throughout their lifecycle.""")
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -77,6 +78,7 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 </hfoption>
 <hfoption id="transformers">
 

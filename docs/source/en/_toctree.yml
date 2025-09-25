@@ -935,6 +935,8 @@
         title: MusicGen
       - local: model_doc/musicgen_melody
         title: MusicGen Melody
+      - local: model_doc/parakeet
+        title: Parakeet
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
