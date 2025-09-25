@@ -56,7 +56,7 @@ conversation = [
     {"role": "system", "content": "Generate audio following instruction.\n\n<|scene_desc_start|>\nAudio is recorded from a quiet room.\n<|scene_desc_end|>"},
     {"role": "user", "content": "The sun rises in the east and sets in the west. This simple fact has been observed by humans for thousands of years."},
 ]
-inputs = processor.apply_chat_template(conversation, add_generation_prompt=True).to(torch_device)
+inputs = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=True).to(torch_device)
 
 outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, tokenizer=processor.tokenizer, do_sample=True)
 
@@ -85,7 +85,7 @@ conversation = [
     {"role": "assistant", "content": [{"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"}]},
     {"role": "user", "content": "The sun rises in the east and sets in the west. This simple fact has been observed by humans for thousands of years."},
 ]
-inputs = processor.apply_chat_template(conversation, add_generation_prompt=True).to(torch_device)
+inputs = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=True).to(torch_device)
 
 outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, tokenizer=processor.tokenizer, do_sample=True)
 
@@ -120,7 +120,7 @@ conversation = [
     {"role": "assistant", "content": [{"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"}]},
     {"role": "user", "content": "[SPEAKER0] It is a doctrine of comfort and complacency, and, like all gospels, it tells its followers precisely what they wish to hear."},
 ]
-inputs = processor.apply_chat_template(conversation, add_generation_prompt=True).to(torch_device)
+inputs = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=True).to(torch_device)
 
 outputs = model.generate(**inputs, max_length=1024, temperature=0.3, top_p=0.95, top_k=50, tokenizer=processor.tokenizer, do_sample=True)
 
@@ -149,7 +149,7 @@ conversation = [
     {"role": "assistant", "content": [{"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"}]},
     {"role": "user", "content": "The sun rises in the east and sets in the west. This simple fact has been observed by humans for thousands of years."},
 ]
-inputs = processor.apply_chat_template(conversation, add_generation_prompt=True).to(torch_device)
+inputs = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=True).to(torch_device)
 
 out = model(**inputs)
 out.loss.backward()

@@ -1403,21 +1403,7 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         # Calculate the loss function
         # There will be two loss functions, one for the text-stream and one for the audio stream.
         if label_ids is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-
-            if (shift_labels == -100).all():
-                loss = shift_logits.sum() * 0.0  # Connect the gradient
-            else:
-                # Flatten the tokens
-                shift_logits = shift_logits.view(-1, self.config.vocab_size)
-                shift_labels = shift_labels.view(-1)
-                # Enable model parallelism
-                shift_labels = shift_labels.to(shift_logits.device)
-                loss = nn.functional.cross_entropy(shift_logits, shift_labels)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if label_audio_ids is not None and label_audio_ids.shape[-1] > 0:
             # audio_logits have shape (num_audio_out_tokens, audio_num_codebooks * audio_codebook_size)
