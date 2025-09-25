@@ -44,6 +44,27 @@ from .utils.constants import (  # noqa: F401
 )
 
 
+logger = logging.get_logger(__name__)
+
+
+# Safe import of vision-related modules
+if is_vision_available():
+    import PIL
+
+
+class PILImageResampling(ExplicitEnum):
+    """
+    Enum containing valid values for the `resample` parameter of `PIL.Image.resize()`.
+    """
+
+    NEAREST = 0
+    LANCZOS = 1
+    BILINEAR = 2
+    BICUBIC = 3
+    BOX = 4
+    HAMMING = 5
+
+
 # Safe import of torchvision transforms (avoid crashing text-only users if torchvision is broken)
 InterpolationMode = None
 pil_torch_interpolation_mapping = {}
@@ -76,9 +97,6 @@ if is_torchvision_available():
 
 if is_torch_available():
     import torch
-
-
-logger = logging.get_logger(__name__)
 
 
 ImageInput = Union[
