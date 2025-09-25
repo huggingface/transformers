@@ -153,7 +153,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
         return dtype
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
@@ -184,7 +184,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import (
@@ -387,7 +386,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 return param_name.replace("down_proj", "down_proj_blocks")
         return param_name
 
-    def get_state_dict_and_metadata(self, model):
+    def get_state_dict_and_metadata(self, model, safe_serialization: bool = False):
         from ..integrations import Mxfp4GptOssExperts
 
         state_dict = model.state_dict()
