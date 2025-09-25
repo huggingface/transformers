@@ -13,7 +13,6 @@
 # limitations under the License.
 import collections
 import copy
-import gc
 import inspect
 import math
 import os
@@ -75,10 +74,6 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
-    backend_device_count,
-    backend_empty_cache,
-    backend_memory_allocated,
-    backend_torch_accelerator_module,
     get_device_properties,
     hub_retry,
     is_flaky,

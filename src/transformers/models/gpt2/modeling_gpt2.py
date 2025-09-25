@@ -16,7 +16,6 @@
 """PyTorch OpenAI GPT-2 model."""
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
@@ -41,7 +40,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
     auto_docstring,
     logging,
 )
@@ -573,6 +571,7 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
     past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
+
 
 @auto_docstring
 class GPT2Model(GPT2PreTrainedModel):

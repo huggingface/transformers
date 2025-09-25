@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch GPT-J model."""
 
-import warnings
 from typing import Optional, Union
 
 import torch
@@ -36,7 +35,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_start_docstrings,
     auto_docstring,
     is_torch_flex_attn_available,
     is_torch_fx_proxy,
@@ -489,6 +487,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+
 @auto_docstring
 class GPTJModel(GPTJPreTrainedModel):
     def __init__(self, config):
@@ -500,7 +499,7 @@ class GPTJModel(GPTJPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTJBlock(config, layer_idx=i) for i in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-        
+
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -819,7 +818,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device 
+            # move labels to correct device
             labels = labels.to(lm_logits.device)
             # Flatten the tokens
             loss = self.loss_function(
