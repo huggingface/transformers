@@ -58,8 +58,9 @@ class PhimoeRotaryEmbedding(nn.Module):
             self.rope_type = "default"
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-    def forward(self, x, seq_len=None):
+    def forward(self, x, position_ids):
         mscale = None
+        seq_len = torch.max(position_ids) + 1
         if self.config.rope_scaling and seq_len:
             mscale = (
                 self.long_mscale
@@ -68,11 +69,16 @@ class PhimoeRotaryEmbedding(nn.Module):
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
         mscale = attention_scaling if mscale is None else mscale
-        t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
-        freqs = torch.outer(t, inv_freq)
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
 
-        emb = torch.cat((freqs, freqs), dim=-1)
-        return (emb.cos() * mscale).to(x.dtype), (emb.sin() * mscale).to(x.dtype)
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * mscale
+            sin = emb.sin() * mscale
+        return cos.to(x.dtype), sin.to(x.dtype)
 
 
 def rotate_half(x):
@@ -80,6 +86,33 @@ def rotate_half(x):
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -118,33 +151,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos[position_ids].unsqueeze(unsqueeze_dim)
-    sin = sin[position_ids].unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 class PhimoeAttention(nn.Module):
@@ -302,7 +308,6 @@ class PhimoeRouter(nn.Linear):
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
             )
-        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = super().forward(hidden_states)
         return router_logits
 
@@ -452,7 +457,7 @@ class PhimoeSparseMoeBlock(nn.Module):
         self.gate = PhimoeRouter(config)
         self.experts = PhimoeExperts(config)
 
-    def route_tokens_to_experts(self, hidden_states, router_logits):
+    def route_tokens_to_experts(self, router_logits):
         routing_weights, selected_experts = sparsemixer(
             router_logits,
             jitter_eps=self.router_jitter_noise,
@@ -461,15 +466,12 @@ class PhimoeSparseMoeBlock(nn.Module):
         return routing_weights, selected_experts
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-
+        hidden_states = hidden_states.reshape(-1, hidden_dim)
         router_logits = self.gate(hidden_states)
-        routing_weights, selected_experts = self.route_tokens_to_experts(hidden_states, router_logits)
-        final_hidden_states = self.experts(
-            hidden_states.reshape(batch_size, sequence_length, hidden_dim), routing_weights, selected_experts
-        )
-        return final_hidden_states
+        routing_weights, selected_experts = self.route_tokens_to_experts(router_logits)
+        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -517,7 +519,6 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
@@ -528,10 +529,9 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
             **kwargs,
         )
         hidden_states = residual + hidden_states
-
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, _ = self.block_sparse_moe(hidden_states)
+        hidden_states = self.block_sparse_moe(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -549,7 +549,7 @@ class PhimoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(PhimoeSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(nn.Linear, layer_name="gate", index=1),
         "hidden_states": PhimoeDecoderLayer,
         "attentions": PhimoeAttention,
     }
@@ -617,7 +617,7 @@ class PhimoeModel(PhimoePreTrainedModel):
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, seq_len=cache_position[-1] + 1)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
