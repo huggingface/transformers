@@ -476,7 +476,7 @@ class MiniMaxSparseMoeBlock(nn.Module):
         top_k_index, top_k_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights.to(hidden_states.dtype))
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states, router_logits
+        return hidden_states
 
 
 class MiniMaxDecoderLayer(GradientCheckpointingLayer):

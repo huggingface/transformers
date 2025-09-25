@@ -429,6 +429,8 @@ class DbrxPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["DbrxBlock"]
     _skip_keys_device_placement = ["past_key_values"]
+    _supports_flex_attn = True
+    _supports_attention_backend = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
@@ -508,7 +510,6 @@ class DbrxModel(DbrxPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
-        inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.emb_pdrop, training=self.training)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -666,7 +667,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
 
     def get_decoder(self) -> DbrxModel:
         return self.transformer
-
 
     @can_return_tuple
     @auto_docstring
