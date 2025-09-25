@@ -170,7 +170,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                     f"In order to use safetensors with torchao, please use torchao version >= 0.14.0. Current version: {TORCHAO_VERSION}"
                 )
         else:
-            return super().get_state_dict_and_metadata(model)
+            return None, {}
 
     def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
@@ -229,7 +229,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             ]
         return
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
@@ -262,7 +262,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: list[str],
     ):
         """
         Each nn.Linear layer that needs to be quantized is processed here.
@@ -322,7 +321,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         if TORCHAO_VERSION >= version.parse("0.14.0") and is_metadata_torchao(metadata):
             return unflatten_tensor_state_dict(state_dict, metadata)
         else:
-            return super().update_state_dict_with_metadata(state_dict, metadata)
+            return state_dict
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
