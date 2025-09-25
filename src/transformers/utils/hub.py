@@ -665,7 +665,7 @@ def cached_files(
     """
     path_or_repo_id_str = str(path_or_repo_id)
 
-    to_log = not path_or_repo_id_str.startswith("/tmp/")
+    to_log = "/tmp/" not in path_or_repo_id_str
     PYTEST_CURRENT_TEST = os.environ.get("PYTEST_CURRENT_TEST", "")
     to_log = to_log and PYTEST_CURRENT_TEST != ""
 
