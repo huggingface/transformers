@@ -230,7 +230,7 @@ class OlmoeAttention(nn.Module):
         key_states = self.k_norm(self.k_proj(hidden_states))
         value_states = self.v_proj(hidden_states)
 
-        if self.config.clip_qkv is not None:
+        if self.config.clip_qkv is not None:  # Diff with llama
             query_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
             key_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
             value_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)

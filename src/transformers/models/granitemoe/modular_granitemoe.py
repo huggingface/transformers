@@ -18,12 +18,12 @@ from typing import Optional
 import torch
 from torch import nn
 
-from ...processing_utils import Unpack
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import check_model_inputs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding

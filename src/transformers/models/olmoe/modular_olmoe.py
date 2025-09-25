@@ -15,11 +15,11 @@ from typing import Callable, Optional
 
 import torch
 from torch import nn
+
 from transformers.masking_utils import create_causal_mask
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -79,7 +79,7 @@ class OlmoeAttention(LlamaAttention):
         key_states = self.k_norm(self.k_proj(hidden_states))
         value_states = self.v_proj(hidden_states)
 
-        if self.config.clip_qkv is not None:
+        if self.config.clip_qkv is not None:  # Diff with llama
             query_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
             key_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
             value_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
@@ -156,7 +156,7 @@ class OlmoeSparseMoeBlock(nn.Module):
 
 class OlmoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: OlmoeConfig, layer_idx: int):
-        super().__init__(config)
+        super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
         self.self_attn = OlmoeAttention(config=config, layer_idx=layer_idx)
         self.mlp = OlmoeSparseMoeBlock(config)
