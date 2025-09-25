@@ -249,7 +249,7 @@ Tool responses are message dicts with the `tool` role. They are much simpler tha
 
 Some templates may not even need the `name` key, in which case, you can write your template to only read the `content` key.
 
-```text
+```jinja
 {%- if message['role'] == 'tool' %}
     {{- "<tool_result>" + message['content'] + "</tool_result>" }}
 {%- endif %}
