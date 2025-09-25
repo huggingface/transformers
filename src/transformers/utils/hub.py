@@ -69,6 +69,265 @@ from .import_utils import (
     is_training_run_on_sagemaker,
 )
 
+import inspect
+import re
+
+
+# def get_from_pretrained_call_with_values():
+#     stack = inspect.stack()
+#
+#     for frame_info in stack:
+#         code_context = frame_info.code_context[0] if frame_info.code_context else ''
+#         if 'from_pretrained' in code_context:
+#             frame = frame_info.frame
+#             locals_dict = frame.f_locals
+#
+#             # Get the source line
+#             call_line = code_context.strip()
+#             print(f"Original: {call_line}")
+#
+#             # Simple substitution for common patterns
+#             result = call_line
+#
+#             # Replace self.attribute patterns
+#             self_pattern = r'self\.(\w+)'
+#
+#             def replace_self_attr(match):
+#                 attr_name = match.group(1)
+#                 if 'self' in locals_dict:
+#                     self_obj = locals_dict['self']
+#                     try:
+#                         value = getattr(self_obj, attr_name)
+#                         return repr(value)
+#                     except:
+#                         return match.group(0)
+#                 return match.group(0)
+#
+#             result = re.sub(self_pattern, replace_self_attr, result)
+#
+#             print(f"Substituted: {result}")
+#             return result
+#
+#     return None
+
+
+import inspect
+import ast
+import re
+import os
+
+
+def extract_and_substitute_call():
+    stack = inspect.stack()
+
+    # Find frames from test directories
+    for frame_info in stack:
+        if not is_test_file(frame_info.filename):
+            continue
+
+        # Check if this frame contains a from_pretrained call
+        if has_from_pretrained_call(frame_info):
+            call_text = extract_multiline_call(frame_info)
+            if call_text:
+                print(f"Original call:\n{call_text}")
+
+                # Substitute variables with actual values
+                substituted_call = substitute_variables(call_text, frame_info.frame.f_locals)
+                print(f"\nWith substituted values:\n{substituted_call}")
+
+                return substituted_call
+
+    return None
+
+
+def is_test_file(filename):
+    """Check if file is in a tests directory"""
+    return 'tests' in filename.replace('\\', '/').split('/')
+
+
+def has_from_pretrained_call(frame_info):
+    """Check if the current line or nearby lines contain from_pretrained"""
+    try:
+        with open(frame_info.filename, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        # Check a few lines around the current line
+        start = max(0, frame_info.lineno - 3)
+        end = min(len(lines), frame_info.lineno + 3)
+
+        for i in range(start, end):
+            if 'from_pretrained' in lines[i]:
+                return True
+        return False
+    except:
+        return False
+
+
+def extract_multiline_call(frame_info):
+    """Extract a potentially multi-line from_pretrained call"""
+    try:
+        with open(frame_info.filename, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        # Find the line with from_pretrained
+        from_pretrained_line = None
+        for i in range(max(0, frame_info.lineno - 5), min(len(lines), frame_info.lineno + 5)):
+            if 'from_pretrained' in lines[i]:
+                from_pretrained_line = i
+                break
+
+        if from_pretrained_line is None:
+            return None
+
+        # Find the start of the statement (look backwards for assignment or start of expression)
+        start_line = from_pretrained_line
+        for i in range(from_pretrained_line, max(0, from_pretrained_line - 10), -1):
+            line = lines[i].strip()
+            # Look for assignment operator or start of expression
+            if ('=' in line and not line.startswith(('==', '!=', '<=', '>=', '+=', '-=', '*=', '/='))) or \
+                    (line and not line.startswith((' ', '\t', '.', ',', ')', ']', '}'))):
+                start_line = i
+                break
+
+        # Find the end of the call (count parentheses)
+        call_lines = []
+        open_parens = 0
+        in_call = False
+        square_brackets = 0
+        curly_brackets = 0
+        in_string = False
+        string_char = None
+
+        for line_idx in range(start_line, len(lines)):
+            line = lines[line_idx]
+            call_lines.append(line.rstrip('\n'))
+
+            # Parse character by character to handle strings and nested structures
+            i = 0
+            while i < len(line):
+                char = line[i]
+
+                # Handle string literals
+                if char in ['"', "'"] and (i == 0 or line[i - 1] != '\\'):
+                    if not in_string:
+                        in_string = True
+                        string_char = char
+                    elif char == string_char:
+                        in_string = False
+                        string_char = None
+
+                # Only count brackets when not in string
+                if not in_string:
+                    if char == '(':
+                        open_parens += 1
+                        if 'from_pretrained' in line[:i + 20]:  # Check if this is our call
+                            in_call = True
+                    elif char == ')':
+                        open_parens -= 1
+                    elif char == '[':
+                        square_brackets += 1
+                    elif char == ']':
+                        square_brackets -= 1
+                    elif char == '{':
+                        curly_brackets += 1
+                    elif char == '}':
+                        curly_brackets -= 1
+
+                i += 1
+
+            # If we've closed all structures and we were in a call, we're done
+            if in_call and open_parens == 0 and square_brackets == 0 and curly_brackets == 0:
+                break
+
+        return '\n'.join(call_lines)
+
+    except Exception as e:
+        print(f"Error extracting call: {e}")
+        return None
+
+
+def substitute_variables(call_text, local_vars):
+    """Replace variable names with their actual values"""
+
+    def replace_var(match):
+        var_name = match.group(1)
+
+        # Skip function names, keywords, and common method names
+        skip_words = {'from_pretrained', 'True', 'False', 'None', 'self', 'to', 'cuda', 'cpu'}
+        if var_name in skip_words:
+            return var_name
+
+        # Handle attribute access (like self.path_bigscience_model)
+        if '.' in var_name:
+            parts = var_name.split('.')
+            if parts[0] in local_vars:
+                obj = local_vars[parts[0]]
+                try:
+                    for attr in parts[1:]:
+                        obj = getattr(obj, attr)
+                    return repr(obj)
+                except (AttributeError, TypeError):
+                    return var_name
+
+        # Handle simple variables
+        elif var_name in local_vars:
+            value = local_vars[var_name]
+            # Handle common types nicely
+            if isinstance(value, str):
+                return repr(value)
+            elif isinstance(value, (int, float, bool, type(None))):
+                return str(value)
+            else:
+                return repr(value)
+
+        return var_name
+
+    # Find variable patterns - more comprehensive regex
+    pattern = r'\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\b'
+    return re.sub(pattern, replace_var, call_text)
+
+
+def substitute_variables_ast(call_text, local_vars):
+    """More robust substitution using AST - handles complex expressions better"""
+    try:
+        # Wrap in a function to make it valid Python for AST parsing
+        wrapped_code = f"def dummy():\n    {call_text.replace(chr(10), chr(10) + '    ')}"
+        tree = ast.parse(wrapped_code)
+
+        class VariableReplacer(ast.NodeTransformer):
+            def visit_Name(self, node):
+                if node.id in local_vars and node.id not in ['True', 'False', 'None']:
+                    value = local_vars[node.id]
+                    return ast.Constant(value=value)
+                return node
+
+            def visit_Attribute(self, node):
+                if isinstance(node.value, ast.Name) and node.value.id in local_vars:
+                    obj = local_vars[node.value.id]
+                    try:
+                        value = getattr(obj, node.attr)
+                        return ast.Constant(value=value)
+                    except (AttributeError, TypeError):
+                        pass
+                return node
+
+        transformer = VariableReplacer()
+        new_tree = transformer.visit(tree)
+
+        # Convert back to source (this is tricky without external libraries)
+        # For now, fall back to regex method
+        return substitute_variables(call_text, local_vars)
+
+    except Exception as e:
+        print(f"AST substitution failed, using regex: {e}")
+        return substitute_variables(call_text, local_vars)
+
+
+# Usage example
+def debug_from_pretrained_call():
+    """Call this from your test or debugging code"""
+    return extract_and_substitute_call()
+
 
 LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE = "chat_template.json"
 CHAT_TEMPLATE_FILE = "chat_template.jinja"
@@ -430,6 +689,9 @@ def cached_files(
         file_name = f"repo_ids_node_{CIRCLE_NODE_INDEX}_{PYTEST_WORKER_INDEX}.txt"
         file_path = os.path.join(dir_name, file_name)
 
+        orig_call = debug_from_pretrained_call()
+        if orig_call is not None:
+            orig_call = orig_call.strip()
         info = {
             "path_or_repo_id_str": path_or_repo_id_str,
             "PYTEST_CURRENT_TEST": PYTEST_CURRENT_TEST,
@@ -437,11 +699,14 @@ def cached_files(
             "subfolder": subfolder,
             "repo_type": repo_type,
             "revision": revision,
+            "call": orig_call,
         }
         info_str = json.dumps(info, ensure_ascii=False, sort_keys=True)
 
         with open(file_path, "a", encoding="utf-8") as fp:
             fp.write(f"{info_str}\n")
+
+        # breakpoint()
 
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
