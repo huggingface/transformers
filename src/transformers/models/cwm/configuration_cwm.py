@@ -63,7 +63,7 @@ class CwmTextConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
-        pad_token_id: Optional[int] = 128004,  # <|pad|>
+        pad_token_id: Optional[int] = None,
         eos_token_id=(128001, 128008, 128009),
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
