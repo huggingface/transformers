@@ -50,6 +50,9 @@ import tempfile
 import subprocess
 
 def foo(call):
+
+    idx, call = call
+
     class_name = call.split(".from_pretrained")[0]
     expr = f'import torch; from transformers.tokenization_utils import AddedToken; from transformers import {class_name}; torch_device = "cpu"; obj = {call}; print(obj.__class__); print("OK")'
     print(expr)
@@ -60,8 +63,8 @@ def foo(call):
         text=True
     )
     ok = result.returncode == 0
-    return ok
 
+    return (idx, call, ok)
 
 if __name__ == "__main__":
 
@@ -73,11 +76,16 @@ if __name__ == "__main__":
     # for x in calls[:10]:
     #     print(x)
 
-    import multiprocessing
-    with multiprocessing.Pool(processes=8) as pool:
-        results = pool.map(foo, calls)
+    calls = [(idx, call) for idx, call in enumerate(calls)]
 
-    print(sum(results))
+    import multiprocessing
+    with multiprocessing.Pool(processes=2) as pool:
+        results = pool.map(foo, calls[:8])
+
+    breakpoint()
+
+    # TODO: how to get error message and size?
+    print(sum([x[-1] for x in results]))
 
 
     # for call in calls[:16]:
