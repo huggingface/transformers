@@ -658,16 +658,16 @@ class TopHLogitsWarper(LogitsProcessor):
                 torch.tensor([0], device=top_probs.device)
             )  # -top_probs[0] * torch.log2(top_probs[0])
             chosen = []
-            ind = 0
-            for idx, p in zip(top_idx, top_probs):
-                chosen.append(idx)
-                ind += 1
-                if ind == len(top_probs):
+            index = 0
+            for token_id in top_idx:
+                chosen.append(token_id)
+                index += 1
+                if index == len(top_probs):
                     break
                 # update running sums for current prefix
                 cumulative_entropy = cumulative_entropy - distribution.probs[
-                    torch.tensor([ind], device=top_probs.device)
-                ] * distribution.log_prob(torch.tensor([ind], device=top_probs.device))
+                    torch.tensor([index], device=top_probs.device)
+                ] * distribution.log_prob(torch.tensor([index], device=top_probs.device))
 
                 # entropy difference term
                 if cumulative_entropy > tau:
