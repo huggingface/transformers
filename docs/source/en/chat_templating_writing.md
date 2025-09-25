@@ -226,7 +226,7 @@ Tool calls are generally passed in the `tool_calls` key of an `"assistant”` me
 
 A common pattern for handling tool calls is shown below. You can use this as a starting point, but make sure you template actually matches the format the model was trained with!
 
-```text
+```jinja
 {%- if message['role'] == 'assistant' and 'tool_calls' in message %}
     {%- for tool_call in message['tool_calls'] %}
             {{- '<tool_call>' + tool_call['function']['name'] + '\n' + tool_call['function']['arguments']|tojson + '\n</tool_call>' }}
