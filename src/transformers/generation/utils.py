@@ -1690,7 +1690,7 @@ class GenerationMixin(ContinuousMixin):
         self,
         generation_config: Optional[GenerationConfig],
         use_model_defaults: Optional[bool] = None,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> tuple[GenerationConfig, dict]:
         """
         Prepares the base generation config, then applies any generation configuration options from kwargs. This
