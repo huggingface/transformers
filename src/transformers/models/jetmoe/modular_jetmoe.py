@@ -441,7 +441,7 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, JetMoeParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, (JetMoeMoA, JetMoeMoE)):
+        elif isinstance(module, JetMoeMoA | JetMoeMoE):
             module.bias.data.zero_()
 
 
