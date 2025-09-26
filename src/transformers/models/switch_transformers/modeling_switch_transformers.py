@@ -630,7 +630,6 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["SwitchTransformersBlock"]
     _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
-        "encoder_hidden_states": OutputRecorder(SwitchTransformersBlock, 0, layer_name="encoder"),
         "attentions": SwitchTransformersLayerSelfAttention,
         "cross_attentions": SwitchTransformersLayerCrossAttention,
     }
@@ -1016,11 +1015,11 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            decoder_router_logits=decoder_outputs.router_probs,
+            decoder_router_logits=decoder_outputs.router_logits,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            encoder_router_logits=encoder_outputs.router_probs,
+            encoder_router_logits=encoder_outputs.router_logits,
         )
 
 
