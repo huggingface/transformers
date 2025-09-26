@@ -222,7 +222,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     fx_compatible = False
     test_missing_keys = False
-    test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # Rwkv does not support head masking
 

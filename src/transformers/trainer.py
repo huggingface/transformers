@@ -497,26 +497,13 @@ class Trainer:
                 "https://huggingface.co/docs/transformers/model_doc/auto"
             )
 
-        if getattr(model, "is_parallelizable", False) and getattr(model, "model_parallel", False):
-            self.is_model_parallel = True
-        else:
-            self.is_model_parallel = False
-
+        self.is_model_parallel = False
         if getattr(model, "hf_device_map", None) is not None:
             devices = [device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]
             if len(devices) > 1:
                 self.is_model_parallel = True
             elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
-            else:
-                self.is_model_parallel = False
-
-            # warn users
-            if self.is_model_parallel:
-                logger.info(
-                    "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set"
-                    " to `True` to avoid any unexpected behavior such as device placement mismatching."
-                )
 
         if self.args.use_liger_kernel:
             if is_liger_kernel_available():

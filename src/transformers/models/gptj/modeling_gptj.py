@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch GPT-J model."""
 
-import warnings
 from typing import Optional, Union
 
 import torch
@@ -36,13 +35,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_start_docstrings,
     auto_docstring,
     is_torch_flex_attn_available,
     is_torch_fx_proxy,
     logging,
 )
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gptj import GPTJConfig
 
 
@@ -466,7 +463,6 @@ class GPTJBlock(GradientCheckpointingLayer):
 class GPTJPreTrainedModel(PreTrainedModel):
     config: GPTJConfig
     base_model_prefix = "transformer"
-    is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTJBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -492,55 +488,6 @@ class GPTJPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-PARALLELIZE_DOCSTRING = r"""
-    This is an experimental feature and is a subject to change at a moment's notice. Uses a device map to distribute
-    attention modules of the model across several devices. If no device map is given, it will evenly distribute blocks
-    across all devices.
-
-    Args:
-        device_map (`dict[int, list]`, *optional*):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-            automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the GPT-J models have the
-            following number of attention modules:
-
-                - gpt-j-6B: 28
-
-    Example:
-
-    ```python
-    # Here is an example of a device map on a machine with 4 GPUs using gpt-j-6B, which has a total of 28 attention modules:
-    model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
-    device_map = {
-        0: [0, 1, 2, 3, 4, 5, 6],
-        1: [7, 8, 9, 10, 11, 12, 13],
-        2: [14, 15, 16, 17, 18, 19, 20],
-        3: [21, 22, 23, 24, 25, 26, 27],
-    }
-    model.parallelize(device_map)
-    ```
-"""
-
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to CPU from a model parallel state.
-
-    Example:
-
-    ```python
-    # On a 4 GPU machine with gpt-j-6B:
-    model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
-    device_map = {
-        0: [0, 1, 2, 3, 4, 5, 6],
-        1: [7, 8, 9, 10, 11, 12, 13],
-        2: [14, 15, 16, 17, 18, 19, 20],
-        3: [21, 22, 23, 24, 25, 26, 27],
-    }
-    model.parallelize(device_map)  # Splits the model across several devices
-    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-    ```
-"""
-
-
 @auto_docstring
 class GPTJModel(GPTJPreTrainedModel):
     def __init__(self, config):
@@ -553,55 +500,10 @@ class GPTJModel(GPTJPreTrainedModel):
         self.h = nn.ModuleList([GPTJBlock(config, layer_idx=i) for i in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        warnings.warn(
-            "`GPTJModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your"
-            " model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
-            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'h.0': 0, 'h.1': 1,"
-            " ...}",
-            FutureWarning,
-        )
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.h))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        self.wte = self.wte.to(self.first_device)
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for block in v:
-                cuda_device = "cuda:" + str(k)
-                self.h[block] = self.h[block].to(cuda_device)
-        # ln_f to last
-        self.ln_f = self.ln_f.to(self.last_device)
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        warnings.warn(
-            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        self.wte = self.wte.to("cpu")
-        for index in range(len(self.h)):
-            self.h[index] = self.h[index].to("cpu")
-        self.ln_f = self.ln_f.to("cpu")
-        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.wte
@@ -686,21 +588,6 @@ class GPTJModel(GPTJPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, block in enumerate(self.h):
-            # Model parallel
-            if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
-
-                # Ensure layer_past is on same device as hidden_states (might not be correct)
-                if past_key_values is not None:
-                    for layer in past_key_values.layers:
-                        layer.keys = layer.keys.to(hidden_states.device)
-                        layer.values = layer.values.to(hidden_states.device)
-
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if causal_mask is not None:
-                    causal_mask = causal_mask.to(hidden_states.device)
-                if isinstance(head_mask, torch.Tensor):
-                    head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -718,12 +605,6 @@ class GPTJModel(GPTJPreTrainedModel):
             hidden_states = outputs[0]
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[1],)
-
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
         hidden_states = self.ln_f(hidden_states)
 
@@ -881,43 +762,8 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         self.transformer = GPTJModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
         # Initialize weights and apply final processing
         self.post_init()
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        warnings.warn(
-            "`GPTJForCausalLM.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
-            " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
-            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'transformer.h.0':"
-            " 0, 'transformer.h.1': 1, ...}",
-            FutureWarning,
-        )
-        self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.transformer.h))
-        self.transformer.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.transformer.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        warnings.warn(
-            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        self.transformer.deparallelize()
-        self.transformer = self.transformer.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.model_parallel = False
-        torch.cuda.empty_cache()
 
     @auto_docstring
     def forward(
@@ -965,11 +811,6 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         )
         hidden_states = transformer_outputs[0]
 
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
-            hidden_states = hidden_states.to(self.lm_head.weight.device)
-
         # make sure sampling in fp16 works correctly and
         # compute loss in fp32 to match with mesh-tf version
         # https://github.com/EleutherAI/gpt-neo/blob/89ce74164da2fb16179106f54e2269b5da8db333/models/gpt2/gpt2.py#L179
@@ -977,7 +818,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(lm_logits.device)
             # Flatten the tokens
             loss = self.loss_function(
@@ -1022,10 +863,6 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         self.num_labels = config.num_labels
         self.transformer = GPTJModel(config)
         self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1140,10 +977,6 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
         self.num_labels = config.num_labels
         self.transformer = GPTJModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
 
         # Initialize weights and apply final processing
         self.post_init()

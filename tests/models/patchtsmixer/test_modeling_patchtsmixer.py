@@ -230,7 +230,6 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_resize_embeddings = True
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
-    test_model_parallel = False
     has_attentions = False
 
     def setUp(self):

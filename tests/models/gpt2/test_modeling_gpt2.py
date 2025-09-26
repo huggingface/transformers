@@ -175,10 +175,8 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     test_missing_keys = False
-    test_model_parallel = True
     model_tester_class = GPT2ModelTester
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

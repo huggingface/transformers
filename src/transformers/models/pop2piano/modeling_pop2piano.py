@@ -579,7 +579,6 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
 class Pop2PianoPreTrainedModel(PreTrainedModel):
     config: Pop2PianoConfig
     base_model_prefix = "transformer"
-    is_parallelizable = False
     supports_gradient_checkpointing = True
 
     _can_compile_fullgraph = False
@@ -671,9 +670,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
         self.gradient_checkpointing = False
 
     # Copied from transformers.models.t5.modeling_t5.T5Stack.set_input_embeddings
