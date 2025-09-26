@@ -284,10 +284,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    @unittest.skip(reason="Decoder cannot keep gradients")
-    def test_flex_attention_with_grads():
-        pass
-
 
 @require_torch_accelerator
 class BltIntegrationTest(unittest.TestCase):
