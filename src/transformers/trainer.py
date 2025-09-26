@@ -720,7 +720,7 @@ class Trainer:
 
         # Mixed precision setup
         self.use_apex = False
-        self.use_cpu_amp = False
+        self.use_torch_amp = False
 
         # Mixed precision setup for SageMaker Model Parallel
         if is_sagemaker_mp_enabled():
@@ -744,21 +744,26 @@ class Trainer:
                         f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
                         "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
                     )
-        if (args.fp16 or args.bf16) and args.half_precision_backend == "auto":
-            if args.device == torch.device("cpu"):
-                if args.fp16:
-                    if not is_torch_greater_or_equal_than_2_3:
-                        raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+        if (args.fp16 or args.bf16) and args.half_precision_backend in ("auto", "cpu_amp"):
+            if args.half_precision_backend == "cpu_amp":
+                if args.device == torch.device("cpu"):
+                    if args.fp16:
+                        if not is_torch_greater_or_equal_than_2_3:
+                            raise ValueError("Tried to use `fp16` but it is not supported on cpu")
                 else:
-                    args.half_precision_backend = "cpu_amp"
+                    raise ValueError(f"Chosen device {args.device} is not cpu")
+
+            if args.fp16:
+                self.half_precision_type = torch.float16
+            else:
+                self.half_precision_type = torch.bfloat16
+            self.amp_device_type = args.device.type
+            self.use_torch_amp = True
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         if (args.fp16 or args.bf16) and not (self.is_deepspeed_enabled or is_sagemaker_mp_enabled()):
             # deepspeed and SageMaker Model Parallel manage their own half precision
-            if args.half_precision_backend == "cpu_amp":
-                self.use_cpu_amp = True
-                self.amp_dtype = torch.bfloat16
-            elif args.half_precision_backend == "apex":
+            if args.half_precision_backend == "apex":
                 self.use_apex = True
 
         # Label smoothing
@@ -2022,7 +2027,7 @@ class Trainer:
                     jit_model(**example_batch)
                     jit_model(**example_batch)
                 model = jit_model
-                self.use_cpu_amp = False
+                self.use_torch_amp = False
             except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
                 logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
@@ -3970,8 +3975,10 @@ class Trainer:
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
         """
-        if self.use_cpu_amp:
-            ctx_manager = torch.autocast(device_type="cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
+        if self.use_torch_amp:
+            ctx_manager = torch.autocast(
+                device_type=self.amp_device_type, cache_enabled=cache_enabled, dtype=self.half_precision_type
+            )
         else:
             ctx_manager = contextlib.nullcontext()
 
