@@ -134,6 +134,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GptOssConfig": True,
     "LwDetrConfig": True,
     "NemotronHConfig": True,
+	"RfDetrConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
