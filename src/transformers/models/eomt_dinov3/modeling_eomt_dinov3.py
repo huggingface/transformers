@@ -1127,7 +1127,7 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+        if isinstance(module, nn.Linear | nn.Conv2d | nn.ConvTranspose2d):
             module.weight.data = nn.init.trunc_normal_(module.weight.data.to(torch.float32), mean=0.0, std=std).to(
                 module.weight.dtype
             )

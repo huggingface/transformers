@@ -22,7 +22,7 @@ import os
 import re
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 from accelerate import init_empty_weights
@@ -546,6 +546,144 @@ def build_config(metadata: CheckpointMetadata, base_config: DINOv3ViTConfig) -> 
     )
 
 
+def _format_slice(tensor: torch.Tensor) -> torch.Tensor:
+    """Returns a `(3, 3)` slice of the provided tensor for logging purposes."""
+
+    if tensor.dim() == 4:
+        tensor = tensor.flatten(2).transpose(1, 2)
+
+    height = min(3, tensor.shape[1])
+    width = min(3, tensor.shape[2])
+
+    return tensor[0, :height, :width].detach().cpu()
+
+
+def _log_stage_differences(stage: str, hf_tensor: torch.Tensor, original_tensor: torch.Tensor) -> None:
+    if hf_tensor.shape != original_tensor.shape:
+        LOGGER.warning(
+            "Stage %s shape mismatch: hf=%s original=%s",
+            stage,
+            tuple(hf_tensor.shape),
+            tuple(original_tensor.shape),
+        )
+        return
+
+    aligned_original = original_tensor.to(device=hf_tensor.device, dtype=hf_tensor.dtype)
+    difference = (hf_tensor - aligned_original).abs().max().item()
+    hf_slice = _format_slice(hf_tensor)
+    original_slice = _format_slice(original_tensor)
+
+    LOGGER.info("%s HF[0,:3,:3]=%s", stage, hf_slice)
+    LOGGER.info("%s ORIG[0,:3,:3]=%s", stage, original_slice)
+    LOGGER.info("%s max |Δ| = %.6e", stage, difference)
+
+
+def debug_backbone_layers(
+    hf_model: EomtDinov3ForUniversalSegmentation,
+    original_model: Any,
+    pixel_values: torch.Tensor,
+    original_inputs: torch.Tensor,
+) -> None:
+    backbone = original_model.encoder.backbone
+    device = pixel_values.device
+
+    with torch.no_grad():
+        target_dtype = hf_model.embeddings.patch_embeddings.weight.dtype
+        hf_patch = hf_model.embeddings.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        hf_patch = hf_patch.flatten(2).transpose(1, 2)
+
+        normalized_inputs = (original_inputs - original_model.encoder.pixel_mean) / original_model.encoder.pixel_std
+        normalized_inputs = normalized_inputs.to(device=device, dtype=hf_patch.dtype)
+
+        original_patch = backbone.patch_embed(normalized_inputs)
+        _log_stage_differences("patch_embed", hf_patch, original_patch)
+
+        hf_hidden = hf_model.embeddings(pixel_values)
+
+        original_hidden = original_patch
+        if hasattr(backbone, "_pos_embed"):
+            original_hidden = backbone._pos_embed(original_hidden)
+        if hasattr(backbone, "patch_drop"):
+            original_hidden = backbone.patch_drop(original_hidden)
+        if hasattr(backbone, "norm_pre"):
+            original_hidden = backbone.norm_pre(original_hidden)
+
+        _log_stage_differences("pos_embed", hf_hidden, original_hidden)
+
+        hf_position_embeddings = hf_model.rope_embeddings(pixel_values)
+        original_rope = None
+        if hasattr(backbone, "rope_embeddings"):
+            original_rope = backbone.rope_embeddings(normalized_inputs)
+
+        query_insert_idx = hf_model.config.num_hidden_layers - hf_model.config.num_blocks
+
+        for idx, layer_module in enumerate(hf_model.layers):
+            stage = f"layer_{idx:02d}"
+
+            if idx == query_insert_idx:
+                hf_query = hf_model.query.weight[None, :, :].expand(hf_hidden.shape[0], -1, -1)
+                hf_hidden = torch.cat((hf_query, hf_hidden), dim=1)
+
+                original_query = original_model.q.weight[None, :, :].expand(original_hidden.shape[0], -1, -1)
+                original_hidden = torch.cat((original_query, original_hidden), dim=1)
+
+            attention_mask = None
+            original_attention_mask = None
+
+            if idx >= query_insert_idx:
+                hf_norm_hidden = hf_model.layernorm(hf_hidden)
+                original_norm_hidden = backbone.norm(original_hidden)
+
+                hf_masks, hf_classes = hf_model.predict(hf_norm_hidden)
+                original_masks, original_classes = original_model._predict(original_norm_hidden)
+
+                mask_diff = (hf_masks - original_masks.to(dtype=hf_masks.dtype)).abs().max().item()
+                class_diff = (hf_classes - original_classes.to(dtype=hf_classes.dtype)).abs().max().item()
+                LOGGER.info("%s mask logits max |Δ| = %.6e", stage, mask_diff)
+                LOGGER.info("%s class logits max |Δ| = %.6e", stage, class_diff)
+
+                original_attention_mask = original_model._attn_mask(original_hidden, original_masks, idx)
+                attention_mask_bool = original_attention_mask[:, None, ...].expand(
+                    -1, hf_model.config.num_attention_heads, -1, -1
+                )
+                attention_mask = attention_mask_bool.float().masked_fill(~attention_mask_bool, -1e9)
+
+            hf_hidden = layer_module(
+                hf_hidden,
+                attention_mask=attention_mask,
+                position_embeddings=hf_position_embeddings,
+            )
+
+            block = backbone.blocks[idx]
+            attn_module = getattr(block, "attn", getattr(block, "attention", None))
+            if attn_module is None:
+                raise AttributeError(f"Block {idx} is missing an attention module")
+
+            attn_output = original_model._attn(
+                attn_module,
+                block.norm1(original_hidden),
+                original_attention_mask,
+                rope=original_rope,
+            )
+
+            if hasattr(block, "ls1"):
+                original_hidden = original_hidden + block.ls1(attn_output)
+            elif hasattr(block, "layer_scale1"):
+                original_hidden = original_hidden + block.layer_scale1(attn_output)
+            else:
+                original_hidden = original_hidden + attn_output
+
+            mlp_output = block.mlp(block.norm2(original_hidden))
+            if hasattr(block, "ls2"):
+                original_hidden = original_hidden + block.ls2(mlp_output)
+            elif hasattr(block, "layer_scale2"):
+                original_hidden = original_hidden + block.layer_scale2(mlp_output)
+            else:
+                original_hidden = original_hidden + mlp_output
+
+            _log_stage_differences(stage, hf_hidden, original_hidden)
+
+
 def verify_conversion(
     config: EomtDinov3Config,
     processor: EomtDinov3ImageProcessorFast,
@@ -555,6 +693,7 @@ def verify_conversion(
     raw_backbone_state: Optional[OrderedDict],
     original_repo_path: Optional[str],
     image_url: str = "http://images.cocodataset.org/val2017/000000039769.jpg",
+    debug_layers: bool = False,
 ) -> None:
     if original_repo_path is None:
         raise ValueError("Verification requested but --original_repo_path was not provided")
@@ -624,6 +763,9 @@ def verify_conversion(
     std = torch.tensor(processor.image_std, dtype=pixel_values.dtype).view(1, -1, 1, 1)
     original_inputs = pixel_values * std + mean
 
+    if debug_layers:
+        debug_backbone_layers(hf_model, original_model, pixel_values, original_inputs)
+
     with torch.no_grad():
         hf_outputs = hf_model(pixel_values=pixel_values)
         orig_masks, orig_classes = original_model(original_inputs)
@@ -649,6 +791,7 @@ def convert_model(
     safe_serialization: bool = True,
     verify: bool = False,
     original_repo_path: Optional[str] = None,
+    debug_layers: bool = False,
 ):
     if output_dir is None and output_hub_path is None:
         raise ValueError("At least one of output_dir or output_hub_path must be specified")
@@ -701,6 +844,7 @@ def convert_model(
             raw_delta_state,
             raw_backbone_state,
             original_repo_path,
+            debug_layers=debug_layers,
         )
 
     if output_dir:
@@ -729,6 +873,11 @@ def main():
     )
     parser.add_argument("--safe_serialization", action="store_true")
     parser.add_argument("--verify", action="store_true", help="Verify conversion against the original implementation")
+    parser.add_argument(
+        "--debug-layers",
+        action="store_true",
+        help="Log intermediate activations for both implementations during verification",
+    )
     args = parser.parse_args()
 
     if args.output_dir is None and args.output_hub_path is None:
@@ -750,6 +899,7 @@ def main():
         safe_serialization=args.safe_serialization,
         verify=args.verify,
         original_repo_path=args.original_repo_path,
+        debug_layers=args.debug_layers,
     )
 
 
