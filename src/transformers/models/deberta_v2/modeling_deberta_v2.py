@@ -253,7 +253,6 @@ class DisentangledSelfAttention(nn.Module):
 
         if rel_att is not None:
             attention_scores = attention_scores + rel_att
-        attention_scores = attention_scores
         attention_scores = attention_scores.view(
             -1, self.num_attention_heads, attention_scores.size(-2), attention_scores.size(-1)
         )
@@ -912,7 +911,7 @@ class DebertaV2OnlyMLMHead(nn.Module):
 @auto_docstring
 class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
-    _keys_to_ignore_on_load_unexpected = r"mask_predictions.*"
+    _keys_to_ignore_on_load_unexpected = [r"mask_predictions.*"]
 
     def __init__(self, config):
         super().__init__(config)
