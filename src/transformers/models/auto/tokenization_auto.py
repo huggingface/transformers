@@ -767,6 +767,20 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         (
+            "zagros",
+            (
+                "Qwen2Tokenizer",
+                "Qwen2TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "zagros_next",
+            (
+                "Qwen2Tokenizer",
+                "Qwen2TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
             "zamba",
             (
                 "LlamaTokenizer" if is_sentencepiece_available() else None,

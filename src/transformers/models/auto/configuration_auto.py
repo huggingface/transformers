@@ -451,6 +451,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("zagros", "ZagrosConfig"),
+        ("zagros_next", "ZagrosNextConfig"),
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
         ("zoedepth", "ZoeDepthConfig"),
@@ -911,9 +913,11 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("zagros", "Zagros"),
+        ("zagros_next", "ZagrosNext"),
         ("zamba", "Zamba"),
         ("zamba2", "Zamba2"),
-        ("zoedepth", "ZoeDepth"),
+        ("zoedepth", "ZoeDfepth"),
     ]
 )
 
