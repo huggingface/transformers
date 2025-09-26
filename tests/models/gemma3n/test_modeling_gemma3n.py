@@ -1020,7 +1020,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations({
             # FIXME: This test is VERY flaky on ROCm
             ("cuda", None): [" and I am glad to be here. This is a nice place. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
-            ("rocm", (9, 4)): [' and I think it makes this place special. This is a nice place. This is a nice place', ', green, yellow, purple, orange, pink, brown, black, white.\n\nHere are']
+            ("rocm", (9, 4)): [' and I think it makes this place special. This is a nice place. This is a nice place', ', green, yellow, purple, orange, pink, brown, black, white.\n\nHere are'],
             ("xpu", None): [" and I think it is very nice. I think it is nice. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
