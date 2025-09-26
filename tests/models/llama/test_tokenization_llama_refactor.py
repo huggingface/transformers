@@ -1,8 +1,10 @@
 import pytest
 import unittest
+import tempfile
+import shutil
 
 from transformers import AutoTokenizer
-from transformers.models.llama.tokenization_llama import LlamaTokenizer
+from transformers.models.llama.tokenization_llama_fast import LlamaTokenizerFast
 from transformers.create_fast_tokenizer import SentencePieceExtractor
 from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
@@ -42,7 +44,7 @@ class LlamaTokenizationRefactorTest(unittest.TestCase):
         extractor = SentencePieceExtractor(vocab_file)
         vocab, merges = extractor.extract()
 
-        tok_from_vocab = LlamaTokenizer(vocab=vocab, merges=merges)
+        tok_from_vocab = LlamaTokenizerFast(vocab=vocab, merges=merges)
 
         cls.tokenizers = [tok_auto, tok_from_vocab]
 
@@ -53,3 +55,25 @@ class LlamaTokenizationRefactorTest(unittest.TestCase):
     def test_llama_tokenizers_match_expected_ids(self):
         for tok in self.tokenizers:
             self.assertEqual(tok.encode(input_string), expected_token_ids)
+
+    def test_save_and_reload_preserves_tokenization(self):
+        """Test that tokenizer produces same results after save_pretrained and reloading."""
+        for tok in self.tokenizers:
+            with self.subTest(f"{tok.__class__.__name__}"):
+                # Get original tokenization results
+                original_tokens = tok.tokenize(input_string)
+                original_ids = tok.encode(input_string)
+                
+                # Save tokenizer to temporary directory
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    tok.save_pretrained(tmp_dir)
+                    
+                    # Reload tokenizer from saved directory
+                    reloaded_tok = tok.__class__.from_pretrained(tmp_dir)
+                    
+                    # Test that reloaded tokenizer produces same results
+                    reloaded_tokens = reloaded_tok.tokenize(input_string)
+                    reloaded_ids = reloaded_tok.encode(input_string)
+                    
+                    self.assertEqual(original_tokens, reloaded_tokens)
+                    self.assertEqual(original_ids, reloaded_ids)

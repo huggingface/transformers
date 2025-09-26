@@ -79,7 +79,6 @@ class SentencePieceExtractor:
         return vocab, merges
 
 
-
 class SpmTokenizer:
     """
     Base SentencePiece tokenizer that can be instantiated with model-specific arguments.

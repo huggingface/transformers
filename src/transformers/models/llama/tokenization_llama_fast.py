@@ -41,16 +41,16 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
-class LlamaTokenizer(PreTrainedTokenizerFast):
+class LlamaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
 
     This uses notably ByteFallback and no normalization.
 
     ```python
-    >>> from transformers import LlamaTokenizer
+    >>> from transformers import LlamaTokenizerFast
 
-    >>> tokenizer = LlamaTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
+    >>> tokenizer = LlamaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
     >>> tokenizer.encode("Hello this is a test")
     [1, 15043, 445, 338, 263, 1243]
     ```
@@ -95,17 +95,17 @@ class LlamaTokenizer(PreTrainedTokenizerFast):
 
             - `legacy=True`:
             ```python
-            >>> from transformers import LlamaTokenizer
+            >>> from transformers import LlamaTokenizerFast
 
-            >>> tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=True, from_scratch=True)
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=True, from_scratch=True)
             >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
             [1, 15043, 29871, 1, 869]
             ```
             - `legacy=False`:
             ```python
-            >>> from transformers import LlamaTokenizer
+            >>> from transformers import LlamaTokenizerFast
 
-            >>> tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False, from_scratch=True)
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False, from_scratch=True)
             >>> tokenizer.encode("Hello <s>.")  # 29889 is '.'
             [1, 15043, 29871, 1, 29889]
             ```
@@ -118,7 +118,6 @@ class LlamaTokenizer(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = None  # No slow tokenizer class needed
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -148,7 +147,6 @@ class LlamaTokenizer(PreTrainedTokenizerFast):
         self._merges = merges if merges is not None else generate_merges(self._vocab)
 
         # Prepare base-class construction helpers
-        metaspace_override = None
         tokenizer_backend_config = None
         if tokenizer_file is None:
             tokenizer_backend_config = {
@@ -167,7 +165,6 @@ class LlamaTokenizer(PreTrainedTokenizerFast):
         super().__init__(
             tokenizer_file=tokenizer_file,
             tokenizer_backend_config=tokenizer_backend_config,
-            metaspace_override=metaspace_override,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -235,4 +232,4 @@ class LlamaTokenizer(PreTrainedTokenizerFast):
         return None
 
 
-__all__ = ["LlamaTokenizer"]
+__all__ = ["LlamaTokenizerFast"]
