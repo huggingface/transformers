@@ -643,36 +643,33 @@ class TopHLogitsWarper(LogitsProcessor):
         keep_mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
         top_n = min(self.top_n, vocab_size)
 
-        for b in range(batch_size):
-            # top-k for this example
-            top_probs, top_idx = torch.topk(scores[b], top_n, largest=True, sorted=True)
-            distribution = torch.distributions.Categorical(logits=top_probs)
+        # 1. Get top-k logits and indices for the whole batch
+        top_logits, top_idx = torch.topk(scores, top_n, dim=-1, largest=True, sorted=True)
 
-            # entropy-based threshold tau (computed on the top-k distribution)
-            tau = distribution.entropy() * self.top_h
+        # 2. Create a batch of categorical distributions
+        dist = torch.distributions.Categorical(logits=top_logits)
+        probs = dist.probs
+        log_probs = torch.log(probs) #dist.log_prob(idx)
 
-            # grow the kept set until the stopping rule triggers
-            cumulative_entropy = -distribution.probs[
-                torch.tensor([0], device=top_probs.device)
-            ] * distribution.log_prob(
-                torch.tensor([0], device=top_probs.device)
-            )  # -top_probs[0] * torch.log2(top_probs[0])
-            chosen = []
-            index = 0
-            for token_id in top_idx:
-                chosen.append(token_id)
-                index += 1
-                if index == len(top_probs):
-                    break
-                # update running sums for current prefix
-                cumulative_entropy = cumulative_entropy - distribution.probs[
-                    torch.tensor([index], device=top_probs.device)
-                ] * distribution.log_prob(torch.tensor([index], device=top_probs.device))
+        # 3. Calculate the entropy-based threshold tau for the whole batch
+        # We unsqueeze tau to enable broadcasting against the cumulative entropy tensor.
+        tau = (dist.entropy() * self.top_h).unsqueeze(-1)
 
-                # entropy difference term
-                if cumulative_entropy > tau:
-                    break
-            keep_mask[b, torch.stack(chosen)] = True
+        # 4. Calculate cumulative entropy using torch.cumsum
+        # The individual entropy terms (-p * log(p)) are calculated for all top_n tokens at once.
+        entropy_terms = -probs * log_probs
+        cumulative_entropy = torch.cumsum(entropy_terms, dim=-1)
+
+        # # 5. Determine which tokens to keep based on the stopping condition
+        # Create a boolean mask for the top_n tokens.
+        selection_mask = cumulative_entropy <= tau
+        # Ensure the most probable token (at index 0) is always kept.
+        selection_mask[:, 0] = True
+
+        # 6. Update the final keep_mask for the entire batch in one operation
+        # The scatter_ operation efficiently updates the keep_mask at the indices
+        # specified by top_idx with the boolean values from selection_mask.
+        keep_mask.scatter_(dim=1, index=top_idx, src=selection_mask)
 
         # apply filtering
         scores_processed = scores.clone()
