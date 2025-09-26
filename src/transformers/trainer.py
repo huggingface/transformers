@@ -49,7 +49,7 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import ModelCard, create_repo, upload_folder
+from huggingface_hub import CommitInfo, ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
@@ -3976,10 +3976,7 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cpu_amp:
-            # TODO Matt: This syntax is deprecated and the preferred version is
-            #      torch.amp.autocast("cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
-            #      but this is unavailable on Torch 2.1 or earlier. We can change this when we stop supporting 2.1.
-            ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            ctx_manager = torch.autocast(device_type="cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
         else:
             ctx_manager = contextlib.nullcontext()
 
@@ -4120,16 +4117,27 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
 
-        if labels is not None:
+        # User-defined compute_loss function
+        if self.compute_loss_func is not None:
+            if labels is None:
+                logger.warning(
+                    "Trainer: `compute_loss_func` is defined but `labels=None`. "
+                    "Your custom loss function will still be called with labels=None. "
+                )
+            loss = self.compute_loss_func(
+                outputs,
+                labels,
+                num_items_in_batch=num_items_in_batch,
+            )
+        # Default HF loss handling (label smoothing) if no custom loss function
+        elif labels is not None:
             unwrapped_model = self.accelerator.unwrap_model(model)
-            if _is_peft_model(unwrapped_model):
-                model_name = unwrapped_model.base_model.model._get_name()
-            else:
-                model_name = unwrapped_model._get_name()
-            # User-defined compute_loss function
-            if self.compute_loss_func is not None:
-                loss = self.compute_loss_func(outputs, labels, num_items_in_batch=num_items_in_batch)
-            elif model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+            model_name = (
+                unwrapped_model.base_model.model._get_name()
+                if _is_peft_model(unwrapped_model)
+                else unwrapped_model._get_name()
+            )
+            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
                 loss = self.label_smoother(outputs, labels)
@@ -5114,7 +5122,7 @@ class Trainer:
         token: Optional[str] = None,
         revision: Optional[str] = None,
         **kwargs,
-    ) -> str:
+    ) -> CommitInfo:
         """
         Upload `self.model` and `self.processing_class` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 

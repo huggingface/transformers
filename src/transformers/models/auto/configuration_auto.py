@@ -296,6 +296,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
         ("paligemma", "PaliGemmaConfig"),
+        ("parakeet_ctc", "ParakeetCTCConfig"),
+        ("parakeet_encoder", "ParakeetEncoderConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -330,6 +332,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("qwen3", "Qwen3Config"),
         ("qwen3_moe", "Qwen3MoeConfig"),
         ("qwen3_next", "Qwen3NextConfig"),
+        ("qwen3_omni_moe", "Qwen3OmniMoeConfig"),
         ("qwen3_vl", "Qwen3VLConfig"),
         ("qwen3_vl_moe", "Qwen3VLMoeConfig"),
         ("qwen3_vl_moe_text", "Qwen3VLMoeTextConfig"),
@@ -744,6 +747,9 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
         ("paligemma", "PaliGemma"),
+        ("parakeet", "Parakeet"),
+        ("parakeet_ctc", "Parakeet"),
+        ("parakeet_encoder", "ParakeetEncoder"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),
@@ -779,6 +785,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("qwen3", "Qwen3"),
         ("qwen3_moe", "Qwen3MoE"),
         ("qwen3_next", "Qwen3Next"),
+        ("qwen3_omni_moe", "Qwen3OmniMoE"),
         ("qwen3_vl", "Qwen3VL"),
         ("qwen3_vl_moe", "Qwen3VLMoe"),
         ("qwen3_vl_moe_text", "Qwen3VLMoe"),
@@ -982,6 +989,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("perception_encoder", "perception_lm"),
+        ("parakeet_encoder", "parakeet"),
+        ("parakeet_ctc", "parakeet"),
     ]
 )
 

@@ -12,7 +12,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
@@ -43,6 +42,7 @@ The original code can be found [here](https://huggingface.co/meituan-longcat/Lon
 ## Usage examples
 
 The model is large: you will need 2x8 H100 to run inference.
+
 ```python
 # launch_longcat.py
 from transformers import LongcatFlashForCausalLM, AutoTokenizer
@@ -76,6 +76,7 @@ torchrun  --nproc_per_node=8 --nnodes=2 --node_rank=0 | 1  --rdzv-id <an_id> --r
 ```
 
 And you'll get a nice generation:
+
 ```json
 [Round 0] USER:Hello! What is the capital of France? What can you tell me about it? ASSISTANT:Hello! 😊 The capital of France is Paris, one of the most famous and beloved cities in the world. Here’s a quick overview of what makes Paris special:
 1. Iconic Landmarks
