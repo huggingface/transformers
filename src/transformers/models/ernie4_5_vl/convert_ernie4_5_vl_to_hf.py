@@ -1,9 +1,27 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Converts an Ernie 4.5 VL models to Hugging Face format."""
+
+import argparse
 import json
 import os
 import re
 
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file, save_file
+from tqdm import tqdm
 
 from transformers import (
     AutoTokenizer,
@@ -231,6 +249,8 @@ def convert_state_dict_to_hf(state_dict, is_tied=True):
 
 
 def convert_weights(model_path, save_dir):
+    print('Starting to convert model weights')
+
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir, exist_ok=True)
 
@@ -239,7 +259,7 @@ def convert_weights(model_path, save_dir):
 
     is_tied = TIED_MAPPING[model_path]
     checkpoint_path = snapshot_download(repo_id=model_path, allow_patterns=["*.safetensors*"])
-    for filename in sorted(os.listdir(checkpoint_path)):
+    for filename in tqdm(sorted(os.listdir(checkpoint_path))):
         # metadata doesn't change
         if filename == SAFETENSOR_INDEX_NAME:
             original_index = load_json(checkpoint_path, filename)
@@ -259,6 +279,8 @@ def convert_weights(model_path, save_dir):
 
     # save index
     write_json(index_dict, save_dir, SAFETENSOR_INDEX_NAME)
+
+    print('Converted all model weights\n')
 
 
 def convert_vision_config_to_hf(vision_config, original_config, original_vision_config):
@@ -329,6 +351,7 @@ def convert_config(model_path, save_dir):
 
             final_config.save_pretrained(save_dir)
             break
+    print('Converted model config\n')
 
 
 def convert_tokenizer(original_tokenizer_path, save_dir):
@@ -391,10 +414,13 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
 
 
 def convert_processor(model_path, save_dir):
+    print('Starting to convert processor')
+
     convert_tokenizer(model_path, save_dir)
     tokenizer = AutoTokenizer.from_pretrained(save_dir)
 
     processor = Ernie4_5_VLProcessor(
+        # TODO: check if I didnt mess up something here
         # Using the slow processor for now as it changes the default output otherwise
         image_processor=Ernie4_5_VLImageProcessor(),
         tokenizer=tokenizer,
@@ -403,31 +429,30 @@ def convert_processor(model_path, save_dir):
     )
     processor.save_pretrained(save_dir)
 
+    print('Finished converting the processor\n')
 
-"""
-convert_weights(
-    model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
-    save_dir='AntonV/ErnieVL',
-)
-#"""
 
-"""
-convert_config(
-    model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
-    save_dir='AntonV/ErnieVL',
-)
-#"""
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    # # Required parameters
+    parser.add_argument(
+        "--checkpoint_path", type=str, default="baidu/ERNIE-4.5-VL-28B-A3B-PT", help="Path to the downloaded checkpoints"
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default="AntonV/ErnieVL", type=str, help="Path to the output PyTorch model."
+    )
+    parser.add_argument(
+        "--convert_preprocessor",
+        type=bool,
+        default=True,
+        help="Whether or not the preprocessor (tokenizer + image/video processors) should be converted along with the model.",
+    )
+    args = parser.parse_args()
 
-"""
-convert_tokenizer(
-    original_tokenizer_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
-    save_dir='AntonV/ErnieVL',
-)
-#"""
+    convert_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
+    convert_config(args.checkpoint_path, args.pytorch_dump_folder_path)
 
-#"""
-convert_processor(
-    model_path="baidu/ERNIE-4.5-VL-28B-A3B-PT",
-    save_dir="AntonV/ErnieVL",
-)
-#"""
+    if args.convert_preprocessor:
+        convert_processor(args.checkpoint_path, args.pytorch_dump_folder_path)
+
+    print(f"Saved converted checkpoint to {args.pytorch_dump_folder_path}")
