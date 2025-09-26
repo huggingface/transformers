@@ -16,7 +16,86 @@ from ..dinov2_with_registers.modeling_dinov2_with_registers import (
 
 
 class RfDetrDinov2WithRegistersConfig(Dinov2WithRegistersConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`RfDetrDinov2WithRegistersModel`]. It is used to instantiate an
+    RfDetrDinov2WithRegisters model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the DINOv2 with Registers
+    [facebook/dinov2-with-registers-base](https://huggingface.co/facebook/dinov2-with-registers-base) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        mlp_ratio (`int`, *optional*, defaults to 4):
+            Ratio of the hidden size of the MLPs relative to the `hidden_size`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
+        layerscale_value (`float`, *optional*, defaults to 1.0):
+           Initial value to use for layer scale.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            Stochastic depth rate per sample (when applied in the main path of residual layers).
+        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
+            Whether to use the SwiGLU feedforward neural network.
+        num_register_tokens (`int`, *optional*, defaults to 4):
+            Number of register tokens to use.
+        out_features (`list[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`list[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        apply_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
+        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
+            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
+            seq_len, hidden_size)`.
+        num_windows (`int`, *optional*, defaults to 4):
+            Number of windows to use for windowed attention. If 1, no windowed attention is used.
+    Example:
+
+    ```python
+    >>> from transformers import RfDetrDinov2WithRegistersConfig, RfDetrDinov2WithRegistersModel
+
+    >>> # Initializing a RfDetrDinov2WithRegisters base style configuration
+    >>> configuration = RfDetrDinov2WithRegistersConfig()
+
+    >>> # Initializing a model (with random weights) from the base style configuration
+    >>> model = RfDetrDinov2WithRegistersModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "rf_detr_dinov2_with_registers"
+
     def __init__(self, num_windows: int = 4, **super_kwargs):
         super().__init__(**super_kwargs)
 
@@ -159,6 +238,7 @@ class RfDetrDinov2WithRegistersEncoder(Dinov2WithRegistersEncoder):
             hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
         )
 
+
 class RfDetrDinov2WithRegistersPreTrainedModel(Dinov2WithRegistersPreTrainedModel):
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -283,4 +363,5 @@ class RfDetrDinov2WithRegistersBackbone(Dinov2WithRegistersBackbone):
 __all__ = [
     "RfDetrDinov2WithRegistersConfig",
     "RfDetrDinov2WithRegistersBackbone",
+    "RfDetrDinov2WithRegistersPreTrainedModel",
 ]
