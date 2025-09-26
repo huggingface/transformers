@@ -106,11 +106,6 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 [[autodoc]] MobileNetV1Config
 
-## MobileNetV1FeatureExtractor
-
-[[autodoc]] MobileNetV1FeatureExtractor
-    - preprocess
-
 ## MobileNetV1ImageProcessor
 
 [[autodoc]] MobileNetV1ImageProcessor

@@ -119,13 +119,6 @@ for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
     - pad
     - post_process_object_detection
 
-## YolosFeatureExtractor
-
-[[autodoc]] YolosFeatureExtractor
-    - __call__
-    - pad
-    - post_process_object_detection
-
 ## YolosModel
 
 [[autodoc]] YolosModel

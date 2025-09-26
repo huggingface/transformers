@@ -69,11 +69,6 @@ The original code can be found [here](https://github.com/zinengtang/TVLT). This 
 [[autodoc]] TvltImageProcessor
     - preprocess
 
-## TvltFeatureExtractor
-
-[[autodoc]] TvltFeatureExtractor
-    - __call__
-
 ## TvltModel
 
 [[autodoc]] TvltModel

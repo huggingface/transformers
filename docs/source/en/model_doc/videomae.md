@@ -84,11 +84,6 @@ to fine-tune a VideoMAE model on a custom dataset.
 
 [[autodoc]] VideoMAEConfig
 
-## VideoMAEFeatureExtractor
-
-[[autodoc]] VideoMAEFeatureExtractor
-    - __call__
-
 ## VideoMAEImageProcessor
 
 [[autodoc]] VideoMAEImageProcessor
