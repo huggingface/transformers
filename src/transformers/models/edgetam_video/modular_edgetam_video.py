@@ -1156,7 +1156,7 @@ class EdgeTamVideoModel(Sam2VideoModel):
 
         # Step 3: Get and process object pointers
         temporal_offsets, pointer_tokens, max_object_pointers_to_use = self._get_object_pointers(
-            inference_session, obj_idx, frame_idx, num_total_frames, track_in_reverse_time, streaming
+            inference_session, obj_idx, frame_idx, num_total_frames, device, track_in_reverse_time, streaming
         )
 
         num_object_pointer_tokens = 0

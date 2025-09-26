@@ -1884,6 +1884,7 @@ class Sam2VideoModel(Sam2Model):
         obj_idx: int,
         frame_idx: int,
         num_total_frames: int,
+        device: torch.device,
         track_in_reverse_time: bool = False,
         streaming: bool = False,
     ) -> tuple[list[int], list[torch.Tensor], int]:
@@ -1918,7 +1919,7 @@ class Sam2VideoModel(Sam2Model):
         for temporal_idx, out_data in eligible_conditioning_outputs.items():
             temporal_difference = (frame_idx - temporal_idx) * temporal_position_sign_multiplier
             temporal_offsets.append(temporal_difference)
-            pointer_tokens.append(out_data["object_pointer"])
+            pointer_tokens.append(out_data["object_pointer"].to(device))
 
         # Add object pointers from non-conditioning frames (up to max_object_pointers_to_use - 1)
         for t_diff_offset in range(1, max_object_pointers_to_use):
@@ -1934,7 +1935,7 @@ class Sam2VideoModel(Sam2Model):
             )
             if out_data is not None:
                 temporal_offsets.append(t_diff_offset)
-                pointer_tokens.append(out_data["object_pointer"])
+                pointer_tokens.append(out_data["object_pointer"].to(device))
 
         return temporal_offsets, pointer_tokens, max_object_pointers_to_use
 
@@ -2070,7 +2071,7 @@ class Sam2VideoModel(Sam2Model):
 
         # Step 3: Get and process object pointers
         temporal_offsets, pointer_tokens, max_object_pointers_to_use = self._get_object_pointers(
-            inference_session, obj_idx, frame_idx, num_total_frames, track_in_reverse_time, streaming
+            inference_session, obj_idx, frame_idx, num_total_frames, device, track_in_reverse_time, streaming
         )
 
         num_object_pointer_tokens = 0
