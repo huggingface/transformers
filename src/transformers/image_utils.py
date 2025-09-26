@@ -44,34 +44,58 @@ from .utils.constants import (  # noqa: F401
 )
 
 
+logger = logging.get_logger(__name__)
+
+
+# Safe import of vision-related modules
 if is_vision_available():
-    import PIL.Image
-    import PIL.ImageOps
+    import PIL
 
-    PILImageResampling = PIL.Image.Resampling
 
-    if is_torchvision_available():
-        from torchvision.transforms import InterpolationMode
+class PILImageResampling(ExplicitEnum):
+    """
+    Enum containing valid values for the `resample` parameter of `PIL.Image.resize()`.
+    """
 
+    NEAREST = 0
+    LANCZOS = 1
+    BILINEAR = 2
+    BICUBIC = 3
+    BOX = 4
+    HAMMING = 5
+
+
+# Safe import of torchvision transforms (avoid crashing text-only users if torchvision is broken)
+InterpolationMode = None
+pil_torch_interpolation_mapping = {}
+
+if is_torchvision_available():
+    try:
+        from torchvision.transforms import InterpolationMode as _TVInterpolationMode
+
+        InterpolationMode = _TVInterpolationMode
         pil_torch_interpolation_mapping = {
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT
-            if is_torchvision_v2_available()
-            else InterpolationMode.NEAREST,
+            PILImageResampling.NEAREST: (
+                InterpolationMode.NEAREST_EXACT if is_torchvision_v2_available() else InterpolationMode.NEAREST
+            ),
             PILImageResampling.BOX: InterpolationMode.BOX,
             PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
             PILImageResampling.HAMMING: InterpolationMode.HAMMING,
             PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
         }
-    else:
+    except Exception as e:
+        logger.warning(
+            "Torchvision is installed but failed to import (%s). "
+            "Continuing without torchvision; image pipelines that require it "
+            "will raise at runtime.",
+            e,
+        )
+        InterpolationMode = None
         pil_torch_interpolation_mapping = {}
-
 
 if is_torch_available():
     import torch
-
-
-logger = logging.get_logger(__name__)
 
 
 ImageInput = Union[
@@ -126,11 +150,15 @@ def is_valid_list_of_images(images: list):
 
 
 def concatenate_list(input_list):
-    if isinstance(input_list[0], list):
+    first_item = input_list[0]
+
+    if isinstance(first_item, list):
         return [item for sublist in input_list for item in sublist]
-    elif isinstance(input_list[0], np.ndarray):
+    if isinstance(first_item, np.ndarray):
         return np.concatenate(input_list, axis=0)
-    elif isinstance(input_list[0], torch.Tensor):
+    if is_torch_tensor(first_item):
+        import torch
+
         return torch.cat(input_list, dim=0)
 
 
@@ -916,7 +944,9 @@ def validate_annotations(
     annotations: list[dict],
 ) -> None:
     if annotation_format not in supported_annotation_formats:
-        raise ValueError(f"Unsupported annotation format: {format} must be one of {supported_annotation_formats}")
+        raise ValueError(
+            f"Unsupported annotation format: {annotation_format} must be one of {supported_annotation_formats}"
+        )
 
     if annotation_format is AnnotationFormat.COCO_DETECTION:
         if not valid_coco_detection_annotations(annotations):
