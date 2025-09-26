@@ -28,7 +28,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...integrations.hub_kernels import rotary_kernel
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -45,10 +44,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_qwen3 import Qwen3Config
-
-
-# Global variable to track kernel usage, set by model instances
-use_kernels = False
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -122,34 +117,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def apply_rotary_kernel(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """
-    Rotary kernel implementation wrapper
-    Adapts rotary kernels implementation to match HuggingFace apply_rotary_pos_emb signature
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    q_rotated = q.clone()
-    k_rotated = k.clone()
-
-    # Get half dimension for rotation
-    half_dim = q.shape[-1] // 2
-    q1 = q_rotated[..., :half_dim]
-    q2 = q_rotated[..., half_dim:]
-    k1 = k_rotated[..., :half_dim]
-    k2 = k_rotated[..., half_dim:]
-    if cos.shape[-1] != half_dim:
-        # Trim cos/sin to match half_dim
-        cos = cos[..., :half_dim]
-        sin = sin[..., :half_dim]
-
-    # Apply rotary embedding using our kernel
-    rotary_kernel.apply_rotary(q1, q2, cos, sin, q1, q2, False)
-    rotary_kernel.apply_rotary(k1, k2, cos, sin, k1, k2, False)
-    return q_rotated, k_rotated
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -186,6 +153,36 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
+
+
+def apply_rotary_kernel(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """
+    Rotary kernel implementation wrapper
+    Adapts rotary kernels implementation to match HuggingFace apply_rotary_pos_emb signature
+    """
+    from ...integrations.hub_kernels import rotary_kernel
+
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    q_rotated = q.clone()
+    k_rotated = k.clone()
+
+    # Get half dimension for rotation
+    half_dim = q.shape[-1] // 2
+    q1 = q_rotated[..., :half_dim]
+    q2 = q_rotated[..., half_dim:]
+    k1 = k_rotated[..., :half_dim]
+    k2 = k_rotated[..., half_dim:]
+    if cos.shape[-1] != half_dim:
+        # Trim cos/sin to match half_dim
+        cos = cos[..., :half_dim]
+        sin = sin[..., :half_dim]
+
+    # Apply rotary embedding using our kernel
+    rotary_kernel.apply_rotary(q1, q2, cos, sin, q1, q2, False)
+    rotary_kernel.apply_rotary(k1, k2, cos, sin, k1, k2, False)
+    return q_rotated, k_rotated
 
 
 class Qwen3Attention(nn.Module):
@@ -235,8 +232,14 @@ class Qwen3Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        if rotary_kernel:
-            query_states, key_states = apply_rotary_kernel(query_states, key_states, cos, sin, cache_position)
+        # Check if use_kernels is passed in kwargs
+        use_kernels = kwargs.get("use_kernels", False)
+        if use_kernels:
+            try:
+                query_states, key_states = apply_rotary_kernel(query_states, key_states, cos, sin, cache_position)
+            except (ImportError, AttributeError, RuntimeError):
+                # Fallback to regular rotary position embedding if kernel is not available
+                query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
         else:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -513,10 +516,7 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        # Set global use_kernels flag based on model's kernel usage
-        global use_kernels
         use_kernels = getattr(self, "use_kernels", False)
-
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -525,6 +525,7 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
+            use_kernels=use_kernels,
             **kwargs,
         )
 
