@@ -211,13 +211,12 @@ class LwDetrCSPRepLayer(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
         all_hidden_states = list(hidden_states.split(self.hidden_channels, 1))
-        last_hidden_state = all_hidden_states[-1]
+        hidden_states = all_hidden_states[-1]
 
-        bottlenecked_hidden_states = []
         for bottleneck in self.bottlenecks:
-            bottlenecked_hidden_states.append(bottleneck(last_hidden_state))
+            hidden_states = bottleneck(hidden_states)
+            all_hidden_states.append(hidden_states)
 
-        all_hidden_states.extend(bottlenecked_hidden_states)
         hidden_states = torch.cat(all_hidden_states, 1)
         hidden_states = self.conv2(hidden_states)
         return hidden_states

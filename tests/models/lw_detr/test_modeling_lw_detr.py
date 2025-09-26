@@ -580,7 +580,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [-7.98357, -3.25769, -4.27604, -4.36642, -4.26377],
+                (None, None): [-7.76931, -4.12702, -2.90175, -4.06055, -2.95753],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -591,7 +591,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.69171, 0.41640, 0.42500, 0.71044, 0.68572],
+                (None, None): [0.16942, 0.19788, 0.21209, 0.09115, 0.25367],
             }
         )
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
