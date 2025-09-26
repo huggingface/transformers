@@ -14,17 +14,15 @@
 # limitations under the License.
 """PyTorch JetMoe model."""
 
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import functional as F
 
-from transformers.utils.generic import OutputRecorder
-
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
@@ -32,7 +30,8 @@ from ...modeling_layers import (
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..llama.modeling_llama import LlamaDecoderLayer
 from ..mixtral.modeling_mixtral import (

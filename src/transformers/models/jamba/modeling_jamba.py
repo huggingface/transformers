@@ -225,7 +225,7 @@ class JambaAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-    def forward(
+    def forward(  # FIME: this is also the classic attention NOPE
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
@@ -752,7 +752,7 @@ class JambaModel(JambaPreTrainedModel):
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JambaDecoderLayer`]
 
     Args:
-        config: JambaConfig
+        config (`JambaConfig`): <fill_docstring>
     """
 
     def __init__(self, config: JambaConfig):
@@ -806,7 +806,6 @@ class JambaModel(JambaPreTrainedModel):
             cache_position: torch.Tensor = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
-            cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -1053,30 +1052,48 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
             router_logits=outputs.router_logits,
         )
 
-    # def prepare_inputs_for_generation(
-    #     self,
-    #     input_ids,
-    #     past_key_values=None,
-    #     attention_mask=None,
-    #     inputs_embeds=None,
-    #     cache_position=None,
-    #     **kwargs,
-    # ):
-    #     # create cache if necessary
-    #     if past_key_values is None:
-    #         past_key_values = HybridMambaAttentionDynamicCache(
-    #             self.config, input_ids.shape[0], self.dtype, device=self.device
-    #         )
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        **kwargs,
+    ):
+        # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
+        past_length = 0
+        if past_key_values is not None:
+            past_length = past_key_values.get_seq_length()
 
-    #     model_inputs = super().prepare_inputs_for_generation(
-    #         input_ids,
-    #         past_key_values=past_key_values,
-    #         attention_mask=attention_mask,
-    #         inputs_embeds=inputs_embeds,
-    #         cache_position=cache_position,
-    #         **kwargs,
-    #     )
-    #     return model_inputs
+        # create cache if necessary
+        if past_key_values is None:
+            past_key_values = HybridMambaAttentionDynamicCache(
+                self.config, input_ids.shape[0], self.dtype, device=self.device
+            )
+
+        if cache_position is None:
+            cache_position = torch.arange(past_length, past_length + input_ids.shape[1], device=input_ids.device)
+        else:
+            # past_length in this case is close to the actual seq_len - 1
+            # and we want to add the new token to the cache
+            cache_position = torch.tensor([past_length], device=input_ids.device)
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values.get_seq_length() == 0:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+            }
+        )
+        return model_inputs
 
 
 class JambaForSequenceClassification(GenericForSequenceClassification, JambaPreTrainedModel):

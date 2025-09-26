@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -22,8 +22,9 @@ from transformers.masking_utils import create_causal_mask
 
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
@@ -35,6 +36,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
     GraniteMoeSharedPreTrainedModel,
+    eager_attention_forward,
 )
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
