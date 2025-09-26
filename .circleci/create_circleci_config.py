@@ -185,7 +185,7 @@ class CircleCIJob:
             # During the CircleCI docker images build time, we might already (or not) download the data.
             # If it's done already, the files are inside the directory `/test_data/`.
             {"run": {"name": "fetch hub objects before pytest", "command": "cp -r /test_data/* . 2>/dev/null || true; python3 utils/fetch_hub_objects_for_ci.py"}},
-            {"run": {"name": "download and unzip hub cache", "command": "curl https://huggingface.co/datasets/hf-transformers-bot/ci_artifacts_temp/resolve/main/huggingface-cache.tar.gz && tar -xzf huggingface-cache.tar.gz && mv hub/* /root/.cache/huggingface/hub/ && ls -la /root/.cache/huggingface/hub/"}},
+            {"run": {"name": "download and unzip hub cache", "command": "curl -L https://huggingface.co/datasets/hf-transformers-bot/ci_artifacts_temp/resolve/main/huggingface-cache.tar.gz && tar -xzf huggingface-cache.tar.gz && mv hub/* /root/.cache/huggingface/hub/ && ls -la /root/.cache/huggingface/hub/"}},
 
             {"run": {
                 "name": "Run tests",
