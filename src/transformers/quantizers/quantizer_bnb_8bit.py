@@ -173,7 +173,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             if self.pre_quantized:
                 if param_name.replace("weight", "SCB") not in state_dict:
                     raise ValueError("Missing quantization component `SCB`")
-                if param_value.dtype != torch.int8:
+                if (hasattr(param_value, "dtype") and param_value.dtype != torch.int8) or (
+                    hasattr(param_value, "get_dtype") and param_value.get_dtype() != "I8"
+                ):
                     raise ValueError(
                         f"Incompatible dtype `{param_value.dtype}` when loading 8-bit prequantized weight. Expected `torch.int8`."
                     )
