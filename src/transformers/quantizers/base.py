@@ -140,6 +140,9 @@ class HfQuantizer(ABC):
         """
         return expected_keys
 
+    def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
+        return unexpected_keys
+
     def get_special_dtypes_update(self, model, dtype: "torch.dtype") -> dict[str, "torch.dtype"]:
         """
         returns dtypes for modules that are not quantized - used for the computation of the device_map in case
@@ -175,10 +178,12 @@ class HfQuantizer(ABC):
         """
         return False
 
-    def create_quantized_param(self, *args, **kwargs) -> "torch.nn.Parameter":
+    def create_quantized_param(self, *args, **kwargs):
         """
-        takes needed components from state_dict and creates quantized param; only applicable if
-        requires_parameters_quantization == True
+        Take needed components from state_dict (those from which `param_needs_quantization` is True) and create
+        quantized param.
+        It usually also load the new param directly in the `model`.
+        Note: only applicable if requires_parameters_quantization == True.
         """
         if not self.requires_parameters_quantization:
             raise AttributeError(
