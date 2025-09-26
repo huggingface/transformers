@@ -624,7 +624,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                     delta = torch.zeros((batch_size, seq_length), device=inputs_embeds.device)
                 delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=1)
                 position_ids = position_ids + delta.to(position_ids.device)
-        
+
         if rope_deltas is not None:
             self.rope_deltas = rope_deltas
 
