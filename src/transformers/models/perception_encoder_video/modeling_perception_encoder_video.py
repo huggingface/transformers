@@ -21,7 +21,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForImageClassification
 from .configuration_perception_encoder_video import (
@@ -462,7 +462,6 @@ class PerceptionEncoderVideoModel(PerceptionEncoderVideoPretrainedModel):
 
 
 @dataclass
-@auto_docstring
 class PerceptionEncoderVideoTextOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     text_embeds: Optional[torch.FloatTensor] = None
@@ -474,7 +473,6 @@ class PerceptionEncoderVideoTextOutput(ModelOutput):
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
 
 
-@auto_docstring
 class PerceptionEncoderVideoWithTextModel(PerceptionEncoderVideoPretrainedModel):
     def __init__(self, config: PerceptionEncoderVideoConfig):
         super().__init__(config)

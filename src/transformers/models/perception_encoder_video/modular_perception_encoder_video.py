@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForImageClassification
 from ..perception_encoder_audio.configuration_perception_encoder_audio import PerceptionEncoderAudioTransformerConfig
 from ..perception_encoder_audio.modeling_perception_encoder_audio import (
@@ -88,7 +88,6 @@ class PerceptionEncoderVideoModel(PerceptionEncoderVideoPretrainedModel):
 
 
 @dataclass
-@auto_docstring
 class PerceptionEncoderVideoTextOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     text_embeds: Optional[torch.FloatTensor] = None
@@ -100,7 +99,6 @@ class PerceptionEncoderVideoTextOutput(ModelOutput):
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
 
 
-@auto_docstring
 class PerceptionEncoderVideoWithTextModel(PerceptionEncoderVideoPretrainedModel):
     def __init__(self, config: PerceptionEncoderVideoConfig):
         super().__init__(config)

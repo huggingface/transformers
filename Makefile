@@ -7,6 +7,12 @@ check_dirs := examples tests src utils scripts benchmark benchmark_v2
 
 exclude_folders :=  ""
 
+audio_modular:	src/transformers/models/perception_encoder_audio/modular_perception_encoder_audio.py
+	python utils/modular_model_converter.py perception_encoder_audio
+
+modular: audio_modular	src/transformers/models/perception_encoder_video/modular_perception_encoder_video.py	src/transformers/models/perception_encoder_audio_video/modular_perception_encoder_audio_video.py
+	python utils/modular_model_converter.py perception_encoder_video perception_encoder_audio_video
+
 modified_only_fixup:
 	@current_branch=$$(git branch --show-current); \
 	if [ "$$current_branch" = "main" ]; then \

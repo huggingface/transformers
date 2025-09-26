@@ -21,7 +21,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_perception_encoder_audio import (
@@ -649,7 +649,6 @@ class PerceptionEncoderAudioModel(PerceptionEncoderAudioPretrainedModel):
 
 
 @dataclass
-@auto_docstring
 class PerceptionEncoderAudioTextOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     text_embeds: Optional[torch.FloatTensor] = None
@@ -661,7 +660,6 @@ class PerceptionEncoderAudioTextOutput(ModelOutput):
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
 
 
-@auto_docstring
 class PerceptionEncoderAudioWithTextModel(PerceptionEncoderAudioPretrainedModel):
     def __init__(self, config: PerceptionEncoderAudioConfig):
         super().__init__(config)

@@ -10,7 +10,7 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..dac.configuration_dac import DacConfig
 from ..dac.modeling_dac import DacEncoder
@@ -433,7 +433,6 @@ class PerceptionEncoderAudioModel(PerceptionEncoderAudioPretrainedModel):
 
 
 @dataclass
-@auto_docstring
 class PerceptionEncoderAudioTextOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     text_embeds: Optional[torch.FloatTensor] = None
@@ -445,7 +444,6 @@ class PerceptionEncoderAudioTextOutput(ModelOutput):
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
 
 
-@auto_docstring
 class PerceptionEncoderAudioWithTextModel(PerceptionEncoderAudioPretrainedModel):
     def __init__(self, config: PerceptionEncoderAudioConfig):
         super().__init__(config)
