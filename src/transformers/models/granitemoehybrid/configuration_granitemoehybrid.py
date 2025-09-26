@@ -95,8 +95,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
             allow the model to output the auxiliary loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxiliary loss coefficient
         shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
-        position_embedding_type (`str`, *optional*): Positional embedding
-            type to be used; defaults to None. Allowed options: `[None, "rope"]`
         layer_types (`List`, *optional*): list of strings to be used as layer types.
             Allowed choices: "mamba", "attention".
         mamba_n_heads (`int`, *optional*, defaults to 128):
