@@ -133,6 +133,7 @@ class Dots1Config(PretrainedConfig):
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
+
     def __init__(
         self,
         vocab_size=152064,

@@ -34,7 +34,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ..llama.modeling_llama import (
-    LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -235,7 +234,7 @@ class DbrxFFN(nn.Module):
                 router_top_value, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True
             )
         return router_top_value, router_indices
-    
+
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         router_logits = self.router(hidden_states)
         top_k_weights, top_k_index = self.route_tokens_to_experts(router_logits)
@@ -485,8 +484,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
 
     def get_decoder(self) -> DbrxModel:
         return self.transformer
-
-
 
     @can_return_tuple
     @auto_docstring

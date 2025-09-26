@@ -423,6 +423,7 @@ class Glm4vMoeTextMoE(Glm4MoeMoE):
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
+
 class Glm4vMoeTextMLP(Glm4MoeMLP):
     pass
 

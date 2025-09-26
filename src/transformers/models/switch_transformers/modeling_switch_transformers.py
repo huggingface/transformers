@@ -50,7 +50,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import check_model_inputs
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 

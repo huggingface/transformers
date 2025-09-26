@@ -111,6 +111,7 @@ class HunYuanMoEV1Config(PretrainedConfig):
         "num_experts_per_tok": "moe_topk",
         "num_local_experts": "num_experts",
     }
+
     def __init__(
         self,
         vocab_size=290943,

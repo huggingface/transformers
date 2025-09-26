@@ -56,8 +56,6 @@ class JambaRMSNorm(LlamaRMSNorm):
     pass
 
 
-
-
 class HybridMambaAttentionDynamicCache:
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
@@ -181,7 +179,7 @@ class JambaAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-    def forward(
+    def forward(  # FIME: this is also the classic attention NOPE
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
@@ -197,9 +195,7 @@ class JambaAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(
-                key_states, value_states, self.layer_idx
-            )
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -273,8 +269,6 @@ class JambaMambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
 
         self.dt_layernorm = JambaRMSNorm(self.time_step_rank, eps=config.rms_norm_eps)
-        self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
-        self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
         self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
         self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
 
@@ -509,6 +503,7 @@ class JambaMLP(MixtralMLP):
 class JambaExperts(MixtralExperts):
     pass
 
+
 class JambaSparseMoeBlock(nn.Module):
     """
     This implementation is
@@ -535,7 +530,6 @@ class JambaSparseMoeBlock(nn.Module):
         routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
         top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
         return top_k_index, top_k_weights
-
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -621,6 +615,7 @@ class JambaMambaDecoderLayer(GradientCheckpointingLayer):
 
 ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": JambaMambaDecoderLayer}
 
+
 class JambaPreTrainedModel(PreTrainedModel):
     config_class = JambaConfig
     base_model_prefix = "model"
@@ -654,6 +649,7 @@ class JambaPreTrainedModel(PreTrainedModel):
             A = A.expand(module.intermediate_size, -1).contiguous()
             module.A_log.data.copy_(torch.log(A))
             module.D.data.fill_(1.0)
+
 
 class JambaModel(JambaPreTrainedModel):
     """
@@ -702,7 +698,12 @@ class JambaModel(JambaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = HybridMambaAttentionDynamicCache(config=self.config, batch_size=inputs_embeds.shape[0], dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+            past_key_values = HybridMambaAttentionDynamicCache(
+                config=self.config,
+                batch_size=inputs_embeds.shape[0],
+                dtype=inputs_embeds.dtype,
+                device=inputs_embeds.device,
+            )
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -723,7 +724,9 @@ class JambaModel(JambaPreTrainedModel):
                     past_key_values=past_key_values,
                     position_ids=position_ids,
                 ),
-                "mamba": self._update_mamba_mask(attention_mask, cache_position) if self.config.use_mamba_kernels else attention_mask
+                "mamba": self._update_mamba_mask(attention_mask, cache_position)
+                if self.config.use_mamba_kernels
+                else attention_mask,
             }
 
         hidden_states = inputs_embeds
@@ -823,5 +826,6 @@ class JambaForCausalLM(MixtralForCausalLM):
 
 class JambaForSequenceClassification(GenericForSequenceClassification, JambaPreTrainedModel):
     pass
+
 
 __all__ = ["JambaForCausalLM", "JambaForSequenceClassification", "JambaModel", "JambaPreTrainedModel"]

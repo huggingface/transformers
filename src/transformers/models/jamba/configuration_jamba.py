@@ -127,6 +127,7 @@ class JambaConfig(PretrainedConfig):
     attribute_map = {
         "num_local_experts": "num_experts",
     }
+
     def __init__(
         self,
         vocab_size=65536,

@@ -32,7 +32,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3Model,
-    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
@@ -117,6 +116,7 @@ class LongcatFlashExperts(nn.ModuleList):
             current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
+
 
 # remap config key expert_ffn_hidden_size -> moe_intermediate_size
 class LongcatFlashMoE(nn.Module):

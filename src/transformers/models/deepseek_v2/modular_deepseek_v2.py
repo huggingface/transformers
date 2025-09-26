@@ -245,7 +245,6 @@ class DeepseekV2Experts(Qwen2MoeExperts, nn.ModuleList):
             self += [DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size)]
 
 
-
 class DeepseekV2Moe(nn.Module):
     def __init__(self, config: DeepseekV2Config):
         super().__init__()
@@ -292,6 +291,7 @@ class DeepseekV2Moe(nn.Module):
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
+
 
 class DeepseekV2MLP(LlamaMLP):
     def __init__(self, config: DeepseekV2Config, hidden_size=None, intermediate_size=None):
