@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from huggingface_hub import HfFolder, Repository
+from huggingface_hub import snapshot_download, upload_folder
 
 import transformers
 from transformers import (
@@ -423,7 +423,6 @@ class ProcessorPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub_via_save_pretrained(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
@@ -471,7 +470,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
             processor = CustomProcessor(feature_extractor, tokenizer)
 
             with tempfile.TemporaryDirectory() as tmp_dir:
-                repo = Repository(tmp_dir, clone_from=tmp_repo, token=self._token)
+                snapshot_download(tmp_repo.repo_id, token=self._token)
                 processor.save_pretrained(tmp_dir)
 
                 # This has added the proper auto_map field to the feature extractor config
@@ -499,7 +498,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_tokenization.py")))
                 self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_processing.py")))
 
-                repo.push_to_hub()
+                upload_folder(repo_id=tmp_repo.repo_id, folder_path=tmp_dir, token=self._token)
 
                 new_processor = AutoProcessor.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
                 # Can't make an isinstance check because the new_processor is from the CustomProcessor class of a dynamic module
