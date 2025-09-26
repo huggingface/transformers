@@ -245,14 +245,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 
-    @unittest.skip("BLT does not support flash attention")
-    def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
-        pass
-
-    @unittest.skip("BLT does not support flash attention dispatch")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         """Override rope scaling from config test to handle Blt's sub-config structure."""

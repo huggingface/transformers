@@ -955,7 +955,6 @@ def _prepare_patch_cross_attention_mask(
     patches_as_queries: bool = False,
     cross_attn_k: int = 1,
     dtype: torch.dtype = torch.float32,
-    attn_implementation: str = "eager",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Prepare cross-attention mask for patch-based attention, following mllama's robust approach.
@@ -970,7 +969,6 @@ def _prepare_patch_cross_attention_mask(
         patches_as_queries (bool): If True, patches are used as queries, otherwise as keys.
         cross_attn_k (int): Cross-attention multiplier for repeating patches.
         dtype (torch.dtype): Data type for the output mask.
-        attn_implementation (str): Attention implementation type to determine mask format.
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor]:
@@ -1124,7 +1122,6 @@ class BltModel(BltPreTrainedModel):
             patches_as_queries=True,
             cross_attn_k=self.config.cross_attn_k,
             dtype=encoder_embeds.dtype,
-            attn_implementation=self.config._attn_implementation,
         )
         encoder_hidden_states, encoder_cross_states = self.local_encoder(
             input_ids=input_ids,
@@ -1162,7 +1159,6 @@ class BltModel(BltPreTrainedModel):
             patches_as_queries=False,
             cross_attn_k=self.config.cross_attn_k,
             dtype=encoder_embeds.dtype,
-            attn_implementation=self.config._attn_implementation,
         )
         output = self.local_decoder(
             input_ids=input_ids,
