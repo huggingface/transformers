@@ -908,6 +908,9 @@ class Trainer:
 
     def _move_model_to_device(self, model, device):
         if getattr(model, "hf_device_map", None) is not None:
+            logger.warning(
+                "The model is already on multiple devices. Skipping the move to device specified in `args`."
+            )
             return
         model = model.to(device)
         # Moving a model to an XLA device disconnects the tied weights, so we have to retie them.
