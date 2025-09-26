@@ -210,6 +210,7 @@ VLMS = [
     "mllama",
     "paligemma",
     "shieldgemma2",
+    "step3v",
     "qwen2vl",
     "qwen2_5_vl",
     "videollava",
