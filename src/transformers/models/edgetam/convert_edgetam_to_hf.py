@@ -28,67 +28,36 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import (
-    Sam2HieraDetConfig,
+    EdgeTamConfig,
+    EdgeTamMaskDecoderConfig,
+    EdgeTamModel,
+    EdgeTamPromptEncoderConfig,
+    EdgeTamVisionConfig,
     Sam2ImageProcessorFast,
-    Sam2VideoConfig,
-    Sam2VideoMaskDecoderConfig,
-    Sam2VideoModel,
-    Sam2VideoProcessor,
-    Sam2VideoPromptEncoderConfig,
-    Sam2VideoVideoProcessor,
-    Sam2VisionConfig,
+    Sam2Processor,
+    TimmWrapperConfig,
 )
 
 
 def get_config(model_name):
-    if "hiera_tiny" in model_name:
-        hiera_det_config = Sam2HieraDetConfig()
-        vision_config = Sam2VisionConfig(backbone_config=hiera_det_config)
-    elif "hiera_small" in model_name:
-        hiera_det_config = Sam2HieraDetConfig(blocks_per_stage=[1, 2, 11, 2], global_attention_blocks=[7, 10, 13])
-        vision_config = Sam2VisionConfig(backbone_config=hiera_det_config)
-    elif "hiera_base_plus" in model_name:
-        hiera_det_config = Sam2HieraDetConfig(
-            hidden_size=112,
-            embed_dim_per_stage=[112, 224, 448, 896],
-            num_attention_heads_per_stage=[2, 4, 8, 16],
-            blocks_per_stage=[2, 3, 16, 3],
-            global_attention_blocks=[12, 16, 20],
-            window_positional_embedding_background_size=(14, 14),
-        )
-        vision_config = Sam2VisionConfig(
-            backbone_config=hiera_det_config,
-            backbone_channel_list=[896, 448, 224, 112],
-        )
-    elif "hiera_large" in model_name:
-        hiera_det_config = Sam2HieraDetConfig(
-            hidden_size=144,
-            embed_dim_per_stage=[144, 288, 576, 1152],
-            num_attention_heads_per_stage=[2, 4, 8, 16],
-            blocks_per_stage=[2, 6, 36, 4],
-            global_attention_blocks=[23, 33, 43],
-            window_positional_embedding_background_size=(7, 7),
-            window_size_per_stage=[8, 4, 16, 8],
-        )
-        vision_config = Sam2VisionConfig(
-            backbone_config=hiera_det_config,
-            backbone_channel_list=[1152, 576, 288, 144],
-        )
-    prompt_encoder_config = Sam2VideoPromptEncoderConfig()
-    mask_decoder_config = Sam2VideoMaskDecoderConfig()
+    backbone_config = TimmWrapperConfig.from_pretrained(
+        "timm/repvit_m1.dist_in1k",
+        model_args={"in_chans": 3, "features_only": True, "out_indices": (0, 1, 2, 3)},
+    )
+    vision_config = EdgeTamVisionConfig(backbone_config=backbone_config)
 
-    if "sam2.1" in model_name:
-        enable_temporal_pos_encoding_for_object_pointers = True
-        enable_occlusion_spatial_embedding = True
-    else:
-        enable_temporal_pos_encoding_for_object_pointers = False
-        enable_occlusion_spatial_embedding = False
+    prompt_encoder_config = EdgeTamPromptEncoderConfig()
+    mask_decoder_config = EdgeTamMaskDecoderConfig()
+    enable_temporal_pos_encoding_for_object_pointers = False
+    project_temporal_pos_encoding_in_object_pointers = False
+    enable_occlusion_spatial_embedding = False
 
-    config = Sam2VideoConfig(
+    config = EdgeTamConfig(
         vision_config=vision_config,
         prompt_encoder_config=prompt_encoder_config,
         mask_decoder_config=mask_decoder_config,
         enable_temporal_pos_encoding_for_object_pointers=enable_temporal_pos_encoding_for_object_pointers,
+        project_temporal_pos_encoding_in_object_pointers=project_temporal_pos_encoding_in_object_pointers,
         enable_occlusion_spatial_embedding=enable_occlusion_spatial_embedding,
     )
 
@@ -132,10 +101,14 @@ KEYS_TO_MODIFY_MAPPING = {
     ".norm": ".layer_norm",
     "trunk.": "",
     "out_proj": "o_proj",
+    "body.": "timm_model.",
+    "ff.0": "feed_forward.layer_norm",
+    "ff.1": "feed_forward.linear1",
+    "ff.3": "feed_forward.linear2",
 }
 
 
-def replace_keys(state_dict, config):
+def replace_keys(state_dict):
     model_state_dict = {}
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
     output_mask_decoder_mlps_pattern = r"mask_decoder.transformer.layers.(\d+).mlp.layers.(\d+).*"
@@ -144,8 +117,6 @@ def replace_keys(state_dict, config):
     output_vision_encoder_neck_pattern = r"vision_encoder.neck.convs.(\d+).conv"
     output_memory_encoder_projection_pattern = r"memory_encoder.o_proj.*"
     output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
-    output_memory_encoder_mask_downsampler_pattern = r"memory_encoder.mask_downsampler.encoder.(\d+).*"
-
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
@@ -203,14 +174,7 @@ def replace_keys(state_dict, config):
             elif layer_nb == 2:
                 key = key.replace("layers.2", "proj_out")
 
-        if re.match(output_memory_encoder_mask_downsampler_pattern, key):
-            layer_nb = int(re.match(output_memory_encoder_mask_downsampler_pattern, key).group(1))
-            if layer_nb == 12:
-                key = key.replace(f"encoder.{layer_nb}", "final_conv")
-            elif layer_nb % 3 == 0:
-                key = key.replace(f"encoder.{layer_nb}", f"layers.{layer_nb // 3}.conv")
-            elif layer_nb % 3 == 1:
-                key = key.replace(f"encoder.{layer_nb}", f"layers.{layer_nb // 3}.layer_norm")
+                key = key.replace("layers.2", "proj_out")
 
         model_state_dict[key] = value
 
@@ -221,60 +185,48 @@ def replace_keys(state_dict, config):
         [model_state_dict.pop(f"prompt_encoder.point_embed.{i}.weight") for i in range(4)],
         dim=0,
     )
+
     return model_state_dict
 
 
-def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub):
+def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub, run_sanity_check):
     config = get_config(model_name)
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
-    state_dict = replace_keys(state_dict, config)
+    state_dict = replace_keys(state_dict)
 
     image_processor = Sam2ImageProcessorFast()
-    video_processor = Sam2VideoVideoProcessor()
-    processor = Sam2VideoProcessor(image_processor=image_processor, video_processor=video_processor)
-    hf_model = Sam2VideoModel(config)
+    processor = Sam2Processor(image_processor=image_processor)
+    hf_model = EdgeTamModel(config)
     hf_model.eval()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=True)
+    missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=False)
     hf_model = hf_model.to(device)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:", unexpected_keys)
+    for pattern in EdgeTamModel._keys_to_ignore_on_load_unexpected:
+        unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
+    if missing_keys or unexpected_keys:
+        print("Missing keys:", missing_keys)
+        print("Unexpected keys:", unexpected_keys)
+        raise ValueError("Missing or unexpected keys in the state dict")
 
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    if run_sanity_check:
+        img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+        raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
-    input_points = [[[[1000, 600]]]]
-    input_labels = [[[1]]]
+        input_points = [[[[1000, 600]]]]
+        input_labels = [[[1]]]
 
-    inputs = processor(
-        images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-    ).to(device)
+        inputs = processor(
+            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
+        ).to(device)
 
-    with torch.no_grad():
-        output = hf_model._single_frame_forward(**inputs)
-    scores = output.iou_scores.squeeze()
+        with torch.no_grad():
+            output = hf_model(**inputs)
+        scores = output.iou_scores.squeeze()
 
-    if model_name == "sam2.1_hiera_tiny":
-        assert torch.allclose(scores, torch.tensor([0.0316, 0.9647, 0.1029]).cuda(), atol=1e-2)
-    elif model_name == "sam2.1_hiera_small":
-        assert torch.allclose(scores, torch.tensor([0.9664, 0.1494, 0.0456]).cuda(), atol=1e-2)
-    elif model_name == "sam2.1_hiera_base_plus":
-        assert torch.allclose(scores, torch.tensor([0.0361, 0.9775, 0.1307]).cuda(), atol=1e-2)
-    elif model_name == "sam2.1_hiera_large":
-        assert torch.allclose(scores, torch.tensor([0.9648, 0.0371, 0.1898]).cuda(), atol=1e-2)
-    elif model_name == "sam2_hiera_tiny":
-        assert torch.allclose(scores, torch.tensor([0.0439, 0.9567, 0.1415]).cuda(), atol=1e-2)
-    elif model_name == "sam2_hiera_small":
-        assert torch.allclose(scores, torch.tensor([0.9593, 0.1633, 0.0392]).cuda(), atol=1e-2)
-    elif model_name == "sam2_hiera_base_plus":
-        assert torch.allclose(scores, torch.tensor([0.0423, 0.9815, 0.0897]).cuda(), atol=1e-2)
-    elif model_name == "sam2_hiera_large":
-        assert torch.allclose(scores, torch.tensor([0.9514, 0.0535, 0.1787]).cuda(), atol=1e-2)
-    else:
-        raise ValueError(f"Model {model_name} not supported")
+        assert torch.allclose(scores, torch.tensor([0.0356, 0.2141, 0.9707]).cuda(), atol=1e-3)
 
     if pytorch_dump_folder is not None:
         processor.save_pretrained(pytorch_dump_folder)
@@ -288,19 +240,10 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    choices = [
-        "sam2.1_hiera_tiny",
-        "sam2.1_hiera_small",
-        "sam2.1_hiera_base_plus",
-        "sam2.1_hiera_large",
-        "sam2_hiera_tiny",
-        "sam2_hiera_small",
-        "sam2_hiera_base_plus",
-        "sam2_hiera_large",
-    ]
+    choices = ["EdgeTAM"]
     parser.add_argument(
         "--model_name",
-        default="sam2.1_hiera_tiny",
+        default="EdgeTAM",
         choices=choices,
         type=str,
         help="Name of the original model to convert",
@@ -317,6 +260,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether to push the model and processor to the hub after converting",
     )
+    parser.add_argument(
+        "--run_sanity_check",
+        action="store_true",
+        help="Whether to run the sanity check after converting",
+    )
 
     args = parser.parse_args()
 
@@ -327,4 +275,6 @@ if __name__ == "__main__":
         else args.checkpoint_path
     )
 
-    convert_sam2_checkpoint(args.model_name, checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_edgetam_checkpoint(
+        args.model_name, checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub, args.run_sanity_check
+    )
