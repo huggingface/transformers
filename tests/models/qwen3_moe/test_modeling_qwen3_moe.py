@@ -79,7 +79,6 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
     test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = Qwen3MoeModelTester

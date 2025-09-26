@@ -70,7 +70,6 @@ class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_headmasking = False
     test_pruning = False
     model_tester_class = Qwen2ModelTester
     pipeline_model_mapping = (

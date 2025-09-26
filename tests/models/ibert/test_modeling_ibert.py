@@ -226,7 +226,6 @@ class IBertModelTester:
 class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
-    test_head_masking = False
     test_resize_embeddings = False
 
     all_model_classes = (

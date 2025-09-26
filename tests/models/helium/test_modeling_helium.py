@@ -66,7 +66,6 @@ class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
     model_tester_class = HeliumModelTester
-    test_headmasking = False
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]

@@ -176,7 +176,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
     _is_composite = True
-    test_headmasking = False
     test_pruning = False
 
     def setUp(self):

@@ -63,9 +63,6 @@ python src/transformers/models/musicgen/convert_musicgen_transformers.py \
     --checkpoint small --pytorch_dump_folder /output/path --safe_serialization 
 ```
 
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
-
 ## Generation
 
 MusicGen is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly

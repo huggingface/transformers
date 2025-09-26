@@ -95,13 +95,10 @@ class XGLMModelTester:
 
         config = self.get_config(gradient_checkpointing=gradient_checkpointing)
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
         )
 
     def get_config(
@@ -125,18 +122,18 @@ class XGLMModelTester:
             gradient_checkpointing=gradient_checkpointing,
         )
 
-    def create_and_check_xglm_model(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, head_mask=head_mask)
+        result = model(input_ids)
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.num_hidden_layers)
 
-    def create_and_check_xglm_model_past(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_past(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -166,7 +163,7 @@ class XGLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_xglm_model_attention_mask_past(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_attention_mask_past(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -201,7 +198,7 @@ class XGLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_xglm_model_past_large_inputs(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_past_large_inputs(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -233,7 +230,7 @@ class XGLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
         model = XGLMForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -243,7 +240,7 @@ class XGLMModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, *args, gradient_checkpointing=False
+        self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
         model = XGLMForCausalLM(config)
         model.to(torch_device)
@@ -270,12 +267,10 @@ class XGLMModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
         ) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict

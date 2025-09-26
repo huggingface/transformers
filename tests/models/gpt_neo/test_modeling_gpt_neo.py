@@ -122,13 +122,10 @@ class GPTNeoModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -156,12 +153,12 @@ class GPTNeoModelTester:
         config.vocab_size = 300
         return config
 
-    def create_and_check_gpt_neo_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt_neo_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPTNeoModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
@@ -169,7 +166,7 @@ class GPTNeoModelTester:
         # past_key_values is not implemented
         # self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_gpt_neo_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt_neo_model_past(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPTNeoModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -205,9 +202,7 @@ class GPTNeoModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_gpt_neo_model_attention_mask_past(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
-    ):
+    def create_and_check_gpt_neo_model_attention_mask_past(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPTNeoModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -247,9 +242,7 @@ class GPTNeoModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_gpt_neo_model_past_large_inputs(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
-    ):
+    def create_and_check_gpt_neo_model_past_large_inputs(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPTNeoModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -285,7 +278,7 @@ class GPTNeoModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPTNeoForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -295,7 +288,7 @@ class GPTNeoModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_gpt_neo_for_question_answering(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = GPTNeoForQuestionAnswering(config)
@@ -306,7 +299,7 @@ class GPTNeoModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_gpt_neo_for_sequence_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = GPTNeoForSequenceClassification(config)
@@ -316,7 +309,7 @@ class GPTNeoModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_gpt_neo_for_token_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = GPTNeoForTokenClassification(config)
@@ -326,7 +319,7 @@ class GPTNeoModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
+        self, config, input_ids, input_mask, token_type_ids, *args, gradient_checkpointing=False
     ):
         model = GPTNeoForCausalLM(config)
         if gradient_checkpointing:
@@ -345,7 +338,6 @@ class GPTNeoModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -356,7 +348,6 @@ class GPTNeoModelTester:
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict

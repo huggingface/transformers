@@ -172,7 +172,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     fx_compatible = False
     test_pruning = False
     test_torchscript = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):

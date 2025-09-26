@@ -69,7 +69,6 @@ class GlmModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
     test_pruning = False
     model_tester_class = GlmModelTester
 

@@ -144,7 +144,6 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = OwlViTVisionModelTester(self)
@@ -305,7 +304,6 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = OwlViTTextModelTester(self)
@@ -422,7 +420,6 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -637,7 +634,6 @@ class OwlViTForObjectDetectionTester:
 class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTForObjectDetection,) if is_torch_available() else ()
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False

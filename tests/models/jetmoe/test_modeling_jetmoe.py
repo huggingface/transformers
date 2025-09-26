@@ -109,7 +109,6 @@ class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (JetMoeModel, JetMoeForCausalLM, JetMoeForSequenceClassification) if is_torch_available() else ()
     )
-    test_headmasking = False
     test_pruning = False
     test_mismatched_shapes = False
     test_cpu_offload = False

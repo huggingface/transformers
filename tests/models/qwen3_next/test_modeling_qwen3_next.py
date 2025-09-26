@@ -89,7 +89,6 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
     test_pruning = False
     model_tester_class = Qwen3NextModelTester
 

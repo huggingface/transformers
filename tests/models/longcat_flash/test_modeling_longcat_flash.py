@@ -226,7 +226,6 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
 
     model_split_percents = [0.5, 0.8]
 
-    test_headmasking = False
     test_pruning = False
 
     model_tester_class = LongcatFlashModelTester

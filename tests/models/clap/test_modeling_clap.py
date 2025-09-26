@@ -163,7 +163,6 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = ClapAudioModelTester(self)
@@ -382,7 +381,6 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClapTextModel, ClapTextModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = ClapTextModelTester(self)
@@ -493,7 +491,6 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ClapModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ClapModel} if is_torch_available() else {}
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
