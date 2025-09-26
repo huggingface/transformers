@@ -53,9 +53,9 @@ class T5GemmaModelTester:
 
     if is_torch_available():
         model_class = T5GemmaModel
-        for_causal_lm_class = T5GemmaForConditionalGeneration
-        for_sequence_class = T5GemmaForSequenceClassification
-        for_token_class = T5GemmaForTokenClassification
+        causal_lm_class = T5GemmaForConditionalGeneration
+        sequence_classification_class = T5GemmaForSequenceClassification
+        token_classification_class = T5GemmaForTokenClassification
 
     def __init__(
         self,
@@ -310,7 +310,7 @@ class T5GemmaModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = self.for_causal_lm_class(config=config).to(torch_device).eval()
+        model = self.causal_lm_class(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -332,7 +332,7 @@ class T5GemmaModelTester:
         lm_labels,
     ):
         labels = torch.tensor([1] * self.batch_size, dtype=torch.long, device=torch_device)
-        model = self.for_sequence_class(config=config).to(torch_device).eval()
+        model = self.sequence_classification_class(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=input_ids,
@@ -352,7 +352,7 @@ class T5GemmaModelTester:
         is_encoder_decoder,
     ):
         labels = torch.tensor([1] * self.batch_size, dtype=torch.long, device=torch_device)
-        model = self.for_sequence_class(config=config, is_encoder_decoder=is_encoder_decoder)
+        model = self.sequence_classification_class(config=config, is_encoder_decoder=is_encoder_decoder)
         model = model.to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
@@ -374,7 +374,7 @@ class T5GemmaModelTester:
         is_encoder_decoder,
     ):
         labels = torch.tensor([1] * self.seq_length * self.batch_size, dtype=torch.long, device=torch_device)
-        model = self.for_token_class(config=config, is_encoder_decoder=is_encoder_decoder)
+        model = self.token_classification_class(config=config, is_encoder_decoder=is_encoder_decoder)
         model = model.to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
@@ -545,7 +545,7 @@ class T5GemmaModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = self.for_causal_lm_class(config=config).to(torch_device).eval()
+        model = self.causal_lm_class(config=config).to(torch_device).eval()
         torch.manual_seed(0)
         output_without_past_cache = model.generate(
             input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
@@ -767,7 +767,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for is_encoder_decoder in [True, False]:
             model = (
-                self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder)
+                self.model_tester.sequence_classification_class(config, is_encoder_decoder=is_encoder_decoder)
                 .to(torch_device)
                 .eval()
             )
@@ -785,7 +785,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for is_encoder_decoder in [True, False]:
             model = (
-                self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder)
+                self.model_tester.sequence_classification_class(config, is_encoder_decoder=is_encoder_decoder)
                 .to(torch_device)
                 .eval()
             )
@@ -805,7 +805,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for is_encoder_decoder in [True, False]:
             model = (
-                self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder)
+                self.model_tester.sequence_classification_class(config, is_encoder_decoder=is_encoder_decoder)
                 .to(torch_device)
                 .eval()
             )
@@ -822,7 +822,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for is_encoder_decoder in [True, False]:
             model = (
-                self.model_tester.for_token_class(config, is_encoder_decoder=is_encoder_decoder)
+                self.model_tester.token_classification_class(config, is_encoder_decoder=is_encoder_decoder)
                 .to(torch_device)
                 .eval()
             )
@@ -888,7 +888,10 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for model_class in self.all_model_classes:
             # Skip token and sequence classification.
-            if model_class in [self.model_tester.for_token_class, self.model_tester.for_sequence_class]:
+            if model_class in [
+                self.model_tester.token_classification_class,
+                self.model_tester.sequence_classification_class,
+            ]:
                 continue
 
             inputs_dict["output_attentions"] = True
@@ -1000,7 +1003,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
-            if model_class == self.model_tester.for_token_class:
+            if model_class == self.model_tester.token_classification_class:
                 continue
             if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt", "mllama"]):
                 self.skipTest(reason="Won't fix: old model with unique inputs/caches/other")
@@ -1132,7 +1135,10 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @unittest.skip("This was not properly written, submodules need the attribute to be overwritten")
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
-            if model_class in [self.model_tester.for_token_class, self.model_tester.for_sequence_class]:
+            if model_class in [
+                self.model_tester.token_classification_class,
+                self.model_tester.sequence_classification_class,
+            ]:
                 model = model_class(config, is_encoder_decoder=False)
             else:
                 model = model_class(config)
