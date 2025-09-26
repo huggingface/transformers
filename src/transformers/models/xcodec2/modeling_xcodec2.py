@@ -50,7 +50,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ..auto import AutoFeatureExtractor, AutoModel
+from ..auto import AutoModel
 from .configuration_xcodec2 import Xcodec2Config
 
 
@@ -70,11 +70,14 @@ class Xcodec2Output(ModelOutput):
             representations of the input audio used for further processing or generation.
         quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
             Quantized continuous representation of input's embedding.
+        codes_padding_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
+            Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
     """
 
     audio_values: Optional[torch.FloatTensor] = None
     audio_codes: Optional[torch.LongTensor] = None
     quantized_representation: Optional[torch.Tensor] = None
+    codes_padding_mask: Optional[torch.Tensor] = None
 
 
 @dataclass
@@ -87,10 +90,14 @@ class Xcodec2EncoderOutput(ModelOutput):
             used for storage, transmission, or generation.
         quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
             Quantized continuous representation of input's embedding.
+        codes_padding_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
+            Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
+
     """
 
     audio_codes: Optional[torch.LongTensor] = None
     quantized_representation: Optional[torch.Tensor] = None
+    codes_padding_mask: Optional[torch.Tensor] = None
 
 
 @dataclass
@@ -1595,7 +1602,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
 
         self.hop_length = config.hop_length  # needed for padding
         self.semantic_model = AutoModel.from_config(config.semantic_model_config).eval()
-        self.semantic_feature_extractor = AutoFeatureExtractor.from_pretrained(config.semantic_model_id)
+        # Adaptor of semantic model embedding
         self.semantic_encoder = Xcodec2SemanticEncoder(
             config.semantic_hidden_size, config.semantic_hidden_size, config.semantic_hidden_size
         )
@@ -1657,15 +1664,21 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
 
     def encode(
         self,
-        input_values,
+        input_values: torch.Tensor,
+        semantic_input_values: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2EncoderOutput]:
         """
         Encodes the input audio waveform into discrete codes.
 
         Args:
-            input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+            input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
                 Float values of the input audio waveform.
+            semantic_input_values (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
+                Float values of the input audio waveform to be used for semantic encoding. This can be the
+            padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+                Padding mask used to pad the `input_values`.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
@@ -1673,32 +1686,13 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             `audio_codes` of shape `[batch_size, 1, frames]`, the discrete encoded codes for the input audio waveform.
             `quantized_representation` of shape `[batch_size, hidden_size, frames]`, the continuous quantized
                 representation after quantization.
+            `codes_padding_mask` of shape `[batch_size, 1, frames]`, downsampled `padding_mask` for indicating valid
+                audio codes in `audio_codes`.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        _, channels, seq_len = input_values.shape
-        if channels != 1:
-            raise ValueError(f"Audio must be mono, but got {channels}")
-
-        # 0) Custom padding of theirs which they do even if input is multiple of hop_length
-        # without it, resulting audio codes differ from theirs
-        input_values = F.pad(input_values, (0, self.hop_length - (seq_len % self.hop_length)))
-
-        # 1) Get semantic embedding
-        # -- apply feature extractor: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L111
-        input_features = (
-            self.semantic_feature_extractor(
-                # original version pads before and after, perhaps for alignment?
-                # list needed to handle batch
-                F.pad(input_values, (self.hop_length // 2, self.hop_length // 2)).cpu().tolist(),
-                sampling_rate=self.semantic_feature_extractor.sampling_rate,
-                return_tensors="pt",
-            )
-            .input_features.to(self.dtype)
-            .to(self.device)
-        )
-        # -- extract 16th layer of semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L64
-        semantic_output = self.semantic_model(input_features, output_hidden_states=True)
+        # 1) Semantic embedding: 16th layer of pretrained model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L64
+        semantic_output = self.semantic_model(semantic_input_values, output_hidden_states=True)
         semantic_hidden_16 = semantic_output.hidden_states[16]
         semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)
         semantic_encoded = self.semantic_encoder(semantic_hidden_16)
@@ -1718,12 +1712,25 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         # 4) Get codes for decoder
         quantized_representation, audio_codes = self.decoder.quantize(concat_emb)
 
+        if padding_mask is not None:
+            # Expected token length, as in: https://github.com/zhenye234/X-Codec-2.0/blob/ccbbf340ff143dfa6a0ea7cd61ec34a8ba2f1c3d/inference_save_code.py#L89
+            audio_length = padding_mask.sum(dim=-1, keepdim=True).cpu()
+            token_length = audio_length // self.hop_length
+            codes_padding_mask = torch.zeros(audio_codes.shape, dtype=padding_mask.dtype)
+            idx = torch.arange(audio_codes.shape[-1]).view(1, -1)
+            codes_padding_mask = (idx < token_length).to(padding_mask.dtype).to(padding_mask.device)
+
+            # # TODO (ebezzam) maybe below is enough
+            # new_len = int(padding_mask.shape[-1] / self.hop_length)
+            # codes_padding_mask = padding_mask[:, :new_len * self.hop_length:self.hop_length]
+
         if not return_dict:
-            return audio_codes, quantized_representation
+            return audio_codes, quantized_representation, codes_padding_mask
 
         return Xcodec2EncoderOutput(
             audio_codes=audio_codes,
             quantized_representation=quantized_representation,
+            codes_padding_mask=codes_padding_mask,
         )
 
     def decode(
@@ -1764,6 +1771,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
     def forward(
         self,
         input_values: torch.Tensor,
+        semantic_input_values: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2Output]:
         r"""
@@ -1775,6 +1784,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
                 Discrete code indices computed using `model.encode`.
             - `quantized_representation` (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
                 The continuous quantized representation after quantization.
+            - `codes_padding_mask` (`torch.int32` of shape `(batch_size, 1, codes_length)`):
+                Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
 
         Examples:
 
@@ -1796,18 +1807,23 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         >>> audio_values = outputs.audio_values
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # TODO (ebezzam) use padding_mask to actually remove padded values?
         length = input_values.shape[-1]
 
-        audio_codes, quantized_representation = self.encode(input_values, return_dict=False)
+        audio_codes, quantized_representation, codes_padding_mask = self.encode(
+            input_values, semantic_input_values=semantic_input_values, padding_mask=padding_mask, return_dict=False
+        )
         audio_values = self.decode(audio_codes, return_dict=False)[..., :length]
 
         if not return_dict:
-            return (audio_values, audio_codes, quantized_representation)
+            return (audio_values, audio_codes, quantized_representation, codes_padding_mask)
 
         return Xcodec2Output(
             audio_values=audio_values,
             audio_codes=audio_codes,
             quantized_representation=quantized_representation,
+            codes_padding_mask=codes_padding_mask,
         )
 
 

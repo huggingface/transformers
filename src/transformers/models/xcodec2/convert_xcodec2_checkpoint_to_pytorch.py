@@ -23,9 +23,11 @@ import torch
 
 from transformers import (
     AutoConfig,
+    AutoFeatureExtractor,
     DacFeatureExtractor,
     Xcodec2Config,
     Xcodec2Model,
+    Xcodec2Processor,
     logging,
 )
 
@@ -202,6 +204,8 @@ def convert_checkpoint(
     Copy/paste/tweak model's weights to transformers design.
     """
 
+    semantic_model_id = "facebook/w2v-bert-2.0"
+
     # load json
     if config_path is not None:
         with open(config_path, "r") as f:
@@ -219,7 +223,7 @@ def convert_checkpoint(
 
     # create config
     # -- use hardcoded semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L19
-    semantic_model_config = AutoConfig.from_pretrained("facebook/w2v-bert-2.0", output_hidden_states=True)
+    semantic_model_config = AutoConfig.from_pretrained(semantic_model_id, output_hidden_states=True)
 
     config = Xcodec2Config(
         encoder_hidden_size=encoder_hidden_size,
@@ -243,20 +247,20 @@ def convert_checkpoint(
     model = _convert_model(original_checkpoint, model)
     model.remove_weight_norm()
 
-    # create feature extractor
-    feature_extractor = DacFeatureExtractor(
-        sampling_rate=config.sampling_rate,
-        hop_length=config.hop_length,
+    # create processor
+    processor = Xcodec2Processor(
+        semantic_feature_extractor=AutoFeatureExtractor.from_pretrained(semantic_model_id),
+        feature_extractor=DacFeatureExtractor(hop_length=320),
     )
 
     # save and upload
     if pytorch_dump_folder_path is not None:
         model.save_pretrained(pytorch_dump_folder_path)
-        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:
         print("Pushing to the hub...")
-        feature_extractor.push_to_hub(repo_id)
+        processor.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
 
 
