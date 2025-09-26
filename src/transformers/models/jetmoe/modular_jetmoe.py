@@ -207,7 +207,7 @@ class JetMoeMoE(nn.Module):
         layer_output = zeros.index_add(0, batch_index, expert_outputs)
         layer_output = layer_output.view(bsz, length, self.input_size)
         layer_output = layer_output + self.bias
-        return layer_output, router_logits
+        return layer_output
 
 
 class JetMoeMoA(nn.Module):
@@ -379,6 +379,39 @@ class JetMoeDecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
         self.mlp = JetMoeMoE(config)
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
+        hidden_states, _, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
+
 
 @auto_docstring
 class JetMoePreTrainedModel(MixtralPreTrainedModel):
@@ -387,6 +420,30 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
         "hidden_states": JetMoeDecoderLayer,
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
+    config: JetMoeConfig
+    base_model_prefix = "transformer"
+    supports_gradient_checkpointing = False
+    _no_split_modules = ["JetMoeDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, JetMoeRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, JetMoeParallelExperts):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, (JetMoeMoA, JetMoeMoE)):
+            module.bias.data.zero_()
 
 
 @auto_docstring
@@ -452,7 +509,6 @@ class JetMoeModel(MixtralModel):
                 hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
-                position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -505,6 +561,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state

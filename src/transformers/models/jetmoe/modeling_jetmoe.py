@@ -497,10 +497,12 @@ class JetMoeDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = JetMoeRMSNorm(config.hidden_size)
         self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -509,9 +511,11 @@ class JetMoeDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
         hidden_states, _, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -519,6 +523,8 @@ class JetMoeDecoderLayer(GradientCheckpointingLayer):
             **kwargs,
         )
         hidden_states = residual + hidden_states
+
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
@@ -530,7 +536,7 @@ class JetMoeDecoderLayer(GradientCheckpointingLayer):
 class JetMoePreTrainedModel(PreTrainedModel):
     config: JetMoeConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -546,7 +552,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear,)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -581,8 +587,8 @@ class JetMoeModel(JetMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
     @check_model_inputs
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -624,6 +630,7 @@ class JetMoeModel(JetMoePreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
@@ -636,7 +643,8 @@ class JetMoeModel(JetMoePreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return MoeModelOutputWithPast(  # only diff with Mixtral: no sliding window
+
+        return MoeModelOutputWithPast(  # only diff with Mistral is the output type, we need MoE
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -738,8 +746,8 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
