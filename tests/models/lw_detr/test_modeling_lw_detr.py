@@ -19,9 +19,6 @@ import unittest
 from functools import cached_property
 
 import numpy as np
-import torch
-from tensor_representation import enhanced
-from torch import Tensor
 
 from transformers import (
     CONFIG_NAME,
@@ -45,8 +42,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
-Tensor.__repr__ = enhanced
 
 if is_torch_available():
     import torch
