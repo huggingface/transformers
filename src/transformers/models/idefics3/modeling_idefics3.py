@@ -473,7 +473,7 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings = value
 
-    @check_model_inputs
+    @check_model_inputs(post_ln_hiddens=False)
     def forward(
         self,
         pixel_values,

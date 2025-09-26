@@ -195,7 +195,7 @@ class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):
         "attentions": SamHQVisionAttention,
     }
 
-    @check_model_inputs
+    @check_model_inputs(post_ln_hiddens=False)
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
     ) -> Union[tuple, SamHQVisionEncoderOutput]:
