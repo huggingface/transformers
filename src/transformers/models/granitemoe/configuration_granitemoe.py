@@ -166,8 +166,6 @@ class GraniteMoeConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-        # this model has rope embedding type, hardcoded for BC
-        self.position_embedding_type = "rope"
 
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout

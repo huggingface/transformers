@@ -463,7 +463,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         self.rope_theta = config.rope_theta
 
         self.position_embedding_type = config.position_embedding_type
-        self.rotary_emb = GraniteMoeRotaryEmbedding(config) if self.position_embedding_type == "rope" else None
+        self.rotary_emb = GraniteMoeRotaryEmbedding(config)
 
         # Initialize weights and apply final processing
         self.post_init()
