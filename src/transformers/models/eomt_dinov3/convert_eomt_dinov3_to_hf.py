@@ -20,7 +20,7 @@ import json
 import logging
 import os
 import re
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -307,6 +307,141 @@ def convert_delta_keys(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.T
         converted_state_dict[new_key] = value
 
     return converted_state_dict
+
+
+def _build_qkv_update(
+    idx: int,
+    pieces: dict[str, torch.Tensor],
+    current_state: dict[str, torch.Tensor],
+) -> tuple[str, torch.Tensor]:
+    """Stacks q/k/v projection deltas into the fused qkv tensor expected by the original model."""
+
+    target_key = f"encoder.backbone.blocks.{idx}.attn.qkv.weight"
+    if target_key not in current_state:
+        raise KeyError(f"Expected {target_key} in the original model state")
+
+    reference = current_state[target_key]
+    head_dim = reference.shape[0] // 3
+
+    stacked = torch.zeros_like(reference)
+    order = ("q", "k", "v")
+
+    for offset, name in enumerate(order):
+        part = pieces.get(name)
+        if part is None:
+            continue
+        start = offset * head_dim
+        end = start + head_dim
+        stacked[start:end] = part.to(dtype=stacked.dtype)
+
+    return target_key, stacked
+
+
+def convert_delta_to_original(
+    delta_state: dict[str, torch.Tensor], current_state: dict[str, torch.Tensor]
+) -> dict[str, torch.Tensor]:
+    """Maps delta weights back to the naming/structure expected by the original EoMT implementation."""
+
+    converted: dict[str, torch.Tensor] = {}
+    attn_weight_updates: defaultdict[int, dict[str, torch.Tensor]] = defaultdict(dict)
+
+    for raw_key, value in delta_state.items():
+        if raw_key.startswith("network.encoder.pixel_mean"):
+            converted["encoder.pixel_mean"] = value
+            continue
+
+        if raw_key.startswith("network.encoder.pixel_std"):
+            converted["encoder.pixel_std"] = value
+            continue
+
+        normalized_key = normalize_original_key(raw_key)
+        if normalized_key is None:
+            continue
+
+        if normalized_key.startswith("encoder.backbone.patch_embed.cls_token"):
+            converted["encoder.backbone.cls_token"] = value
+            continue
+
+        if normalized_key.startswith("encoder.backbone.patch_embed.register_tokens"):
+            converted["encoder.backbone.reg_token"] = value
+            continue
+
+        if normalized_key.startswith("encoder.backbone.patch_embed.patch_embeddings.weight"):
+            converted["encoder.backbone.patch_embed.proj.weight"] = value
+            continue
+
+        if normalized_key.startswith("encoder.backbone.patch_embed.patch_embeddings.bias"):
+            converted["encoder.backbone.patch_embed.proj.bias"] = value
+            continue
+
+        match = re.match(
+            r"encoder\.backbone\.blocks\.(\d+)\.attention\.(q|k|v)_proj\.(weight|bias)",
+            normalized_key,
+        )
+        if match:
+            block_idx = int(match.group(1))
+            proj = match.group(2)
+            field = match.group(3)
+
+            if field == "weight":
+                attn_weight_updates[block_idx][proj] = value
+            continue
+
+        match = re.match(
+            r"encoder\.backbone\.blocks\.(\d+)\.attention\.o_proj\.(weight|bias)",
+            normalized_key,
+        )
+        if match:
+            block_idx = int(match.group(1))
+            field = match.group(2)
+            converted[f"encoder.backbone.blocks.{block_idx}.attn.proj.{field}"] = value
+            continue
+
+        match = re.match(
+            r"encoder\.backbone\.blocks\.(\d+)\.layer_scale1\.lambda1",
+            normalized_key,
+        )
+        if match:
+            block_idx = int(match.group(1))
+            converted[f"encoder.backbone.blocks.{block_idx}.gamma_1"] = value
+            continue
+
+        match = re.match(
+            r"encoder\.backbone\.blocks\.(\d+)\.layer_scale2\.lambda1",
+            normalized_key,
+        )
+        if match:
+            block_idx = int(match.group(1))
+            converted[f"encoder.backbone.blocks.{block_idx}.gamma_2"] = value
+            continue
+
+        match = re.match(
+            r"encoder\.backbone\.blocks\.(\d+)\.mlp\.up_proj\.(weight|bias)",
+            normalized_key,
+        )
+        if match:
+            block_idx = int(match.group(1))
+            field = match.group(2)
+            converted[f"encoder.backbone.blocks.{block_idx}.mlp.fc1.{field}"] = value
+            continue
+
+        match = re.match(
+            r"encoder\.backbone\.blocks\.(\d+)\.mlp\.down_proj\.(weight|bias)",
+            normalized_key,
+        )
+        if match:
+            block_idx = int(match.group(1))
+            field = match.group(2)
+            converted[f"encoder.backbone.blocks.{block_idx}.mlp.fc2.{field}"] = value
+            continue
+
+        converted[normalized_key] = value
+
+    for block_idx, pieces in attn_weight_updates.items():
+        key, stacked = _build_qkv_update(block_idx, pieces, current_state)
+        converted[key] = stacked
+
+    return converted
 
 
 def convert_base_state_dict(base_state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
@@ -741,9 +876,7 @@ def verify_conversion(
                 param.zero_()
 
     current_state = original_model.state_dict()
-    delta_state = {
-        key[len("network.") :]: value for key, value in raw_delta_state.items() if key.startswith("network.")
-    }
+    delta_state = convert_delta_to_original(raw_delta_state, current_state)
 
     missing_keys = [key for key in current_state.keys() if key not in delta_state]
     if missing_keys:
