@@ -182,9 +182,30 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         # First, override TrainingArguments based on DeepSpeed config to ensure compatibility
         self.override_training_args_from_deepspeed(args)
 
+        tp_size = self.config.get("tensor_parallel", {}).get("autotp_size", 1)
+        dp_world_size = args.world_size // tp_size
+        if args.total_train_batch_size > 0:
+            if (
+                args.total_train_batch_size_mode == "strict"
+                and args.total_train_batch_size % (args.train_batch_size * dp_world_size) != 0
+            ):
+                raise ValueError(
+                    f"Can not find gradient_accumulation_steps to match total_train_batch_size of "
+                    f"{args.total_train_batch_size} when train batch size is {args.train_batch_size} "
+                    f"and dp world size is {dp_world_size}."
+                )
+            new_gradient_accumulation_steps = max(
+                1, round(args.total_train_batch_size / (args.train_batch_size * dp_world_size))
+            )
+            logger.info(
+                f"Updated gradient_accumulation_steps from {args.gradient_accumulation_steps} "
+                f"to {new_gradient_accumulation_steps}"
+            )
+            args.gradient_accumulation_steps = new_gradient_accumulation_steps
+
         # DeepSpeed does:
-        # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
-        train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
+        # train_batch_size = dp_world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
+        train_batch_size = dp_world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
         self.fill_match(
             "train_micro_batch_size_per_gpu",
             args.per_device_train_batch_size,
