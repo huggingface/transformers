@@ -1006,7 +1006,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         batch_size = 4
         hidden_states = torch.stack(batch_size * [torch.rand((seq_len, self.config.hidden_size))])
 
-        router_probs, router_logits = model._compute_router_probabilities(hidden_states)
+        router_probs, router_logits = model.forward(hidden_states)
         expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.config.num_experts)
 
