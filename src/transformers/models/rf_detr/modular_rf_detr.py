@@ -12,6 +12,7 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrForObjectDetection,
     LwDetrLayerNorm,
     LwDetrModel,
+    LwDetrPreTrainedModel,
     LwDetrSamplingLayer,
     LwDetrScaleProjector,
 )
@@ -54,8 +55,8 @@ class RfDetrConfig(PretrainedConfig):
             Expansion factor for hidden dimensions in the projector layers.
         activation_function (`str`, *optional*, defaults to `"silu"`):
             The non-linear activation function in the projector. Supported values are `"silu"`, `"relu"`, `"gelu"`.
-        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon value for batch normalization layers.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon value for layer normalization layers.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the model layers and the number of expected features in the decoder inputs.
         dropout (`float`, *optional*, defaults to 0.1):
@@ -150,7 +151,7 @@ class RfDetrConfig(PretrainedConfig):
         projector_scale_factors: list[float] = [],
         hidden_expansion=0.5,
         activation_function="silu",
-        batch_norm_eps=1e-5,
+        layer_norm_eps=1e-5,
         # decoder
         d_model=256,
         dropout=0.1,
@@ -185,7 +186,7 @@ class RfDetrConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.batch_norm_eps = batch_norm_eps
+        self.layer_norm_eps = layer_norm_eps
 
         # backbone
         if backbone_config is None and backbone is None:
@@ -212,6 +213,7 @@ class RfDetrConfig(PretrainedConfig):
                 num_windows=4,
                 num_register_tokens=0,
                 image_size=518,
+                **kwargs,
             )
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.pop("model_type")
@@ -274,6 +276,26 @@ class RfDetrConfig(PretrainedConfig):
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
 
+    @property
+    def hidden_size(self) -> int:
+        return self.d_model
+
+    @property
+    def num_attention_heads(self) -> int:
+        return self.decoder_self_attention_heads
+
+    @property
+    def num_key_value_heads(self) -> int:
+        return self.decoder_self_attention_heads
+
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
 
 class RfDetrLayerNorm(LwDetrLayerNorm):
     pass
@@ -297,7 +319,7 @@ class RfDetrConvNormLayer(LwDetrConvNormLayer):
             stride,
             activation,
         )
-        self.norm = RfDetrLayerNorm(out_channels, data_format="channels_first")
+        self.norm = RfDetrLayerNorm(out_channels, data_format="channels_first", eps=config.layer_norm_eps)
 
 
 class RfDetrCSPRepLayer(LwDetrCSPRepLayer):
@@ -333,6 +355,10 @@ class RfDetrScaleProjector(LwDetrScaleProjector):
         self.layer_norm = RfDetrLayerNorm(output_dim, data_format="channels_first")
 
 
+class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
+    pass
+
+
 class RfDetrModel(LwDetrModel):
     pass
 
@@ -341,4 +367,4 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
     pass
 
 
-__all__ = ["RfDetrConfig", "RfDetrModel", "RfDetrForObjectDetection"]
+__all__ = ["RfDetrConfig", "RfDetrModel", "RfDetrForObjectDetection", "RfDetrPreTrainedModel"]

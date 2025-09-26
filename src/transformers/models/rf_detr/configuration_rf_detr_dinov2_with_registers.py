@@ -70,7 +70,8 @@ class RfDetrDinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
             Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
             case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
             seq_len, hidden_size)`.
-
+        num_windows (`int`, *optional*, defaults to 4):
+            Number of windows to use for windowed attention. If 1, no windowed attention is used.
     Example:
 
     ```python
