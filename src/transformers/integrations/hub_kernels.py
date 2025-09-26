@@ -59,6 +59,10 @@ try:
                     # revision="pure-layer-test",
                 )
             },
+            "npu": LayerRepository(
+                repo_id="kernels-ext-npu/RMSNorm",
+                layer_name="RMSNorm",
+            ),
         },
         "MLP": {
             "cuda": LayerRepository(
