@@ -114,6 +114,8 @@ try:
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)
+    # Preload the rotary kernel as it's used in many models.
+    rotary_kernel = get_kernel(repo_id="kernels-community/rotary")
 
 except ImportError:
     _kernels_available = False
@@ -137,6 +139,8 @@ except ImportError:
 
     def register_kernel_mapping(*args, **kwargs):
         raise RuntimeError("register_kernel_mapping requires `kernels` to be installed. Run `pip install kernels`.")
+
+    rotary_kernel = None
 
 
 def is_kernel(attn_implementation: Optional[str]) -> bool:
@@ -201,4 +205,5 @@ __all__ = [
     "use_kernel_forward_from_hub",
     "register_kernel_mapping",
     "replace_kernel_forward_from_hub",
+    "rotary_kernel",
 ]
