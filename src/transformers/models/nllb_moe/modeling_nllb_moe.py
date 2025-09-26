@@ -671,9 +671,7 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
-    _can_record_outputs = {
-        "router_logits": OutputRecorder(NllbMoeTop2Router, index=2),
-    }
+    _can_record_outputs = {}
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
@@ -692,7 +690,11 @@ class NllbMoePreTrainedModel(PreTrainedModel):
 
 
 class NllbMoeEncoder(NllbMoePreTrainedModel):
-    _can_record_outputs = {"hidden_states": NllbMoeEncoderLayer, "attentions": NllbMoeAttention}
+    _can_record_outputs = {
+        "hidden_states": NllbMoeEncoderLayer,
+        "router_logits": OutputRecorder(NllbMoeTop2Router, index=2),
+        "attentions": NllbMoeAttention,
+    }
 
     def __init__(self, config: NllbMoeConfig, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
@@ -796,6 +798,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
     _can_record_outputs = {
         "hidden_states": NllbMoeDecoderLayer,
         "attentions": OutputRecorder(NllbMoeAttention, layer_name="self_attn", index=1),
+        "router_logits": OutputRecorder(NllbMoeTop2Router, index=2),
         "cross_attentions": OutputRecorder(NllbMoeAttention, layer_name="cross_attention", index=1),
     }
 
@@ -1016,7 +1019,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         return self.encoder
 
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1061,8 +1064,8 @@ class NllbMoeModel(NllbMoePreTrainedModel):
             decoder_hidden_states=decoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             decoder_attentions=decoder_outputs.attentions,
-            encoder_router_logits=encoder_outputs.router_probs,
-            decoder_router_logits=decoder_outputs.router_probs,
+            encoder_router_logits=encoder_outputs.router_logits,
+            decoder_router_logits=decoder_outputs.router_logits,
         )
 
 
@@ -1235,7 +1238,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         total_expert_indexes = []
         for router_output in router_outputs:
             if router_output is not None:
-                router_logits, expert_indexes = router_output
+                router_logits, expert_indexes = torch.topk(router_output, 1)
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
 
