@@ -890,8 +890,10 @@ class EdgeTamVideoInferenceSession:
         dtype: Union[torch.dtype, str] = "float32",
         max_vision_features_cache_size: int = 1,
     ):
-        # store as a list to avoid double memory allocation with torch.cat when adding new frames
-        self.processed_frames = list(video.to(video_storage_device, dtype=dtype)) if video is not None else None
+        # store as a dictionary to avoid double memory allocation with torch.cat when adding new frames
+        self.processed_frames = (
+            dict(enumerate(video.to(video_storage_device, dtype=dtype))) if video is not None else None
+        )
         self.video_height = video_height
         self.video_width = video_width
 
@@ -1049,18 +1051,21 @@ class EdgeTamVideoInferenceSession:
         return value
 
     # Video frame management
-    def add_new_frame(self, pixel_values: torch.Tensor) -> int:
+    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: Optional[int] = None) -> int:
         """Add new frame with automatic device placement."""
         pixel_values = pixel_values.to(self.video_storage_device, dtype=self.dtype, non_blocking=True)
         if pixel_values.dim() == 4:
             pixel_values = pixel_values.squeeze(0)
 
-        if self.processed_frames is None:
-            self.processed_frames = [pixel_values]
-        else:
-            self.processed_frames.append(pixel_values)
+        if frame_idx is None:
+            frame_idx = len(self.processed_frames) if self.processed_frames is not None else 0
 
-        return self.num_frames - 1
+        if self.processed_frames is None:
+            self.processed_frames = {frame_idx: pixel_values}
+        else:
+            self.processed_frames[frame_idx] = pixel_values
+
+        return frame_idx
 
     def get_frame(self, frame_idx: int) -> torch.Tensor:
         """Get frame from video."""
@@ -2129,7 +2134,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             Whether to propagate in reverse.
         """
         if frame is not None:
-            frame_idx = inference_session.add_new_frame(frame)
+            frame_idx = inference_session.add_new_frame(frame, frame_idx)
 
         if frame is not None and inference_session.get_obj_num() == 0:
             raise ValueError("No objects are provided for tracking; please add inputs first.")
