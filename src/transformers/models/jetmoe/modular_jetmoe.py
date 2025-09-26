@@ -312,7 +312,7 @@ class JetMoeAttention(nn.Module):
                 "when creating this class."
             )
 
-        self.top_k = config.num_experts_per_tok
+        self.num_key_value_groups = config.num_experts_per_tok
         self.attention_dropout = config.attention_dropout
         self.kv_projection_size = config.kv_channels * config.num_key_value_heads
         self.num_key_value_heads = config.num_key_value_heads
@@ -332,14 +332,15 @@ class JetMoeAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        bsz, q_len, _ = hidden_states.size()
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states, router_logits, topo_info = self.experts.map(hidden_states)
         key_states, value_states = self.kv_proj(hidden_states).chunk(2, dim=-1)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(hidden_shape).transpose(1, 2)
+        key_states = key_states.view(hidden_shape).transpose(1, 2)
+        value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -364,6 +365,7 @@ class JetMoeAttention(nn.Module):
             **kwargs,
         )
 
+        attn_output = attn_output.view(*input_shape, self.num_key_value_groups, -1)
         attn_output = self.experts.reduce(attn_output, topo_info)
         attn_output = attn_output.view(*input_shape, -1)
         return attn_output, attn_weights, router_logits
