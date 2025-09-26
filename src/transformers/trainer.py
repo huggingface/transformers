@@ -2598,6 +2598,10 @@ class Trainer:
             if epoch == epochs_trained and resume_from_checkpoint is not None:
                 if steps_trained_in_current_epoch > 0 and not args.ignore_data_skip:
                     epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
+                    # #### BEGINNING OF THE FIX ####
+                    if hasattr(epoch_dataloader, "set_epoch"):
+                        epoch_dataloader.set_epoch(epoch)  # FIX: set dataloader to correct epoch
+                    #### END OF THE FIX ####
                     step = steps_trained_in_current_epoch - 1
                     rng_to_sync = True
                 elif steps_trained_in_current_epoch == 0:
