@@ -23,7 +23,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor
 
 
 if is_torch_available():

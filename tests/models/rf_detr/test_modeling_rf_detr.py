@@ -20,14 +20,10 @@ from functools import cached_property
 
 import numpy as np
 import torch
-from tensor_representation import enhanced
-from torch import Tensor
 
 from transformers import (
     CONFIG_NAME,
-    LwDetrConfig,
     LwDetrImageProcessor,
-    LwDetrViTConfig,
     RfDetrConfig,
     RfDetrDinov2WithRegistersConfig,
     is_torch_available,

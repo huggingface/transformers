@@ -83,7 +83,7 @@ class RfDetrConvNormLayer(nn.Module):
             padding=kernel_size // 2,
             bias=False,
         )
-        self.norm = RfDetrLayerNorm(out_channels, data_format="channels_first")
+        self.norm = RfDetrLayerNorm(out_channels, data_format="channels_first", eps=config.layer_norm_eps)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, hidden_state):
@@ -175,246 +175,6 @@ class RfDetrScaleProjector(nn.Module):
         hidden_states = self.projector_layer(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         return hidden_states
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the DeformableDetrDecoder. This class adds two attributes to
-    BaseModelOutputWithCrossAttentions, namely:
-    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
-    - a stacked tensor of intermediate reference points.
-    """
-)
-class RfDetrDecoderOutput(ModelOutput):
-    r"""
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
-    """
-
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the RfDetr backbone-decoder model.
-    """
-)
-class RfDetrModelOutput(ModelOutput):
-    r"""
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-        Initial reference points sent through the Transformer decoder.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-        foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Logits of predicted bounding boxes coordinates in the first stage.
-    """
-
-    init_reference_points: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
-
-
-class RfDetrMultiScaleProjector(nn.Module):
-    def __init__(self, config: RfDetrConfig, intermediate_channel_sizes: list[int]):
-        super().__init__()
-
-        self.config = config
-        scale_factors = config.projector_scale_factors
-        output_channels = config.d_model
-
-        self.scale_layers = nn.ModuleList(
-            [
-                RfDetrScaleProjector(config, intermediate_channel_sizes, scale, output_channels)
-                for scale in scale_factors
-            ]
-        )
-
-    def forward(self, hidden_states: tuple[torch.Tensor]) -> list[torch.Tensor]:
-        output_hidden_states = []
-        for scale_layer in self.scale_layers:
-            output_hidden_states.append(scale_layer(hidden_states))
-        return output_hidden_states
-
-
-class RfDetrFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
-def replace_batch_norm(model):
-    r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `RfDetrFrozenBatchNorm2d`.
-
-    Args:
-        model (torch.nn.Module):
-            input model
-    """
-    for name, module in model.named_children():
-        if isinstance(module, nn.BatchNorm2d):
-            new_module = RfDetrFrozenBatchNorm2d(module.num_features)
-
-            if module.weight.device != torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
-
-            model._modules[name] = new_module
-
-        if len(list(module.children())) > 0:
-            replace_batch_norm(module)
-
-
-class RfDetrConvEncoder(nn.Module):
-    """
-    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
-
-    nn.BatchNorm2d layers are replaced by RfDetrFrozenBatchNorm2d as defined above.
-
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        self.config = config
-
-        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
-        if config.use_timm_backbone:
-            # We default to values which were previously hard-coded. This enables configurability from the config
-            # using backbone arguments, while keeping the default behavior the same.
-            requires_backends(self, ["timm"])
-            kwargs = getattr(config, "backbone_kwargs", {})
-            kwargs = {} if kwargs is None else kwargs.copy()
-            out_indices = kwargs.pop("out_indices", (1, 2, 3, 4))
-            num_channels = kwargs.pop("in_chans", config.num_channels)
-            if config.dilation:
-                kwargs["output_stride"] = kwargs.get("output_stride", 16)
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=out_indices,
-                in_chans=num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
-
-        # replace batch norm by frozen batch norm
-        with torch.no_grad():
-            replace_batch_norm(backbone)
-        self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
-
-        backbone_model_type = None
-        if config.backbone is not None:
-            backbone_model_type = config.backbone
-        elif config.backbone_config is not None:
-            backbone_model_type = config.backbone_config.model_type
-        else:
-            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
-
-        if "resnet" in backbone_model_type:
-            for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
-                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                        parameter.requires_grad_(False)
-                else:
-                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
-                        parameter.requires_grad_(False)
-        self.projector = RfDetrMultiScaleProjector(config, self.intermediate_channel_sizes)
-
-    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
-        features = self.projector(features)
-        out = []
-        for feature_map in features:
-            # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            out.append((feature_map, mask))
-        return out
-
-
-class RfDetrConvModel(nn.Module):
-    """
-    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
-    """
-
-    def __init__(self, conv_encoder, position_embedding):
-        super().__init__()
-        self.conv_encoder = conv_encoder
-        self.position_embedding = position_embedding
-
-    def forward(self, pixel_values, pixel_mask):
-        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
-        out = self.conv_encoder(pixel_values, pixel_mask)
-        pos = []
-        for feature_map, mask in out:
-            # position encoding
-            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
-
-        return out, pos
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -862,6 +622,246 @@ class RfDetrPreTrainedModel(PreTrainedModel):
         if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
             nn.init.constant_(module.bbox_embed.layers[-1].weight.data, 0)
             nn.init.constant_(module.bbox_embed.layers[-1].bias.data, 0)
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the DeformableDetrDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
+    """
+)
+class RfDetrDecoderOutput(ModelOutput):
+    r"""
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+        used to compute the weighted average in the cross-attention heads.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the RfDetr backbone-decoder model.
+    """
+)
+class RfDetrModelOutput(ModelOutput):
+    r"""
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    """
+
+    init_reference_points: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+
+
+class RfDetrMultiScaleProjector(nn.Module):
+    def __init__(self, config: RfDetrConfig, intermediate_channel_sizes: list[int]):
+        super().__init__()
+
+        self.config = config
+        scale_factors = config.projector_scale_factors
+        output_channels = config.d_model
+
+        self.scale_layers = nn.ModuleList(
+            [
+                RfDetrScaleProjector(config, intermediate_channel_sizes, scale, output_channels)
+                for scale in scale_factors
+            ]
+        )
+
+    def forward(self, hidden_states: tuple[torch.Tensor]) -> list[torch.Tensor]:
+        output_hidden_states = []
+        for scale_layer in self.scale_layers:
+            output_hidden_states.append(scale_layer(hidden_states))
+        return output_hidden_states
+
+
+class RfDetrFrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `RfDetrFrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = RfDetrFrozenBatchNorm2d(module.num_features)
+
+            if module.weight.device != torch.device("meta"):
+                new_module.weight.data.copy_(module.weight)
+                new_module.bias.data.copy_(module.bias)
+                new_module.running_mean.data.copy_(module.running_mean)
+                new_module.running_var.data.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
+class RfDetrConvEncoder(nn.Module):
+    """
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
+
+    nn.BatchNorm2d layers are replaced by RfDetrFrozenBatchNorm2d as defined above.
+
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.config = config
+
+        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
+        if config.use_timm_backbone:
+            # We default to values which were previously hard-coded. This enables configurability from the config
+            # using backbone arguments, while keeping the default behavior the same.
+            requires_backends(self, ["timm"])
+            kwargs = getattr(config, "backbone_kwargs", {})
+            kwargs = {} if kwargs is None else kwargs.copy()
+            out_indices = kwargs.pop("out_indices", (1, 2, 3, 4))
+            num_channels = kwargs.pop("in_chans", config.num_channels)
+            if config.dilation:
+                kwargs["output_stride"] = kwargs.get("output_stride", 16)
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=out_indices,
+                in_chans=num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = load_backbone(config)
+
+        # replace batch norm by frozen batch norm
+        with torch.no_grad():
+            replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
+
+        backbone_model_type = None
+        if config.backbone is not None:
+            backbone_model_type = config.backbone
+        elif config.backbone_config is not None:
+            backbone_model_type = config.backbone_config.model_type
+        else:
+            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
+
+        if "resnet" in backbone_model_type:
+            for name, parameter in self.model.named_parameters():
+                if config.use_timm_backbone:
+                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                        parameter.requires_grad_(False)
+                else:
+                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                        parameter.requires_grad_(False)
+        self.projector = RfDetrMultiScaleProjector(config, self.intermediate_channel_sizes)
+
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the model to get list of feature maps
+        features = self.model(pixel_values).feature_maps
+        features = self.projector(features)
+        out = []
+        for feature_map in features:
+            # downsample pixel_mask to match shape of corresponding feature_map
+            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            out.append((feature_map, mask))
+        return out
+
+
+class RfDetrConvModel(nn.Module):
+    """
+    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
+    """
+
+    def __init__(self, conv_encoder, position_embedding):
+        super().__init__()
+        self.conv_encoder = conv_encoder
+        self.position_embedding = position_embedding
+
+    def forward(self, pixel_values, pixel_mask):
+        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
+        out = self.conv_encoder(pixel_values, pixel_mask)
+        pos = []
+        for feature_map, mask in out:
+            # position encoding
+            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
+
+        return out, pos
 
 
 # function to generate sine positional embedding for 4d coordinates
@@ -1549,4 +1549,4 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         )
 
 
-__all__ = ["RfDetrModel", "RfDetrForObjectDetection"]
+__all__ = ["RfDetrModel", "RfDetrForObjectDetection", "RfDetrPreTrainedModel"]

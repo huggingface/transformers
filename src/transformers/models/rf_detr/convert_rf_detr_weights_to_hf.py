@@ -25,16 +25,12 @@ from typing import Optional
 import requests
 import torch
 from PIL import Image
-from tensor_representation import enhanced
-from torch import Tensor
 from torchvision import transforms
 from tqdm import tqdm
 
 from transformers import LwDetrImageProcessor, RfDetrConfig, RfDetrForObjectDetection
 from transformers.image_utils import load_image
 
-
-Tensor.__repr__ = enhanced
 
 # Mapping of model names to their checkpoint files
 HOSTED_MODELS = {
@@ -477,7 +473,7 @@ def convert_rf_detr_checkpoint(
     checkpoint_url: str,
     pytorch_dump_folder_path: str,
     push_to_hub: bool = False,
-    organization: str = "huggingface",
+    organization: str = "stevenbucaille",
 ):
     """
     Convert a RF-DETR checkpoint to HuggingFace format.
@@ -517,7 +513,6 @@ def convert_rf_detr_checkpoint(
     else:
         state_dict = checkpoint
 
-    model_state_dict = model.state_dict()
     # Convert keys if needed
     if ORIGINAL_TO_CONVERTED_KEY_MAPPING:
         backbone_projector_sampling_key_mapping = get_backbone_projector_sampling_key_mapping(lw_detr_config)
@@ -581,18 +576,13 @@ def main():
     args = parser.parse_args()
 
     # Get checkpoint path
-    if args.checkpoint_path:
-        checkpoint_path = args.checkpoint_path
-    else:
-        # Download from hub
-        repo_id = "stevenbucaille/rf-detr"
-        filename = HOSTED_MODELS[args.model_name]
+    checkpoint_path = args.checkpoint_path
 
 
     # Convert checkpoint
     convert_rf_detr_checkpoint(
         model_name=args.model_name,
-        checkpoint_url=filename,
+        checkpoint_url=checkpoint_path,
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         push_to_hub=args.push_to_hub,
         organization=args.organization,
