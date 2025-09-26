@@ -14,7 +14,7 @@
 import importlib
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from packaging import version
 
@@ -160,11 +160,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
+        **kwargs,
     ):
-        """
-        combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
-        """
         import bitsandbytes as bnb
 
         is_quant_stat = any(param_name.endswith(x) for x in self.bnb_keys)

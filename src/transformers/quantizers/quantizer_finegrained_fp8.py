@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 from .base import HfQuantizer
@@ -81,11 +81,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
+        **kwargs,
     ):
-        """
-        Quantizes weights to FP8 format using Block-wise quantization
-        """
         from ..integrations.finegrained_fp8 import FP8Linear
         from ..modeling_utils import _load_parameter_into_model
 

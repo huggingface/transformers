@@ -25,7 +25,6 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from typing import Any
 
 from ..utils import is_torch_available, is_torchao_available, logging
 from ..utils.quantization_config import TorchAoConfig
@@ -250,12 +249,8 @@ class TorchAoHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
+        **kwargs,
     ):
-        """
-        Each nn.Linear layer that needs to be quantized is processed here.
-        First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
-        """
         if self.quantization_config.quant_type == "autoquant":
             return
 

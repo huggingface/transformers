@@ -175,11 +175,8 @@ class Int8SymmetricQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
+        **kwargs,
     ):
-        """
-        Quantizes weights to INT8 symmetric format.
-        """
         # Sanity check
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module, Int8SymmetricLinear):

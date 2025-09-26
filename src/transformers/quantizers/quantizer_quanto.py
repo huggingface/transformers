@@ -125,12 +125,8 @@ class QuantoHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        *args,
         **kwargs,
     ):
-        """
-        Create the quantized parameter by calling .freeze() after setting it to the module.
-        """
         from accelerate.utils import set_module_tensor_to_device
 
         set_module_tensor_to_device(model, param_name, target_device, param_value)

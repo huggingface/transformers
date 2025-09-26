@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ..integrations import prepare_for_hqq_linear
 from ..utils import is_hqq_available, is_torch_available, logging
@@ -163,13 +163,8 @@ class HqqHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
+        **kwargs,
     ):
-        """
-        Each nn.Linear layer is processed here.
-        We first check if the corresponding module state_dict contains already HQQ quantized parameters.
-        If not, we create a temp linear layer with the module state_dict params and use it for quantization
-        """
         module, tensor_name = get_module_from_name(model, param_name)
         module_name = param_name.rsplit(".", 1)[0]
         parent_module, node = get_module_from_name(model, module_name)

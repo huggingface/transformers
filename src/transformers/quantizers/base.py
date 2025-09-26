@@ -178,10 +178,12 @@ class HfQuantizer(ABC):
         """
         return False
 
-    def create_quantized_param(self, *args, **kwargs) -> "torch.nn.Parameter":
+    def create_quantized_param(self, *args, **kwargs):
         """
-        takes needed components from state_dict and creates quantized param; only applicable if
-        requires_parameters_quantization == True
+        Take needed components from state_dict (those from which `param_needs_quantization` is True) and create
+        quantized param.
+        It usually also load the new param directly in the `model`.
+        Note: only applicable if requires_parameters_quantization == True.
         """
         if not self.requires_parameters_quantization:
             raise AttributeError(

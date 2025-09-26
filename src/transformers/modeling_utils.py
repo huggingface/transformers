@@ -737,7 +737,8 @@ def _load_state_dict_into_meta_model(
                     device_mesh.get_local_rank(),
                     device_mesh,
                 )
-            else:  # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param:
+            else:
+                # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param
                 sharding_kwargs = {
                     "empty_param": empty_param,
                     "casting_dtype": casting_dtype,
@@ -750,7 +751,6 @@ def _load_state_dict_into_meta_model(
                     param,
                     param_name,
                     device_mesh.get_local_rank(),
-                    state_dict,
                     **sharding_kwargs,
                 )
         else:
@@ -779,8 +779,7 @@ def _load_state_dict_into_meta_model(
                 _load_parameter_into_model(model, param_name, param.to(param_device))
 
             else:
-                # TODO naming is stupid it loads it as well
-                hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict)
+                hf_quantizer.create_quantized_param(model, param, param_name, param_device)
 
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
@@ -5701,7 +5700,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
                 else:
-                    hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict)
+                    hf_quantizer.create_quantized_param(self, value, key, "cpu")
 
     def _initialize_missing_keys(self, missing_keys: list[str], is_quantized: bool) -> None:
         """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to

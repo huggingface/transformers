@@ -15,15 +15,11 @@
 
 from typing import TYPE_CHECKING
 
-from ..file_utils import is_torch_available
 from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
-
-    if is_torch_available():
-        import torch
 
 from ..utils import is_accelerate_available, is_quark_available, logging
 
@@ -85,7 +81,7 @@ class QuarkHfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         return True
 
-    def create_quantized_param(self, model, param, param_name, param_device, state_dict) -> "torch.nn.Parameter":
+    def create_quantized_param(self, model, param, param_name, param_device, **kwargs):
         postfix = param_name.split(".")[-1]
 
         if postfix in CHECKPOINT_KEYS:
