@@ -278,8 +278,9 @@ class TorchAoHfQuantizer(HfQuantizer):
 
         if self.pre_quantized:
             # If it's a bias, no need to do anything special (except removing the ":_data" part of the key, but was
-            # already done)
-            if tensor_name == "bias":
+            # already done) - if it's unsafe-serialized (i.e. not safetensors), not need for anything either
+            is_unsafe_serialization = ":" not in full_name
+            if tensor_name == "bias" or is_unsafe_serialization:
                 module._parameters[tensor_name] = torch.nn.Parameter(
                     param_value.to(target_device), requires_grad=param_value.requires_grad
                 )
