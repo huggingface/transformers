@@ -127,9 +127,9 @@ class QuantoHfQuantizer(HfQuantizer):
         target_device: "torch.device",
         **kwargs,
     ):
-        from accelerate.utils import set_module_tensor_to_device
+        from ..modeling_utils import _load_parameter_into_model
 
-        set_module_tensor_to_device(model, param_name, target_device, param_value)
+        _load_parameter_into_model(model, param_name, param_value.to(target_device))
         module, _ = get_module_from_name(model, param_name)
         module.freeze()
         module.weight.requires_grad = False

@@ -21,11 +21,8 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_quark_available, logging
+from ..utils import is_quark_available, logging
 
-
-if is_accelerate_available():
-    from accelerate.utils import set_module_tensor_to_device
 
 logger = logging.get_logger(__name__)
 
@@ -82,12 +79,14 @@ class QuarkHfQuantizer(HfQuantizer):
         return True
 
     def create_quantized_param(self, model, param, param_name, param_device, **kwargs):
+        from ..modeling_utils import _load_parameter_into_model
+
         postfix = param_name.split(".")[-1]
 
         if postfix in CHECKPOINT_KEYS:
             param_name = param_name.replace(postfix, CHECKPOINT_KEYS[postfix])
 
-        set_module_tensor_to_device(model, param_name, param_device, value=param)
+        _load_parameter_into_model(model, param_name, param.to(param_device))
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
