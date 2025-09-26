@@ -148,12 +148,6 @@ class FlavaTextConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048). For VL, max_length passed to model is 77.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -205,7 +199,6 @@ class FlavaTextConfig(PretrainedConfig):
         vocab_size: int = 30522,
         type_vocab_size: int = 2,
         max_position_embeddings: int = 512,
-        position_embedding_type: str = "absolute",
         hidden_size: int = 768,
         num_hidden_layers: int = 12,
         num_attention_heads: int = 12,
@@ -224,7 +217,6 @@ class FlavaTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.position_embedding_type = position_embedding_type
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

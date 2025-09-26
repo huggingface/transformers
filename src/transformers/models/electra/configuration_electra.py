@@ -89,12 +89,6 @@ class ElectraConfig(PretrainedConfig):
             Argument used when doing sequence summary. Used in the sequence classification and multiple choice models.
 
             The dropout ratio to be used after the projection and activation.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -138,7 +132,6 @@ class ElectraConfig(PretrainedConfig):
         summary_activation="gelu",
         summary_last_dropout=0.1,
         pad_token_id=0,
-        position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
         **kwargs,
@@ -163,7 +156,6 @@ class ElectraConfig(PretrainedConfig):
         self.summary_use_proj = summary_use_proj
         self.summary_activation = summary_activation
         self.summary_last_dropout = summary_last_dropout
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
 
