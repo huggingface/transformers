@@ -136,7 +136,7 @@ def dirsize(path):
     return sum(f.stat().st_size for f in pathlib.Path(path).rglob('*') if f.is_file() and not f.is_symlink())
 
 
-def cleanup_large_model_files(directory, size_threshold_mb=10):
+def cleanup_large_model_files(directory, size_threshold_mb=1):
     """
     Delete large model files in HuggingFace cache structure
     """
