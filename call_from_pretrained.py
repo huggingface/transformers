@@ -66,6 +66,49 @@ def foo(call):
 
     return (idx, call, ok)
 
+
+# def execute_expression_safely(expr, globals_dict=None, locals_dict=None):
+#     """Execute an expression safely without crashing the process"""
+
+
+import torch
+import transformers
+from transformers.tokenization_utils import AddedToken
+
+
+def foo2(call):
+
+    idx, call = call
+    class_name = call.split(".from_pretrained")[0]
+
+    error = None
+    ok = False
+    try:
+        # from transformers import {class_name};
+        target_class = getattr(transformers, class_name)
+        print(target_class)
+    except Exception as e:
+        print(e)
+        error = e
+        return (idx, call, ok)
+
+    try:
+        # Execute the expression
+        call2 = call.replace(class_name, "target_class")
+        result = eval(call2, globals(), locals())
+        print(f"✅ SUCCESS: {call}")
+        ok = True
+        return (idx, call, ok)
+
+    except Exception as e:
+        print(f"❌ FAILED: {call}")
+        print(f"   Error: {type(e).__name__}: {e}")
+        error = e
+
+    ok = error is None
+    return (idx, call, ok)
+
+
 if __name__ == "__main__":
 
     with open("calls.json") as fp:
@@ -80,11 +123,12 @@ if __name__ == "__main__":
 
     import multiprocessing
     with multiprocessing.Pool(processes=2) as pool:
-        results = pool.map(foo, calls[:8])
+        results = pool.map(foo2, calls[:8])
 
-    breakpoint()
+
 
     # TODO: how to get error message and size?
+    # breakpoint()
     print(sum([x[-1] for x in results]))
 
 
