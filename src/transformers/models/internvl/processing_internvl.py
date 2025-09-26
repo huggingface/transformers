@@ -98,7 +98,7 @@ class InternVLProcessor(ProcessorMixin):
         video_num_patches: list[int],
         image_num_patches_indices: np.ndarray,
         video_num_patches_indices: np.ndarray,
-        video_patch_indices: np.ndarray,
+        video_frame_indices: np.ndarray,
     ):
         """
         Processes interleaved text with <image> and <video> placeholders, replacing them with appropriate
@@ -132,13 +132,13 @@ class InternVLProcessor(ProcessorMixin):
                     # Get the slice of patches corresponding to the current video
                     # Here we need to account for both the multiple video frames and the potential multiple patches per frame
                     # As of now, InternVL only supports one patch per frame, but we keep the code flexible for future updates
-                    current_patch_index = video_patch_indices[video_index - 1] if video_index > 0 else 0
-                    end_patch_index = video_patch_indices[video_index]
-                    start_index = video_num_patches_indices[current_patch_index] if video_index > 0 else 0
-                    end_index = video_num_patches_indices[end_patch_index - 1]
+                    start_frame_index = video_frame_indices[video_index - 1] if video_index > 0 else 0
+                    end_frame_index = video_frame_indices[video_index]
+                    start_index = video_num_patches_indices[start_frame_index - 1] if start_frame_index > 0 else 0
+                    end_index = video_num_patches_indices[end_frame_index - 1]
                     image_video_patches.append(video_pixel_values[start_index:end_index])
                     # Get the number of patches per frame and replace the video placeholder with the correct number of image tokens
-                    num_patches = list(video_num_patches[current_patch_index:end_patch_index])
+                    num_patches = list(video_num_patches[start_frame_index:end_frame_index])
                     video_prompt = "\n".join(
                         f"Frame{i + 1}: {self.start_image_token}{self.image_token * self.image_seq_length * num_patches[i]}{self.end_image_token}"
                         for i in range(len(num_patches))
@@ -211,7 +211,7 @@ class InternVLProcessor(ProcessorMixin):
         image_pixel_values = None
         video_pixel_values = None
         image_num_patches_indices = np.array([0])
-        video_patch_indices = np.array([0])
+        video_frame_indices = np.array([0])
         video_num_patches_indices = np.array([0])
         if images is not None:
             images = self.image_processor.fetch_images(images)
@@ -227,7 +227,7 @@ class InternVLProcessor(ProcessorMixin):
             # Obtain per frame information first and then flatten to (BS * T, ...)
             num_frames_per_video = [len(video) for video in video_pixel_values]
             video_num_patches = [1 for frames in num_frames_per_video for _ in range(frames)]
-            video_patch_indices = np.cumsum(num_frames_per_video)
+            video_frame_indices = np.cumsum(num_frames_per_video)
             video_num_patches_indices = np.cumsum(video_num_patches)
             video_pixel_values = video_pixel_values.flatten(0, 1)
 
@@ -240,7 +240,7 @@ class InternVLProcessor(ProcessorMixin):
                 video_num_patches,
                 image_num_patches_indices,
                 video_num_patches_indices,
-                video_patch_indices,
+                video_frame_indices,
             )
             if images is not None and image_index != len(images):
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
