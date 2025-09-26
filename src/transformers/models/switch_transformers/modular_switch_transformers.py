@@ -351,7 +351,6 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["SwitchTransformersBlock"]
     _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
-        "encoder_hidden_states": OutputRecorder(SwitchTransformersBlock, 0, layer_name="encoder"),
         "attentions": SwitchTransformersLayerSelfAttention,
         "cross_attentions": SwitchTransformersLayerCrossAttention,
     }
@@ -419,8 +418,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         inputs_embeds=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
         past_key_values=None,
         use_cache=None,
         cache_position=None,
@@ -489,18 +486,12 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
-        # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
-        cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
         position_bias = None
         encoder_decoder_position_bias = None
 
         hidden_states = self.dropout(inputs_embeds)
 
         for i, layer_module in enumerate(self.block):
-            layer_head_mask = head_mask[i]
-            cross_attn_layer_head_mask = cross_attn_head_mask[i]
-
             hidden_states = layer_module(
                 hidden_states,
                 causal_mask,
@@ -508,8 +499,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 encoder_hidden_states,
                 encoder_extended_attention_mask,
                 encoder_decoder_position_bias,
-                layer_head_mask=layer_head_mask,
-                cross_attn_layer_head_mask=cross_attn_layer_head_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -670,9 +659,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        # Model parallel
-        self.device_map = None
-
     def get_input_embeddings(self):
         return self.shared
 
@@ -698,7 +684,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
-    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -712,12 +697,9 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
-        # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
+                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
             )
 
         hidden_states = encoder_outputs.last_hidden_state
@@ -729,6 +711,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             cache_position=cache_position,
+            **kwargs,
         )
 
         return Seq2SeqMoEModelOutput(
