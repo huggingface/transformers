@@ -182,6 +182,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         self.layers = nn.ModuleList(
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.embedding_multiplier = config.embedding_multiplier
 
     @auto_docstring
     @check_model_inputs
