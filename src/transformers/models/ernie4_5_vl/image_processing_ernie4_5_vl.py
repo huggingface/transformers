@@ -42,7 +42,9 @@ from ...image_utils import (
 )
 from ...utils import TensorType, logging
 from ...video_utils import VideoInput, make_batched_videos
-#from .image_processing_ernie4_5_vl import smart_resize  # TODO: modular bug
+
+
+# from .image_processing_ernie4_5_vl import smart_resize  # TODO: modular bug
 
 
 logger = logging.get_logger(__name__)

@@ -5,7 +5,15 @@ import re
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file, save_file
 
-from transformers import AutoTokenizer, Ernie4_5_VLConfig, LlamaTokenizer
+from transformers import (
+    AutoTokenizer,
+    Ernie4_5_VLConfig,
+    Ernie4_5_VLImageProcessor,
+    Ernie4_5_VLImageProcessorFast,
+    Ernie4_5_VLProcessor,
+    Ernie4_5_VLVideoProcessor,
+    LlamaTokenizer,
+)
 
 
 TIED_MAPPING = {
@@ -49,8 +57,18 @@ TEXT_TO_VISION_CONFIG_KEYS = [
     "temporal_conv_size",
     "rms_norm_eps",
 ]
-ALL_VISION_CONFIG_KEYS = VALID_VISION_CONFIG_KEYS + TEXT_TO_VISION_CONFIG_KEYS + ["intermediate_size", "text_hidden_size", "vision_rms_norm_eps"]
-ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + ["hidden_act", "moe_layer_end_index", "moe_layer_start_index", "moe_num_experts", "freq_allocation"]
+ALL_VISION_CONFIG_KEYS = (
+    VALID_VISION_CONFIG_KEYS
+    + TEXT_TO_VISION_CONFIG_KEYS
+    + ["intermediate_size", "text_hidden_size", "vision_rms_norm_eps"]
+)
+ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + [
+    "hidden_act",
+    "moe_layer_end_index",
+    "moe_layer_start_index",
+    "moe_num_experts",
+    "freq_allocation",
+]
 
 TMP_TOKENIZER_DIR = "/tmp/ernie_vl_tokenizer"
 ADDED_TOKENS_FILE = "added_tokens.json"
@@ -183,29 +201,30 @@ def convert_state_dict_to_hf(state_dict, is_tied=True):
                 converted_state_dict[converted_key + f"{moe_type}." + suffix] = tensor.T.contiguous()
             elif ".experts" in key:
                 moe_type = "text_moe"
-                expert_number = int(re.findall(r'\d+', key)[-1])
+                expert_number = int(re.findall(r"\d+", key)[-1])
                 # 128 experts split into 64 each (text, vision)
                 if expert_number >= 64:
                     moe_type = "vision_moe"
                     expert_number -= 64
                 # avoid subbing the layer idx + experts twice
-                prefix = re.findall(r'model.language_model.layers.\d+.mlp.experts.', key)[0]
+                prefix = re.findall(r"model.language_model.layers.\d+.mlp.experts.", key)[0]
                 converted_key = re.sub(r"\d+", f"{moe_type}.experts.{expert_number}", key.removeprefix(prefix))
                 converted_state_dict[re.sub(".experts", "", prefix) + converted_key] = tensor.contiguous()
             else:
                 converted_state_dict[key] = tensor.contiguous()
         # Convert sequential to its own module
         elif "spatial_linear" in key or "temporal_linear" in key:
-            sequential_number = int(re.findall(r'\d+', key)[-1])
-            match sequential_number:
-                case 0:
-                    converted_key = re.sub(r'(?<=\.)\d+(?=\.)', 'fc1', key)
-                case 2:
-                    converted_key = re.sub(r'(?<=\.)\d+(?=\.)', 'fc2', key)
-                case 3:
-                    converted_key = re.sub(r'(?<=\.)\d+(?=\.)', 'ln', key)
-                case _:
-                    converted_key = key
+            sequential_number = int(re.findall(r"\d+", key)[-1])
+
+            if sequential_number == 0:
+                converted_key = re.sub(r"(?<=\.)\d+(?=\.)", "fc1", key)
+            elif sequential_number == 2:
+                converted_key = re.sub(r"(?<=\.)\d+(?=\.)", "fc2", key)
+            elif sequential_number == 3:
+                converted_key = re.sub(r"(?<=\.)\d+(?=\.)", "ln", key)
+            else:
+                converted_key = key
+
             converted_state_dict[converted_key] = tensor.contiguous()
         else:
             converted_state_dict[key] = tensor.contiguous()
@@ -227,7 +246,7 @@ def convert_weights(model_path, save_dir):
             original_index = load_json(checkpoint_path, filename)
             index_dict["metadata"] = original_index["metadata"]
         # sharded files are converted 1 by 1
-        if filename.endswith('.safetensors'):
+        if filename.endswith(".safetensors"):
             input_file = os.path.join(checkpoint_path, filename)
             output_file = os.path.join(save_dir, filename)
 
@@ -296,11 +315,7 @@ def convert_config(model_path, save_dir):
             # vision config
             vision_config = hf_config.vision_config.to_dict()
             original_vision_config = original_config["vision_config"]
-            vision_config = convert_vision_config_to_hf(
-                vision_config,
-                original_config,
-                original_vision_config
-            )
+            vision_config = convert_vision_config_to_hf(vision_config, original_config, original_vision_config)
 
             # text config
             text_config = hf_config.text_config.to_dict()
@@ -376,6 +391,49 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
     tokenizer.save_pretrained(save_dir)
 
 
+def convert_processor(model_path, save_dir):
+    convert_tokenizer(model_path, save_dir)
+    tokenizer = AutoTokenizer.from_pretrained(save_dir)
+
+    processor = Ernie4_5_VLProcessor(
+        # Using the slow processor for now as it changes the default output otherwise
+        image_processor=Ernie4_5_VLImageProcessor(),
+        tokenizer=tokenizer,
+        video_processor=Ernie4_5_VLVideoProcessor(),
+        chat_template=tokenizer.chat_template,
+    )
+    processor.save_pretrained(save_dir)
+
+    """test_1 = Ernie4_5_VLImageProcessor.from_pretrained(save_dir)
+    test_2 = Ernie4_5_VLImageProcessorFast.from_pretrained(save_dir)
+    test_3 = Ernie4_5_VLImageProcessorFast()
+
+    for attr in [
+        #"min_pixels",
+        #"max_pixels",
+        "size",
+        "do_resize",
+        "resample",
+        "do_rescale",
+        "rescale_factor",
+        "do_normalize",
+        "image_mean",
+        "image_std",
+        "patch_size",
+        "temporal_patch_size",
+        "merge_size",
+        "do_convert_rgb",
+    ]:
+        t1 = getattr(test_1, attr, None)
+        t2 = getattr(test_2, attr, None)
+        t3 = getattr(test_3, attr, None)
+
+        if t1 != t2 or t1 != t3:
+            raise ValueError(f"{attr} - {t1} vs {t2} vs {t3}")
+
+    print()"""
+
+
 """
 convert_weights(
     model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
@@ -390,9 +448,16 @@ convert_config(
 )
 #"""
 
-#"""
+"""
 convert_tokenizer(
     original_tokenizer_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
     save_dir='AntonV/ErnieVL',
+)
+#"""
+
+#"""
+convert_processor(
+    model_path="baidu/ERNIE-4.5-VL-28B-A3B-PT",
+    save_dir="AntonV/ErnieVL",
 )
 #"""

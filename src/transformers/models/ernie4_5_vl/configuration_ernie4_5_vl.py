@@ -127,6 +127,8 @@ class Ernie4_5_VLTextConfig(PretrainedConfig):
 
 
 class Ernie4_5_VLConfig(PretrainedConfig):
+    r"""TODO: autodocstring complains otherwise"""
+
     model_type = "ernie4_5_vl"
     sub_configs = {"vision_config": Ernie4_5_VLVisionConfig, "text_config": Ernie4_5_VLTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -135,7 +137,6 @@ class Ernie4_5_VLConfig(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
-        # TODO: check these out
         image_start_token_id=101304,
         image_end_token_id=101305,
         image_token_id=100295,
