@@ -126,9 +126,6 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -260,7 +257,6 @@ class _BaseAutoModelClass:
             "force_download",
             "local_files_only",
             "proxies",
-            "resume_download",
             "revision",
             "subfolder",
             "use_auth_token",
