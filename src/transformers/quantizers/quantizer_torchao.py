@@ -14,6 +14,7 @@
 import importlib
 import re
 import types
+from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, Union
 
 from packaging import version
@@ -25,9 +26,13 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
+from typing import Any
 
-from ..utils import is_torch_available, is_torchao_available, logging
-from ..utils.quantization_config import TorchAoConfig
+from ..utils import is_safetensors_available, is_torch_available, is_torchao_available, logging
+
+
+if is_safetensors_available():
+    from safetensors import safe_open
 
 
 if is_torch_available():
@@ -42,7 +47,6 @@ if is_torchao_available():
             flatten_tensor_state_dict,
             unflatten_tensor_state_dict,
         )
-        from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
 
 
 logger = logging.get_logger(__name__)
@@ -61,15 +65,6 @@ def fuzzy_match_size(config_name: str) -> Optional[str]:
         return str_match.group(1)
 
     return None
-
-
-# Finds the parent of a node module named "name"
-def find_parent(model, name):
-    module_tree = name.split(".")[:-1]
-    parent = model
-    for m in module_tree:
-        parent = parent._modules[m]
-    return parent
 
 
 def _quantization_type(weight):
@@ -111,6 +106,20 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
+
+        if isinstance(self.quantization_config.quant_type, str):
+            is_int_4 = "int4" in self.quantization_config.quant_type
+        else:
+            config_name = self.quantization_config.quant_type.__class__.__name__
+            is_int_4 = fuzzy_match_size(config_name) == "4"
+
+        # TODO: better way to get the serialized key names? Hard to read from torchao codebase
+        if is_int_4:
+            self.weight_ao_keys = ["qdata", "scale", "zero_point"]
+        else:
+            self.weight_ao_keys = ["qdata", "scale"]
+        # Instead of serializing the simple torch.Tensor like usual, torchao adds a `:_data` suffix so we need this
+        self.full_ao_keys = self.weight_ao_keys + ["_data"]
 
     def validate_environment(self, *args, **kwargs):
         if not is_torchao_available():
@@ -228,20 +237,25 @@ class TorchAoHfQuantizer(HfQuantizer):
             ]
         return
 
+    def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
+        return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.full_ao_keys)]
+
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         if self.quantization_config.quant_type == "autoquant":
             return False
 
         # check if the param_name is not in self.modules_to_not_convert
-        if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
+        if any(key + "." in param_name or key == param_name for key in self.modules_to_not_convert):
             return False
+        elif any(param_name.endswith(f":{x}") for x in self.full_ao_keys):
+            return True
         else:
             # we only quantize the weight of nn.Linear and nn.Embedding
             module, tensor_name = get_module_from_name(model, param_name)
             _QUANTIZABLE = [torch.nn.Linear]
             if self.quantization_config.include_input_output_embeddings:
                 _QUANTIZABLE.append(torch.nn.Embedding)
-            return isinstance(module, tuple(_QUANTIZABLE)) and (tensor_name == "weight")
+            return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 
     def create_quantized_param(
         self,
@@ -249,25 +263,52 @@ class TorchAoHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        **kwargs,
+        state_dict: dict[str, Any],
     ):
-        if self.quantization_config.quant_type == "autoquant":
-            return
-
+        """
+        Each nn.Linear layer that needs to be quantized is processed here.
+        First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
+        """
         from torchao.quantization import quantize_
 
+        full_name = param_name
+        # Those are the pre quantized weights
+        if ":" in param_name:
+            param_name = param_name.rsplit(":", 1)[0]
         module, tensor_name = get_module_from_name(model, param_name)
+
         if self.pre_quantized:
-            module._parameters[tensor_name] = torch.nn.Parameter(
-                param_value.to(device=target_device), requires_grad=param_value.requires_grad
-            )
+            # If it's a bias, no need to do anything special (except removing the ":_data" part of the key, but was
+            # already done)
+            if tensor_name == "bias":
+                module._parameters[tensor_name] = torch.nn.Parameter(
+                    param_value.to(target_device), requires_grad=param_value.requires_grad
+                )
+                return
+
+            # Save the states for later quantization when they are all gathered
+            if not hasattr(self, "ao_params"):
+                self.ao_params = defaultdict(dict)
+            self.ao_params[param_name].update({full_name: param_value})
+
+            # We are ready for quantization in this case (we retrieved all the needed keys)
+            if len(self.ao_params[param_name]) == len(self.weight_ao_keys):
+                new_param = unflatten_tensor_state_dict(self.ao_params[param_name], self.metadata)[param_name]
+                # Set it
+                module._parameters[tensor_name] = torch.nn.Parameter(
+                    new_param.to(target_device), requires_grad=new_param.requires_grad
+                )
+
+                # Free memory
+                del self.ao_params[param_name]
+
+            # Add repr to the module
             if isinstance(module, nn.Linear):
                 module.extra_repr = types.MethodType(_linear_extra_repr, module)
         else:
-            assert isinstance(self.quantization_config, TorchAoConfig)
             module._parameters[tensor_name] = torch.nn.Parameter(
                 param_value, requires_grad=param_value.requires_grad
-            ).to(device=target_device)
+            ).to(target_device)
             # if we are quantizing tied parameters, to avoid tying the quantized weights
             # the correct order to do it is
             # 1. load the weight to model
@@ -296,16 +337,6 @@ class TorchAoHfQuantizer(HfQuantizer):
                     return
 
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
-
-    def update_state_dict_with_metadata(self, state_dict, metadata):
-        """
-        If the metadata contains torchao tensor subclass information, we reconstruct the tensor subclass state dict
-        from the provided state_dict and metadata.
-        """
-        if TORCHAO_VERSION >= version.parse("0.14.0") and is_metadata_torchao(metadata):
-            return unflatten_tensor_state_dict(state_dict, metadata)
-        else:
-            return state_dict
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
@@ -399,3 +430,13 @@ class TorchAoHfQuantizer(HfQuantizer):
     @property
     def is_compileable(self) -> bool:
         return True
+
+    def set_metadata(self, checkpoint_files: list[str]):
+        if checkpoint_files[0].endswith(".safetensors") and is_safetensors_available():
+            metadata = {}
+            for checkpoint in checkpoint_files:
+                with safe_open(checkpoint, framework="pt") as f:
+                    metadata_ = f.metadata() or {}
+                    metadata.update(metadata_)
+            # Save it
+            self.metadata = metadata

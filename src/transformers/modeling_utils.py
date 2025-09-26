@@ -120,7 +120,7 @@ from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 
 if is_torchao_available():
-    from torchao.quantization import Int4WeightOnlyConfig
+    pass
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map
@@ -699,11 +699,8 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
-        QuantizationMethod.TORCHAO,
-    }
     is_safetensors = shard_file.endswith(".safetensors")
-    is_meta_state_dict = is_safetensors and not is_ao
+    is_meta_state_dict = is_safetensors
     file_pointer = safe_open(shard_file, framework="pt", device=tensor_device) if is_meta_state_dict else None
     params_to_load = list(state_dict.keys())
 
@@ -737,8 +734,7 @@ def _load_state_dict_into_meta_model(
                     device_mesh.get_local_rank(),
                     device_mesh,
                 )
-            else:
-                # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param
+            else:  # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param:
                 sharding_kwargs = {
                     "empty_param": empty_param,
                     "casting_dtype": casting_dtype,
@@ -751,6 +747,7 @@ def _load_state_dict_into_meta_model(
                     param,
                     param_name,
                     device_mesh.get_local_rank(),
+                    state_dict,
                     **sharding_kwargs,
                 )
         else:
@@ -779,7 +776,8 @@ def _load_state_dict_into_meta_model(
                 _load_parameter_into_model(model, param_name, param.to(param_device))
 
             else:
-                hf_quantizer.create_quantized_param(model, param, param_name, param_device)
+                # TODO naming is stupid it loads it as well
+                hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict)
 
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
@@ -817,7 +815,6 @@ def load_shard_file(args):
         shard_file,
         state_dict,
         disk_only_shard_files,
-        is_ao,
         is_quantized,
         device_map,
         hf_quantizer,
@@ -836,18 +833,8 @@ def load_shard_file(args):
         return [], disk_offload_index
 
     map_location = "cpu"
-    if shard_file.endswith(".safetensors") and not is_ao and not (is_deepspeed_zero3_enabled() and not is_quantized):
+    if shard_file.endswith(".safetensors") and not (is_deepspeed_zero3_enabled() and not is_quantized):
         map_location = "meta"
-    elif (
-        device_map is not None
-        and hf_quantizer is not None
-        and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-        and (
-            hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
-            or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
-        )
-    ):
-        map_location = torch.device([d for d in device_map.values() if d not in ["disk"]][0])
 
     # If shard_file is "", we use the existing state_dict instead of loading it
     if shard_file != "":
@@ -858,14 +845,7 @@ def load_shard_file(args):
     # Fix the key names
     state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
 
-    if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO:
-        if shard_file.endswith(".safetensors") and is_safetensors_available():
-            with safe_open(shard_file, framework="pt") as f:
-                metadata = f.metadata()
-            state_dict = hf_quantizer.update_state_dict_with_metadata(state_dict, metadata)
-
     error_msgs = []
-
     if is_deepspeed_zero3_enabled() and not is_quantized:
         error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
     # Skip it with fsdp on ranks other than 0
@@ -4921,6 +4901,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config._pre_quantization_dtype = original_dtype
             _assign_original_dtype(model)
 
+            # Torchao needs access to all metadata later
+            if hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO:
+                hf_quantizer.set_metadata(checkpoint_files)
+
         if _torch_distributed_available and device_mesh is not None:
             model = distribute_model(model, distributed_config, device_mesh, tp_size)
 
@@ -5191,9 +5175,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
-        is_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
-            QuantizationMethod.TORCHAO,
-        }
 
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
@@ -5326,7 +5307,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 shard_file,
                 state_dict,
                 disk_only_shard_files,
-                is_ao,
                 is_quantized,
                 device_map,
                 hf_quantizer,
@@ -5700,7 +5680,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
                 else:
-                    hf_quantizer.create_quantized_param(self, value, key, "cpu")
+                    hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict)
 
     def _initialize_missing_keys(self, missing_keys: list[str], is_quantized: bool) -> None:
         """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
