@@ -636,4 +636,4 @@ class RfDetrDinov2WithRegistersBackbone(RfDetrDinov2WithRegistersPreTrainedModel
         )
 
 
-__all__ = ["RfDetrDinov2WithRegistersBackbone"]
+__all__ = ["RfDetrDinov2WithRegistersBackbone", "RfDetrDinov2WithRegistersPreTrainedModel"]
