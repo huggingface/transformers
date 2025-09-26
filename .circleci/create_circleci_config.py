@@ -182,7 +182,7 @@ class CircleCIJob:
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
             },
-            {"run": {"name": "Install torch 2.9 RC", "command": "pip3 install torch==2.9.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cpu"}},
+            {"run": {"name": "pip uninstall -y torchcodec && Install torch 2.9 RC", "command": "pip3 install torch==2.9.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cpu"}},
             # During the CircleCI docker images build time, we might already (or not) download the data.
             # If it's done already, the files are inside the directory `/test_data/`.
             {"run": {"name": "fetch hub objects before pytest", "command": "cp -r /test_data/* . 2>/dev/null || true; python3 utils/fetch_hub_objects_for_ci.py"}},
