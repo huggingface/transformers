@@ -49,6 +49,8 @@ jobs:
           context: ./docker
           build-args: |
             REF=${{ github.sha }}
+          secrets: |
+            token=${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
           file: "./docker/${{ matrix.file }}.dockerfile"
           push: true
           tags: ${{ env.TAG }}

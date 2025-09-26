@@ -1,5 +1,6 @@
 FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
+
 ARG REF=main
 USER root
 RUN apt-get update &&  apt-get install -y --no-install-recommends libsndfile1-dev espeak-ng time git g++ cmake pkg-config openssh-client git-lfs ffmpeg curl
@@ -21,6 +22,7 @@ RUN python call_from_pretrained.py
 # Move the already downloaded file
 RUN mv upload_hub_cache.py ~/.cache/huggingface/
 # file name: huggingface-cache.tar.gz
-RUN cd ~/.cache/huggingface && tar -czf huggingface-cache.tar.gz hub/ && python3 upload_hub_cache.py
-
+RUN --mount=type=secret,id=token cd ~/.cache/huggingface && \
+    tar -czf huggingface-cache.tar.gz hub/ && \
+    TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN=$(cat /run/secrets/token) python3 upload_hub_cache.py
 RUN uv pip uninstall transformers
