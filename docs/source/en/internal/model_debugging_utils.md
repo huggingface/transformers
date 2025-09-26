@@ -279,7 +279,7 @@ python utils/scan_skipped_tests.py --output_dir path/to/output
 
 **Example output:**
 
-```
+```text
 🔬 Parsing 331 model test files once each...
 📝 Aggregating 224 tests...
   (224/224) test_update_candidate_strategy_with_matches_1es_3d_is_nonecodet_schedule_fa_kwargs

@@ -112,7 +112,7 @@ as with `nvidia-smi` CLI:
 nvidia-smi
 ```
 
-```bash
+```text
 Tue Jan 11 08:58:05 2022
 +-----------------------------------------------------------------------------+
 | NVIDIA-SMI 460.91.03    Driver Version: 460.91.03    CUDA Version: 11.2     |
@@ -172,7 +172,7 @@ Let's use the [`Trainer`] and train the model without using any GPU performance 
 >>> print_summary(result)
 ```
 
-```
+```text
 Time: 57.82
 Samples/second: 8.86
 GPU memory occupied: 14949 MB.
@@ -258,7 +258,7 @@ needs to maintain multiple copies of inputs and outputs.
 
 For convolutions and linear layers there are 2x flops in the backward compared to the forward, which generally translates
 into ~2x slower (sometimes more, because sizes in the backward tend to be more awkward). Activations are usually
-bandwidth-limited, and it’s typical for an activation to have to read more data in the backward than in the forward
+bandwidth-limited, and it's typical for an activation to have to read more data in the backward than in the forward
 (e.g. activation forward reads once, writes once, activation backward reads twice, gradOutput and output of the forward,
 and writes once, gradInput).
 

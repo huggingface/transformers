@@ -15,7 +15,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-09-12.*
+*This model was released on 2016-07-01 and added to Hugging Face Transformers on 2025-09-12.*
 
 # VaultGemma
 
@@ -81,7 +81,7 @@ print(tokenizer.decode(outputs[0]))
 </hfoption>
 <hfoption id="transformers CLI">
 
-```
+```bash
 echo -e "Write me a poem about Machine Learning. Answer:" | transformers run --task text2text-generation --model google/vaultgemma-1b-pt --device 0
 ```
 

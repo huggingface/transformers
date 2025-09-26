@@ -115,7 +115,7 @@ tensors. After setting up the tensor quantizers, one can use the following examp
 
 The goal of exporting to ONNX is to deploy inference by [TensorRT](https://developer.nvidia.com/tensorrt). Fake
 quantization will be broken into a pair of QuantizeLinear/DequantizeLinear ONNX ops. After setting static member of
-TensorQuantizer to use Pytorch’s own fake quantization functions, fake quantized model can be exported to ONNX, follow
+TensorQuantizer to use Pytorch's own fake quantization functions, fake quantized model can be exported to ONNX, follow
 the instructions in [torch.onnx](https://pytorch.org/docs/stable/onnx.html). Example:
 
 ```python

@@ -25,11 +25,8 @@ from collections.abc import Sequence
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-
-if TYPE_CHECKING:
-    import torch
+import httpx
 import numpy as np
-import requests
 from packaging import version
 
 from .utils import (
@@ -41,6 +38,9 @@ from .utils import (
     requires_backends,
 )
 
+
+if TYPE_CHECKING:
+    import torch
 
 if is_soundfile_available():
     import soundfile as sf
@@ -132,7 +132,9 @@ def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeo
 
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
     if audio.startswith("http://") or audio.startswith("https://"):
-        audio = librosa.load(BytesIO(requests.get(audio, timeout=timeout).content), sr=sampling_rate)[0]
+        audio = librosa.load(
+            BytesIO(httpx.get(audio, follow_redirects=True, timeout=timeout).content), sr=sampling_rate
+        )[0]
     elif os.path.isfile(audio):
         audio = librosa.load(audio, sr=sampling_rate)[0]
     return audio
@@ -174,7 +176,7 @@ def load_audio_as(
         # Load audio bytes from URL or file
         audio_bytes = None
         if audio.startswith(("http://", "https://")):
-            response = requests.get(audio, timeout=timeout)
+            response = httpx.get(audio, follow_redirects=True, timeout=timeout)
             response.raise_for_status()
             audio_bytes = response.content
         elif os.path.isfile(audio):

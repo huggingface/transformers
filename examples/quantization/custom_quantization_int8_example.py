@@ -159,7 +159,7 @@ class Int8SymmetricQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model,
         param_value: "torch.Tensor",
@@ -187,7 +187,6 @@ class Int8SymmetricQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         Quantizes weights to INT8 symmetric format.

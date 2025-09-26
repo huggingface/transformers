@@ -26,7 +26,7 @@ This guide shows how to use Transformers' models as a backend to some popular in
 
 [vLLM](https://github.com/vllm-project/vllm) is a high-performance inference engine optimized for serving LLMs at scale. It supports many Transformers' models, including all decoder-only LLMs and several vision-language models (VLMs). VLMs currently support image inputs only, with video support planned.
 
-vLLM automatically selects the best backend, and if a model isn’t natively supported, it falls back to the Transformers model. To explicitly use a Transformers' model, set `model_impl="transformers"`.
+vLLM automatically selects the best backend, and if a model isn't natively supported, it falls back to the Transformers model. To explicitly use a Transformers' model, set `model_impl="transformers"`.
 
 ```python
 from vllm import LLM
@@ -47,7 +47,7 @@ Refer to the [vLLM docs](https://docs.vllm.ai/en/latest/models/supported_models.
 
 [SGLang](https://github.com/InternLM/sglang) is a high-performance, OpenAI-compatible server and runtime designed for chat-based LLMs. It offers fast inference, role-based conversation handling, and support for custom pipelines, making it great for building real-world LLM apps.
 
-SGLang automatically falls back to the Transformers backend if a model isn’t natively supported. To explicitly use a Transformers' model, set `impl="transformers"`.
+SGLang automatically falls back to the Transformers backend if a model isn't natively supported. To explicitly use a Transformers' model, set `impl="transformers"`.
 
 ```python
 import sglang as sgl

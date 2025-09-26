@@ -82,7 +82,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         Quantizes weights to FP8 format using Block-wise quantization
@@ -129,7 +128,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         _load_parameter_into_model(model, param_name, quantized_param)
         _load_parameter_into_model(model, param_name.rsplit(".", 1)[0] + ".weight_scale_inv", scale)
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",

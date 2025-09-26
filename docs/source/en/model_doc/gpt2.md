@@ -75,7 +75,7 @@ echo -e "Hello, I'm a language model" | transformers run --task text-generation 
 
 One can also serve the model using vLLM with the `transformers backend`.
 
-```
+```bash
 vllm serve openai-community/gpt2 --model-imp transformers
 ```
 

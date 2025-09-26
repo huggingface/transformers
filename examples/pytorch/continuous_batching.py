@@ -40,7 +40,8 @@ def generate_simple(
     attn_impl = {
         "sdpa_paged": "sdpa",
         "eager_paged": "eager",
-        "flash_paged": "flash_attention_2",
+        "paged_attention": "eager",  # TODO: this does not work on AMD docker
+        "flash_paged": "flash_attention_2",  # TODO: this does not work on AMD docker
     }[attn_impl]
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_impl)

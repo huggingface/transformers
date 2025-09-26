@@ -1,7 +1,7 @@
 import os
 
 import requests
-from huggingface_hub import Repository, hf_hub_download
+from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers.testing_utils import _run_pipeline_tests, _run_staging
 from transformers.utils.import_utils import is_mistral_common_available
@@ -173,9 +173,9 @@ if __name__ == "__main__":
     # But this repo. is never used in a test decorated by `is_staging_test`.
     if not _run_staging:
         if not os.path.isdir("tiny-random-custom-architecture"):
-            _ = Repository(
+            snapshot_download(
+                "hf-internal-testing/tiny-random-custom-architecture",
                 local_dir="tiny-random-custom-architecture",
-                clone_from="hf-internal-testing/tiny-random-custom-architecture",
             )
 
         # For `tests/test_tokenization_mistral_common.py:TestMistralCommonTokenizer`, which eventually calls

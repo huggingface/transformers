@@ -124,7 +124,7 @@ Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopte
 
 > [!WARNING]
 > Some tokenizers add special `<bos>` and `<eos>` tokens. Chat templates should already include all the necessary special tokens, and adding additional special tokens is often incorrect or duplicated, hurting model performance. When you format text with `apply_chat_template(tokenize=False)`, make sure you set `add_special_tokens=False` if you tokenize later to avoid duplicating these tokens.
-> This isn’t an issue if you use `apply_chat_template(tokenize=True)`, which means it's usually the safer option!
+> This isn't an issue if you use `apply_chat_template(tokenize=True)`, which means it's usually the safer option!
 
 ### add_generation_prompt
 
@@ -168,7 +168,7 @@ Can I ask a question?<|im_end|>
 
 When `add_generation_prompt=True`, `<|im_start|>assistant` is added at the end to indicate the start of an `assistant` message. This lets the model know an `assistant` response is next.
 
-Not all models require generation prompts, and some models, like [Llama](./model_doc/llama), don’t have any special tokens before the `assistant` response. In these cases, [add_generation_prompt](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.add_generation_prompt) has no effect.
+Not all models require generation prompts, and some models, like [Llama](./model_doc/llama), don't have any special tokens before the `assistant` response. In these cases, [add_generation_prompt](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.add_generation_prompt) has no effect.
 
 ### continue_final_message
 
@@ -187,9 +187,9 @@ model.generate(**formatted_chat)
 ```
 
 > [!WARNING]
-> You shouldn’t use [add_generation_prompt](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.add_generation_prompt) and [continue_final_message](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.continue_final_message) together. The former adds tokens that start a new message, while the latter removes end of sequence tokens. Using them together returns an error.
+> You shouldn't use [add_generation_prompt](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.add_generation_prompt) and [continue_final_message](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.continue_final_message) together. The former adds tokens that start a new message, while the latter removes end of sequence tokens. Using them together returns an error.
 
-[`TextGenerationPipeline`] sets [add_generation_prompt](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.add_generation_prompt) to `True` by default to start a new message. However, if the final message in the chat has the `assistant` role, it assumes the message is a prefill and switches to `continue_final_message=True`. This is because most models don’t support multiple consecutive assistant messages. To override this behavior, explicitly pass the [continue_final_message](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.continue_final_message) argument to the pipeline.
+[`TextGenerationPipeline`] sets [add_generation_prompt](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.add_generation_prompt) to `True` by default to start a new message. However, if the final message in the chat has the `assistant` role, it assumes the message is a prefill and switches to `continue_final_message=True`. This is because most models don't support multiple consecutive assistant messages. To override this behavior, explicitly pass the [continue_final_message](https://huggingface.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.apply_chat_template.continue_final_message) argument to the pipeline.
 
 ## Model training
 

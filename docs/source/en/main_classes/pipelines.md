@@ -159,7 +159,7 @@ for batch_size in [1, 8, 64, 256]:
         pass
 ```
 
-```
+```text
 # On GTX 970
 ------------------------------
 Streaming no batching
@@ -195,7 +195,7 @@ This is a occasional very long sentence compared to the other. In that case, the
 tokens long, so the whole batch will be [64, 400] instead of [64, 4], leading to the high slowdown. Even worse, on
 bigger batches, the program simply crashes.
 
-```
+```text
 ------------------------------
 Streaming no batching
 100%|█████████████████████████████████████████████████████████████████████| 1000/1000 [00:05<00:00, 183.69it/s]

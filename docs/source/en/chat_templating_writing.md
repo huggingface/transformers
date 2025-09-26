@@ -188,7 +188,7 @@ The example below shows how a tool is defined in JSON schema format.
 
 An example of handling tool definitions in a chat template is shown below. The specific tokens and layouts should be changed to match the ones the model was trained with.
 
-```
+```jinja
 {%- if tools %}
     {%- for tool in tools %}
         {{- '<tool>' + tool['function']['name'] + '\n' }}
@@ -226,7 +226,7 @@ Tool calls are generally passed in the `tool_calls` key of an `"assistant”` me
 
 A common pattern for handling tool calls is shown below. You can use this as a starting point, but make sure you template actually matches the format the model was trained with!
 
-```
+```jinja
 {%- if message['role'] == 'assistant' and 'tool_calls' in message %}
     {%- for tool_call in message['tool_calls'] %}
             {{- '<tool_call>' + tool_call['function']['name'] + '\n' + tool_call['function']['arguments']|tojson + '\n</tool_call>' }}
@@ -249,7 +249,7 @@ Tool responses are message dicts with the `tool` role. They are much simpler tha
 
 Some templates may not even need the `name` key, in which case, you can write your template to only read the `content` key.
 
-```
+```jinja
 {%- if message['role'] == 'tool' %}
     {{- "<tool_result>" + message['content'] + "</tool_result>" }}
 {%- endif %}

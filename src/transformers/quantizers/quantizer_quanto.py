@@ -103,7 +103,7 @@ class QuantoHfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
@@ -111,9 +111,6 @@ class QuantoHfQuantizer(HfQuantizer):
         state_dict: dict[str, Any],
         **kwargs,
     ) -> bool:
-        """
-        Check if a parameter needs to be quantized.
-        """
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
 

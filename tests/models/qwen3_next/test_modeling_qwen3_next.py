@@ -315,10 +315,6 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    @unittest.skip("Redundant with `test_initialization`, and fails because of the same param (`A_log`)")
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        pass
-
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
         self,

@@ -260,8 +260,7 @@ or `pytest.ini`/``tox.ini`` files:
 looponfailroots = transformers tests
 ```
 
-This would lead to only looking for file changes in the respective directories, specified relatively to the ini-file’s
-directory.
+This would lead to only looking for file changes in the respective directories, specified relatively to the ini-file's directory.
 
 [pytest-watch](https://github.com/joeyespo/pytest-watch) is an alternative implementation of this functionality.
 
@@ -852,7 +851,7 @@ Methods:
 
 -  A **xfail** means that you expect a test to fail for some reason. A common example is a test for a feature not yet
   implemented, or a bug not yet fixed. When a test passes despite being expected to fail (marked with
-  pytest.mark.xfail), it’s an xpass and will be reported in the test summary.
+  pytest.mark.xfail), it's an xpass and will be reported in the test summary.
 
 One of the important differences between the two is that `skip` doesn't run the test, and `xfail` does. So if the
 code that's buggy causes some bad state that will affect other tests, do not use `xfail`.
@@ -1285,7 +1284,7 @@ You can vote for this feature and see where it is at these CI-specific threads:
 
 ## DeepSpeed integration
 
-For a PR that involves the DeepSpeed integration, keep in mind our CircleCI PR CI setup doesn't have GPUs. Tests requiring GPUs are run on a different CI nightly. This means if you get a passing CI report in your PR, it doesn’t mean the DeepSpeed tests pass.
+For a PR that involves the DeepSpeed integration, keep in mind our CircleCI PR CI setup doesn't have GPUs. Tests requiring GPUs are run on a different CI nightly. This means if you get a passing CI report in your PR, it doesn't mean the DeepSpeed tests pass.
 
 To run DeepSpeed tests:
 

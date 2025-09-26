@@ -100,7 +100,7 @@ result
 
 **Output**:
 
-```
+```text
 Here is a Python function that transforms bytes to Giga bytes:\n\n```python\ndef bytes_to_giga_bytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single
 ```
 
@@ -119,7 +119,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 **Output**:
 
-```bash
+```text
 29.0260648727417
 ```
 
@@ -208,7 +208,7 @@ result
 
 **Output**:
 
-```
+```text
 Here is a Python function that transforms bytes to Giga bytes:\n\n```python\ndef bytes_to_giga_bytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single
 ```
 
@@ -220,7 +220,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 **Output**:
 
-```
+```text
 15.219234466552734
 ```
 
@@ -251,7 +251,7 @@ result
 
 **Output**:
 
-```
+```text
 Here is a Python function that transforms bytes to Giga bytes:\n\n```\ndef bytes_to_gigabytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single argument
 ```
 
@@ -263,7 +263,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 **Output**:
 
-```
+```text
 9.543574333190918
 ```
 
@@ -423,7 +423,7 @@ result
 
 **Output**:
 
-```
+```text
 Generated in 10.96854019165039 seconds.
 Sure. Here is a function that does that.\n\ndef bytes_to_giga(bytes):\n   return bytes / 1024 / 1024 / 1024\n\nAnswer: Sure. Here is a function that does that.\n\ndef
 ````
@@ -440,7 +440,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 **Output**:
 
-```bash
+```text
 37.668193340301514
 ```
 
@@ -472,7 +472,7 @@ result
 
 **Output**:
 
-```
+```text
 Generated in 3.0211617946624756 seconds.
  Sure. Here is a function that does that.\n\ndef bytes_to_giga(bytes):\n   return bytes / 1024 / 1024 / 1024\n\nAnswer: Sure. Here is a function that does that.\n\ndef
 ```
@@ -487,7 +487,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 **Output**:
 
-```
+```text
 32.617331981658936
 ```
 
@@ -618,7 +618,7 @@ generated_text
 
 **Output**:
 
-```
+```text
 shape of input_ids torch.Size([1, 21])
 shape of input_ids torch.Size([1, 22])
 shape of input_ids torch.Size([1, 23])
@@ -656,7 +656,7 @@ generated_text
 
 **Output**:
 
-```
+```text
 shape of input_ids torch.Size([1, 1])
 length of key-value cache 20
 shape of input_ids torch.Size([1, 1])
@@ -690,7 +690,7 @@ Note that, despite our advice to use key-value caches, your LLM output may be sl
 
 The key-value cache is especially useful for applications such as chat where multiple passes of auto-regressive decoding are required. Let's look at an example.
 
-```
+```text
 User: How many people live in France?
 Assistant: Roughly 75 million people live in France
 User: And how many are in Germany?
@@ -728,7 +728,7 @@ tokenizer.batch_decode(generation_output.sequences)[0][len(prompt):]
 
 **Output**:
 
-```
+```text
  is a modified version of the function that returns Mega bytes instead.
 
 def bytes_to_megabytes(bytes):
@@ -750,7 +750,7 @@ config = model.config
 
 **Output**:
 
-```
+```text
 7864320000
 ```
 

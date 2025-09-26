@@ -289,7 +289,7 @@ print(tokenizer.batch_decode(gen_out)[0])
 
 If the custom method has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [transformers-community/custom_generate_bad_requirements](https://huggingface.co/transformers-community/custom_generate_bad_requirements) has an impossible set of requirements defined in its `custom_generate/requirements.txt` file, and you'll see the error message below if you try to run it.
 
-```
+```text
 ImportError: Missing requirements in your local environment for `transformers-community/custom_generate_bad_requirements`:
 foo (installed: None)
 bar==0.0.0 (installed: None)
@@ -308,7 +308,7 @@ To create a new generation method, you need to create a new [**Model**](https://
 
 After you've added all required files, your repository should look like this
 
-```
+```text
 your_repo/
 ├── README.md          # include the 'custom_generate' tag
 ├── config.json
@@ -399,7 +399,7 @@ The root level `README.md` in the model repository usually describes the model t
 
 For discoverability, we highly recommend you to add the `custom_generate` tag to your repository. To do so, the top of your `README.md` file should look like the example below. After you push the file, you should see the tag in your repository!
 
-```
+```text
 ---
 library_name: transformers
 tags:
@@ -414,9 +414,9 @@ Recommended practices:
 - Add self-contained examples to enable quick experimentation.
 - Describe soft-requirements such as if the method only works well with a certain family of models.
 
-### Reusing `generate`’s input preparation
+### Reusing `generate`'s input preparation
 
-If you're adding a new decoding loop, you might want to preserve the input preparation present in `generate` (batch expansion, attention masks, logits processors, stopping criteria, etc.). You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline while overriding only the decoding loop.
+If you're adding a new decoding loop, you might want to preserve the input preparation present in `generate` (batch expansion, attention masks, logits processors, stopping criteria, etc.). You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]'s full preparation pipeline while overriding only the decoding loop.
 
 ```py
 def custom_loop(model, input_ids, attention_mask, logits_processor, stopping_criteria, generation_config, **model_kwargs):
@@ -437,7 +437,7 @@ output = model.generate(
 ```
 
 > [!TIP]
-> If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers’ built-in input preparation logic.
+> If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers' built-in input preparation logic.
 
 ### Finding custom generation methods
 

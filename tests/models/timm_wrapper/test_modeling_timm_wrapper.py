@@ -163,10 +163,6 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        pass
-
     def test_gradient_checkpointing(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = TimmWrapperModel._from_config(config)
