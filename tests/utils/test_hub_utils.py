@@ -19,8 +19,7 @@ import unittest.mock as mock
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download
-from huggingface_hub.errors import LocalEntryNotFoundError, OfflineModeIsEnabled
-from requests.exceptions import HTTPError
+from huggingface_hub.errors import HfHubHTTPError, LocalEntryNotFoundError, OfflineModeIsEnabled
 
 from transformers.utils import (
     CONFIG_NAME,
@@ -87,7 +86,10 @@ class GetFromCacheTests(unittest.TestCase):
         self.assertIsNone(path)
 
         # Under the mock environment, hf_hub_download will always raise an HTTPError
-        with mock.patch("transformers.utils.hub.hf_hub_download", side_effect=HTTPError) as mock_head:
+        with mock.patch(
+            "transformers.utils.hub.hf_hub_download",
+            side_effect=HfHubHTTPError("failed", response=mock.Mock(status_code=404)),
+        ) as mock_head:
             path = cached_file(RANDOM_BERT, "conf", _raise_exceptions_for_connection_errors=False)
             self.assertIsNone(path)
             # This check we did call the fake head request
