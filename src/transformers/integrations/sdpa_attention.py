@@ -2,7 +2,7 @@ from typing import Optional
 
 import torch
 
-from ..utils import is_torch_xpu_available, logging
+from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
 
@@ -12,6 +12,7 @@ logger = logging.get_logger(__name__)
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
+_is_torch_npu_available = is_torch_npu_available()
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -79,6 +80,14 @@ def sdpa_attention_forward(
     # We convert it to a bool for the SDPA kernel that only accepts bools.
     if torch.jit.is_tracing() and isinstance(is_causal, torch.Tensor):
         is_causal = is_causal.item()
+
+    # When is_causal=False and the dtype of attention_mask is not bool, the sdpa interface of Ascend NPU cannot invoke
+    # the FlashAttentionScore operator but instead uses internal small operator concatenation. To enter FlashAttentionScore,
+    # the following conditions must be met:enable is_causal and set attention_mask to None; or disable is_causal and
+    # set attention_mask to a boolean type.So we adapt the parameters to allow it entry the FlashAttentionScore.
+    if _is_torch_npu_available:
+        if attention_mask is not None and attention_mask.dtype != torch.bool:
+            attention_mask = torch.logical_not(attention_mask.bool()).to(query.device)
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
