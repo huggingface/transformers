@@ -944,7 +944,9 @@ def validate_annotations(
     annotations: list[dict],
 ) -> None:
     if annotation_format not in supported_annotation_formats:
-        raise ValueError(f"Unsupported annotation format: {format} must be one of {supported_annotation_formats}")
+        raise ValueError(
+            f"Unsupported annotation format: {annotation_format} must be one of {supported_annotation_formats}"
+        )
 
     if annotation_format is AnnotationFormat.COCO_DETECTION:
         if not valid_coco_detection_annotations(annotations):
