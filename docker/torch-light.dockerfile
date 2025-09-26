@@ -18,8 +18,9 @@ RUN curl -O https://raw.githubusercontent.com/huggingface/transformers/${REF}/ca
 RUN curl -O https://raw.githubusercontent.com/huggingface/transformers/${REF}/calls.json
 RUN curl -O https://raw.githubusercontent.com/huggingface/transformers/${REF}/upload_hub_cache.py
 RUN python call_from_pretrained.py
+# Move the already downloaded file
+RUN mv upload_hub_cache.py ~/.cache/huggingface/
 # file name: huggingface-cache.tar.gz
-COPY upload_hub_cache.py ~/.cache/huggingface/
 RUN cd ~/.cache/huggingface && tar -czf huggingface-cache.tar.gz hub/ && python3 upload_hub_cache.py
 
 RUN uv pip uninstall transformers
