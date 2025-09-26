@@ -69,8 +69,6 @@ class TrOCRProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[TrOCRProcessorKwargs],
     ) -> BatchFeature:
         """

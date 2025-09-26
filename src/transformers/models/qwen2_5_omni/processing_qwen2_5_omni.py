@@ -25,34 +25,29 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
 
 
+# Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
+# and does not use them in video processor class
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    fps: Optional[list[Union[int, float]]]
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
+    min_frames: Optional[int]
+    max_frames: Optional[int]
     use_audio_in_video: Optional[bool]
     seconds_per_chunk: Optional[float]
     position_id_per_seconds: Optional[int]
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-
-
-class Qwen2_5_OmniImagesKwargs(ImagesKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
 
 
 class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
     videos_kwargs: Qwen2_5_OmniVideosKwargs
-    images_kwargs: Qwen2_5_OmniImagesKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,

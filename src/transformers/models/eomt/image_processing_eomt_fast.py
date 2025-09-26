@@ -23,7 +23,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -43,6 +42,7 @@ from ...utils import (
     is_torchvision_v2_available,
 )
 from .image_processing_eomt import (
+    EomtImageProcessorKwargs,
     compute_segments,
     convert_segmentation_map_to_binary_masks,
     get_size_with_aspect_ratio,
@@ -56,23 +56,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class EomtImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_split_image (`bool`, *optional*, defaults to `False`):
-            Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
-            input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
-            Otherwise, the input images will be padded to the target size.
-    do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    ignore_index (`int`, *optional*):
-            Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-            denoted with 0 (background) will be replaced with `ignore_index`.
-    """
-
-    do_split_image: bool
-    do_pad: bool
-    ignore_index: Optional[int] = None
+EomtImageProcessorFastKwargs = EomtImageProcessorKwargs
 
 
 def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:

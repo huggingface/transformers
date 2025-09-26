@@ -45,7 +45,6 @@ class PixtralProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
-        "images_kwargs": {},
         "common_kwargs": {
             "return_tensors": "pt",
         },
@@ -120,8 +119,6 @@ class PixtralProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[PixtralProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -164,7 +161,8 @@ class PixtralProcessor(ProcessorMixin):
         patch_size = self.patch_size * self.spatial_merge_size
 
         if images is not None:
-            image_inputs = self.image_processor(images, patch_size=patch_size, **output_kwargs["images_kwargs"])
+            output_kwargs["images_kwargs"]["patch_size"] = patch_size
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 

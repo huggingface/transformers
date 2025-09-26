@@ -20,10 +20,10 @@ import torch
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     Unpack,
 )
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -40,7 +40,7 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class Phi4MultimodalFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Phi4MultimodalImageProcessorKwargs(ImagesKwargs):
     r"""
     patch_size (`int`, *optional*):
         The size of the patch.
@@ -64,10 +64,10 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = Phi4MultimodalFastImageProcessorKwargs
+    valid_kwargs = Phi4MultimodalImageProcessorKwargs
     model_input_names = ["image_pixel_values", "image_sizes", "image_attention_mask"]
 
-    def __init__(self, **kwargs: Unpack[Phi4MultimodalFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Phi4MultimodalImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height, image_size):
@@ -163,7 +163,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Phi4MultimodalFastImageProcessorKwargs],
+        **kwargs: Unpack[Phi4MultimodalImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

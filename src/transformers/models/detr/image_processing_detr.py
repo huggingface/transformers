@@ -52,6 +52,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     is_scipy_available,
@@ -80,6 +81,29 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+
+
+class DetrImageProcessorKwargs(ImagesKwargs):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the DETR model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+        Whether to return segmentation masks.
+    annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
+        Annotations to transform according to the padding that is applied to the images.
+    masks_path (`str` or `pathlib.Path`, *optional*):
+        Path to the directory containing the segmentation masks.
+    """
+
+    format: Optional[Union[str, AnnotationFormat]]
+    do_convert_annotations: Optional[bool]
+    return_segmentation_masks: Optional[bool]
+    annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
+    masks_path: Optional[Union[str, pathlib.Path]]
 
 
 # From the original repo: https://github.com/facebookresearch/detr/blob/3af9fa878e73b6894ce3596450a8d9b89d918ca9/datasets/transforms.py#L76
@@ -811,6 +835,7 @@ class DetrImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = DetrImageProcessorKwargs
 
     def __init__(
         self,

@@ -38,6 +38,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -51,6 +52,16 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class DeepseekVLImageProcessorKwargs(ImagesKwargs):
+    r"""
+    min_size (`int`, *optional*, defaults to 14):
+        The minimum allowed size for the resized image. Ensures that neither the height nor width
+        falls below this value after resizing.
+    """
+
+    min_size: int
 
 
 class DeepseekVLImageProcessor(BaseImageProcessor):
@@ -94,6 +105,8 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+
+    valid_kwargs = DeepseekVLImageProcessorKwargs
 
     def __init__(
         self,

@@ -35,6 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -45,6 +46,22 @@ MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 if is_vision_available():
     import PIL
     from PIL import Image
+
+
+class Idefics3ImageProcessorKwargs(ImagesKwargs):
+    """
+    do_image_splitting (`bool`, *optional*, defaults to `True`):
+        Whether to split the image into sub-images concatenated with the original image. They are split into patches
+        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
+    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
+    return_row_col_info (`bool`, *optional*, defaults to `False`):
+        Whether to return the row and column information of the images.
+    """
+
+    do_image_splitting: Optional[bool]
+    max_image_size: Optional[dict[str, int]]
+    return_row_col_info: Optional[bool]
 
 
 def _resize_output_size_rescale_to_max_len(
@@ -291,6 +308,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask"]
+    valid_kwargs = Idefics3ImageProcessorKwargs
 
     def __init__(
         self,

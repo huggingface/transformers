@@ -21,7 +21,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -40,6 +39,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from .image_processing_vitmatte import VitMatteImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -48,15 +48,6 @@ else:
     from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
-
-
-class VitMatteFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    size_divisor (`int`, *optional*, defaults to 32):
-        The width and height of the image will be padded to be divisible by this number.
-    """
-
-    size_divisor: Optional[int]
 
 
 @auto_docstring
@@ -68,9 +59,9 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
     image_std: Optional[Union[float, list[float]]] = IMAGENET_STANDARD_STD
     do_pad: bool = True
     size_divisor: int = 32
-    valid_kwargs = VitMatteFastImageProcessorKwargs
+    valid_kwargs = VitMatteImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[VitMatteFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[VitMatteImageProcessorKwargs]) -> None:
         size_divisibility = kwargs.pop("size_divisibility", None)
         kwargs.setdefault("size_divisor", size_divisibility)
         super().__init__(**kwargs)
@@ -92,21 +83,21 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
     def _pad_image(
         self,
         images: torch.Tensor,
-        size_divisibility: int = 32,
+        size_divisor: int = 32,
     ) -> torch.Tensor:
         """
-        Pads an image or batched images constantly so that width and height are divisible by size_divisibility
+        Pads an image or batched images constantly so that width and height are divisible by size_divisor
 
         Args:
             image (`torch.Tensor`):
                 Image to pad.
-            size_divisibility (`int`, *optional*, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The width and height of the image will be padded to be divisible by this number.
         """
         height, width = get_image_size(images, channel_dim=ChannelDimension.FIRST)
 
-        pad_height = 0 if height % size_divisibility == 0 else size_divisibility - height % size_divisibility
-        pad_width = 0 if width % size_divisibility == 0 else size_divisibility - width % size_divisibility
+        pad_height = 0 if height % size_divisor == 0 else size_divisor - height % size_divisor
+        pad_width = 0 if width % size_divisor == 0 else size_divisor - width % size_divisor
 
         if pad_width + pad_height > 0:
             padding = (0, 0, pad_width, pad_height)
@@ -119,7 +110,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         trimaps: list["torch.Tensor"],
-        **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
+        **kwargs: Unpack[VitMatteImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         trimaps (`list[torch.Tensor]`):
@@ -134,7 +125,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
+        **kwargs: Unpack[VitMatteImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
