@@ -121,13 +121,13 @@ class AudioVideoEncoder(PerceptionEncoderAudioVideoTransformer):
         self,
         audio: torch.Tensor,
         video: torch.Tensor,
-        audio_mask: Optional[torch.Tensor] = None,
-        video_mask: Optional[torch.Tensor] = None,
+        audio_padding_mask: Optional[torch.Tensor] = None,
+        video_padding_mask: Optional[torch.Tensor] = None,
     ):
-        video, video_mask = self.modality_aligner(audio, audio_mask, video, video_mask)
+        video, video_padding_mask = self.modality_aligner(audio, audio_padding_mask, video, video_padding_mask)
         x = torch.cat([audio, video], dim=-1)
         x = self.concat_modality_proj(x)
-        return super().forward(self.data_proj(x), padding_mask=video_mask)
+        return super().forward(self.data_proj(x), padding_mask=video_padding_mask)
 
 
 @dataclass
@@ -159,12 +159,19 @@ class PerceptionEncoderAudioVideoModel(PerceptionEncoderAudioVideoPretrainedMode
 
     def forward(
         self,
-        audio: torch.Tensor,
+        input_values: torch.Tensor,
         pixel_values_videos: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
+        padding_mask_videos: Optional[torch.Tensor] = None,
     ) -> AudioVideoModelOutput:
-        audio_output = self.audio_model(audio)
-        video_output = self.video_model(pixel_values_videos)
-        av_output = self.transformer(audio_output.last_hidden_state, video_output.last_hidden_state)
+        audio_output = self.audio_model(input_values, padding_mask=padding_mask)
+        video_output = self.video_model(pixel_values_videos, padding_mask_videos=padding_mask_videos)
+        av_output = self.transformer(
+            audio_output.last_hidden_state,
+            video_output.last_hidden_state,
+            audio_padding_mask=audio_output.audio_feature_padding_mask,
+            video_padding_mask=padding_mask_videos,
+        )
         return AudioVideoModelOutput(
             last_hidden_state=av_output.last_hidden_state,
             pooler_output=av_output.pooler_output,
@@ -246,14 +253,30 @@ class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel)
             return -F.logsigmoid(labels * logits).sum() / embeds1.size(0)
         return None
 
-    def get_video_features(self, pixel_values_videos: torch.Tensor):
-        return self.video_head(self.video_model(pixel_values_videos).pooler_output)
+    def get_video_features(
+        self, pixel_values_videos: torch.Tensor, padding_mask_videos: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        return self.video_head(self.video_model(pixel_values_videos, padding_mask_videos).pooler_output)
 
-    def get_audio_features(self, audio: torch.Tensor):
-        return self.audio_head(self.audio_model(audio).pooler_output)
+    def get_audio_features(
+        self, input_values: torch.Tensor, padding_mask: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        return self.audio_head(self.audio_model(input_values, padding_mask).pooler_output)
 
-    def get_audio_video_features(self, audio: torch.Tensor, video: torch.Tensor):
-        return self.audio_video_head(super().forward(audio, video).pooler_output)
+    def get_audio_video_features(
+        self,
+        input_values: torch.Tensor,
+        pixel_values_videos: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
+        padding_mask_videos: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        output = super().forward(
+            input_values=input_values,
+            pixel_values_videos=pixel_values_videos,
+            padding_mask=padding_mask,
+            padding_mask_videos=padding_mask_videos,
+        )
+        return self.audio_video_head(output.pooler_output)
 
     def get_audio_text_features(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         return self.audio_text_head(self._get_text_output(input_ids, attention_mask).pooler_output)
@@ -268,8 +291,10 @@ class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel)
         self,
         input_ids: Optional[torch.Tensor] = None,
         pixel_values_videos: Optional[torch.Tensor] = None,
-        audio: Optional[torch.Tensor] = None,
+        input_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        padding_mask_videos: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None,
         return_loss=False,
     ) -> PerceptionEncoderAudioVideoTextOutput:
         # text embeddings
@@ -282,9 +307,11 @@ class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel)
         # Compute model outputs and embeddings for each modality
         if input_ids is not None:
             text_outputs = self._get_text_output(input_ids, attention_mask)
-        if audio is not None and pixel_values_videos is not None:
+        if input_values is not None and pixel_values_videos is not None:
             # If we compute audio/video outputs, then extract the intermedia audio and video outputs
-            audio_video_outputs = super().forward(audio, pixel_values_videos)
+            audio_video_outputs = super().forward(
+                input_values, pixel_values_videos, padding_mask=padding_mask, padding_mask_videos=padding_mask_videos
+            )
             audio_outputs = audio_video_outputs.audio_model_output
             video_outputs = audio_video_outputs.video_model_output
 
@@ -298,12 +325,12 @@ class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel)
                 audio_video_text_embeds = self.audio_video_text_head(text_outputs.pooler_output)
         else:
             if pixel_values_videos is not None:
-                video_outputs = self.video_model(pixel_values_videos)
+                video_outputs = self.video_model(pixel_values_videos, padding_mask_videos=padding_mask_videos)
                 video_embeds = self.video_head(video_outputs.pooler_output)
                 if text_outputs is not None:
                     video_text_embeds = self.video_text_head(text_outputs.pooler_output)
-            if audio is not None:
-                audio_outputs = self.audio_model(audio)
+            if input_values is not None:
+                audio_outputs = self.audio_model(input_values, padding_mask=padding_mask)
                 if text_outputs is not None:
                     audio_text_embeds = self.audio_text_head(text_outputs.pooler_output)
 

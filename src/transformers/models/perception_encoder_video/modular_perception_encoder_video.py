@@ -79,11 +79,12 @@ class PerceptionEncoderVideoModel(PerceptionEncoderVideoPretrainedModel):
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
+        padding_mask_videos: Optional[torch.Tensor] = None,
     ) -> BaseModelOutputWithPooling:
         B, N, C, H, W = pixel_values_videos.shape
         backbone_output = self.clip_vision_model(pixel_values_videos.view(B * N, C, H, W)).logits.view(B, N, -1)
         projected = self.proj(F.normalize(backbone_output, dim=-1))
-        return self.transformer(self.data_proj(projected))
+        return self.transformer(self.data_proj(projected), padding_mask=padding_mask_videos)
 
 
 @dataclass
@@ -125,9 +126,10 @@ class PerceptionEncoderVideoWithTextModel(PerceptionEncoderVideoPretrainedModel)
         input_ids: torch.Tensor,
         pixel_values_videos: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        padding_mask_videos: Optional[torch.Tensor] = None,
         return_loss=False,
     ) -> PerceptionEncoderVideoTextOutput:
-        video_model_output = super().forward(pixel_values_videos)
+        video_model_output = super().forward(pixel_values_videos, padding_mask_videos)
         text_model_output = self._get_text_output(input_ids, attention_mask)
 
         text_embeds = self.video_text_head(text_model_output.pooler_output)

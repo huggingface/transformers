@@ -32,10 +32,38 @@ from .configuration_perception_encoder_audio import (
 
 
 ## Patcher
+class MaskedGroupNorm(torch.nn.GroupNorm):
+    def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if padding_mask is None:
+            return super().forward(x)
+
+        # x: (B, C, L), padding_mask: (B, 1, L) or (B, L)
+        if padding_mask.dim() == 2:
+            padding_mask = padding_mask.unsqueeze(1)  # (B, 1, L)
+
+        B, C, L = x.shape
+        G = self.num_groups
+
+        if padding_mask.shape != x.shape:
+            padding_mask = padding_mask.expand_as(x)
+
+        x_grouped = x.view(B, G, C // G, L)
+        padding_mask_grouped = padding_mask.view(B, G, C // G, L)
+        padding_masked_x = x_grouped * padding_mask_grouped
+        padding_mask_sum = padding_mask_grouped.sum(dim=(2, 3), keepdim=True)  # (B, G, 1, 1)
+        mean = padding_masked_x.sum(dim=(2, 3), keepdim=True) / padding_mask_sum  # (B, G, 1, 1)
+        var = ((padding_masked_x - mean) ** 2 * padding_mask_grouped).sum(dim=(2, 3), keepdim=True) / padding_mask_sum
+        x_norm = (x_grouped - mean) / torch.sqrt(var + self.eps)
+        x_norm = x_norm.view(B, C, L)
+        if self.affine:
+            x_norm = x_norm * self.weight.view(1, -1, 1) + self.bias.view(1, -1, 1)
+        return x_norm * padding_mask
+
+
 class ConvBlock1d(torch.nn.Module):
     def __init__(self, config: PerceptionEncoderAudioTransformerConfig):
         super().__init__()
-        self.groupnorm = torch.nn.GroupNorm(num_groups=1, num_channels=config.hidden_size)
+        self.groupnorm = MaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
         self.activation = torch.nn.SiLU()
         self.project = torch.nn.Conv1d(
             in_channels=config.hidden_size,
@@ -57,12 +85,11 @@ class ConvBlock1d(torch.nn.Module):
         padding_left = padding_total - padding_right
         return F.pad(x, (padding_left, padding_right + extra_padding), mode="constant", value=0.0)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-    ) -> torch.Tensor:
-        x = self.groupnorm(x)
+    def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        x = self.groupnorm(x, padding_mask=padding_mask)
         x = self.activation(x)
+        if padding_mask is not None:
+            x = x * padding_mask.unsqueeze(1)
         return self.project(self._pad(x))
 
 
@@ -72,9 +99,9 @@ class ResnetBlock1d(torch.nn.Module):
         self.block1 = ConvBlock1d(config)
         self.block2 = ConvBlock1d(config)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        h = self.block1(x)
-        h = self.block2(h)
+    def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        h = self.block1(x, padding_mask=padding_mask)
+        h = self.block2(h, padding_mask=padding_mask)
         return h + x
 
 
@@ -227,6 +254,7 @@ class DACVAEEncoder(nn.Module):
 class DacEncoderVAE(torch.nn.Module):
     def __init__(self, config: DACVAEConfig) -> None:
         super().__init__()
+        self.config = config
         self.encoder = DACVAEEncoder(config)
         self.bottleneck = VAEBottleneck(config.codebook_size, config.codebook_dim)
         self.hop_length = config.hop_length
@@ -388,7 +416,7 @@ def apply_rotary_pos_emb(q, k, freqs_cis, unsqueeze_dim=1):
 class PerceptionEncoderAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: PerceptionEncoderAudioConfig, layer_idx: int):
+    def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -396,7 +424,7 @@ class PerceptionEncoderAudioAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -546,13 +574,16 @@ class PerceptionEncoderAudioTransformer(torch.nn.Module):
             padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1)
 
         x = rearrange(x, "b l c-> b c l")
-        h = self.x_embedder(x)
+        h = self.x_embedder(x, padding_mask=padding_mask)
         h = rearrange(h, "b c l -> b l c")
         original_N = h.shape[1]
         N = h.shape[1]
 
         cos, sin = self.rope_embeddings(h, torch.arange(h.size(1), device=h.device)[None])
         rope_embeddings = stack_freqs(cos, sin)
+
+        if padding_mask is not None:
+            padding_mask = padding_mask[:, None, None].bool()
 
         for layer in self.layers:
             h = layer(
@@ -583,6 +614,13 @@ class PerceptionEncoderAudioPretrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
+@dataclass
+class PerceptionEncoderAudioOutput(BaseModelOutputWithPooling):
+    # Padding mask for the encoded audio (shortened by `hop_length` of the dac_vae_encoder)
+    audio_feature_padding_mask: Optional[torch.Tensor] = None
+    dac_vae_features: Optional[torch.Tensor] = None
+
+
 class PerceptionEncoderAudioModel(PerceptionEncoderAudioPretrainedModel):
     def __init__(self, config: PerceptionEncoderAudioConfig):
         super().__init__(config)
@@ -594,10 +632,20 @@ class PerceptionEncoderAudioModel(PerceptionEncoderAudioPretrainedModel):
 
     def forward(
         self,
-        audio: Optional[torch.Tensor] = None,
-    ) -> BaseModelOutputWithPooling:
-        codec_features = self.dac_vae_encoder(audio).transpose(1, 2)
-        return self.transformer(self.data_proj(codec_features))
+        input_values: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
+    ) -> PerceptionEncoderAudioOutput:
+        codec_features = self.dac_vae_encoder(input_values).transpose(1, 2)
+        feature_padding_mask = None
+        if padding_mask is not None:
+            feature_padding_mask = padding_mask[:, :: self.dac_vae_encoder.config.hop_length]
+        outputs = self.transformer(self.data_proj(codec_features), padding_mask=feature_padding_mask)
+        return PerceptionEncoderAudioOutput(
+            last_hidden_state=outputs.last_hidden_state,
+            pooler_output=outputs.pooler_output,
+            audio_feature_padding_mask=feature_padding_mask,
+            dac_vae_features=codec_features,
+        )
 
 
 @dataclass
@@ -639,12 +687,13 @@ class PerceptionEncoderAudioWithTextModel(PerceptionEncoderAudioPretrainedModel)
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        audio: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,  # tokenized text
+        input_values: torch.Tensor,  # audio waveform
+        attention_mask: Optional[torch.Tensor] = None,  # text attention mask
+        padding_mask: Optional[torch.Tensor] = None,  # audio padding mask
         return_loss=False,
     ) -> PerceptionEncoderAudioTextOutput:
-        audio_model_output = super().forward(audio)
+        audio_model_output = super().forward(input_values, padding_mask)
         text_model_output = self._get_text_output(input_ids, attention_mask)
 
         text_embeds = self.audio_text_head(text_model_output.pooler_output)
