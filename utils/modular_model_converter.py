@@ -1220,9 +1220,14 @@ class ModularFileMapper(ModuleMapper):
                     if import_module not in self.model_specific_modules:
                         if "models" not in import_module:
                             import_module = "models." + import_module
-                        if "transformers" not in import_module:
+                        if not import_module.startswith("transformers"):
                             import_module = "transformers." + import_module
-                        source_code = get_module_source_from_name(import_module)
+                        try:
+                            source_code = get_module_source_from_name(import_module)
+                        except ModuleNotFoundError as e:
+                            raise ModuleNotFoundError(
+                                f"Failed to visit import from for: {self.python_module.code_for_node(node)}. Tried to import {import_module} but failed."
+                            ) from e
                         tree = cst.parse_module(source_code)
                         self.model_specific_modules[import_module] = tree
                     imported_object = self.python_module.code_for_node(imported_.name)

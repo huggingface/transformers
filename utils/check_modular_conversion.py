@@ -197,10 +197,25 @@ if __name__ == "__main__":
             # Process files with diff
             num_workers = min(args.num_workers, len(files_to_check))
             with multiprocessing.Pool(num_workers) as p:
-                is_changed_flags = p.map(
-                    partial(compare_files, show_diff=not args.fix_and_overwrite),
-                    files_to_check,
-                )
+                try:
+                    is_changed_flags = p.map(
+                        partial(compare_files, show_diff=not args.fix_and_overwrite),
+                        files_to_check,
+                    )
+                except Exception as e:
+                    console.print(
+                        f"[bold red]Failed to convert one or more files in batch: {files_to_check}[/bold red]"
+                    )
+                    console.print(f"[bold red]Error: {e}[/bold red]")
+                    # Try to process files individually to identify which one failed
+                    is_changed_flags = []
+                    for file_path in files_to_check:
+                        try:
+                            result = compare_files(file_path, show_diff=not args.fix_and_overwrite)
+                            is_changed_flags.append(result)
+                        except Exception as individual_error:
+                            console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
+                            is_changed_flags.append(0)  # Mark as no change to continue processing
 
             # Collect changed files and their original paths
             for is_changed, file_path in zip(is_changed_flags, files_to_check):
