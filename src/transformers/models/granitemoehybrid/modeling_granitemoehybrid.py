@@ -58,40 +58,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -160,7 +126,6 @@ class GraniteMoeHybridAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -172,10 +137,6 @@ class GraniteMoeHybridAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        if position_embeddings is not None:
-            cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
@@ -1111,7 +1072,6 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -1132,7 +1092,6 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -1229,17 +1188,8 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = GraniteMoeHybridRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-
-        self.embedding_multiplier = config.embedding_multiplier  # only diff with Mixtral
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
-        self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
-
-        self.position_embedding_type = config.position_embedding_type
-        self.rotary_emb = GraniteMoeHybridRotaryEmbedding(config) if self.position_embedding_type == "rope" else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1250,7 +1200,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1270,8 +1219,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             self.config,
@@ -1284,12 +1231,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
-
-        position_embeddings = None
-        # create position embeddings to be shared across the decoder layers
-        if self.rotary_emb is not None:
-            position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
             layer_mask = mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
@@ -1300,7 +1241,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)

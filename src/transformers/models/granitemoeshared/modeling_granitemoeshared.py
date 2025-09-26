@@ -373,7 +373,8 @@ class GraniteMoeSharedAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"cache_position": cache_position}
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
@@ -523,17 +524,8 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
             [GraniteMoeSharedDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = GraniteMoeSharedRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-
-        self.embedding_multiplier = config.embedding_multiplier  # only diff with Mixtral
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
-        self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
-
-        self.position_embedding_type = config.position_embedding_type
-        self.rotary_emb = GraniteMoeSharedRotaryEmbedding(config) if self.position_embedding_type == "rope" else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -568,7 +560,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
+        causal_mask = create_causal_mask(  # ONLY DIFF WITH MIXTRAL: NO SLIDING
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,

@@ -29,7 +29,7 @@ from ...utils.generic import check_model_inputs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
 from ..jetmoe.modeling_jetmoe import JetMoeParallelExperts, JetMoeTopKGating
 from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
-from ..mixtral.modeling_mixtral import MixtralDecoderLayer, MixtralForCausalLM
+from ..mixtral.modeling_mixtral import MixtralDecoderLayer, MixtralForCausalLM, MixtralModel
 from .configuration_granitemoe import GraniteMoeConfig
 
 

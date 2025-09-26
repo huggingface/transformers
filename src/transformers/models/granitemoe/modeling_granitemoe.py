@@ -453,17 +453,8 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
             [GraniteMoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = GraniteMoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-
-        self.embedding_multiplier = config.embedding_multiplier  # only diff with Mixtral
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
-        self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
-
-        self.position_embedding_type = config.position_embedding_type
-        self.rotary_emb = GraniteMoeRotaryEmbedding(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -498,7 +489,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
+        causal_mask = create_causal_mask(  # ONLY DIFF WITH MIXTRAL: NO SLIDING
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
