@@ -9,7 +9,6 @@ from transformers import (
     AutoTokenizer,
     Ernie4_5_VLConfig,
     Ernie4_5_VLImageProcessor,
-    Ernie4_5_VLImageProcessorFast,
     Ernie4_5_VLProcessor,
     Ernie4_5_VLVideoProcessor,
     LlamaTokenizer,
@@ -403,35 +402,6 @@ def convert_processor(model_path, save_dir):
         chat_template=tokenizer.chat_template,
     )
     processor.save_pretrained(save_dir)
-
-    """test_1 = Ernie4_5_VLImageProcessor.from_pretrained(save_dir)
-    test_2 = Ernie4_5_VLImageProcessorFast.from_pretrained(save_dir)
-    test_3 = Ernie4_5_VLImageProcessorFast()
-
-    for attr in [
-        #"min_pixels",
-        #"max_pixels",
-        "size",
-        "do_resize",
-        "resample",
-        "do_rescale",
-        "rescale_factor",
-        "do_normalize",
-        "image_mean",
-        "image_std",
-        "patch_size",
-        "temporal_patch_size",
-        "merge_size",
-        "do_convert_rgb",
-    ]:
-        t1 = getattr(test_1, attr, None)
-        t2 = getattr(test_2, attr, None)
-        t3 = getattr(test_3, attr, None)
-
-        if t1 != t2 or t1 != t3:
-            raise ValueError(f"{attr} - {t1} vs {t2} vs {t3}")
-
-    print()"""
 
 
 """
