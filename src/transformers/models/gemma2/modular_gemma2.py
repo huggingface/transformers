@@ -586,7 +586,7 @@ __all__ = [
     "Gemma2Config",
     "Gemma2ForCausalLM",
     "Gemma2Model",
-    "Gemma2PreTrainedModel",  # noqa: F822
+    "Gemma2PreTrainedModel",
     "Gemma2ForSequenceClassification",
     "Gemma2ForTokenClassification",
 ]

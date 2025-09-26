@@ -996,7 +996,7 @@ class GenerationMixin(ContinuousMixin):
         input_ids: torch.LongTensor,
         inputs_tensor: torch.Tensor,
         logits_processor: LogitsProcessorList,
-        model_kwargs: dict,
+        model_kwargs: dict[str, Any],
         assistant_model: Optional["PreTrainedModel"] = None,
         target_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
@@ -1687,7 +1687,10 @@ class GenerationMixin(ContinuousMixin):
         return generation_config
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: dict
+        self,
+        generation_config: Optional[GenerationConfig],
+        use_model_defaults: Optional[bool] = None,
+        **kwargs: Any,
     ) -> tuple[GenerationConfig, dict]:
         """
         Prepares the base generation config, then applies any generation configuration options from kwargs. This
@@ -2115,7 +2118,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config._pad_token_tensor = pad_token_tensor
         generation_config._decoder_start_token_tensor = decoder_start_token_tensor
 
-    def _valid_auto_compile_criteria(self, model_kwargs: dict, generation_config: GenerationConfig) -> bool:
+    def _valid_auto_compile_criteria(self, model_kwargs: dict[str, Any], generation_config: GenerationConfig) -> bool:
         """
         Determines whether to trigger auto-compilation of the model's forward pass at generation time.
         """

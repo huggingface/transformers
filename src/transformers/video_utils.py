@@ -74,7 +74,7 @@ VideoInput = Union[
     Path,
     list[Path],
     list[list[Path]],
-]  # noqa
+]
 
 
 @dataclass

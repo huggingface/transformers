@@ -1805,7 +1805,7 @@ class EmbeddingAccessMixin:
             )
 
     def set_input_embeddings(self, value: nn.Module):
-        """Fallback setter that handles **~70 %** of models in the code‑base.
+        """Fallback setter that handles **~70%** of models in the code-base.
 
         Order of attempts:
         1. `self.model.embed_tokens`

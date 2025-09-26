@@ -187,7 +187,7 @@ class BatchFeature(UserDict):
             [`BatchFeature`]: The same instance after modification.
         """
         requires_backends(self, ["torch"])
-        import torch  # noqa
+        import torch
 
         device = kwargs.get("device")
         non_blocking = kwargs.get("non_blocking", False)

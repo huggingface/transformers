@@ -514,11 +514,9 @@ class TrainingArguments:
                     A list of options along the following:
 
                     - `"backward_pre"` : Prefetches the next set of parameters before the current set of parameter's
-                      gradient
-                        computation.
+                      gradient computation.
                     - `"backward_post"` : This prefetches the next set of parameters after the current set of
-                      parameter’s
-                        gradient computation.
+                      parameter's gradient computation.
                 - forward_prefetch (`bool`, *optional*, defaults to `False`)
                     FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
                      If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the
@@ -2359,7 +2357,7 @@ class TrainingArguments:
 
     def to_sanitized_dict(self) -> dict[str, Any]:
         """
-        Sanitized serialization to use with TensorBoard’s hparams
+        Sanitized serialization to use with TensorBoard's hparams
         """
         d = self.to_dict()
         d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}
