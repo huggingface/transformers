@@ -3,10 +3,17 @@ import unittest
 import tempfile
 import shutil
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AddedToken, PreTrainedTokenizerFast
 from transformers.models.llama.tokenization_llama_fast import LlamaTokenizerFast
 from transformers.create_fast_tokenizer import SentencePieceExtractor
-from transformers.testing_utils import require_sentencepiece, require_tokenizers
+from transformers.testing_utils import (
+    require_sentencepiece, 
+    require_tokenizers, 
+    require_tiktoken, 
+    require_read_token,
+    get_tests_dir
+)
+from tests.test_tokenization_common import TokenizerTesterMixin
 
 
 # Master input string of combined test cases
@@ -32,21 +39,40 @@ expected_token_ids = [1, 910, 338, 263, 1243, 13, 29902, 471, 6345, 297, 29871, 
 
 @require_sentencepiece
 @require_tokenizers
-class LlamaTokenizationRefactorTest(unittest.TestCase):
+class LlamaTokenizationRefactorTest(TokenizerTesterMixin, unittest.TestCase):
+    # TokenizerTesterMixin configuration
+    from_pretrained_id = ["hf-internal-testing/llama-tokenizer"]
+    tokenizer_class = LlamaTokenizerFast  # We'll set this dynamically
+    rust_tokenizer_class = LlamaTokenizerFast
+    test_rust_tokenizer = False
+    test_sentencepiece = True
+    from_pretrained_kwargs = {}
     @classmethod
     def setUpClass(cls):
+        # Call TokenizerTesterMixin's setUpClass first
         super().setUpClass()
-        tok_auto = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
+
+        from_pretrained_id = "hf-internal-testing/llama-tokenizer"
+        
+        # Your custom tokenizer setup
+        tok_auto = AutoTokenizer.from_pretrained(from_pretrained_id)
+        tok_auto.pad_token = tok_auto.eos_token
+        tok_auto.save_pretrained(cls.tmpdirname)
 
         # Build backend for slow tokenizer from the fast tokenizer's SentencePiece model
         vocab_file = getattr(tok_auto, "vocab_file", None)
 
         extractor = SentencePieceExtractor(vocab_file)
         vocab, merges = extractor.extract()
-
         tok_from_vocab = LlamaTokenizerFast(vocab=vocab, merges=merges)
+        tok_from_vocab.pad_token = tok_from_vocab.eos_token
 
+        # Store your custom tokenizers for your specific tests
         cls.tokenizers = [tok_auto, tok_from_vocab]
+
+    def get_tokenizers(self, **kwargs):
+        kwargs.update({"pad_token": "<PAD>"})
+        return super().get_tokenizers(**kwargs)
 
     def test_llama_tokenizers_match_expected_tokens(self):
         for tok in self.tokenizers:
