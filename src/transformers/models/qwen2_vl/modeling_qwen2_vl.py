@@ -19,8 +19,9 @@
 # limitations under the License.
 """PyTorch Qwen2-VL model."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn

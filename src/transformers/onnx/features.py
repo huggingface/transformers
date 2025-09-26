@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from functools import partial, reduce
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Optional
 
 import transformers
 

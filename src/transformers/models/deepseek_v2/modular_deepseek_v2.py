@@ -14,7 +14,8 @@
 # limitations under the License.
 
 import warnings
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
