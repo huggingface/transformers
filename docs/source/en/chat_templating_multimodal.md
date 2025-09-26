@@ -56,7 +56,7 @@ out = pipe(text=messages, max_new_tokens=128)
 print(out[0]['generated_text'][-1]['content'])
 ```
 
-```
+```text
 Ahoy, me hearty! These be two feline friends, likely some tabby cats, taking a siesta on a cozy pink blanket. They're resting near remote controls, perhaps after watching some TV or just enjoying some quiet time together. Cats sure know how to find comfort and relaxation, don't they?
 ```
 
@@ -96,7 +96,7 @@ processed_chat = processor.apply_chat_template(messages, add_generation_prompt=T
 print(list(processed_chat.keys()))
 ```
 
-```
+```text
 ['input_ids', 'attention_mask', 'pixel_values', 'image_grid_thw']
 ```
 
