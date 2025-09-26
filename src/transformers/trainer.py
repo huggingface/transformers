@@ -162,13 +162,11 @@ from .utils import (
     is_schedulefree_available,
     is_torch_hpu_available,
     is_torch_mlu_available,
-    is_torch_mps_available,
     is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_optimi_available,
     is_torch_xla_available,
-    is_torch_xpu_available,
     is_torchao_available,
     logging,
     strtobool,
@@ -220,6 +218,7 @@ if is_accelerate_available():
         DistributedType,
         load_fsdp_model,
         load_fsdp_optimizer,
+        release_memory,
         save_fsdp_model,
         save_fsdp_optimizer,
     )
@@ -3841,22 +3840,7 @@ class Trainer:
                 self.args.torch_empty_cache_steps is not None
                 and self.state.global_step % self.args.torch_empty_cache_steps == 0
             ):
-                if is_torch_xpu_available():
-                    torch.xpu.empty_cache()
-                elif is_torch_mlu_available():
-                    torch.mlu.empty_cache()
-                elif is_torch_musa_available():
-                    torch.musa.empty_cache()
-                elif is_torch_npu_available():
-                    torch.npu.empty_cache()
-                elif is_torch_mps_available():
-                    torch.mps.empty_cache()
-                elif is_torch_hpu_available():
-                    logger.warning(
-                        "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
-                    )
-                else:
-                    torch.cuda.empty_cache()
+                release_memory()
 
             kwargs = {}
 
