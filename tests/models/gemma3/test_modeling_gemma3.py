@@ -116,6 +116,10 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         config.layer_types = ["full_attention", "sliding_attention"]
         config.sliding_window = 8
         config.max_position_embeddings = 128
+        config.rope_scaling = {
+            "full_attention": {"rope_type": "default", "rope_theta": 1000000},
+            "sliding_attention": {"rope_type": "default", "rope_theta": 10000},
+        }
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/tiny-random-Gemma3ForCausalLM", config=config
         ).to(torch_device)
@@ -137,6 +141,7 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
                 do_sample=False,
                 use_cache=True,
                 cache_implementation="hybrid",
+                disable_compile=True,
             )
             # 2 generations are needed to trigger https://github.com/huggingface/transformers/issues/39711
             # Since it requires model._cache to have been previously initialized
@@ -147,8 +152,10 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
                 do_sample=False,
                 use_cache=True,
                 cache_implementation="hybrid",
+                disable_compile=True,
             )
         generated_sequences = output[:, input_len:].cpu()
+        print(generated_sequences)
         EXPECTED_OUTPUT = torch.tensor([[90109, 90109, 90109, 83191, 83191], [246901, 69832, 69832, 69832, 62288]])
         torch.testing.assert_close(generated_sequences, EXPECTED_OUTPUT)
 

@@ -88,6 +88,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -137,6 +138,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
+                position_ids=position_ids,
                 **kwargs,
             )
 
@@ -248,12 +250,6 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         # embed positions
         hidden_states = inputs_embeds
-
-        position_embeddings = None
-        # create position embeddings to be shared across the decoder layers
-        if self.rotary_emb is not None:
-            position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -274,7 +270,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 output_router_logits=output_router_logits,
-                position_embeddings=position_embeddings,
+                position_ids=position_ids,
                 **kwargs,
             )
 

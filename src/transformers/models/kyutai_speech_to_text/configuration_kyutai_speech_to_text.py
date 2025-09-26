@@ -13,7 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.s
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -56,8 +59,10 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 750):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        rope_theta (`float`, *optional*, defaults to 100000.0):
-            The base period of the RoPE embeddings.
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
@@ -117,29 +122,29 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        codebook_vocab_size=2049,
-        vocab_size=4001,
-        hidden_size=2048,
-        num_hidden_layers=48,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        max_position_embeddings=750,
-        rope_theta=100000.0,
-        hidden_act="silu",
-        head_dim=None,
-        initializer_range=0.02,
-        use_cache=True,
-        sliding_window=375,
-        attention_dropout=0.0,
-        ffn_dim=11264,
-        rms_norm_eps=1e-8,
-        num_codebooks=32,
-        audio_bos_token_id=2048,
-        audio_pad_token_id=69569,
-        tie_word_embeddings=False,
-        pad_token_id=3,
-        bos_token_id=48000,
-        codec_config=None,
+        codebook_vocab_size: Optional[int] = 2049,
+        vocab_size: Optional[int] = 4001,
+        hidden_size: Optional[int] = 2048,
+        num_hidden_layers: Optional[int] = 48,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        max_position_embeddings: Optional[int] = 750,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        hidden_act: Optional[str] = "silu",
+        head_dim: Optional[int] = None,
+        initializer_range: Optional[float] = 0.02,
+        use_cache: Optional[bool] = True,
+        sliding_window: Optional[int] = 375,
+        attention_dropout: Optional[float] = 0.0,
+        ffn_dim: Optional[int] = 11264,
+        rms_norm_eps: Optional[int] = 1e-8,
+        num_codebooks: Optional[int] = 32,
+        audio_bos_token_id: Optional[int] = 2048,
+        audio_pad_token_id: Optional[int] = 69569,
+        tie_word_embeddings: Optional[bool] = False,
+        pad_token_id: Optional[int] = 3,
+        bos_token_id: Optional[int] = 48000,
+        codec_config: Optional[dict] = None,
         **kwargs,
     ):
         super().__init__(
@@ -179,10 +184,20 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.sliding_window = sliding_window
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
 
 __all__ = ["KyutaiSpeechToTextConfig"]

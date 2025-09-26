@@ -31,6 +31,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
@@ -42,7 +43,6 @@ from ..phi3.modeling_phi3 import (
     Phi3Model,
     Phi3PreTrainedModel,
     Phi3RMSNorm,
-    Phi3RotaryEmbedding,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -327,13 +327,10 @@ class Phi4MultimodalConfig(Phi3Config):
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
-            the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
-            divided by the number of attention heads divided by 2.
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         partial_rotary_factor (`float`, *optional*, defaults to `1.0`):
             Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
         bos_token_id (`int`, *optional*, defaults to 199999):
@@ -375,31 +372,30 @@ class Phi4MultimodalConfig(Phi3Config):
 
     def __init__(
         self,
-        vocab_size=200064,
-        hidden_size=3072,
-        intermediate_size=8192,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        resid_pdrop=0.0,
-        embd_pdrop=0.0,
-        attention_dropout=0.0,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        partial_rotary_factor=1,
-        bos_token_id=199999,
-        eos_token_id=[199999, 200020],
-        pad_token_id=199999,
-        original_max_position_embeddings=4096,
-        sliding_window=None,
-        vision_config=None,
-        audio_config=None,
+        vocab_size: Optional[int] = 200064,
+        hidden_size: Optional[int] = 3072,
+        intermediate_size: Optional[int] = 8192,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 8,
+        resid_pdrop: Optional[float] = 0.0,
+        embd_pdrop: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 131072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        partial_rotary_factor: Optional[int] = 1,
+        bos_token_id: Optional[int] = 199999,
+        eos_token_id: Optional[list[int]] = [199999, 200020],
+        pad_token_id: Optional[int] = 199999,
+        original_max_position_embeddings: Optional[int] = 4096,
+        sliding_window: Optional[int] = None,
+        vision_config: Optional[dict] = None,
+        audio_config: Optional[dict] = None,
         **kwargs,
     ):
         super().__init__(
@@ -418,7 +414,6 @@ class Phi4MultimodalConfig(Phi3Config):
             rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
             tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
             rope_scaling=rope_scaling,
             partial_rotary_factor=partial_rotary_factor,
             bos_token_id=bos_token_id,
@@ -1440,10 +1435,6 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
         return inputs_embeds
 
 
-class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
-    pass
-
-
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -1545,9 +1536,8 @@ class Phi4MultimodalModel(Phi3Model):
         )
 
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,

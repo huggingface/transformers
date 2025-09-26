@@ -16,7 +16,7 @@
 """PyTorch Phimoe model."""
 
 import math
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -31,7 +31,7 @@ from ...modeling_layers import (
     GradientCheckpointingLayer,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, standardize_rope_params
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -143,33 +143,76 @@ def load_balancing_loss_func(
 
 
 class PhimoeRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: Optional[PhimoeConfig] = None,
-    ):
+    def __init__(self, config: PhimoeConfig, device=None):
         super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.config = standardize_rope_params(config)
 
-        self.config = config
-        if config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            self.short_mscale = config.rope_scaling.get("short_mscale")
-            self.long_mscale = config.rope_scaling.get("long_mscale")
-        else:
-            self.rope_type = "default"
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        self.rope_type = self.config.rope_scaling["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-    def forward(self, x, seq_len=None):
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        self.short_mscale = config.rope_scaling.get("short_mscale", None)  # Diff with Llama
+        self.long_mscale = config.rope_scaling.get("long_mscale", None)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[PhimoeConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PretrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
+        config = standardize_rope_params(config)
+        rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
+
+        base = rope_scaling_dict["rope_theta"]
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    def forward(self, x, seq_len=None, layer_type=None):
+        if layer_type is not None:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support layer types, but got `layer_type={layer_type}`"
+            )
+
         mscale = None
-        if self.config.rope_scaling and seq_len:
+        if self.short_mscale is not None and self.long_mscale is not None and seq_len:
             mscale = (
                 self.long_mscale
                 if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
                 else self.short_mscale
             )
-        inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
-        mscale = attention_scaling if mscale is None else mscale
+        mscale = self.attention_scaling if mscale is None else mscale
         t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
-        freqs = torch.outer(t, inv_freq)
+        freqs = torch.outer(t, self.inv_freq)
 
         emb = torch.cat((freqs, freqs), dim=-1)
         return (emb.cos() * mscale).to(x.dtype), (emb.sin() * mscale).to(x.dtype)
@@ -247,7 +290,7 @@ class PhimoeAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
 
@@ -1242,7 +1285,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         ```"""
         if (
             use_cache
-            and self.config.rope_scaling
+            and hasattr(self.config, "original_max_position_embeddings")
             and cache_position is not None
             and cache_position[0] == self.config.original_max_position_embeddings
         ):
@@ -1322,7 +1365,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and self.config.rope_scaling
+            and hasattr(self.config, "original_max_position_embeddings")
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]

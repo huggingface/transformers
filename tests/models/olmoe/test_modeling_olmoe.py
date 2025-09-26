@@ -217,6 +217,7 @@ class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_scaling["rope_theta"]
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         original_model = OlmoeModel(config)
@@ -226,7 +227,7 @@ class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         original_long_output = original_model(long_input).last_hidden_state
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        config.rope_scaling = {"type": scaling_type, "factor": 10.0, "rope_theta": rope_theta}
         scaled_model = OlmoeModel(config)
         scaled_model.to(torch_device)
         scaled_model.eval()

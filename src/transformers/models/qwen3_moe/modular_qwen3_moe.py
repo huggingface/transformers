@@ -45,6 +45,7 @@ logger = logging.get_logger(__name__)
 class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        del self.layer_type
         self.sliding_window = getattr(config, "sliding_window", None)
 
 
@@ -143,7 +144,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

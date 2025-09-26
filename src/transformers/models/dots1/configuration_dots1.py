@@ -12,7 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -73,10 +76,10 @@ class Dots1Config(PretrainedConfig):
             Whether or not the model should return the last key/values attentions. Only relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie the input and output word embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            Dictionary for scaling RoPE embeddings. Supports `{"type": strategy name, "factor": scaling factor}`.
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the self-attention projections.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -133,34 +136,33 @@ class Dots1Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=152064,
-        hidden_size=4608,
-        intermediate_size=10944,
-        moe_intermediate_size=1408,
-        num_hidden_layers=62,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        n_shared_experts=None,
-        n_routed_experts=None,
-        n_group=1,
-        topk_group=1,
-        num_experts_per_tok=None,
-        first_k_dense_replace=0,
-        norm_topk_prob=False,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        routed_scaling_factor=1.0,
-        sliding_window=4096,
-        max_window_layers=62,
-        layer_types=None,
+        vocab_size: Optional[int] = 152064,
+        hidden_size: Optional[int] = 4608,
+        intermediate_size: Optional[int] = 10944,
+        moe_intermediate_size: Optional[int] = 1408,
+        num_hidden_layers: Optional[int] = 62,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 32,
+        n_shared_experts: Optional[int] = None,
+        n_routed_experts: Optional[int] = None,
+        n_group: Optional[int] = 1,
+        topk_group: Optional[int] = 1,
+        num_experts_per_tok: Optional[int] = None,
+        first_k_dense_replace: Optional[int] = 0,
+        norm_topk_prob: Optional[bool] = False,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        routed_scaling_factor: Optional[float] = 1.0,
+        sliding_window: Optional[int] = 4096,
+        max_window_layers: Optional[int] = 62,
+        layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -184,8 +186,6 @@ class Dots1Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.routed_scaling_factor = routed_scaling_factor
@@ -201,6 +201,22 @@ class Dots1Config(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

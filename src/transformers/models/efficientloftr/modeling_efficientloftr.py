@@ -20,7 +20,7 @@ from torch import nn
 from ...activations import ACT2CLS, ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -29,10 +29,14 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    logging,
     torch_int,
 )
 from ...utils.generic import check_model_inputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -83,30 +87,97 @@ def compute_embeddings(inv_freq: torch.Tensor, embed_height: int, embed_width: i
     return emb
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->EfficientLoFTR
 class EfficientLoFTRRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
+    # Ignore copy
     def __init__(self, config: EfficientLoFTRConfig, device=None):
         super().__init__()
-        self.config = config
-        self.rope_type = config.rope_scaling["rope_type"]
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        self.config = standardize_rope_params(config)
 
-        inv_freq, _ = self.rope_init_fn(self.config, device)
-        inv_freq_expanded = inv_freq[None, None, None, :].float().expand(1, 1, 1, -1)
+        # We get one layer type per model if:
+        #   1) Model is used as backbone with several other models. E.g. Gemma which has sliding
+        #      layers with Paligemma and has only one layer type as a standalone model
+        #   2) Tiny models used for testing do not have enough layers to reach the next layer type
+        self.layer_types = list(set(config.layer_types)) if hasattr(config, "layer_types") else None
+        if self.layer_types is not None and len(self.layer_types) > 1:
+            self.rope_type = {}
+            for layer_type in self.layer_types:
+                rope_type, curr_inv_freq, curr_attention_scaling = self.get_rope_frequencies(device, layer_type)
+                self.rope_type[layer_type] = rope_type
+                self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
+                setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
+                setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
+        else:
+            layer_type = None if self.layer_types is None else self.layer_types[0]
+            self.rope_type, inv_freq, self.attention_scaling = self.get_rope_frequencies(device, layer_type=layer_type)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)
+            self.original_inv_freq = inv_freq
 
-        self.register_buffer("inv_freq", inv_freq_expanded, persistent=False)
+    def get_rope_frequencies(self, device, layer_type=None):
+        # Some layer types have no RoPE, e.g. conv or mamba layers. Skip them
+        rope_params = self.config.rope_scaling[layer_type] if layer_type is not None else self.config.rope_scaling
+        if rope_params is None:
+            return None, None, None
 
+        rope_type = rope_params["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+        inv_freq, attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+        return rope_type, inv_freq, attention_scaling
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[EfficientLoFTRConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PretrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
+        config = standardize_rope_params(config)
+        rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
+
+        base = rope_scaling_dict["rope_theta"]
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    # Ignore copy
     @torch.no_grad()
     def forward(
-        self, x: torch.Tensor, position_ids: Optional[tuple[torch.LongTensor, torch.LongTensor]] = None
+        self, x: torch.Tensor, position_ids: Optional[torch.LongTensor] = None, layer_type=None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         feats_height, feats_width = x.shape[-2:]
+        prefix = "" if layer_type is None or len(self.layer_types) == 1 else f"{layer_type}_"
+        inv_freq = getattr(self, f"{prefix}inv_freq")
         embed_height = (feats_height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         embed_width = (feats_width - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            emb = compute_embeddings(self.inv_freq, embed_height, embed_width, self.config.hidden_size)
+            emb = compute_embeddings(inv_freq, embed_height, embed_width, self.config.hidden_size)
             sin = emb.sin()
             cos = emb.cos()
 
@@ -332,7 +403,7 @@ def eager_attention_forward(
 class EfficientLoFTRAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
+    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int, is_cross_attention: bool = False):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -341,6 +412,7 @@ class EfficientLoFTRAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
+        self.is_cross_attention = is_cross_attention
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -367,13 +439,11 @@ class EfficientLoFTRAttention(nn.Module):
 
         query_states = self.q_proj(hidden_states).view(batch_size, seq_len, -1, dim)
 
-        is_cross_attention = encoder_hidden_states is not None
-        current_states = encoder_hidden_states if is_cross_attention else hidden_states
-
+        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
         key_states = self.k_proj(current_states).view(batch_size, seq_len, -1, dim)
         value_states = self.v_proj(current_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
 
-        if position_embeddings is not None:
+        if not self.is_cross_attention:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
 
@@ -419,12 +489,12 @@ class EfficientLoFTRMLP(nn.Module):
 
 
 class EfficientLoFTRAggregatedAttention(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
+    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int, is_cross_attention: bool = False):
         super().__init__()
 
         self.q_aggregation_kernel_size = config.q_aggregation_kernel_size
         self.aggregation = EfficientLoFTRAggregationLayer(config)
-        self.attention = EfficientLoFTRAttention(config, layer_idx)
+        self.attention = EfficientLoFTRAttention(config, layer_idx, is_cross_attention=is_cross_attention)
         self.mlp = EfficientLoFTRMLP(config)
 
     def forward(
@@ -474,12 +544,12 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         super().__init__()
 
         self.self_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
-        self.cross_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
+        self.cross_attention = EfficientLoFTRAggregatedAttention(config, layer_idx, is_cross_attention=True)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, _, embed_dim, height, width = hidden_states.shape
@@ -514,7 +584,7 @@ class EfficientLoFTRLocalFeatureTransformer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         for layer in self.layers:
@@ -738,7 +808,6 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         coarse_features = self.local_feature_transformer(
             coarse_features, position_embeddings=position_embeddings, **kwargs
         )
-
         features = (coarse_features,) + tuple(residual_features)
 
         return BackboneOutput(feature_maps=features)

@@ -346,6 +346,7 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)
+        config.rope_scaling = {"rope_type": "default", "rope_theta": 10_000.0}
         original_model = self.model_tester_class.base_model_class(config)
         original_model.to(torch_device)
         original_model.eval()
@@ -353,7 +354,7 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
         original_long_output = original_model(long_input).last_hidden_state
 
         set_seed(42)
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        config.rope_scaling = {"rope_type": scaling_type, "factor": 10.0, "rope_theta": 10_000.0}
         scaled_model = self.model_tester_class.base_model_class(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
