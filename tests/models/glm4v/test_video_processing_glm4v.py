@@ -250,8 +250,8 @@ class Glm4vVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
                 video_inputs[0],
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=(0.0, 0.0, 0.0, 0.0),
+                image_std=(1.0, 1.0, 1.0, 1.0),
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
@@ -261,8 +261,8 @@ class Glm4vVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
                 video_inputs,
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=(0.0, 0.0, 0.0, 0.0),
+                image_std=(1.0, 1.0, 1.0, 1.0),
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)

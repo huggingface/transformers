@@ -33,7 +33,7 @@ else:
 
 
 class InternVLVideoProcessorInitKwargs(VideosKwargs):
-    initial_shift: Union[bool, float, int]
+    initial_shift: Optional[Union[bool, float, int]]
 
 
 class InternVLVideoProcessor(BaseVideoProcessor):

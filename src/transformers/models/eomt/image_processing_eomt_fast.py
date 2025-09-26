@@ -59,19 +59,15 @@ else:
 class EomtImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
     """
     do_split_image (`bool`, *optional*, defaults to `False`):
-            Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
-            input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
-            Otherwise, the input images will be padded to the target size.
-    do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
+        Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
+        input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
+        Otherwise, the input images will be padded to the target size.
     ignore_index (`int`, *optional*):
-            Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-            denoted with 0 (background) will be replaced with `ignore_index`.
+        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+        denoted with 0 (background) will be replaced with `ignore_index`.
     """
 
-    do_split_image: bool
-    do_pad: bool
+    do_split_image: Optional[bool]
     ignore_index: Optional[int] = None
 
 

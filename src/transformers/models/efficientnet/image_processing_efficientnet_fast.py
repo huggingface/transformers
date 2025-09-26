@@ -45,8 +45,8 @@ class EfficientNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Normalize the image again with the standard deviation only for image classification if set to True.
     """
 
-    rescale_offset: bool
-    include_top: bool
+    rescale_offset: Optional[bool]
+    include_top: Optional[bool]
 
 
 @auto_docstring

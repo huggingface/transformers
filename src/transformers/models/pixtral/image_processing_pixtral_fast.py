@@ -46,11 +46,11 @@ logger = logging.get_logger(__name__)
 
 class PixtralFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-    patch_size (`dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
+    patch_size (`Union[int, dict[str, int]]` *optional*, defaults to `{"height": 16, "width": 16}`):
         Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
     """
 
-    patch_size: Optional[dict[str, int]]
+    patch_size: Optional[Union[int, dict[str, int]]]
 
 
 @auto_docstring
