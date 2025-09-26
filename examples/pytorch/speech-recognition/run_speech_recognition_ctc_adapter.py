@@ -41,10 +41,10 @@ import datasets
 import evaluate
 import numpy as np
 import torch
-from datasets import DatasetDict, load_dataset
-from safetensors.torch import save_file as safe_save_file
 
 import transformers
+from datasets import DatasetDict, load_dataset
+from safetensors.torch import save_file as safe_save_file
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
@@ -52,10 +52,10 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     HfArgumentParser,
+    set_seed,
     Trainer,
     TrainingArguments,
     Wav2Vec2Processor,
-    set_seed,
 )
 from transformers.models.wav2vec2.modeling_wav2vec2 import WAV2VEC2_ADAPTER_SAFE_FILE
 from transformers.trainer_utils import get_last_checkpoint, is_main_process

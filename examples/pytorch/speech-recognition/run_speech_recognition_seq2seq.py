@@ -40,9 +40,9 @@ from typing import Any, Optional, Union
 import datasets
 import evaluate
 import torch
-from datasets import DatasetDict, load_dataset
 
 import transformers
+from datasets import DatasetDict, load_dataset
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,

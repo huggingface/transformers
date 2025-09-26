@@ -40,9 +40,9 @@ from typing import Optional, Union
 import datasets
 import evaluate
 import torch
-from datasets import DatasetDict, load_dataset
 
 import transformers
+from datasets import DatasetDict, load_dataset
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
@@ -50,10 +50,10 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     HfArgumentParser,
+    set_seed,
     Trainer,
     TrainingArguments,
     Wav2Vec2Processor,
-    set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry

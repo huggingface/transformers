@@ -314,7 +314,7 @@ below 27%.
 For an example run, you can have a look at [`patrickvonplaten/wav2vec2-common_voice-tr-mms-demo`](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-mms-demo).
 
 
-If you'd like to train another adapter model with the same base model, you can simply re-use the same `--output_dir`,
+If you'd like to train another adapter model with the same base model, you can simply reuse the same `--output_dir`,
 but make sure to pass the `--output_dir` folder also to `--tokenizer_name_or_path` so that the vocabulary is not 
 overwritten but **extended**. Assuming you would like to train adapter weights on Swedish in addition to Turkish and save 
 the adapter weights in the same model repo, you can run:
