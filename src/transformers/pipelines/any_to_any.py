@@ -370,7 +370,7 @@ class AnyToAnyPipeline(Pipeline):
             model_inputs = self.processor.apply_chat_template(
                 inputs.messages,
                 continue_final_message=continue_final_message,
-                return_tensors=self.framework,
+                return_tensors="pt",
                 tokenize=True,
                 return_dict=True,
                 **chat_template_kwargs,
@@ -395,7 +395,7 @@ class AnyToAnyPipeline(Pipeline):
             processing_kwargs.setdefault("padding", True)
 
         # Multimodal data is loaded in preprocessors so we pass all ipnuts directly to `self.processor`
-        model_inputs = self.processor(text=text, **inputs, return_tensors=self.framework, **processing_kwargs).to(
+        model_inputs = self.processor(text=text, **inputs, return_tensors="pt", **processing_kwargs).to(
             dtype=self.dtype
         )
         model_inputs["text"] = text
