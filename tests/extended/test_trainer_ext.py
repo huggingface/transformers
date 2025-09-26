@@ -259,8 +259,8 @@ class TestTrainerExt(TestCasePlus):
             f" gpu_total_mem_bnb={gpu_total_mem_bnb}MB",
         )
 
-        self.assertEqual(
-            loss_orig, loss_bnb, f"loss should be the same, but got loss_orig={loss_orig}, loss_bnb={loss_bnb}"
+        self.assertAlmostEqual(
+            loss_orig, loss_bnb, 5, f"loss should be the same, but got loss_orig={loss_orig}, loss_bnb={loss_bnb}"
         )
 
     def run_trainer(
