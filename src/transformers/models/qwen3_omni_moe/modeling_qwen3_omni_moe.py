@@ -1969,7 +1969,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
             raise ValueError(
-                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
             )
 
         special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -2590,9 +2590,8 @@ class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3OmniMoeP
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        Args:
-            generation_steps (`int`):
-                generation step of code predictor, 0..num_code_groups-1
+        generation_steps (`int`):
+            generation step of code predictor, 0..num_code_groups-1
         """
 
         # Prefill stage
@@ -3017,27 +3016,26 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
         **kwargs,
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        Args:
-            use_audio_in_video (`bool`, *optional*):
-                If set to `True`, use the audio in video.
-            audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The length of feature shape of each audio in LLM.
-            video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
-                Number of seconds per grid for each video, used for temporal feature mapping.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            residual_codes (`torch.Tensor`):
-                The predicted residual codes of previous step.
-            trailing_text_hidden (`torch.Tensor`):
-                Text hidden states from thinker after the first token.
-            tts_pad_embed (`torch.Tensor`):
-                Embedding tensor of `tts_pad_token_id`.
-            generation_step (`int`):
-                Generation step since prefill, used to sync with `trailing_text_hidden`.
-            talker_input_ids (`torch.Tensor`):
-                Input ids from thinker, used to compute 3d RoPE.
+        use_audio_in_video (`bool`, *optional*):
+            If set to `True`, use the audio in video.
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
+            Number of seconds per grid for each video, used for temporal feature mapping.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        residual_codes (`torch.Tensor`):
+            The predicted residual codes of previous step.
+        trailing_text_hidden (`torch.Tensor`):
+            Text hidden states from thinker after the first token.
+        tts_pad_embed (`torch.Tensor`):
+            Embedding tensor of `tts_pad_token_id`.
+        generation_step (`int`):
+            Generation step since prefill, used to sync with `trailing_text_hidden`.
+        talker_input_ids (`torch.Tensor`):
+            Input ids from thinker, used to compute 3d RoPE.
         """
         # Prefill
         if inputs_embeds is not None and inputs_embeds.shape[1] > 1:
