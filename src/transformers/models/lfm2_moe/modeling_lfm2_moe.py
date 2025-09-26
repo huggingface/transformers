@@ -105,13 +105,15 @@ class Lfm2MoeRotaryEmbedding(nn.Module):
 class Lfm2MoeMLP(nn.Module):
     def __init__(
         self,
-        hidden_size: int,
-        intermediate_size: int,
+        config: Lfm2MoeConfig,
+        intermediate_size: int = None,
     ):
         super().__init__()
-        self.w1 = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.w3 = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.w2 = nn.Linear(intermediate_size, hidden_size, bias=False)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.w1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.w3 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
     def forward(self, x):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
@@ -126,14 +128,14 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
 
         if config.use_expert_bias:
-            self.expert_bias = nn.Parameter(torch.empty(self.num_experts, dtype=torch.float32))
+            self.register_buffer("expert_bias", torch.zeros(self.num_experts, dtype=torch.float32))
         else:
-            self.expert_bias = None
+            self.register_buffer("expert_bias", None)
 
         # gating
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = nn.ModuleList(
-            [Lfm2MoeMLP(config.hidden_size, config.moe_intermediate_size) for _ in range(self.num_experts)]
+            [Lfm2MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
         )
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -153,7 +155,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
             routing_weights, selected_experts = torch.topk(routing_weights, k=self.top_k, dim=-1)
 
         if self.norm_topk_prob:
-            routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-20)
+            routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-6)
 
         if self.routed_scaling_factor:
             routing_weights = routing_weights * self.routed_scaling_factor
@@ -162,7 +164,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         routing_weights = routing_weights.to(hidden_states.dtype)
 
         final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=torch.float32, device=hidden_states.device
+            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
         )
 
         # One hot encode the selected experts to create an expert mask
@@ -183,7 +185,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(torch.float32))
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         final_hidden_states = final_hidden_states.to(hidden_states.dtype).reshape(
             batch_size, sequence_length, hidden_dim
         )
@@ -601,14 +603,11 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
             self.self_attn = Lfm2MoeAttention(config, layer_idx)
         else:
             self.conv = Lfm2MoeShortConv(config, layer_idx)
-
-        if layer_idx < config.num_dense_layers:
-            self.feed_forward = Lfm2MoeMLP(
-                hidden_size=config.hidden_size,
-                intermediate_size=config.intermediate_size,
-            )
-        else:
-            self.feed_forward = Lfm2MoeSparseMoeBlock(config)
+        self.feed_forward = (
+            Lfm2MoeMLP(config, intermediate_size=config.intermediate_size)
+            if layer_idx < config.num_dense_layers
+            else Lfm2MoeSparseMoeBlock(config)
+        )
         self.operator_norm = Lfm2MoeRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.ffn_norm = Lfm2MoeRMSNorm(config.hidden_size, eps=config.norm_eps)
 
@@ -643,7 +642,7 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
             )
 
         hidden_states = hidden_states + residual
-        ff_out = self.feed_forward.forward(self.ffn_norm(hidden_states))
+        ff_out = self.feed_forward(self.ffn_norm(hidden_states))
         if isinstance(ff_out, tuple):
             ff_out, _ = ff_out
 
