@@ -417,6 +417,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("mgp-str", ("MgpstrTokenizer", None)),
         (
+            "minicpm3",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
             "minimax",
             (
                 "GPT2Tokenizer" if is_sentencepiece_available() else None,
