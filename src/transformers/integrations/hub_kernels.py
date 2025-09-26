@@ -152,7 +152,10 @@ def load_and_register_kernel(attn_implementation: str) -> None:
     if not is_kernel(attn_implementation):
         return
     if not _kernels_available:
-        raise ImportError("`kernels` is not installed. Please install it with `pip install kernels`.")
+        raise ImportError(
+            "`kernels` is either not installed or uses an incompatible version. "
+            "Please install the latest version with `pip install -U kernels`."
+        )
 
     # Need to be imported here as otherwise we have a circular import in `modeling_utils`
     from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
