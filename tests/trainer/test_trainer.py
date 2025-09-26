@@ -2957,6 +2957,40 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
             self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
+    def test_train_and_predict_loss_parity(self):
+        """
+        Tests that the loss computed during a training_step is the same as the one computed during prediction_step.
+        for the same inputs
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        # Create a dummy batch of inputs
+        inputs = {}
+        inputs["input_ids"] = []
+        for row_ind in range(4):
+            seq_len = torch.randint(32, 64, (1,)).item()
+            x = torch.randint(1, 100, (seq_len,))
+            inputs["input_ids"].append(x)
+        inputs["input_ids"] = torch.nn.utils.rnn.pad_sequence(inputs["input_ids"], batch_first=True, padding_value=0)
+        inputs["labels"] = inputs["input_ids"].clone()
+        inputs["labels"][inputs["input_ids"] == 0] = -100
+        num_items_in_batch = inputs["labels"].ne(-100).sum().item()
+
+        def custom_loss_func(outputs, labels, num_items_in_batch=None):
+            logits = outputs["logits"]
+            loss_fct = torch.nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
+            if num_items_in_batch is not None:
+                return loss / num_items_in_batch  # multiply by number of items to get the sum
+            return loss
+
+        trainer = Trainer(model, train_dataset=None, compute_loss_func=custom_loss_func)
+
+        # creating log history of trainer, results don't matter
+        train_loss = trainer.training_step(model, inputs, num_items_in_batch)
+        predict_loss = trainer.prediction_step(model, inputs, prediction_loss_only=True)[0]
+
+        torch.testing.assert_close(train_loss, predict_loss, atol=1e-6, rtol=0)
+
     def test_predict_with_batch_eval_metrics(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(

@@ -4897,7 +4897,10 @@ class Trainer:
             else:
                 if has_labels or loss_without_labels:
                     with self.compute_loss_context_manager():
-                        loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                        num_items_in_batch = self._get_num_items_in_batch([inputs], inputs["input_ids"].device)
+                        loss, outputs = self.compute_loss(
+                            model, inputs, return_outputs=True, num_items_in_batch=num_items_in_batch
+                        )
                     loss = loss.detach().mean()
 
                     if isinstance(outputs, dict):
@@ -5586,21 +5589,16 @@ class Trainer:
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
                 )
 
-    def get_batch_samples(
-        self, epoch_iterator: Iterator, num_batches: int, device: torch.device
-    ) -> tuple[list, Optional[Union[torch.Tensor, int]]]:
+    def _get_num_items_in_batch(self, batch_samples: list, device: torch.device) -> int | None:
         """
-        Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
+        Counts the number of items in the batches to properly scale the loss.
+        Args:
+            batch_samples (`list`): List of batches
+            device (`torch.device`): The device on which the number of items in the batch should be.
+        Returns:
+            None if the number of items in the batch doesn't need to be computed else the number of items in the batch
         """
-        batch_samples = []
         num_items_in_batch = None
-
-        for _ in range(num_batches):
-            try:
-                batch_samples.append(next(epoch_iterator))
-            except StopIteration:
-                break
-
         count_num_items_in_batch = (
             len(batch_samples) > 0
             and "labels" in batch_samples[0]
@@ -5615,7 +5613,6 @@ class Trainer:
                 # https://github.com/huggingface/transformers/blob/v4.49.0/src/transformers/trainer.py#L3790
             )
         )
-
         if count_num_items_in_batch:
             # For now we don't support object detection
             try:
@@ -5641,6 +5638,23 @@ class Trainer:
                 if pc := getattr(self.accelerator, "parallelism_config", None):
                     num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
 
+        return num_items_in_batch
+
+    def get_batch_samples(
+        self, epoch_iterator: Iterator, num_batches: int, device: torch.device
+    ) -> tuple[list, Optional[Union[torch.Tensor, int]]]:
+        """
+        Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
+        """
+        batch_samples = []
+
+        for _ in range(num_batches):
+            try:
+                batch_samples.append(next(epoch_iterator))
+            except StopIteration:
+                break
+
+        num_items_in_batch = self._get_num_items_in_batch(batch_samples, device)
         return batch_samples, num_items_in_batch
 
     def set_initial_training_values(
