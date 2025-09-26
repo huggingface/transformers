@@ -62,6 +62,8 @@ class Timesfm2P5Config(PretrainedConfig):
         use_bias: bool = False,
         activation: str = "swish",
         use_positional_embedding: bool = False,  # TimesFM 2.5 uses rotary embeddings instead
+        use_continuous_quantile_head: bool = True,
+        normalize_inputs: bool = True,
         # Gemma2-compatible parameters for query scaling
         query_pre_attn_scalar: float = 256.0,  # This provides the per-dim scaling
         attn_logit_softcapping: Optional[float] = None,
@@ -100,6 +102,8 @@ class Timesfm2P5Config(PretrainedConfig):
         self.use_per_dim_scale = use_per_dim_scale
         self.use_bias = use_bias
         self.activation = activation
+        self.use_continuous_quantile_head = use_continuous_quantile_head
+        self.normalize_inputs = normalize_inputs
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.attn_logit_softcapping = attn_logit_softcapping
         self.num_key_value_heads = num_key_value_heads

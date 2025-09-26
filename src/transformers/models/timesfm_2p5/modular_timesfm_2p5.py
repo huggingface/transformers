@@ -79,6 +79,8 @@ class Timesfm2P5Config(TimesFmConfig):
         use_bias: bool = False,
         activation: str = "swish",
         use_positional_embedding: bool = False,  # TimesFM 2.5 uses rotary embeddings instead
+        use_continuous_quantile_head: bool = True,
+        normalize_inputs: bool = True,
         # Gemma2-compatible parameters for query scaling
         query_pre_attn_scalar: float = 256.0,  # This provides the per-dim scaling
         attn_logit_softcapping: Optional[float] = None,
@@ -120,6 +122,8 @@ class Timesfm2P5Config(TimesFmConfig):
         self.use_per_dim_scale = use_per_dim_scale
         self.use_bias = use_bias
         self.activation = activation
+        self.use_continuous_quantile_head = use_continuous_quantile_head
+        self.normalize_inputs = normalize_inputs
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.attn_logit_softcapping = attn_logit_softcapping
         self.num_key_value_heads = num_key_value_heads
@@ -131,12 +135,34 @@ class Timesfm2P5Config(TimesFmConfig):
 
 
 @dataclass
+@auto_docstring
 class Timesfm2P5Output(TimesFmOutput):
-    pass
+    r"""
+    context_mu (`torch.Tensor` of shape `(batch_size, num_patches)`):
+        Running means computed per input patch during normalization.
+    context_sigma (`torch.Tensor` of shape `(batch_size, num_patches)`):
+        Running standard deviations computed per input patch during normalization.
+    patch_padding (`torch.Tensor` of shape `(batch_size, num_patches)`):
+        Boolean mask indicating fully padded patches.
+    """
+
+    context_mu: Optional[torch.Tensor] = None
+    context_sigma: Optional[torch.Tensor] = None
+    patch_padding: Optional[torch.Tensor] = None
 
 
 @dataclass
+@auto_docstring
 class Timesfm2P5OutputForPrediction(TimesFmOutputForPrediction):
+    r"""
+    mean_predictions (`torch.Tensor` of shape `(batch_size, horizon_length)`):
+        Deterministic forecasts after denormalization.
+    full_predictions (`torch.Tensor` of shape `(batch_size, horizon_length, quantiles)`):
+        Quantile forecasts including the median after denormalization.
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
+        Training loss combining MSE and quantile losses when targets are supplied.
+    """
+
     pass
 
 
@@ -156,11 +182,18 @@ class Timesfm2P5MLP(nn.Module):
         self.ff0 = nn.Linear(hidden_size, intermediate_size, bias=use_bias)
         self.ff1 = nn.Linear(intermediate_size, hidden_size, bias=use_bias)
 
-        # No activation function - TimesFM 2.5 MLP has no activation between ff0 and ff1
+        if config.activation == "swish":
+            self.activation = nn.SiLU()
+        elif config.activation == "relu":
+            self.activation = nn.ReLU()
+        elif config.activation == "none":
+            self.activation = nn.Identity()
+        else:
+            raise ValueError(f"Unsupported activation: {config.activation}")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         hidden = self.ff0(x)
-        # No activation applied - TimesFM 2.5 MLP applies ff1 directly to ff0 output
+        hidden = self.activation(hidden)
         output = self.ff1(hidden)
         return output
 
@@ -270,6 +303,10 @@ class Timesfm2P5Attention(Gemma2Attention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
+        # Apply rotary position embeddings before normalization/scaling (matches original TimesFM)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
         # Apply QK normalization (TimesFM 2.5 specific)
         if self.use_qk_norm:
             query_states = self.query_ln(query_states)
@@ -277,10 +314,6 @@ class Timesfm2P5Attention(Gemma2Attention):
 
         # Apply per-dimension scaling to query (TimesFM 2.5 specific)
         query_states = self._scale_query(query_states)
-
-        # Apply rotary position embeddings
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         # Handle past key/value for caching
         if past_key_values is not None:
@@ -387,6 +420,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
     def __init__(self, config: Timesfm2P5Config):
         super().__init__(config)
         self.config = config
+        self._tolerance = 1e-6
 
         # Input projection with TimesFM 2.5 ResidualBlock
         # Note: tokenizer uses bias=True (different from transformer layers)
@@ -413,21 +447,56 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         # self.post_init()  # Temporarily disabled due to initialization issue
 
     def _revin(self, x: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor, reverse: bool = False) -> torch.Tensor:
-        """
-        Reversible Instance Normalization (RevIN) - exact copy from original TimesFM.
+        if len(loc.shape) == len(x.shape) - 1:
+            loc = loc[..., None]
+            scale = scale[..., None]
+        elif len(loc.shape) == len(x.shape) - 2:
+            loc = loc[..., None, None]
+            scale = scale[..., None, None]
 
-        Args:
-            x: Input tensor
-            loc: Location (mean) for normalization
-            scale: Scale (std) for normalization
-            reverse: If True, denormalize; if False, normalize
-        """
-        if not reverse:
-            # Normalize: (x - mean) / std
-            return (x - loc) / scale
-        else:
-            # Denormalize: x * std + mean
+        safe_scale = torch.where(scale < self._tolerance, torch.ones_like(scale), scale)
+
+        if reverse:
             return x * scale + loc
+
+        return (x - loc) / safe_scale
+
+    @staticmethod
+    def _update_running_stats(
+        n: torch.Tensor,
+        mu: torch.Tensor,
+        sigma: torch.Tensor,
+        x: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        is_valid = (~mask).to(x.dtype)
+        inc_n = is_valid.sum(dim=-1)
+
+        inc_n_safe = torch.where(inc_n == 0, torch.ones_like(inc_n), inc_n)
+        inc_mu = (x * is_valid).sum(dim=-1) / inc_n_safe
+        inc_mu = torch.where(inc_n == 0, torch.zeros_like(inc_mu), inc_mu)
+
+        centered = x - inc_mu.unsqueeze(-1)
+        inc_var = ((centered * is_valid) ** 2).sum(dim=-1) / inc_n_safe
+        inc_var = torch.where(inc_n == 0, torch.zeros_like(inc_var), inc_var)
+        inc_sigma = torch.sqrt(torch.clamp(inc_var, min=0.0))
+
+        new_n = n + inc_n
+        new_n_safe = torch.where(new_n == 0, torch.ones_like(new_n), new_n)
+
+        new_mu = (n * mu + inc_mu * inc_n) / new_n_safe
+        new_mu = torch.where(new_n == 0, torch.zeros_like(new_mu), new_mu)
+
+        term1 = n * sigma.pow(2)
+        term2 = inc_n * inc_sigma.pow(2)
+        term3 = n * (mu - new_mu).pow(2)
+        term4 = inc_n * (inc_mu - new_mu).pow(2)
+
+        new_var = (term1 + term2 + term3 + term4) / new_n_safe
+        new_var = torch.where(new_n == 0, torch.zeros_like(new_var), new_var)
+        new_sigma = torch.sqrt(torch.clamp(new_var, min=0.0))
+
+        return new_n, new_mu, new_sigma
 
     def forward(
         self,
@@ -436,71 +505,54 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ):
-        """
-        TimesFM 2.5 forward pass with proper normalization following original implementation.
+        batch_size, seq_len = past_values.shape
+        patch_len = self.config.patch_length
 
-        Args:
-            past_values: Input tensor of shape (batch_size, sequence_length)
-            past_values_padding: Padding tensor of shape (batch_size, sequence_length)
-            output_attentions: Whether to return attention weights
-            output_hidden_states: Whether to return hidden states
+        patched_inputs = past_values.view(batch_size, -1, patch_len)
+        context_padding = past_values_padding[:, :seq_len]
+        patched_masks = context_padding.view(batch_size, -1, patch_len)
+        patched_masks_bool = patched_masks >= 0.5
 
-        Returns:
-            Timesfm2P5Output containing last_hidden_state and normalization statistics
-        """
-        batch_size = past_values.shape[0]
+        n = past_values.new_zeros(batch_size)
+        mu = past_values.new_zeros(batch_size)
+        sigma = past_values.new_zeros(batch_size)
+        mu_history: list[torch.Tensor] = []
+        sigma_history: list[torch.Tensor] = []
 
-        # Step 1: Patch the inputs (reshape to [B, N, P] where P=patch_length=32)
-        patched_inputs = past_values.view(batch_size, -1, self.config.patch_length)
-        # Use only the context portion of padding for patching
-        context_padding = past_values_padding[:, : past_values.shape[1]]
-        patched_masks = context_padding.view(batch_size, -1, self.config.patch_length)
+        for i in range(patched_inputs.shape[1]):
+            n, mu, sigma = self._update_running_stats(
+                n,
+                mu,
+                sigma,
+                patched_inputs[:, i, :],
+                patched_masks_bool[:, i, :],
+            )
+            mu_history.append(mu)
+            sigma_history.append(sigma)
 
-        # Step 2: Compute normalization statistics per sequence (following original TimesFM 2.5)
-        # Calculate mean and std across the non-padded values for each sequence
-        # Mask out padded values (where context_padding == 1)
-        valid_mask = (context_padding == 0).float()  # 1 for valid, 0 for padded
+        if mu_history:
+            context_mu = torch.stack(mu_history, dim=1)
+            context_sigma = torch.stack(sigma_history, dim=1)
+        else:
+            context_mu = mu.unsqueeze(1)
+            context_sigma = sigma.unsqueeze(1)
 
-        # Compute mean across valid values only
-        loc = (past_values * valid_mask).sum(dim=1) / (valid_mask.sum(dim=1) + 1e-8)  # [B]
+        normed_inputs = self._revin(patched_inputs, context_mu, context_sigma, reverse=False)
+        normed_inputs = torch.where(patched_masks_bool, torch.zeros_like(normed_inputs), normed_inputs)
 
-        # Compute std across valid values only (matching original TimesFM exactly)
-        scale = torch.zeros_like(loc)
-        for i in range(batch_size):
-            valid_values = past_values[i, valid_mask[i] == 1]
-            if valid_values.numel() > 0:
-                scale[i] = valid_values.std(unbiased=False)
-
-        # Ensure minimum scale to avoid division by zero (same as original)
-        scale = torch.clamp(scale, min=1e-8)
-
-        # Step 3: Apply normalization to patched inputs
-        # Normalize each patch using sequence-level statistics
-        loc_expanded = loc.view(batch_size, 1, 1)  # [B, 1, 1]
-        scale_expanded = scale.view(batch_size, 1, 1)  # [B, 1, 1]
-
-        normalized_patches = self._revin(patched_inputs, loc_expanded, scale_expanded, reverse=False)
-
-        # Step 4: Set padded patches to zero (original TimesFM behavior)
-        patched_pad_mask = (patched_masks.sum(dim=-1, keepdim=True) == self.config.patch_length).float()
-        normalized_patches = normalized_patches * (1.0 - patched_pad_mask)
-
-        # Step 5: TimesFM 2.5 preprocessing - concatenate inputs and padding indicators
         tokenizer_inputs = torch.cat(
-            [normalized_patches, patched_pad_mask.expand(-1, -1, self.config.patch_length)], dim=-1
-        )
-
-        # Step 6: Input embedding through tokenizer (ResidualBlock: 64 -> 1280)
-        # Ensure dtype compatibility for mixed precision training
-        tokenizer_inputs = tokenizer_inputs.to(dtype=self.dtype)
+            [normed_inputs, patched_masks_bool.to(dtype=normed_inputs.dtype)],
+            dim=-1,
+        ).to(dtype=self.dtype)
         input_embeddings = self.input_ff_layer(tokenizer_inputs)
 
-        # Step 7: Create position embeddings for RoPE
+        patch_padding = patched_masks_bool[..., -1]
+        attention_mask = self._make_attention_mask(patch_padding, input_embeddings.dtype)
+
         sequence_length = input_embeddings.shape[1]
         position_ids = torch.arange(sequence_length, device=input_embeddings.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(input_embeddings, position_ids)
 
-        # Step 8: Pass through transformer layers
         hidden_states = input_embeddings
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -512,7 +564,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
             layer_outputs = layer(
                 hidden_states=hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=None,  # TimesFM 2.5 doesn't use attention mask
+                attention_mask=attention_mask,
                 position_ids=position_ids,
                 output_attentions=output_attentions,
             )
@@ -526,15 +578,30 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        # Return with normalization statistics for use by prediction model
+        loc = context_mu[:, -1]
+        scale = torch.clamp(context_sigma[:, -1], min=self._tolerance)
+
         return Timesfm2P5Output(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             loc=loc,
             scale=scale,
+            context_mu=context_mu,
+            context_sigma=context_sigma,
+            patch_padding=patch_padding,
         )
 
+    def _make_attention_mask(self, patch_padding: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
+        batch_size, seq_len = patch_padding.shape
+        num_masked = patch_padding.to(torch.int32).sum(dim=-1)
+        q_index = torch.arange(seq_len, device=patch_padding.device)[None, None, :, None]
+        kv_index = torch.arange(seq_len, device=patch_padding.device)[None, None, None, :]
+        allowed = torch.logical_and(q_index >= kv_index, kv_index >= num_masked[:, None, None, None])
+
+        mask = torch.zeros((batch_size, 1, seq_len, seq_len), dtype=dtype, device=patch_padding.device)
+        mask = mask.masked_fill(~allowed, torch.finfo(dtype).min)
+        return mask
 
 class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
     """
@@ -585,57 +652,6 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _postprocess_output(
-        self, model_output: torch.Tensor, stats: tuple[torch.Tensor, torch.Tensor]
-    ) -> torch.Tensor:
-        """
-        Postprocess output of stacked transformer - TimesFM 2.5 version with separate projections.
-
-        Args:
-            model_output: Output from decoder [B, N, D] where D=hidden_size=1280
-            stats: Tuple of (mu, sigma) for normalization
-
-        Returns:
-            output_ts: [B, N, horizon_length, quantiles+1] tensor
-        """
-        # Apply separate output projections (matching original TimesFM 2.5)
-        point_output = self.output_projection_point(model_output)  # [B, N, 1280]
-        quantile_output = self.output_projection_quantiles(model_output)  # [B, N, 9216]
-
-        # Reshape outputs to match expected format
-        b, n, _ = model_output.shape
-
-        # Point predictions: [B, N, 1280] -> [B, N, horizon_length, 1]
-        # Since point output is 1280 and we need horizon_length patches
-        num_patches = point_output.shape[-1] // self.config.horizon_length  # 1280 / 128 = 10
-        point_reshaped = point_output.view(b, n, num_patches, self.config.horizon_length)
-        # Take the mean prediction (index 5 in original TimesFM 2.5)
-        point_final = point_reshaped[
-            :, :, self.config.decode_index : self.config.decode_index + 1, :
-        ]  # [B, N, 1, 128]
-        point_final = point_final.permute(0, 1, 3, 2)  # [B, N, 128, 1]
-
-        # Quantile predictions: [B, N, quantile_output_size] -> [B, N, output_quantile_len, num_quantiles+1]
-        output_quantile_len = self.config.output_quantile_len
-        num_quantiles_plus_one = len(self.config.quantiles) + 1  # 9 quantiles + 1 = 10 total
-        quantile_reshaped = quantile_output.view(
-            b,
-            n,
-            output_quantile_len,
-            num_quantiles_plus_one,
-        )  # [B, N, output_quantile_len, num_quantiles+1]
-        # Take the first horizon_length entries and only the quantiles we want
-        quantile_final = quantile_reshaped[
-            :, :, : self.config.horizon_length, : len(self.config.quantiles)
-        ]  # [B, N, 128, 9]
-
-        # Combine point and quantile predictions: [B, N, 128, 1] + [B, N, 128, 9] -> [B, N, 128, 10]
-        output_ts = torch.cat([point_final, quantile_final], dim=-1)
-
-        # Apply normalization (same as parent)
-        mu, sigma = stats
-        return output_ts * sigma[:, None, None, None] + mu[:, None, None, None]
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -684,120 +700,117 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         else:
             fcontext_len = forecast_context_len
 
-        # Get device from first input tensor
         device = past_values[0].device
 
-        # Truncate inputs to forecast_context_len
+        if return_forecast_on_context:
+            raise NotImplementedError("`return_forecast_on_context` is not supported for TimesFM 2.5 conversion yet.")
+
         inputs = [ts[-fcontext_len:] for ts in past_values]
         inp_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
 
         if window_size is not None:
-            new_inputs = []
+            new_inputs: list[torch.Tensor] = []
             for ts in inputs:
                 new_inputs.extend(self._timesfm_moving_average(ts, window_size))
             inputs = new_inputs
 
-        # TimesFM 2.5 doesn't use frequency - set dummy freq for internal compatibility
-        freq = [0] * len(inputs)  # TimesFM 2.5 simplified API
+        freq = [0] * len(inputs)
 
         if output_attentions is None:
             output_attentions = self.config.output_attentions
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
 
-        input_ts, input_padding, inp_freq = self._preprocess(inputs, freq)
-        # Move tensors to the same device as input
+        input_ts, input_padding, _ = self._preprocess(inputs, freq)
         input_ts = input_ts.to(device)
         input_padding = input_padding.to(device)
-        inp_freq = inp_freq.to(device)
 
-        # Handle default values for output flags
-        if output_attentions is None:
-            output_attentions = self.config.output_attentions
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
+        mu_global = input_ts.mean(dim=1, keepdim=True)
+        sigma_global = input_ts.std(dim=1, keepdim=True)
+        sigma_safe = torch.where(
+            sigma_global < self.decoder._tolerance,
+            torch.ones_like(sigma_global),
+            sigma_global,
+        )
 
-        # Call the base model which handles normalization internally
+        normalized_ts = (input_ts - mu_global) / sigma_safe
+        normalized_ts = normalized_ts.to(self.decoder.dtype)
+
         model_outputs = self.decoder(
-            past_values=input_ts,
+            past_values=normalized_ts,
             past_values_padding=input_padding,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
 
-        # Extract normalization statistics computed by the base model
-        loc = model_outputs.loc  # [B]
-        scale = model_outputs.scale  # [B]
-        hidden_states = model_outputs.last_hidden_state  # [B, N, 1280]
+        hidden_states = model_outputs.last_hidden_state
+        context_mu = model_outputs.context_mu
+        context_sigma = model_outputs.context_sigma
 
-        # Apply output projections
-        point_output = self.output_projection_point(hidden_states)  # [B, N, 1280]
-        quantile_output = self.output_projection_quantiles(hidden_states)  # [B, N, 10240]
+        point_output_norm = self.output_projection_point(hidden_states)
+        quantile_output_norm = self.output_projection_quantiles(hidden_states)
 
-        # Apply denormalization to get final predictions
-        b, n = hidden_states.shape[:2]
+        point_output = self.decoder._revin(point_output_norm, context_mu, context_sigma, reverse=True)
+        quantile_output = self.decoder._revin(quantile_output_norm, context_mu, context_sigma, reverse=True)
 
-        # Reshape point predictions: [B, N, hidden_size] -> [B, N, horizon_length, quantiles_per_step]
-        horizon_length = self.config.horizon_length
-        quantiles_per_step = point_output.shape[-1] // horizon_length
-        point_reshaped = point_output.view(b, n, horizon_length, quantiles_per_step)
-        decode_index = min(5, quantiles_per_step - 1)  # Median index, clamp to available quantiles
-        mean_preds_norm = point_reshaped[:, :, :, decode_index]  # [B, N, horizon_length]
+        batch_size, num_patches, hidden_size = point_output.shape
+        num_quantiles = len(self.config.quantiles) + 1
+        output_patch_len = hidden_size // num_quantiles
+        point_output = point_output.view(batch_size, num_patches, output_patch_len, num_quantiles)
+        pf_outputs = point_output[:, -1, :, :]
 
-        # Flatten and take first horizon_length values
-        mean_preds_flat = mean_preds_norm.reshape(b, -1)[:, :horizon_length]  # [B, horizon_length]
+        quantile_hidden_size = quantile_output.shape[-1]
+        quantile_patch_len = quantile_hidden_size // num_quantiles
+        quantile_output = quantile_output.view(batch_size, num_patches, quantile_patch_len, num_quantiles)
+        quantile_spreads = quantile_output[:, -1, :, :]
 
-        # Denormalize using stats from base model
-        loc_pred = loc.view(b, 1)  # [B, 1]
-        scale_pred = scale.view(b, 1)  # [B, 1]
-        mean_predictions = mean_preds_flat * scale_pred + loc_pred
+        horizon = min(self.horizon_len, pf_outputs.shape[1])
+        full_forecast = pf_outputs[:, :horizon, :].clone()
+        quantile_spreads_slice = quantile_spreads[:, :horizon, :]
 
-        # Process quantile predictions similarly
-        quantile_output_size = quantile_output.shape[-1]
-        quantiles_per_horizon_step = quantile_output_size // horizon_length
-        quantile_reshaped = quantile_output.view(
-            b, n, horizon_length, quantiles_per_horizon_step
-        )  # [B, N, horizon_length, quantiles_per_horizon_step]
+        median_index = min(self.config.decode_index, full_forecast.shape[-1] - 1)
+        if self.config.use_continuous_quantile_head and quantile_spreads_slice.shape[-1] == full_forecast.shape[-1]:
+            for idx in (1, 2, 3, 4, 6, 7, 8, 9):
+                if idx < full_forecast.shape[-1]:
+                    full_forecast[:, :, idx] = (
+                        quantile_spreads_slice[:, :, idx]
+                        - quantile_spreads_slice[:, :, median_index]
+                        + full_forecast[:, :, median_index]
+                    )
 
-        # Take quantiles: we need num_quantiles quantiles, plus the median is at the end
-        # The original TimesFM expects [B, horizon, quantiles] shape
-        num_quantiles = len(self.config.quantiles)  # From config
-        available_quantile_indices = min(quantiles_per_horizon_step, num_quantiles)
-        quantile_indices = list(range(available_quantile_indices))
-        quantile_preds_norm = quantile_reshaped[
-            :, :, :, quantile_indices
-        ]  # [B, N, horizon_length, available_quantiles]
+        full_predictions = self.decoder._revin(full_forecast, mu_global, sigma_global, reverse=True)
+        decode_index = min(self.config.decode_index, full_predictions.shape[-1] - 1)
+        mean_predictions = full_predictions[:, :, decode_index]
 
-        # Flatten and take first horizon values, then reshape properly
-        quantile_preds_flat = quantile_preds_norm.reshape(b, -1, available_quantile_indices)[
-            :, :horizon_length, :
-        ]  # [B, horizon_length, available_quantiles]
+        if window_size is not None:
+            mean_predictions = mean_predictions[0::2, ...] + mean_predictions[1::2, ...]
+            full_predictions = full_predictions[0::2, ...] + full_predictions[1::2, ...]
 
-        # Add median (point prediction) as final quantile
-        mean_preds_expanded = mean_preds_flat.unsqueeze(-1)  # [B, horizon_length, 1]
-        quantile_preds_with_median = torch.cat(
-            [quantile_preds_flat, mean_preds_expanded], dim=-1
-        )  # [B, horizon_length, available_quantiles+1]
-
-        # Denormalize all quantiles
-        total_quantiles = available_quantile_indices + 1
-        scale_expanded_for_quantiles = scale_pred.unsqueeze(-1).expand(
-            -1, horizon_length, total_quantiles
-        )  # [B, horizon_length, total_quantiles]
-        loc_expanded_for_quantiles = loc_pred.unsqueeze(-1).expand(
-            -1, horizon_length, total_quantiles
-        )  # [B, horizon_length, total_quantiles]
-        quantile_predictions = quantile_preds_with_median * scale_expanded_for_quantiles + loc_expanded_for_quantiles
-
-        # Apply truncate_negative if requested (same logic as parent class)
         if inp_min >= 0 and truncate_negative:
-            zero_tensor = torch.tensor(0.0, device=mean_predictions.device, dtype=mean_predictions.dtype)
-            mean_predictions = torch.maximum(mean_predictions, zero_tensor)
-            quantile_predictions = torch.maximum(quantile_predictions, zero_tensor)
+            zero = torch.zeros(1, device=mean_predictions.device, dtype=mean_predictions.dtype)
+            mean_predictions = torch.maximum(mean_predictions, zero)
+            full_predictions = torch.maximum(full_predictions, zero)
 
-        # Note: return_forecast_on_context is not fully supported in TimesFM 2.5 single-pass approach
-        # The parent class uses iterative decoding which allows for context forecasting
-        # For now, we ignore this parameter but keep it for API compatibility
+        loss = None
+        if future_values is not None:
+            mse_loss = F.mse_loss(mean_predictions, future_values)
+            quantile_indices = [i for i in range(full_predictions.shape[-1]) if i != decode_index]
+            if quantile_indices:
+                index_tensor = torch.tensor(quantile_indices, device=full_predictions.device, dtype=torch.long)
+                quantile_tensor = torch.index_select(full_predictions, dim=-1, index=index_tensor)
+                quantile_loss = self._quantile_loss(quantile_tensor, future_values)
+                loss = mse_loss + quantile_loss
+            else:
+                loss = mse_loss
+
+        return Timesfm2P5OutputForPrediction(
+            last_hidden_state=model_outputs.last_hidden_state,
+            attentions=model_outputs.attentions if output_attentions else None,
+            hidden_states=model_outputs.hidden_states if output_hidden_states else None,
+            mean_predictions=mean_predictions,
+            full_predictions=full_predictions,
+            loss=loss,
+        )
         if return_forecast_on_context:
             # TODO: Implement context forecasting for TimesFM 2.5 if needed
             # Currently, TimesFM 2.5 does direct horizon prediction without iterative decoding
