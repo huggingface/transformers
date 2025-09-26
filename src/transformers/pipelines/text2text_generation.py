@@ -123,7 +123,7 @@ class Text2TextGenerationPipeline(Pipeline):
 
         return preprocess_params, forward_params, postprocess_params
 
-    def check_inputs(self, input_length: int, min_length: int, max_length: int):
+    def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int):
         """
         Checks whether there might be something wrong with given input with regard to the model.
         """
@@ -198,7 +198,7 @@ class Text2TextGenerationPipeline(Pipeline):
         self.check_inputs(
             input_length,
             generate_kwargs.get("min_length", self.generation_config.min_length),
-            generate_kwargs.get("max_length", self.generation_config.max_length),
+            generate_kwargs.get("max_new_tokens", self.generation_config.max_new_tokens),
         )
 
         # User-defined `generation_config` passed to the pipeline call take precedence
@@ -284,18 +284,18 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         """
         return super().__call__(*args, **kwargs)
 
-    def check_inputs(self, input_length: int, min_length: int, max_length: int) -> bool:
+    def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int) -> bool:
         """
         Checks whether there might be something wrong with given input with regard to the model.
         """
-        if max_length < min_length:
-            logger.warning(f"Your min_length={min_length} must be inferior than your max_length={max_length}.")
+        if max_new_tokens < min_length:
+            logger.warning(f"Your min_length={min_length} must be inferior than your max_new_tokens={max_new_tokens}.")
 
-        if input_length < max_length:
+        if input_length < max_new_tokens:
             logger.warning(
-                f"Your max_length is set to {max_length}, but your input_length is only {input_length}. Since this is "
+                f"Your max_new_tokens is set to {max_new_tokens}, but your input_length is only {input_length}. Since this is "
                 "a summarization task, where outputs shorter than the input are typically wanted, you might "
-                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length // 2})"
+                f"consider decreasing max_new_tokens manually, e.g. summarizer('...', max_new_tokens={input_length // 2})"
             )
 
 
@@ -327,12 +327,10 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     # Used in the return key of the pipeline.
     return_name = "translation"
 
-    def check_inputs(self, input_length: int, min_length: int, max_length: int):
-        if input_length > 0.9 * max_length:
-            logger.warning(
-                f"Your input_length: {input_length} is bigger than 0.9 * max_length: {max_length}. You might consider "
-                "increasing your max_length manually, e.g. translator('...', max_length=400)"
-            )
+    def check_inputs(self, input_length: int, min_length: int, max_new_tokens: int):
+        """
+        Removed input length check - unnecessary with max_new_tokens (previously relevant for max_length)
+        """
         return True
 
     def preprocess(self, *args, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None):

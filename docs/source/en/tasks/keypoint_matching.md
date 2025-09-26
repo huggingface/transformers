@@ -69,7 +69,7 @@ print(outputs)
 
 Here's the outputs.
 
-```
+```text
 [{'keypoints0': tensor([[4514,  550],
           [4813,  683],
           [1972, 1547],
