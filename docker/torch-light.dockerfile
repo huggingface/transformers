@@ -18,7 +18,7 @@ RUN mkdir test_data && cd test_data && curl -O https://raw.githubusercontent.com
 
 # Download and run the script that caches models
 RUN curl -O https://raw.githubusercontent.com/huggingface/transformers/${REF}/call_from_pretrained.py
-RUN curl -O https://raw.githubusercontent.com/huggingface/calls.json
+RUN curl -O https://raw.githubusercontent.com/huggingface/transformers/${REF}/calls.json
 RUN python call_from_pretrained.py
 
 # Stage 3: Final image - copy EVERYTHING from downloader (dependencies + cleaned cache)
