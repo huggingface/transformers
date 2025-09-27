@@ -150,7 +150,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         features = np.log(np.clip(features, a_min=1e-7, a_max=None))
         return features.T
 
-    def _torch_extract_fbank_features(self, waveform: torch.Tensor) -> torch.Tensor:
+    def _torch_extract_fbank_features(self, waveform):
         """
         Extract mel-spectrogram features using torchaudio (exact match to original Vocos).
         """

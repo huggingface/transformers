@@ -247,13 +247,13 @@ class VocosModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def setUp(self):
-        with open("/content/vocos_mel_integration.json", "r") as f:
+        with open("tests/fixtures/vocos/vocos_mel_integration.json", "r") as f:
             self.mel_expected = json.load(f)[0]
-        with open("/content/vocos_encodec_integration.json", "r") as f:
+        with open("tests/fixtures/vocos/vocos_encodec_integration.json", "r") as f:
             self.encodec_expected = json.load(f)
-        with open("/content/vocos_mel_batch_integration.json", "r") as f:
+        with open("tests/fixtures/vocos/vocos_mel_batch_integration.json", "r") as f:
             self.mel_batch_expected = json.load(f)
-        with open("/content/vocos_encodec_batch_integration.json", "r") as f:
+        with open("tests/fixtures/vocos/vocos_encodec_batch_integration.json", "r") as f:
             self.encodec_batch_expected = json.load(f)
 
     def test_inference_mel_vocos(self):
@@ -333,7 +333,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
 
     def test_batch_encodec_vocos(self):
         repo_id = self.encodec_batch_expected[0]["hf_repo_id"]
-        proc = VocosProcessor.from_pretrained(repo_id)
+        processor = VocosProcessor.from_pretrained(repo_id)
         model = VocosModel.from_pretrained(repo_id).to(torch_device).eval()
 
         # reconstruction from batch of audios
@@ -342,8 +342,8 @@ class VocosModelIntegrationTest(unittest.TestCase):
         for entry in self.encodec_batch_expected:
             if "reconstructed_from_audio" not in entry:
                 continue
-            bw = entry["bandwidth"]
-            inputs = proc(audio=audios, bandwidth=bw, return_tensors="pt").to(torch_device)
+            bandwidth = entry["bandwidth"]
+            inputs = processor(audio=audios, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
             (hf_batch,) = model(**inputs, return_dict=False)
 
             for idx, saved in enumerate(entry["reconstructed_from_audio"]):
@@ -361,7 +361,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
                 continue
             codes = torch.tensor(entry["audio_codes"], dtype=torch.long, device=torch_device)
             bandwidth = entry["bandwidth"]
-            inputs = proc(codes=codes, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            inputs = processor(codes=codes, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
             hf_batch = model(**inputs).audio
 
             for idx, saved in enumerate(entry["reconstructed_from_codes"]):
