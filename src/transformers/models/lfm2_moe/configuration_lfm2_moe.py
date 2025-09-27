@@ -51,6 +51,8 @@ class Lfm2MoeConfig(PretrainedConfig):
             The base period of the RoPE embeddings.
         max_position_embeddings (`int`, *optional*, defaults to 128000):
             The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -123,6 +125,7 @@ class Lfm2MoeConfig(PretrainedConfig):
         tie_word_embeddings: bool = True,
         rope_theta: float = 1000000.0,
         max_position_embeddings: int = 128_000,
+        initializer_range: float = 0.02,
         use_cache: bool = True,
         norm_eps: float = 0.00001,
         num_attention_heads: int = 32,
@@ -147,6 +150,7 @@ class Lfm2MoeConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.rope_theta = rope_theta
         self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.norm_eps = norm_eps
 
