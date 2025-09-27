@@ -33,6 +33,7 @@ if __name__ == "__main__":
     os.makedirs("outputs", exist_ok=True)
 
     workflow_summary = {}
+    workflow_hf_hub_download_count = {}
     # for each job, download artifacts
     for job in jobs:
         project_slug = job["project_slug"]
@@ -45,6 +46,7 @@ if __name__ == "__main__":
             os.makedirs(f"outputs/{job['name']}", exist_ok=True)
 
             job_test_summaries = {}
+            job_hf_hub_download_count = {}
             for artifact in job_artifacts:
                 if artifact["path"].startswith("reports/") and artifact["path"].endswith("/summary_short.txt"):
                     node_index = artifact["node_index"]
@@ -52,6 +54,14 @@ if __name__ == "__main__":
                     r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
                     test_summary = r.text
                     job_test_summaries[node_index] = test_summary
+                elif "hf_hub_download_count.json" in artifact["path"]:
+                    node_index = artifact["node_index"]
+                    url = artifact["url"]
+                    r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
+                    hf_hub_download_count = r.text
+                    # load
+                    hf_hub_download_count = json.loads(hf_hub_download_count)
+                    job_hf_hub_download_count[node_index] = hf_hub_download_count
 
             summary = {}
             for node_index, node_test_summary in job_test_summaries.items():
@@ -66,9 +76,29 @@ if __name__ == "__main__":
             summary = dict(sorted(summary.items(), key=lambda x: (x[1], x[0])))
             workflow_summary[job["name"]] = summary
 
-            # collected version
-            with open(f"outputs/{job['name']}/test_summary.json", "w") as fp:
-                json.dump(summary, fp, indent=4)
+            job_hf_hub_download_count_summed = {"META_DATA_DOWNLOAD_COUNT": 0, "REAL_FILE_DOWNLOAD_COUNT": 0}
+            for k, v in job_hf_hub_download_count.items():
+                for k1, v1 in v.items():
+                    job_hf_hub_download_count_summed[k1] += v1
+            with open(f"outputs/{job['name']}/hf_hub_download_count_summed.json", "w") as fp:
+                json.dump(job_hf_hub_download_count_summed, fp, indent=4)
+
+            job_hf_hub_download_count["summed"] = job_hf_hub_download_count_summed
+            workflow_hf_hub_download_count[job["name"]] = job_hf_hub_download_count
+            with open(f"outputs/{job['name']}/hf_hub_download_count.json", "w") as fp:
+                json.dump(workflow_hf_hub_download_count[job["name"]], fp, indent=4)
+
+    workflow_hf_hub_download_count_summed = {"META_DATA_DOWNLOAD_COUNT": 0, "REAL_FILE_DOWNLOAD_COUNT": 0}
+    for k, v in workflow_hf_hub_download_count.items():
+        v = v["summed"]
+        for k1, v1 in v.items():
+            workflow_hf_hub_download_count_summed[k1] += v1
+    with open(f"outputs/hf_hub_download_count_summed.json", "w") as fp:
+        json.dump(workflow_hf_hub_download_count_summed, fp, indent=4)
+
+    workflow_hf_hub_download_count["summed"] = workflow_hf_hub_download_count_summed
+    with open(f"outputs/hf_hub_download_count.json", "w") as fp:
+        json.dump(workflow_hf_hub_download_count, fp, indent=4)
 
     new_workflow_summary = {}
     for job_name, job_summary in workflow_summary.items():

@@ -185,6 +185,8 @@ class CircleCIJob:
             # During the CircleCI docker images build time, we might already (or not) download the data.
             # If it's done already, the files are inside the directory `/test_data/`.
             {"run": {"name": "fetch hub objects before pytest", "command": "cp -r /test_data/* . 2>/dev/null || true; python3 utils/fetch_hub_objects_for_ci.py"}},
+            {"run": {"name": "download and unzip hub cache", "command": 'curl -L -o huggingface-cache.tar.gz https://huggingface.co/datasets/hf-internal-testing/hf_hub_cache/resolve/main/huggingface-cache.tar.gz && apt-get install pigz && tar --use-compress-program="pigz -d -p 8" -xf huggingface-cache.tar.gz && mv -n hub/* /root/.cache/huggingface/hub/ && ls -la /root/.cache/huggingface/hub/'}},
+            {"run": {"name": "install", "command": 'uv pip install git+https://github.com/huggingface/huggingface_hub.git@ydshieh-v1.0.0.rc2'}},
             {"run": {
                 "name": "Run tests",
                 "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
@@ -211,6 +213,7 @@ class CircleCIJob:
             {"store_test_results": {"path": "test-results"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
+            {"store_artifacts": {"path": "hf_hub_download_count.json"}},
             {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
@@ -347,6 +350,7 @@ PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
+# ALL_TESTS = [pipelines_torch_job]
 
 
 def create_circleci_config(folder=None):
