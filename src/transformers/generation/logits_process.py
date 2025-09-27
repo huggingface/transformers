@@ -591,6 +591,10 @@ class TopHLogitsWarper(LogitsProcessor):
     distribution, thereby balancing exploration and exploitation. It ensures that generated text maintains both
     diversity and coherence.
 
+    Reference:
+    For details, see *Top-H Decoding: Adapting the Creativity and Coherence with Bounded Entropy in Text Generation*
+    (NeurIPS 2025): https://arxiv.org/abs/2509.02510
+
     Args:
         top_h (`float`):
             Scaling coefficient for the entropy-based threshold (`tau`). Must be in the range `(0, 1]`.
@@ -620,7 +624,12 @@ class TopHLogitsWarper(LogitsProcessor):
         # input checks
         if not (0 < top_h <= 1):
             raise ValueError("`top_h` must be in the range (0, 1].")
+
+        # Maximum number of top tokens to consider before applying the entropy-based filter.
+        # Acts as a cap for efficiency and numerical stability — increasing this allows more
+        # tokens to be evaluated but may slow down generation. Default is 100.
         self.top_n = 100
+
         self.top_h = top_h
         self.filter_value = filter_value
 
@@ -662,8 +671,10 @@ class TopHLogitsWarper(LogitsProcessor):
 
         # # 5. Determine which tokens to keep based on the stopping condition
         # Create a boolean mask for the top_n tokens.
+        # Stopping rule: keep adding tokens in order of probability until the cumulative entropy
+        # exceeds the threshold τ = H(p) * top_h. This ensures diversity (via entropy) while
+        # guaranteeing at least the most probable token is always included.
         selection_mask = cumulative_entropy <= tau
-        # Ensure the most probable token (at index 0) is always kept.
         selection_mask[:, 0] = True
 
         # 6. Update the final keep_mask for the entire batch in one operation
