@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 
 A feature extractor is in charge of preparing input features for audio or vision models. This includes feature extraction from sequences, e.g., pre-processing audio files to generate Log-Mel Spectrogram features, feature extraction from images, e.g., cropping image files, but also padding, normalization, and conversion to NumPy and PyTorch tensors.
 
-
 ## FeatureExtractionMixin
 
 [[autodoc]] feature_extraction_utils.FeatureExtractionMixin

@@ -128,27 +128,6 @@ class HfQuantizer(ABC):
         """
         return missing_keys
 
-    def update_unexpected_keys(self, model, unexpected_keys: list[str], prefix: str) -> list[str]:
-        """
-        Override this method if you want to adjust the `unexpected_keys`.
-
-        Args:
-            unexpected_keys (`list[str]`, *optional*):
-                The list of unexpected keys in the checkpoint compared to the state dict of the model
-        """
-        return unexpected_keys
-
-    def update_missing_keys_after_loading(self, model, missing_keys: list[str], prefix: str) -> list[str]:
-        """
-        Override this method if you want to adjust the `missing_keys` after loading the model params,
-        but before the model is post-processed.
-
-        Args:
-            missing_keys (`list[str]`, *optional*):
-                The list of missing keys in the checkpoint compared to the state dict of the model
-        """
-        return missing_keys
-
     def update_expected_keys(self, model, expected_keys: list[str], loaded_keys: list[str]) -> list[str]:
         """
         Override this method if you want to adjust the `update_expected_keys`.
@@ -182,18 +161,17 @@ class HfQuantizer(ABC):
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
 
-    def check_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ) -> bool:
+    def check_quantized_param(self, *args, **kwargs) -> bool:
+        """DEPRECATED -> remove in v5"""
+        logger.warning_once(
+            "`check_quantized_param` is deprecated in favor of `param_needs_quantization`, which is a much "
+            "more self.explanatory name for what the method achieves. It will be removed in v5"
+        )
+        return self.param_needs_quantization(*args, **kwargs)
+
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         """
-        checks if a loaded state_dict component is part of quantized param + some validation; only defined if
-        requires_parameters_quantization == True for quantization methods that require to create a new parameters
-        for quantization.
+        Check whether a given param needs quantization as defined by `create_quantized_param`.
         """
         return False
 
@@ -338,9 +316,13 @@ class HfQuantizer(ABC):
         """Flag indicating whether the quantized model can be compiled"""
         return False
 
-    def get_state_dict(self, model):
-        """Get state dict. Useful when we need to modify a bit the state dict due to quantization"""
-        return None
+    def get_state_dict_and_metadata(self, model, safe_serialization=False):
+        """Get state dict and metadata. Useful when we need to modify a bit the state dict due to quantization"""
+        return None, {}
+
+    def update_state_dict_with_metadata(self, state_dict, metadata):
+        """Update state dict with metadata. Default behaviour returns state_dict"""
+        return state_dict
 
     @abstractmethod
     def _process_model_before_weight_loading(self, model, **kwargs): ...

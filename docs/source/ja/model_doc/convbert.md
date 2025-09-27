@@ -75,8 +75,6 @@ ConvBERT トレーニングのヒントは BERT のヒントと似ています�
 
 [[autodoc]] ConvBertTokenizerFast
 
-<frameworkcontent>
-<pt>
 
 ## ConvBertModel
 
@@ -108,38 +106,3 @@ ConvBERT トレーニングのヒントは BERT のヒントと似ています�
 [[autodoc]] ConvBertForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
-## TFConvBertModel
-
-[[autodoc]] TFConvBertModel
-    - call
-
-## TFConvBertForMaskedLM
-
-[[autodoc]] TFConvBertForMaskedLM
-    - call
-
-## TFConvBertForSequenceClassification
-
-[[autodoc]] TFConvBertForSequenceClassification
-    - call
-
-## TFConvBertForMultipleChoice
-
-[[autodoc]] TFConvBertForMultipleChoice
-    - call
-
-## TFConvBertForTokenClassification
-
-[[autodoc]] TFConvBertForTokenClassification
-    - call
-
-## TFConvBertForQuestionAnswering
-
-[[autodoc]] TFConvBertForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

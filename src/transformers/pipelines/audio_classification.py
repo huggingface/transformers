@@ -14,8 +14,8 @@
 import subprocess
 from typing import Any, Union
 
+import httpx
 import numpy as np
-import requests
 
 from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .base import Pipeline, build_pipeline_init_args
@@ -103,9 +103,6 @@ class AudioClassificationPipeline(Pipeline):
             kwargs["top_k"] = 5
         super().__init__(*args, **kwargs)
 
-        if self.framework != "pt":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-
         self.check_model_type(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES)
 
     def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
@@ -171,7 +168,7 @@ class AudioClassificationPipeline(Pipeline):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                inputs = requests.get(inputs).content
+                inputs = httpx.get(inputs, follow_redirects=True).content
             else:
                 with open(inputs, "rb") as f:
                     inputs = f.read()

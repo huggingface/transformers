@@ -96,12 +96,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         bnb_multibackend_is_enabled = is_bitsandbytes_multi_backend_available()
         validate_bnb_backend_availability(raise_exception=True)
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Converting into 4-bit or 8-bit weights from tf/flax weights is currently not supported, please make"
-                " sure the weights are in PyTorch format."
-            )
-
         device_map = kwargs.get("device_map")
         if (
             device_map is not None
@@ -138,7 +132,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 "calculation. You may encounter unexpected behavior, or pass your own device map"
             )
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
@@ -166,7 +160,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
@@ -224,8 +217,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             for k, v in state_dict.items():
                 if param_name + "." in k:
                     quantized_stats[k] = v
-                    if unexpected_keys is not None and k in unexpected_keys:
-                        unexpected_keys.remove(k)
 
             param_kwargs = {}
             if self.is_bnb_supports_quant_storage_module:
@@ -247,6 +238,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 new_value = new_value.T
 
             kwargs = old_value.__dict__
+            kwargs.pop("_is_hf_initialized", None)
             new_value = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(target_device)
 
         module._parameters[tensor_name] = new_value

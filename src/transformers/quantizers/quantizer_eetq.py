@@ -70,12 +70,6 @@ class EetqHfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an EETQ quantized model requires accelerate (`pip install accelerate`)")
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Converting into 8-bit weights from tf/flax weights is currently not supported, please make"
-                " sure the weights are in PyTorch format."
-            )
-
         if not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
@@ -106,7 +100,7 @@ class EetqHfQuantizer(HfQuantizer):
             logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with EETQ.")
         return dtype
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
@@ -136,7 +130,6 @@ class EetqHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         quantizes weights into qweight and weight_scales

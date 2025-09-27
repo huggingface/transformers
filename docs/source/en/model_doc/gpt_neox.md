@@ -71,7 +71,7 @@ The `generate()` method can be used to generate text using GPT Neo model.
 
 Flash Attention 2 is an faster, optimized version of the model.
 
-### Installation 
+### Installation
 
 First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features). If your hardware is not compatible with Flash Attention 2, you can still benefit from attention kernel optimisations through Better Transformer support covered [above](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
 
@@ -92,7 +92,6 @@ model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", dtype=torc
 ...
 ```
 
-
 ### Expected speedups
 
 Below is an expected speedup diagram that compares pure inference time between the native implementation in transformers using `stockmark/gpt-neox-japanese-1.4b` checkpoint and the Flash Attention 2 version of the model using a sequence length of 2048.
@@ -100,7 +99,6 @@ Below is an expected speedup diagram that compares pure inference time between t
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/gpt-neox-1.8b-speedup.jpg">
 </div>
-
 
 ## Using Scaled Dot Product Attention (SDPA)
 PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
@@ -161,7 +159,6 @@ following speedups during training and inference.
 |             4 |          512 |                           8.798 |                          8.144 |          8.028 |           1752.76 |         1734.85 |            1.032 |
 |             4 |         1024 |                          11.765 |                         11.303 |           4.09 |           2558.96 |         2546.04 |            0.508 |
 |             4 |         2048 |                          19.568 |                         17.735 |          10.33 |            4175.5 |         4165.26 |            0.246 |
-
 
 ## Resources
 

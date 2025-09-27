@@ -46,7 +46,6 @@ class HqqHfQuantizer(HfQuantizer):
     """
     HQQ quantizer base HF class.
     nn.Linear modules are first tagged with quant_config in _process_model_before_weight_loading().
-    The actual quantization and offloading to the GPU is done in check_quantized_param().
     """
 
     use_keep_in_fp32_modules = False
@@ -63,12 +62,6 @@ class HqqHfQuantizer(HfQuantizer):
         if not (is_hqq_available()):
             raise ImportError(
                 "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
-            )
-
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Converting weights from tf/flax weights is currently not supported, please make"
-                " sure the weights are in PyTorch format."
             )
 
         if self.dtype is None:
@@ -158,7 +151,7 @@ class HqqHfQuantizer(HfQuantizer):
 
         return list(new_keys)
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
@@ -188,7 +181,6 @@ class HqqHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: list[str],
     ):
         """
         Each nn.Linear layer is processed here.
@@ -222,8 +214,6 @@ class HqqHfQuantizer(HfQuantizer):
         for k, v in state_dict.items():
             if layer_name + "." in k:
                 module_state_dict[k.split(".")[-1]] = v
-                if unexpected_keys is not None and k in unexpected_keys:
-                    unexpected_keys.remove(k)
 
         if self.pre_quantized:
             if isinstance(module, HQQLinear):
