@@ -533,7 +533,7 @@ def convert_zero_checkpoint_to_universal_checkpoint(input_path, num_workers):
 
     param_dict = {
         "input_folder": input_path,
-        "output_folder": input_path + "_universal",
+        "output_folder": "universal_" + input_path,
         "num_extract_workers": num_workers,
         "num_merge_workers": num_workers // 2,
         "keep_temp_folder": False,
