@@ -649,7 +649,7 @@ class TopHLogitsWarper(LogitsProcessor):
         # 2. Create a batch of categorical distributions
         dist = torch.distributions.Categorical(logits=top_logits)
         probs = dist.probs
-        log_probs = torch.log(probs) #dist.log_prob(idx)
+        log_probs = torch.log(probs)  # dist.log_prob(idx)
 
         # 3. Calculate the entropy-based threshold tau for the whole batch
         # We unsqueeze tau to enable broadcasting against the cumulative entropy tensor.
