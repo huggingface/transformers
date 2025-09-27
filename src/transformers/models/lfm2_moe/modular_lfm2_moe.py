@@ -211,6 +211,23 @@ class Lfm2MoeDecoderLayer(Lfm2DecoderLayer):
 class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
 
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, Lfm2MoeShortConv):
+            module.conv.weight.data.normal_(mean=0.0, std=std)
+            if module.conv.bias is not None:
+                module.conv.bias.data.zero_()
+        elif isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Lfm2MoeRMSNorm):
+            module.weight.data.fill_(1.0)
+
 
 class Lfm2MoeModel(MixtralModel):
     def __init__(self, config: Lfm2MoeConfig):

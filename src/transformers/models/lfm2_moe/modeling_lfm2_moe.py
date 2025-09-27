@@ -668,6 +668,23 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
         "attentions": Lfm2MoeAttention,
     }
 
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, Lfm2MoeShortConv):
+            module.conv.weight.data.normal_(mean=0.0, std=std)
+            if module.conv.bias is not None:
+                module.conv.bias.data.zero_()
+        elif isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Lfm2MoeRMSNorm):
+            module.weight.data.fill_(1.0)
+
 
 @auto_docstring
 class Lfm2MoeModel(Lfm2MoePreTrainedModel):
