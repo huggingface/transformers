@@ -2719,7 +2719,7 @@ class GenerationMixin(ContinuousMixin):
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
         do_sample = generation_config.do_sample
 
-        generate_output = self._init_generate_output(generation_config, model_kwargs)
+        generate_output = self._init_optional_generate_output(generation_config, model_kwargs)
 
         # keep track of which sequences are already finished
         batch_size, cur_len = input_ids.shape[:2]
@@ -2775,10 +2775,10 @@ class GenerationMixin(ContinuousMixin):
             next_token_scores = logits_processor(input_ids, next_token_logits)
 
             # Store scores, attentions and hidden_states when required
-            self._accumulate_generate_output(
+            self._accumulate_optional_generate_output(
                 generate_output,
-                score_tensors=next_token_scores if generate_output["output_scores"] else None,
-                logits_tensors=next_token_logits if generate_output["output_logits"] else None,
+                score_tensors=next_token_scores,
+                logits_tensors=next_token_logits,
                 **outputs,
             )
 
@@ -2810,7 +2810,9 @@ class GenerationMixin(ContinuousMixin):
         if streamer is not None:
             streamer.end()
 
-        return self._finalize_generate_output(generate_output, input_ids, model_kwargs)
+        return self._finalize_generate_output(
+            generate_output, input_ids, model_kwargs, GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput
+        )
 
     @staticmethod
     def _flatten_beam_dim(tensor: torch.Tensor) -> torch.Tensor:
@@ -3100,7 +3102,7 @@ class GenerationMixin(ContinuousMixin):
         num_beams = generation_config.num_beams
         num_return_sequences = generation_config.num_return_sequences
 
-        generate_output = self._init_generate_output(generation_config, model_kwargs)
+        generate_output = self._init_optional_generate_output(generation_config, model_kwargs)
 
         batch_size_unflattened, cur_len = input_ids.shape[:2]
         batch_size = batch_size_unflattened // num_beams
@@ -3200,10 +3202,10 @@ class GenerationMixin(ContinuousMixin):
             log_probs = logits_processor(flat_running_sequences, log_probs)
 
             # Store logits, attentions and hidden_states when required
-            self._accumulate_generate_output(
+            self._accumulate_optional_generate_output(
                 generate_output,
-                score_tensors=log_probs.clone() if generate_output["output_scores"] else None,
-                logits_tensors=logits.clone() if generate_output["output_logits"] else None,
+                score_tensors=log_probs.clone(),
+                logits_tensors=logits.clone(),
                 **model_outputs,
             )
 
@@ -3403,7 +3405,7 @@ class GenerationMixin(ContinuousMixin):
         # init values
         do_sample = generation_config.do_sample
 
-        generate_output = self._init_generate_output(generation_config, model_kwargs)
+        generate_output = self._init_optional_generate_output(generation_config, model_kwargs)
 
         # keep track of which sequences are already finished
         batch_size, cur_len = input_ids.shape[:2]
@@ -3578,7 +3580,7 @@ class GenerationMixin(ContinuousMixin):
                 else None
             )
 
-            self._accumulate_generate_output(
+            self._accumulate_optional_generate_output(
                 generate_output,
                 score_tensors=score_tensors,
                 logits_tensors=logits_tensors,
@@ -3602,8 +3604,13 @@ class GenerationMixin(ContinuousMixin):
                 candidate_generator.num_assistant_tokens
             )
 
-        # finalize
-        return self._finalize_generate_output(generate_output, input_ids, model_kwargs)
+        return self._finalize_generate_output(
+            generate_output,
+            input_ids,
+            model_kwargs,
+            decoder_only_cls=GenerateDecoderOnlyOutput,
+            encoder_decoder_cls=GenerateEncoderDecoderOutput,
+        )
 
     def _prefill_chunking(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, **model_kwargs):
         # Even if we are not compiling the forward, flex is always compiled when used. With chunk prefill, we may
@@ -3649,7 +3656,26 @@ class GenerationMixin(ContinuousMixin):
 
         return model_kwargs
 
-    def _init_generate_output(self, generation_config, model_kwargs):
+    def _init_optional_generate_output(
+        self, generation_config: GenerationConfig, model_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Initialize optional generation output dictionary based on configuration flags.
+
+        Args:
+            generation_config (`GenerationConfig`):
+                The generation configuration object containing flags like `output_attentions`,
+                `output_hidden_states`, `output_scores`, `output_logits`, and `return_dict_in_generate`.
+            model_kwargs (`dict[str, Any]`):
+                Model-specific keyword arguments, potentially containing encoder outputs for
+                encoder-decoder models.
+
+        Returns:
+            `dict[str, Any]`: A dictionary containing:
+                - Configuration flags (output_attentions, output_hidden_states, etc.)
+                - Empty tuples or None for various output types based on configuration
+                - Encoder outputs (if applicable for encoder-decoder models)
+        """
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -3685,23 +3711,52 @@ class GenerationMixin(ContinuousMixin):
             "encoder_hidden_states": encoder_hidden_states,
         }
 
-    def _accumulate_generate_output(
+    def _accumulate_optional_generate_output(
         self,
-        generate_output: dict,
-        score_tensors=None,
-        logits_tensors=None,
+        generate_output: dict[str, Any],
+        score_tensors: Optional[Union[torch.Tensor, tuple[torch.Tensor, ...]]] = None,
+        logits_tensors: Optional[Union[torch.Tensor, tuple[torch.Tensor, ...]]] = None,
         # standard path: unpack a ModelOutput with **outputs
-        attentions=None,
-        decoder_attentions=None,
-        cross_attentions=None,
-        hidden_states=None,
-        decoder_hidden_states=None,
+        attentions: Optional[tuple[torch.FloatTensor, ...]] = None,
+        decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None,
+        cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None,
+        hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None,
+        decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None,
         # assisted path: pre-split, token-wise chunks
-        decoder_attentions_chunks=None,
-        cross_attentions_chunks=None,
-        decoder_hidden_states_chunks=None,
-        **kwargs,
-    ):
+        decoder_attentions_chunks: Optional[tuple[Any, ...]] = None,
+        cross_attentions_chunks: Optional[tuple[Any, ...]] = None,
+        decoder_hidden_states_chunks: Optional[tuple[Any, ...]] = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Accumulate optional generation outputs into the generate_output dictionary.
+
+        Args:
+            generate_output (`dict[str, Any]`):
+                Dictionary containing generation configuration flags and accumulated outputs.
+            score_tensors (`Optional[Union[torch.Tensor, tuple[torch.Tensor, ...]]]`, *optional*):
+                Processed prediction scores to accumulate. Can be a single tensor or tuple of tensors.
+            logits_tensors (`Optional[Union[torch.Tensor, tuple[torch.Tensor, ...]]]`, *optional*):
+                Unprocessed prediction logits to accumulate. Can be a single tensor or tuple of tensors.
+            attentions (`Optional[tuple[torch.FloatTensor, ...]]`, *optional*):
+                Attention weights for decoder-only models (standard path).
+            decoder_attentions (`Optional[tuple[torch.FloatTensor, ...]]`, *optional*):
+                Decoder attention weights for encoder-decoder models (standard path).
+            cross_attentions (`Optional[tuple[torch.FloatTensor, ...]]`, *optional*):
+                Cross attention weights for encoder-decoder models (standard path).
+            hidden_states (`Optional[tuple[torch.FloatTensor, ...]]`, *optional*):
+                Hidden states for decoder-only models (standard path).
+            decoder_hidden_states (`Optional[tuple[torch.FloatTensor, ...]]`, *optional*):
+                Decoder hidden states for encoder-decoder models (standard path).
+            decoder_attentions_chunks (`Optional[tuple[Any, ...]]`, *optional*):
+                Pre-split decoder attention chunks (assisted generation path).
+            cross_attentions_chunks (`Optional[tuple[Any, ...]]`, *optional*):
+                Pre-split cross attention chunks (assisted generation path).
+            decoder_hidden_states_chunks (`Optional[tuple[Any, ...]]`, *optional*):
+                Pre-split decoder hidden state chunks (assisted generation path).
+            **kwargs (`Any`):
+                Additional keyword arguments (unused but accepted for flexibility).
+        """
         if not generate_output["return_dict_in_generate"]:
             return
 
@@ -3762,13 +3817,35 @@ class GenerationMixin(ContinuousMixin):
 
     def _finalize_generate_output(
         self,
-        generate_output: dict,
-        sequences,
-        model_kwargs,
-        decoder_only_cls=GenerateDecoderOnlyOutput,
-        encoder_decoder_cls=GenerateEncoderDecoderOutput,
-        **kwargs,  # method-specific extras, e.g., beam_indices, sequences_scores
-    ):
+        generate_output: dict[str, Any],
+        sequences: torch.Tensor,
+        model_kwargs: dict[str, Any],
+        decoder_only_cls: type[ModelOutput],
+        encoder_decoder_cls: type[ModelOutput],
+        **kwargs: Any,  # method-specific extras, e.g., beam_indices, sequences_scores
+    ) -> Union[torch.Tensor, GenerateOutput]:
+        """
+        Finalize the generation output based on configuration and model architecture.
+
+        Args:
+            generate_output (`dict[str, Any]`):
+                Dictionary containing generation configuration flags and accumulated outputs.
+            sequences (`torch.Tensor`):
+                The generated token sequences.
+            model_kwargs (`dict[str, Any]`):
+                Model keyword arguments, potentially containing cached key-values.
+            decoder_only_cls (`type[ModelOutput]`):
+                The output class to use for decoder-only models (e.g., `GenerateDecoderOnlyOutput`).
+            encoder_decoder_cls (`type[ModelOutput]`):
+                The output class to use for encoder-decoder models (e.g., `GenerateEncoderDecoderOutput`).
+            **kwargs (`Any`):
+                Additional method-specific outputs to include in the final result, such as
+                `beam_indices` for beam search or `sequences_scores` for scoring.
+
+        Returns:
+            `Union[torch.LongTensor, ModelOutput]`:
+                If `return_dict_in_generate=False`, returns the sequences tensor directly.
+        """
         if not generate_output["return_dict_in_generate"]:
             return sequences
 
