@@ -16,6 +16,7 @@
 # by pytest before any tests are run
 
 import doctest
+import json
 import os
 import sys
 import warnings
@@ -148,3 +149,51 @@ if is_torch_available():
 
 if os.environ.get("PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS", "").lower() in ("yes", "true", "on", "y", "1"):
     patch_testing_methods_to_collect_info()
+
+
+import atexit
+import os
+
+
+def setup_worker_exit_inspection():
+    worker_id = os.environ.get('PYTEST_XDIST_WORKER')
+    if worker_id:  # Only on workers, not master
+        def worker_exit_handler():
+            import json
+            from huggingface_hub.file_download import META_DATA_DOWNLOAD_COUNT, REAL_FILE_DOWNLOAD_COUNT
+            info = {"META_DATA_DOWNLOAD_COUNT": META_DATA_DOWNLOAD_COUNT, "REAL_FILE_DOWNLOAD_COUNT": REAL_FILE_DOWNLOAD_COUNT}
+            with open(f"hf_hub_download_count_{worker_id}.json", "w") as fp:
+                json.dump(info, fp, indent=4)
+            print(f"Worker {worker_id} process is actually exiting now!")
+        atexit.register(worker_exit_handler)
+
+
+# Call this when conftest.py is imported
+setup_worker_exit_inspection()
+
+
+def pytest_unconfigure(config):
+    from huggingface_hub.file_download import META_DATA_DOWNLOAD_COUNT, REAL_FILE_DOWNLOAD_COUNT
+
+    count = {
+        "META_DATA_DOWNLOAD_COUNT": 0,
+        "REAL_FILE_DOWNLOAD_COUNT": 0,
+    }
+
+    files = [x for x in os.listdir() if x.startswith("hf_hub_download_count_")]
+
+    if len(files) > 0:
+        for fn in files:
+            with open(fn) as fp:
+                data = json.load(fp)
+            for k, v in data.items():
+                for pid in v:
+                    count[k] += v[pid]
+    else:
+        count = {
+            "META_DATA_DOWNLOAD_COUNT": sum(META_DATA_DOWNLOAD_COUNT.values()),
+            "REAL_FILE_DOWNLOAD_COUNT": sum(REAL_FILE_DOWNLOAD_COUNT.values()),
+        }
+
+    with open(f"hf_hub_download_count.json", "w") as fp:
+        json.dump(count, fp, indent=4)
