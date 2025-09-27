@@ -212,6 +212,7 @@ class CircleCIJob:
             {"store_test_results": {"path": "test-results"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
+            {"store_artifacts": {"path": "hf_hub_download_count.json"}},
             {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
