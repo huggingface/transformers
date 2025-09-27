@@ -24,7 +24,7 @@ import numpy as np
 from datasets import Audio, load_dataset
 
 from transformers import VocosFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -110,6 +110,7 @@ class VocosFeatureExtractionTester:
         return speech_inputs
 
 
+@require_torchaudio
 @require_torch
 class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = VocosFeatureExtractor
@@ -162,9 +163,6 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
 
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
-        mel_1 = feat_extract_first.mel_filters
-        mel_2 = feat_extract_second.mel_filters
-        self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
 
     # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_feat_extract_to_json_file
@@ -246,5 +244,4 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         input_features = feature_extractor(speech, return_tensors="pt").input_features
         self.assertEqual(input_features.shape, (1, 100, 549))
 
-        # numpy backend produces same values as torch, within tolerance ofc
         torch.testing.assert_close(input_features[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)

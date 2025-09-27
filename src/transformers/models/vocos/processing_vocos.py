@@ -113,6 +113,9 @@ class VocosProcessor(ProcessorMixin):
             if bandwidth is not None:
                 # encode audio as in:
                 # https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L79
+
+                if isinstance(audio, (list, tuple)):
+                    audio = self._batch_list_audio_for_encodec(audio)
                 if isinstance(audio, np.ndarray):
                     audio = torch.from_numpy(audio)
                 if audio.dim() == 1:
@@ -155,6 +158,17 @@ class VocosProcessor(ProcessorMixin):
         if bandwidth is not None:
             data["bandwidth"] = float(bandwidth)
         return BatchFeature(data, tensor_type=return_tensors)
+
+    def _batch_list_audio_for_encodec(self, audio_list):
+        audio_arrays = []
+        for audio in audio_list:
+            if torch.is_tensor(audio):
+                audio = audio.cpu().numpy()
+            audio_arrays.append(np.asarray(audio, dtype=np.float32))
+
+        max_length = max(audio.shape[-1] for audio in audio_arrays)
+        padded = [np.pad(audio, (0, max_length - audio.shape[-1]), mode="constant") for audio in audio_arrays]
+        return np.stack(padded, axis=0)
 
 
 __all__ = ["VocosProcessor"]

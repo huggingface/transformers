@@ -63,7 +63,8 @@ audio_sample= ds[0]["audio"]["array"]
 
 inputs = processor(audio=audio)
 # -- `inputs.features` shape (batch, mel, frame): [1, 100, 550]
-audio = model(**inputs)
+outputs = model(**inputs)
+audio = outputs.audio
 # -- `audio` shape (batch, time): [1, 140544]
 ```
 
@@ -105,7 +106,8 @@ audio_sample = ds[0]["audio"]["array"]
 
 inputs = processor(audio=audio_sample, bandwidth=6.0)
 # -- `inputs.features` shape (batch, channels, frame): [1, 128, 440]
-audio = model(**inputs)
+outputs = model(**inputs)
+audio = outputs.audio 
 # -- `audio` shape (batch, time): [1, 140800]
 ```
 
@@ -124,7 +126,8 @@ processor = VocosProcessor.from_pretrained(model_id)
 audio_codes = torch.randint(low=0, high=1024, size=(8, 200))  
 inputs = processor(codes=audio_codes, bandwidth=6.0)
 # -- `inputs.features` shape (batch, channels, frame): [1, 128, 200]
-audio = model(**inputs)
+outputs = model(**inputs)
+audio = outputs.audio 
 # -- `audio` shape (batch, time): [1, 64000]
 ```
 
@@ -181,7 +184,8 @@ vocos_model = VocosModel.from_pretrained(vocos_id).to(device)
 
 inputs = processor(codes=codes.to("cpu"), bandwidth=6.0)   
 # -- `inputs.features` shape (batch, channels, frame): [1, 128, *]
-audio = vocos_model(**inputs)
+outputs = vocos_model(**inputs)
+audio = outputs.audio 
 # -- `audio` shape (batch, time): [1, *]
 ```
 

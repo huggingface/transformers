@@ -20,12 +20,17 @@ import numpy as np
 
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
-from ...utils import PaddingStrategy, TensorType, is_torch_available, logging
+from ...utils import PaddingStrategy, TensorType, is_torch_available, is_torchaudio_available, logging
 
 
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+
+
+if is_torchaudio_available():
+    import torchaudio
+
 
 logger = logging.get_logger(__name__)
 
@@ -99,15 +104,26 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
             periodic=True,
         )
 
-        self.mel_filters = mel_filter_bank(
-            num_frequency_bins=(n_fft // 2) + 1,
-            num_mel_filters=self.num_mel_bins,
-            min_frequency=0.0,
-            max_frequency=sampling_rate // 2,
-            sampling_rate=sampling_rate,
-            norm=None,
-            mel_scale="htk",
-        )
+        if is_torchaudio_available():
+            self.mel_filters = torchaudio.transforms.MelSpectrogram(
+                sample_rate=self.sampling_rate,
+                n_mels=self.num_mel_bins,
+                n_fft=self.n_fft,
+                hop_length=self.hop_length,
+                center=(self.padding == "center"),
+                power=1,
+            )
+
+        else:
+            self.mel_filters = mel_filter_bank(
+                num_frequency_bins=(n_fft // 2) + 1,
+                num_mel_filters=self.num_mel_bins,
+                min_frequency=0.0,
+                max_frequency=sampling_rate // 2,
+                sampling_rate=sampling_rate,
+                norm=None,
+                mel_scale="htk",
+            )
 
     def _np_extract_fbank_features(self, waveform: np.ndarray) -> np.ndarray:
         """
@@ -132,33 +148,26 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
 
         features = features.astype(np.float32)
         features = np.log(np.clip(features, a_min=1e-7, a_max=None))
-        return features
+        return features.T
 
-    def _torch_extract_fbank_features(self, waveform):
+    def _torch_extract_fbank_features(self, waveform: torch.Tensor) -> torch.Tensor:
         """
-        Compute the log-mel spectrogram of the input waveform using torch backend via `torch.stft`.
+        Extract mel-spectrogram features using torchaudio (exact match to original Vocos).
         """
         if self.padding == "same":
             pad = self.win_length - self.hop_length
             waveform = F.pad(waveform, (pad // 2, pad // 2), mode="reflect")
 
-        window = torch.hann_window(self.n_fft, periodic=True, device=waveform.device)
-        stft = torch.stft(
-            waveform,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            win_length=self.win_length,
-            window=window,
-            center=(self.padding == "center"),
-            pad_mode="reflect",
-            return_complex=True,
-        )
-        # Vocos's original implementation uses torchaudio.Melspectrogram with the default power of 1
-        magnitudes = stft.abs()
-        mel_filters = torch.as_tensor(self.mel_filters, device=magnitudes.device, dtype=magnitudes.dtype)
-        features = torch.matmul(mel_filters.T, magnitudes)
+        if not isinstance(waveform, torch.Tensor):
+            waveform = torch.from_numpy(waveform)
+
+        features = self.mel_filters(waveform)
         features = torch.log(torch.clip(features, min=1e-7))
-        return features
+
+        if features.device.type == "cuda":
+            features = features.detach().cpu()
+
+        return features.numpy().T
 
     def __call__(
         self,
@@ -256,33 +265,27 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [raw_speech]
 
-        batched = BatchFeature({"input_features": raw_speech})
-
-        if is_torch_available():
-            # pad the input audio to enable batch processing with torch.stft instead of processing each sample individually
-            max_length = max(len(speech) for speech in raw_speech)
-            padded_audio = torch.full(
-                (len(raw_speech), max_length), fill_value=self.padding_value, dtype=torch.float32
-            )
-            for i, speech in enumerate(raw_speech):
-                padded_audio[i, : len(speech)] = torch.tensor(speech, dtype=torch.float32)
-            input_features = self._torch_extract_fbank_features(padded_audio)
-            batched["input_features"] = input_features
+        if is_torchaudio_available():
+            input_features = [self._torch_extract_fbank_features(speech) for speech in raw_speech]
         else:
             input_features = [self._np_extract_fbank_features(speech) for speech in raw_speech]
-            batched["input_features"] = input_features
 
-        padded = self.pad(
-            batched,
+        batch = BatchFeature({"input_features": input_features})
+        batch = self.pad(
+            batch,
             padding=padding,
             max_length=max_length,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
-            return_tensors=return_tensors,
         )
 
-        return padded
+        batch["input_features"] = [spectrogram.T for spectrogram in batch["input_features"]]
+
+        if return_tensors is not None:
+            batch = batch.convert_to_tensors(return_tensors)
+
+        return batch
 
 
 __all__ = ["VocosFeatureExtractor"]

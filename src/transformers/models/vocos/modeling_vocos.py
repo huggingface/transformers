@@ -14,15 +14,26 @@
 # limitations under the License.
 """Transformers vocos model."""
 
-from typing import Optional
+from dataclasses import dataclass
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
+from ...utils import ModelOutput, auto_docstring
 from .configuration_vocos import VocosConfig
+
+
+@dataclass
+class VocosOutput(ModelOutput):
+    """
+    Args:
+        audio (`torch.FloatTensor` of shape `(batch_size, time)`):
+            Reconstructed audio waveform.
+    """
+    audio: torch.FloatTensor
 
 
 def _vocos_inverse_stft(spectrogram, padding, n_fft, hop_length, win_length, window):
@@ -255,7 +266,7 @@ class VocosModel(VocosPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    def forward(self, features: torch.FloatTensor, bandwidth: Optional[float] = None) -> torch.FloatTensor:
+    def forward(self, features: torch.FloatTensor, bandwidth: Optional[float] = None, return_dict: Optional[bool] = None) -> Union[VocosOutput, tuple[torch.FloatTensor]]:
         r"""
         features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time)`):
             Output of [`VocosProcessor`] is either:
@@ -266,8 +277,12 @@ class VocosModel(VocosPreTrainedModel):
         bandwidth (`float`, *optional*):
             Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, or `None` for Mel-spectrogram features.
 
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`]
+
         Returns:
-            `torch.FloatTensor` of shape (batch_size, time): Reconstructed audio waveform .
+            `VocosOutput` or tuple `(audio,)`:
+            - `audio` of shape (batch_size, time): Reconstructed audio waveform.
 
         Example:
 
@@ -284,7 +299,8 @@ class VocosModel(VocosPreTrainedModel):
 
         >>> # extract mel-spectrogram features from audio and reconstruct high-quality audio
         >>> inputs = processor(audio=audio_sample)
-        >>> reconstructed_audio = model(**inputs)
+        >>> outputs = model(**inputs)
+        >>> reconstructed_audio = outputs.audio
 
 
         >>> # Encode audio using EnCodec neural codec and reconstruct from audio from that
@@ -293,21 +309,28 @@ class VocosModel(VocosPreTrainedModel):
 
         >>> bandwidth = 6.0
         >>> inputs = processor(audio=audio_sample, bandwidth=bandwidth)
-        >>> reconstructed_audio = model(**inputs)
+        >>> outputs = model(**inputs)
+        >>> reconstructed_audio = outputs.audio
 
         >>> # Reconstruct audio directly from pre-computed EnCodec quantized codes
         >>> inputs = processor(codes=audio_codes, bandwidth=bandwidth)
-        >>> reconstructed_audio = model(**inputs)
+        >>> outputs = model(**inputs)
+        >>> reconstructed_audio = outputs.audio
 
         ```
         """
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         if bandwidth is not None:
             bandwidth_id = self._bandwidth_to_id[float(bandwidth)]
         else:
             bandwidth_id = None
         hidden_states = self.backbone(features, bandwidth_id)
         audio = self.head(hidden_states)
-        return audio
+
+        if not return_dict:
+            return (audio,)
+        return VocosOutput(audio=audio)
 
 
 __all__ = ["VocosModel", "VocosPreTrainedModel"]

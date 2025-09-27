@@ -87,7 +87,7 @@ class VocosModelTester:
     def create_and_check_model(self, config, features):
         model = VocosModel(config=config).to(torch_device).eval()
         with torch.no_grad():
-            audio = model(features.to(torch_device))
+            output = model(features.to(torch_device))
         if config.spec_padding == "center":
             # the expected output using PyTorch's ISTFT
             expected_len = (self.seq_length - 1) * config.hop_length
@@ -95,7 +95,7 @@ class VocosModelTester:
             # when padding is same "same" padding, the expected output using the custom ISTFT implementation
             pad = (config.n_fft - config.hop_length) // 2
             expected_len = (self.seq_length - 1) * config.hop_length + config.n_fft - 2 * pad
-        self.parent.assertEqual(audio.shape, (self.batch_size, expected_len))
+        self.parent.assertEqual(output.audio.shape, (self.batch_size, expected_len))
 
 
 @require_torch
@@ -128,7 +128,7 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
         model = VocosModel(config)
         signature = inspect.signature(model.forward)
         arg_names = list(signature.parameters.keys())
-        self.assertListEqual(arg_names, ["features", "bandwidth"])
+        self.assertListEqual(arg_names, ["features", "bandwidth", "return_dict"])
 
     @unittest.skip(
         reason="The VocosModel is not transformers based, thus it does not have the usual `hidden_states` logic"
@@ -163,6 +163,13 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
     @unittest.skip(
         reason="The VocosModel is not transformers based, thus it does not have the usual `hidden_states` logic"
     )
@@ -175,10 +182,6 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="The VocosModel does not have `inputs_embeds` logics")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="VocosModel only has one output format.")
-    def test_model_outputs_equivalence(self):
         pass
 
     @unittest.skip(reason="VocosModel does not use inputs_embeds")
@@ -237,16 +240,21 @@ class VocosModelIntegrationTest(unittest.TestCase):
     See code for reproducing expected outputs: https://gist.github.com/Manalelaidouni/853f4c902ab0ce0a512e5217d87d564c
     """
 
-    def setUp(self):
-        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        dataset = dataset.cast_column("audio", Audio(sampling_rate=24000))
-        audio_np = dataset[0]["audio"]["array"]
-        self.audio = torch.tensor(audio_np, dtype=torch.float32).unsqueeze(0)
+    def _load_datasamples(self, num_samples):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
+        return [x["array"] for x in speech_samples]
 
-        with open("tests/fixtures/vocos/vocos_mel_integration.json", "r") as f:
+    def setUp(self):
+        with open("/content/vocos_mel_integration.json", "r") as f:
             self.mel_expected = json.load(f)[0]
-        with open("tests/fixtures/vocos/vocos_encodec_integration.json", "r") as f:
+        with open("/content/vocos_encodec_integration.json", "r") as f:
             self.encodec_expected = json.load(f)
+        with open("/content/vocos_mel_batch_integration.json", "r") as f:
+            self.mel_batch_expected = json.load(f)
+        with open("/content/vocos_encodec_batch_integration.json", "r") as f:
+            self.encodec_batch_expected = json.load(f)
 
     def test_inference_mel_vocos(self):
         hf_repo_id = self.mel_expected["hf_repo_id"]
@@ -257,7 +265,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
 
         inputs = processor(self.audio, return_tensors="pt").to(torch_device)
         with torch.no_grad():
-            audio_output = model(**inputs)
+            audio_output = model(**inputs).audio
 
         torch.testing.assert_close(
             audio_output.squeeze(0)[: EXPECTED_AUDIO.shape[0]],
@@ -275,7 +283,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
             # now resconstructing audio from raw audio :
             inputs = processor(audio=self.audio, bandwidth=entry["bandwidth"], return_tensors="pt")
             with torch.no_grad():
-                output_from_audio = model(**inputs.to(torch_device))
+                output_from_audio = model(**inputs.to(torch_device)).audio
 
             EXPECTED_AUDIO = torch.tensor(entry["reconstructed_from_audio"], dtype=torch.float32).to(torch_device)
 
@@ -291,7 +299,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
             inputs = processor(codes=codes, bandwidth=entry["bandwidth"], return_tensors="pt")
 
             with torch.no_grad():
-                output_from_codes = model(**inputs.to(torch_device))
+                output_from_codes = model(**inputs.to(torch_device)).audio
 
             EXPECTED_AUDIO_FROM_CODES = torch.tensor(entry["reconstructed_from_codes"], dtype=torch.float32).to(
                 torch_device
@@ -305,83 +313,62 @@ class VocosModelIntegrationTest(unittest.TestCase):
             )
 
     def test_inference_batch_mel_vocos(self):
-        hf_repo_id = self.mel_expected["hf_repo_id"]
-        processor = VocosProcessor.from_pretrained(hf_repo_id)
-        model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
+        repo_id = self.mel_batch_expected["hf_repo_id"]
+        processor = VocosProcessor.from_pretrained(repo_id)
+        model = VocosModel.from_pretrained(repo_id).to(torch_device).eval()
 
-        # batch processing [3, T]
-        audio_batch = self.audio.repeat(3, 1)
-        inputs = processor(audio=audio_batch, return_tensors="pt").to(torch_device)
-        with torch.no_grad():
-            batch_audio_output = model(**inputs)
+        audios = self._load_datasamples(3)
 
-        self.assertEqual(batch_audio_output.shape[0], 3)
+        inputs = processor(audio=audios, return_tensors="pt").to(torch_device)
+        hf_batch_output = model(**inputs).audio
 
-        # comparing batch results with individual processing
-        single_inputs = processor(audio=self.audio, return_tensors="pt").to(torch_device)
-        with torch.no_grad():
-            single_audio_output = model(**single_inputs).squeeze(0)
-
-        for i in range(3):
+        for i, saved in enumerate(self.mel_batch_expected["reconstructed_audio"]):
+            expected = torch.tensor(saved, dtype=torch.float32, device=torch_device)
             torch.testing.assert_close(
-                batch_audio_output[i, : single_audio_output.shape[0]], single_audio_output, rtol=1e-4, atol=1e-4
+                hf_batch_output[i, : expected.shape[0]],
+                expected,
+                rtol=self.mel_batch_expected["rtol"],
+                atol=self.mel_batch_expected["atol"],
             )
 
-        # testing batch processing of a list of numpy arrays
-        audio_np = self.audio.squeeze(0).cpu().numpy()
-        audio_batch = [audio_np, audio_np, audio_np]
-        inputs = processor(audio=audio_batch, return_tensors="pt").to(torch_device)
-        with torch.no_grad():
-            output_from_list = model(**inputs)
+    def test_batch_encodec_vocos(self):
+        repo_id = self.encodec_batch_expected[0]["hf_repo_id"]
+        proc = VocosProcessor.from_pretrained(repo_id)
+        model = VocosModel.from_pretrained(repo_id).to(torch_device).eval()
 
-        assert torch.allclose(output_from_list, batch_audio_output, rtol=1e-6, atol=1e-6)
+        # reconstruction from batch of audios
+        audios = self._load_datasamples(3)
 
-    def test_inference_batch_encodec_vocos(self):
-        hf_repo_id = self.encodec_expected[0]["hf_repo_id"]
-        model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
-        processor = VocosProcessor.from_pretrained(hf_repo_id)
-        for entry in self.encodec_expected:
-            bandwidth, rtol, atol = entry["bandwidth"], entry["rtol"], entry["atol"]
+        for entry in self.encodec_batch_expected:
+            if "reconstructed_from_audio" not in entry:
+                continue
+            bw = entry["bandwidth"]
+            inputs = proc(audio=audios, bandwidth=bw, return_tensors="pt").to(torch_device)
+            (hf_batch,) = model(**inputs, return_dict=False)
 
-            # batch processing from raw audio
-            audio_batch = self.audio.repeat(3, 1)
-            inputs = processor(audio=audio_batch, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
-            with torch.no_grad():
-                batch_output_from_audio = model(**inputs)
-
-            self.assertEqual(batch_output_from_audio.shape[0], 3)
-
-            # comparing batch results with individual processing
-            single_inputs = processor(audio=self.audio, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
-            with torch.no_grad():
-                single_output_from_audio = model(**single_inputs).squeeze(0)
-
-            for i in range(3):
+            for idx, saved in enumerate(entry["reconstructed_from_audio"]):
+                expected = torch.tensor(saved, dtype=torch.float32, device=torch_device)
                 torch.testing.assert_close(
-                    batch_output_from_audio[i, : single_output_from_audio.shape[0]],
-                    single_output_from_audio,
-                    rtol=rtol,
-                    atol=atol,
+                    hf_batch[idx, : expected.shape[0]],
+                    expected,
+                    rtol=entry["rtol"],
+                    atol=entry["atol"],
                 )
 
-            # batch processing from quantized codes
-            codes = torch.tensor(entry["input_codes"], dtype=torch.long)
-            codes_batch = codes.unsqueeze(1).repeat(1, 3, 1)
-            inputs = processor(codes=codes_batch, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
-            with torch.no_grad():
-                batch_output_from_codes = model(**inputs)
+        # reconstruction from batch of codes
+        for entry in self.encodec_batch_expected:
+            if "audio_codes" not in entry:
+                continue
+            codes = torch.tensor(entry["audio_codes"], dtype=torch.long, device=torch_device)
+            bandwidth = entry["bandwidth"]
+            inputs = proc(codes=codes, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            hf_batch = model(**inputs).audio
 
-            self.assertEqual(batch_output_from_codes.shape[0], 3)
-
-            # compare with single codes processing
-            single_inputs = processor(codes=codes, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
-            with torch.no_grad():
-                single_output_from_codes = model(**single_inputs).squeeze(0)
-
-            for i in range(3):
+            for idx, saved in enumerate(entry["reconstructed_from_codes"]):
+                expected = torch.tensor(saved, dtype=torch.float32, device=torch_device)
                 torch.testing.assert_close(
-                    batch_output_from_codes[i, : single_output_from_codes.shape[0]],
-                    single_output_from_codes,
-                    rtol=1e-4,
-                    atol=1e-4,
+                    hf_batch[idx, : expected.shape[0]],
+                    expected,
+                    rtol=entry["rtol"],
+                    atol=entry["atol"],
                 )
