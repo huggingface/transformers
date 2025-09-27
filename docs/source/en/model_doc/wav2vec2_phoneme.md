@@ -63,7 +63,8 @@ except for the tokenizer.
 ## Wav2Vec2PhonemeCTCTokenizer
 
 [[autodoc]] Wav2Vec2PhonemeCTCTokenizer
-	- __call__
-	- batch_decode
-	- decode
-	- phonemize
+
+- __call__
+- batch_decode
+- decode
+- phonemize

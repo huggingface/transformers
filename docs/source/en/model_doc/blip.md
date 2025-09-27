@@ -128,6 +128,7 @@ Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/exam
 ## BlipTextLMHeadModel
 
 [[autodoc]] BlipTextLMHeadModel
+
 - forward
 
 ## BlipVisionModel

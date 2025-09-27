@@ -20,6 +20,7 @@ Mask generation is the task of generating semantically meaningful masks for an i
 This task is very similar to [image segmentation](semantic_segmentation), but many differences exist. Image segmentation models are trained on labeled datasets and are limited to the classes they have seen during training; they return a set of masks and corresponding classes, given an image.
 
 Mask generation models are trained on large amounts of data and operate in two modes.
+
 - Prompting mode: In this mode, the model takes in an image and a prompt, where a prompt can be a 2D point location (XY coordinates) in the image within an object or a bounding box surrounding an object. In prompting mode, the model only returns the mask over the object
 that the prompt is pointing out.
 - Segment Everything mode: In segment everything, given an image, the model generates every mask in the image. To do so, a grid of points is generated and overlaid on the image for inference.
@@ -34,6 +35,7 @@ SAM serves as a powerful foundation model for segmentation as it has large data 
 [SA-1B](https://ai.meta.com/datasets/segment-anything/), a dataset with 1 million images and 1.1 billion masks.
 
 In this guide, you will learn how to:
+
 - Infer in segment everything mode with batching,
 - Infer in point prompting mode,
 - Infer in box prompting mode.

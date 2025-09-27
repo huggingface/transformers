@@ -92,6 +92,7 @@ echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "S
 </hfoptions>
 
 ## Notes
+
 - DeBERTa uses **relative position embeddings**, so it does not require **right-padding** like BERT.
 - For best results, use DeBERTa on sentence-level or sentence-pair classification tasks like MNLI, RTE, or SST-2.
 - If you're using DeBERTa for token-level tasks like masked language modeling, make sure to load a checkpoint specifically pretrained or fine-tuned for token-level tasks.

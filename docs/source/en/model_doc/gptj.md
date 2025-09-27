@@ -133,6 +133,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`GPTJForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling), [text generation example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation), and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
 
 **Documentation resources**
+
 - [Text classification task guide](../tasks/sequence_classification)
 - [Question answering task guide](../tasks/question_answering)
 - [Causal language modeling task guide](../tasks/language_modeling)

@@ -38,22 +38,22 @@ Several versions of the model weights are available on Hugging Face:
 ### Model Details
 
 * **Architecture:** Transformer-based, modified with `BitLinear` layers (BitNet framework).
-    * Uses Rotary Position Embeddings (RoPE).
-    * Uses squared ReLU (ReLU²) activation in FFN layers.
-    * Employs [`subln`](https://proceedings.mlr.press/v202/wang23u.html) normalization.
-    * No bias terms in linear or normalization layers.
+  * Uses Rotary Position Embeddings (RoPE).
+  * Uses squared ReLU (ReLU²) activation in FFN layers.
+  * Employs [`subln`](https://proceedings.mlr.press/v202/wang23u.html) normalization.
+  * No bias terms in linear or normalization layers.
 * **Quantization:** Native 1.58-bit weights and 8-bit activations (W1.58A8).
-    * Weights are quantized to ternary values {-1, 0, +1} using absmean quantization during the forward pass.
-    * Activations are quantized to 8-bit integers using absmax quantization (per-token).
-    * **Crucially, the model was *trained from scratch* with this quantization scheme, not post-training quantized.**
+  * Weights are quantized to ternary values {-1, 0, +1} using absmean quantization during the forward pass.
+  * Activations are quantized to 8-bit integers using absmax quantization (per-token).
+  * **Crucially, the model was *trained from scratch* with this quantization scheme, not post-training quantized.**
 * **Parameters:** ~2 Billion
 * **Training Tokens:** 4 Trillion
-*   **Context Length:** Maximum sequence length of **4096 tokens**.
-    *   *Recommendation:* For optimal performance on tasks requiring very long contexts (beyond the pre-training length or for specialized long-reasoning tasks), we recommend performing intermediate long-sequence adaptation/training before the final fine-tuning stage.
+* **Context Length:** Maximum sequence length of **4096 tokens**.
+  * *Recommendation:* For optimal performance on tasks requiring very long contexts (beyond the pre-training length or for specialized long-reasoning tasks), we recommend performing intermediate long-sequence adaptation/training before the final fine-tuning stage.
 * **Training Stages:**
-    1.  **Pre-training:** Large-scale training on public text/code and synthetic math data using a two-stage learning rate and weight decay schedule.
-    2.  **Supervised Fine-tuning (SFT):** Fine-tuned on instruction-following and conversational datasets using sum loss aggregation and specific hyperparameter tuning.
-    3.  **Direct Preference Optimization (DPO):** Aligned with human preferences using preference pairs.
+    1. **Pre-training:** Large-scale training on public text/code and synthetic math data using a two-stage learning rate and weight decay schedule.
+    2. **Supervised Fine-tuning (SFT):** Fine-tuned on instruction-following and conversational datasets using sum loss aggregation and specific hyperparameter tuning.
+    3. **Direct Preference Optimization (DPO):** Aligned with human preferences using preference pairs.
 * **Tokenizer:** LLaMA 3 Tokenizer (vocab size: 128,256).
 
 ## Usage tips

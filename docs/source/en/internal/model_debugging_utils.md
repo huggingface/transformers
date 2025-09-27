@@ -218,9 +218,9 @@ path reference to the associated `.safetensors` file. Each tensor is written to 
 the state dictionary. File names are constructed using the `module_path` as a prefix with a few possible postfixes that
 are built recursively.
 
-*   Module inputs are denoted with the `_inputs` and outputs by `_outputs`.
-*   `list` and `tuple` instances, such as `args` or function return values, will be postfixed with `_{index}`.
-*   `dict` instances will be postfixed with `_{key}`.
+* Module inputs are denoted with the `_inputs` and outputs by `_outputs`.
+* `list` and `tuple` instances, such as `args` or function return values, will be postfixed with `_{index}`.
+* `dict` instances will be postfixed with `_{key}`.
 
 ### Comparing between implementations
 
@@ -255,6 +255,7 @@ how many tests are being skipped and for which models.
 When porting models to transformers, tests fail as they should, and sometimes `test_modeling_common` feels irreconcilable with the peculiarities of our brand new model. But how can we be sure we're not breaking everything by adding a seemingly innocent skip?
 
 This utility:
+
 - scans all test_modeling_common methods
 - looks for times where a method is skipped
 - returns a summary json you can load as a DataFrame/inspect

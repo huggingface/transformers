@@ -88,6 +88,7 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 </hfoptions>
 
 ## Notes
+
 - Use the [`AutoTokenizer`] or [`BertweetTokenizer`] because it's preloaded with a custom vocabulary adapted to tweet-specific tokens like hashtags (#), mentions (@), emojis, and common abbreviations. Make sure to also install the [emoji](https://pypi.org/project/emoji/) library.
 - Inputs should be padded on the right (`padding="max_length"`) because BERT uses absolute position embeddings.
 
