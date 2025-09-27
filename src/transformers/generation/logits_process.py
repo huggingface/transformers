@@ -669,7 +669,7 @@ class TopHLogitsWarper(LogitsProcessor):
         entropy_terms = -probs * log_probs
         cumulative_entropy = torch.cumsum(entropy_terms, dim=-1)
 
-        # # 5. Determine which tokens to keep based on the stopping condition
+        # 5. Determine which tokens to keep based on the stopping condition
         # Create a boolean mask for the top_n tokens.
         # Stopping rule: keep adding tokens in order of probability until the cumulative entropy
         # exceeds the threshold τ = H(p) * top_h. This ensures diversity (via entropy) while
