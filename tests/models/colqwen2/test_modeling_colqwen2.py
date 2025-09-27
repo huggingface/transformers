@@ -356,6 +356,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         """
         model = ColQwen2ForRetrieval.from_pretrained(
             "Sahil-Kabir/colqwen2.5-v0.2-hf",
+            device_map="cpu",
             dtype=torch.bfloat16,
         ).eval()
         processor = ColQwen2Processor.from_pretrained("Sahil-Kabir/colqwen2.5-v0.2-hf", trust_remote_code=True)
@@ -384,13 +385,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
         # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
         expectations = Expectations(
-            {
-                ("cpu", 0): [
-                    [16.3750, 10.9375, 14.7500],
-                    [11.4375, 16.8750, 12.0625],
-                    [15.0000, 13.3125, 21.5000]
-                ]
-            }
+            {("cpu", 0): [[16.3750, 10.9375, 14.7500], [11.4375, 16.8750, 12.0625], [15.0000, 13.3125, 21.5000]]}
         )
         expected_scores = torch.tensor(expectations.get_expectation(), dtype=scores.dtype)
 
