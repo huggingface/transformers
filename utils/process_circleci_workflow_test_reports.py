@@ -54,7 +54,7 @@ if __name__ == "__main__":
                     r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
                     test_summary = r.text
                     job_test_summaries[node_index] = test_summary
-                if "hf_hub_download_count.json" in artifact["path"]:
+                elif "hf_hub_download_count.json" in artifact["path"]:
                     node_index = artifact["node_index"]
                     url = artifact["url"]
                     r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
