@@ -123,12 +123,6 @@ class LlavaOnevision1_5Config(PretrainedConfig):
             Vocabulary size of the language model. Defines the number of different tokens that can be represented by the
             `input_ids` passed when calling [`~PreTrainedModel`]. Vocabulary size of the model. Defines the number of
             different tokens that can be represented by the `input_ids` passed to the model.
-        use_return_dict (`bool`, *optional*, defaults to `True`):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        output_attentions (`bool`, *optional*, defaults to `False`):
-            Whether or not the model returns attentions.
-        output_hidden_states (`bool`, *optional*, defaults to `False`):
-            Whether or not the model returns all hidden states.
         **kwargs:
             Additional keyword arguments passed to `PretrainedConfig`.
     """
@@ -145,9 +139,6 @@ class LlavaOnevision1_5Config(PretrainedConfig):
         video_token_id: int = 151656,
         vision_start_token_id: Optional[int] = None,
         vocab_size: int = 152064,
-        use_return_dict=True,
-        output_attentions=False,
-        output_hidden_states=False,
         **kwargs,
     ):
         # Vision
@@ -166,9 +157,6 @@ class LlavaOnevision1_5Config(PretrainedConfig):
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vocab_size = vocab_size
-        self.use_return_dict = use_return_dict
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
 
         super().__init__(**kwargs)
 
@@ -794,11 +782,13 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
                 are used, `cache_position` must be provided.
         """
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.config.text_config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.text_config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.text_config.use_return_dict
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1035,11 +1025,13 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
         "The image shows a street scene with a red stop sign in the foreground. In the background, there is a large red gate with Chinese characters ..."
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.config.text_config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.text_config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.text_config.use_return_dict
         # print(f'sum(image_ids):{(input_ids == 151655).sum()}')
         # assert 3==5, f'\ninput_ids: {input_ids[:,300:]},\nlabels: {labels[:,300:]}\nnum_16555:{(input_ids == 151655).sum()}'
 
