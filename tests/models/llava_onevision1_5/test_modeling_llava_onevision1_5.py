@@ -58,6 +58,7 @@ if is_vision_available():
 class LlavaOnevisionVision1_5Text2TextModelTester:
     def __init__(
         self,
+        parent,
         batch_size=3,
         num_channels=3,
         image_size=14,
@@ -114,6 +115,7 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
             "text_hidden_size": 4096,
         },
     ):
+        self.parent = parent
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id

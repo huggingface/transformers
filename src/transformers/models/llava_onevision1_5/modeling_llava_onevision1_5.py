@@ -55,21 +55,13 @@ logger = logging.get_logger(__name__)
 @dataclass
 @auto_docstring
 class LlavaOnevision1_5ModelOutputWithPast(BaseModelOutputWithPast):
-    """
-    Base class for LLaVA-One-Vision-1.5 encoder-decoder outputs.
-    """
-
-    rope_deltas: Optional[torch.LongTensor] = None
+    pass
 
 
 @dataclass
 @auto_docstring
 class LlavaOnevision1_5CausalLMOutputWithPast(CausalLMOutputWithPast):
-    """
-    Base class for LLaVA-One-Vision-1.5 causal LM outputs.
-    """
-
-    rope_deltas: Optional[torch.LongTensor] = None
+    pass
 
 
 class RiceRotaryEmbedding(nn.Module):
@@ -407,7 +399,7 @@ class RicePretrainedModel(PreTrainedModel):
         return window_index, cu_window_seqlens
 
     @auto_docstring
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, is_verifying: bool = False) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
@@ -472,8 +464,6 @@ class RicePretrainedModel(PreTrainedModel):
             seg_end = cu[i].item()
             new_hidden[seg_start:seg_end] = hidden_states[seg_start + 1 : seg_end + 1]
         hidden_states = new_hidden
-        if is_verifying:
-            return hidden_states
 
         return self.merger(hidden_states)
 
@@ -502,7 +492,6 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         super().__init__(config)
         self.visual = RicePretrainedModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.rope_deltas = None  # cache rope_deltas here
 
         self.post_init()
 
@@ -714,20 +703,61 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple, LlavaOnevision1_5ModelOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Qwen2VLImageProcessor.__call__`] for details. [`Qwen2VLProcessor`] uses
-            [`Qwen2VLImageProcessor`] for processing videos.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide it.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                If not provided, will default to a tensor the same shape as `input_ids` that is 1 where
+                `input_ids` is not equal to the padding token id defined in the model config and 0 elsewhere.
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range
+                `[0, config.max_position_embeddings - 1]`.
+                If not provided, will default to a tensor the same shape as `input_ids` with the values
+                `[0, 1, 2, ..., sequence_length - 1]`.
+            past_key_values (`list(torch.FloatTensor)`, *optional*):
+                Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up
+                sequential decoding. If `past_key_values` are used, the user can optionally input only the last
+                `decoder_input_ids` (see `input_ids` docstring) instead of all `decoder_input_ids`. If
+                `past_key_values` are None, then the entire `input_ids` sequence will be processed.
+                The `past_key_values` should be a list of length `config.n_layers`, with each list item being a
+                tuple of two tensors of shape `(batch_size, num_heads, past_sequence_length, head_dim)`.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert `input_ids` indices
+                into associated vectors than the model's internal embedding lookup matrix.
+            use_cache (`bool`, *optional*):
+                Whether or not to use past key/values states to speed up decoding.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`, *optional*):
+                The tensors corresponding to the input images. Pixel values can be obtained using
+                [`AutoImageProcessor`]. See [`Qwen2VLImageProcessor.__call__`] for details. [`Qwen2VLProcessor`] uses
+                [`Qwen2VLImageProcessor`] for processing images.
+            pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
+                The tensors corresponding to the input videos. Pixel values can be obtained using
+                [`AutoImageProcessor`]. See [`Qwen2VLImageProcessor.__call__`] for details. [`Qwen2VLProcessor`] uses
+                [`Qwen2VLImageProcessor`] for processing videos.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            cache_position (`torch.LongTensor` of shape `(sequence_length,)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence. If `past_key_values`
+                are used, `cache_position` must be provided.
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -805,7 +835,6 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
         )
         return output if return_dict else output.to_tuple()
 
@@ -925,7 +954,6 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple, LlavaOnevision1_5CausalLMOutputWithPast]:
         r"""
@@ -941,8 +969,6 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
 
         Example:
 
@@ -1013,7 +1039,6 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def prepare_inputs_for_generation(
