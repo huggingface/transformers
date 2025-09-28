@@ -526,14 +526,14 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     return optimizer, lr_scheduler
 
 
-def convert_zero_checkpoint_to_universal_checkpoint(input_path, num_workers):
+def convert_zero_checkpoint_to_universal_checkpoint(input_path, output_path, num_workers):
     import argparse
 
     from deepspeed.checkpoint.ds_to_universal import main as ds_to_universal_main
 
     param_dict = {
         "input_folder": input_path,
-        "output_folder": "universal_" + input_path,
+        "output_folder": output_path,
         "num_extract_workers": num_workers,
         "num_merge_workers": num_workers // 2,
         "keep_temp_folder": False,
@@ -573,7 +573,9 @@ def deepspeed_load_checkpoint(
                 deepspeed_engine._config.load_universal_checkpoint = True
                 if deepspeed_engine.global_rank == 0:
                     convert_zero_checkpoint_to_universal_checkpoint(
-                        deepspeed_checkpoint_dirs[0], loaded_checkpoint_dp_world_size
+                        deepspeed_checkpoint_dirs[0],
+                        os.path.join(checkpoint_path, "universal_" + os.path.basename(deepspeed_checkpoint_dirs[0])),
+                        loaded_checkpoint_dp_world_size,
                     )
                     logger.info(
                         f"Converted deepspeed checkpoint at {checkpoint_path} to universal format for "
