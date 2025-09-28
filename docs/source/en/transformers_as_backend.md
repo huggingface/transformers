@@ -26,7 +26,7 @@ This guide shows how to use Transformers' models as a backend to some popular in
 
 [vLLM](https://github.com/vllm-project/vllm) is a high-performance inference engine optimized for serving LLMs at scale. It supports many Transformers' models, including all decoder-only LLMs and several vision-language models (VLMs). VLMs currently support image inputs only, with video support planned.
 
-vLLM automatically selects the best backend, and if a model isn’t natively supported, it falls back to the Transformers model. To explicitly use a Transformers' model, set `model_impl="transformers"`.
+vLLM automatically selects the best backend, and if a model isn't natively supported, it falls back to the Transformers model. To explicitly use a Transformers' model, set `model_impl="transformers"`.
 
 ```python
 from vllm import LLM
@@ -47,7 +47,7 @@ Refer to the [vLLM docs](https://docs.vllm.ai/en/latest/models/supported_models.
 
 [SGLang](https://github.com/InternLM/sglang) is a high-performance, OpenAI-compatible server and runtime designed for chat-based LLMs. It offers fast inference, role-based conversation handling, and support for custom pipelines, making it great for building real-world LLM apps.
 
-SGLang automatically falls back to the Transformers backend if a model isn’t natively supported. To explicitly use a Transformers' model, set `impl="transformers"`.
+SGLang automatically falls back to the Transformers backend if a model isn't natively supported. To explicitly use a Transformers' model, set `impl="transformers"`.
 
 ```python
 import sglang as sgl
@@ -205,7 +205,7 @@ class MyMultimodalModelForConditionalGeneration(MyMultimodalPreTrainedModel, Gen
 
 3. A multimodal model's processing class must have the `self.image_token` and `self.image_token_ids` attributes. These are placeholder tokens used to indicate image positions in the input. The placeholder token is the same token used in the input prompt and to mask scatter image features.
 
-   The processing class also needs ` self._get_num_multimodal_tokens` method to compute the number of placeholder tokens needed for multimodal inputs with given sizes and to return a [`MultiModalData`] object. The placeholder for row and column tokens don't count as image placeholders. Only the tokens that are actually replaced by image features are computed.
+   The processing class also needs `self._get_num_multimodal_tokens` method to compute the number of placeholder tokens needed for multimodal inputs with given sizes and to return a [`MultiModalData`] object. The placeholder for row and column tokens don't count as image placeholders. Only the tokens that are actually replaced by image features are computed.
 
 Finally, when `return_mm_token_type_ids=True`, the class has to return `mm_token_type_ids` to indicate whether each position is a text token (`0`) or image placeholder token (`1`). Each image's token type IDs must be contiguous with no breaks between consecutive ones.
 
