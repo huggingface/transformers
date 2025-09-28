@@ -99,7 +99,12 @@ if is_torch_available():
 
 
 ImageInput = Union[
-    "PIL.Image.Image", np.ndarray, "torch.Tensor", list["PIL.Image.Image"], list[np.ndarray], list["torch.Tensor"]
+    "PIL.Image.Image",
+    np.ndarray,
+    "torch.Tensor",
+    list["PIL.Image.Image"],
+    list[np.ndarray],
+    list["torch.Tensor"],
 ]  # noqa
 
 
@@ -433,7 +438,9 @@ def get_image_size_for_max_height_width(
     return new_height, new_width
 
 
-def is_valid_annotation_coco_detection(annotation: dict[str, Union[list, tuple]]) -> bool:
+def is_valid_annotation_coco_detection(
+    annotation: dict[str, Union[list, tuple]],
+) -> bool:
     if (
         isinstance(annotation, dict)
         and "image_id" in annotation
@@ -448,7 +455,9 @@ def is_valid_annotation_coco_detection(annotation: dict[str, Union[list, tuple]]
     return False
 
 
-def is_valid_annotation_coco_panoptic(annotation: dict[str, Union[list, tuple]]) -> bool:
+def is_valid_annotation_coco_panoptic(
+    annotation: dict[str, Union[list, tuple]],
+) -> bool:
     if (
         isinstance(annotation, dict)
         and "image_id" in annotation
@@ -464,11 +473,15 @@ def is_valid_annotation_coco_panoptic(annotation: dict[str, Union[list, tuple]])
     return False
 
 
-def valid_coco_detection_annotations(annotations: Iterable[dict[str, Union[list, tuple]]]) -> bool:
+def valid_coco_detection_annotations(
+    annotations: Iterable[dict[str, Union[list, tuple]]],
+) -> bool:
     return all(is_valid_annotation_coco_detection(ann) for ann in annotations)
 
 
-def valid_coco_panoptic_annotations(annotations: Iterable[dict[str, Union[list, tuple]]]) -> bool:
+def valid_coco_panoptic_annotations(
+    annotations: Iterable[dict[str, Union[list, tuple]]],
+) -> bool:
     return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
 
 
@@ -815,7 +828,10 @@ class ImageFeatureExtractionMixin:
                             f"size for the smaller edge size = {size}"
                         )
                     if new_long > max_size:
-                        new_short, new_long = int(max_size * new_short / new_long), max_size
+                        new_short, new_long = (
+                            int(max_size * new_short / new_long),
+                            max_size,
+                        )
 
                 size = (new_short, new_long) if width <= height else (new_long, new_short)
 
@@ -873,7 +889,10 @@ class ImageFeatureExtractionMixin:
             return image[..., top:bottom, left:right]
 
         # Otherwise, we may need to pad if the image is too small. Oh joy...
-        new_shape = image.shape[:-2] + (max(size[0], image_shape[0]), max(size[1], image_shape[1]))
+        new_shape = image.shape[:-2] + (
+            max(size[0], image_shape[0]),
+            max(size[1], image_shape[1]),
+        )
         if isinstance(image, np.ndarray):
             new_image = np.zeros_like(image, shape=new_shape)
         elif is_torch_tensor(image):
@@ -891,7 +910,9 @@ class ImageFeatureExtractionMixin:
         right += left_pad
 
         new_image = new_image[
-            ..., max(0, top) : min(new_image.shape[-2], bottom), max(0, left) : min(new_image.shape[-1], right)
+            ...,
+            max(0, top) : min(new_image.shape[-2], bottom),
+            max(0, left) : min(new_image.shape[-1], right),
         ]
 
         return new_image
@@ -913,7 +934,16 @@ class ImageFeatureExtractionMixin:
 
         return image[::-1, :, :]
 
-    def rotate(self, image, angle, resample=None, expand=0, center=None, translate=None, fillcolor=None):
+    def rotate(
+        self,
+        image,
+        angle,
+        resample=None,
+        expand=0,
+        center=None,
+        translate=None,
+        fillcolor=None,
+    ):
         """
         Returns a rotated copy of `image`. This method returns a copy of `image`, rotated the given number of degrees
         counter clockwise around its centre.
@@ -934,7 +964,12 @@ class ImageFeatureExtractionMixin:
             image = self.to_pil_image(image)
 
         return image.rotate(
-            angle, resample=resample, expand=expand, center=center, translate=translate, fillcolor=fillcolor
+            angle,
+            resample=resample,
+            expand=expand,
+            center=center,
+            translate=translate,
+            fillcolor=fillcolor,
         )
 
 
