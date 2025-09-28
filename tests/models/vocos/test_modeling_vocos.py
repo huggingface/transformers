@@ -261,9 +261,12 @@ class VocosModelIntegrationTest(unittest.TestCase):
         processor = VocosProcessor.from_pretrained(hf_repo_id)
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
 
+        audio_np = self._load_datasamples(1)[0]
+        audio = torch.tensor(audio_np, dtype=torch.float32).unsqueeze(0).to(torch_device)
+
         EXPECTED_AUDIO = torch.tensor(self.mel_expected["reconstructed_audio"], dtype=torch.float32).to(torch_device)
 
-        inputs = processor(self.audio, return_tensors="pt").to(torch_device)
+        inputs = processor(audio, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             audio_output = model(**inputs).audio
 
@@ -279,11 +282,14 @@ class VocosModelIntegrationTest(unittest.TestCase):
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
         processor = VocosProcessor.from_pretrained(hf_repo_id)
 
+        audio_np = self._load_datasamples(1)[0]
+        audio = torch.tensor(audio_np, dtype=torch.float32).unsqueeze(0).to(torch_device)
+
         for entry in self.encodec_expected:
             # now resconstructing audio from raw audio :
-            inputs = processor(audio=self.audio, bandwidth=entry["bandwidth"], return_tensors="pt")
+            inputs = processor(audio=audio, bandwidth=entry["bandwidth"], return_tensors="pt").to(torch_device)
             with torch.no_grad():
-                output_from_audio = model(**inputs.to(torch_device)).audio
+                output_from_audio = model(**inputs).audio
 
             EXPECTED_AUDIO = torch.tensor(entry["reconstructed_from_audio"], dtype=torch.float32).to(torch_device)
 
@@ -344,7 +350,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
                 continue
             bandwidth = entry["bandwidth"]
             inputs = processor(audio=audios, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
-            (hf_batch,) = model(**inputs, return_dict=False)
+            hf_batch = model(**inputs).audio
 
             for idx, saved in enumerate(entry["reconstructed_from_audio"]):
                 expected = torch.tensor(saved, dtype=torch.float32, device=torch_device)
@@ -355,7 +361,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
                     atol=entry["atol"],
                 )
 
-        # reconstruction from batch of codes
+        # reconstruction from batch of quantized codes
         for entry in self.encodec_batch_expected:
             if "audio_codes" not in entry:
                 continue

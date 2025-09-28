@@ -33,6 +33,7 @@ class VocosOutput(ModelOutput):
         audio (`torch.FloatTensor` of shape `(batch_size, time)`):
             Reconstructed audio waveform.
     """
+
     audio: torch.FloatTensor
 
 
@@ -266,7 +267,9 @@ class VocosModel(VocosPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    def forward(self, features: torch.FloatTensor, bandwidth: Optional[float] = None, return_dict: Optional[bool] = None) -> Union[VocosOutput, tuple[torch.FloatTensor]]:
+    def forward(
+        self, features: torch.FloatTensor, bandwidth: Optional[float] = None, return_dict: Optional[bool] = None
+    ) -> Union[VocosOutput, tuple[torch.FloatTensor]]:
         r"""
         features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time)`):
             Output of [`VocosProcessor`] is either:
