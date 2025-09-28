@@ -70,6 +70,7 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
         image_token_id=151655,
         video_token_id=151656,
         vocab_size=151936,
+        is_training=True,
         text_config={
             "attention_bias": False,
             "attention_dropout": 0.0,
@@ -129,6 +130,7 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
         self.ignore_index = ignore_index
         self.pad_token_id = pad_token_id
         self.vision_start_token_id = vision_start_token_id
+        self.is_training = is_training
 
     def get_config(self):
         return LlavaOnevision1_5Config(
@@ -202,9 +204,8 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
 
     def setUp(self):
         self.model_tester = LlavaOnevisionVision1_5Text2TextModelTester(self)
-        common_properties = ["image_token_index", "video_token_index", "vision_feature_layer"]
         self.config_tester = ConfigTester(
-            self, config_class=LlavaOnevision1_5Config, has_text_modality=False, common_properties=common_properties
+            self, config_class=LlavaOnevision1_5Config, has_text_modality=False
         )
 
     def test_config(self):
