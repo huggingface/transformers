@@ -3067,6 +3067,24 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.all(is_close))
 
     @slow
+    def test_TopH_example_integration(self):    
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-3B")
+        tokenizer.pad_token = tokenizer.eos_token
+        model.config.pad_token_id = tokenizer.pad_token_id
+        encoder_input_str = "Tell me a joke about a monkey."
+        input_ids = tokenizer(encoder_input_str, return_tensors="pt")
+
+        torch.manual_seed(0)
+
+        outputs = model.generate(
+            **input_ids, eos_token_id=model.config.eos_token_id, do_sample=True, temperature=1.0, top_h=0.4, max_new_tokens=32, pad_token_id=tokenizer.pad_token_id)
+        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        self.assertListEqual(outputs, ['Tell me a joke about a monkey. Why did the monkey go to the doctor? Because he was feeling a little "tropic"!'])
+
+
+    @slow
     def test_beam_search_example_integration(self):
         # exactly the example provided in the docstrings of beam search, which previously
         # failed after directly copying from it. Refer to PR #15555
