@@ -85,6 +85,10 @@ class LlavaOnevision1_5Config(PretrainedConfig):
             The special token id in `input_ids` used as a placeholder for video features.
         vision_start_token_id (`int`, *optional*, defaults to `151657`):
             The token id that precedes a vision placeholder token to mark the start of a vision segment.
+        vocab_size (`int`, *optional*, defaults to `152064`):
+            Vocabulary size of the language model. Defines the number of different tokens that can be represented by the
+            `input_ids` passed when calling [`~PreTrainedModel`]. Vocabulary size of the model. Defines the number of
+            different tokens that can be represented by the `input_ids` passed to the model.
         use_return_dict (`bool`, *optional*, defaults to `True`):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         output_attentions (`bool`, *optional*, defaults to `False`):
