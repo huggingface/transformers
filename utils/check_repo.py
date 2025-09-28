@@ -172,7 +172,7 @@ IGNORE_NON_TESTED = (
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
-        "LlavaOnevision1_5Model", # Building part of bigger (tested) model. Tested implicitly through LlavaOnevision1_5ForConditionalGeneration.
+        "LlavaOnevision1_5Model",  # Building part of bigger (tested) model. Tested implicitly through LlavaOnevision1_5ForConditionalGeneration.
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
         "Glm4vTextModel",  # Building part of bigger (tested) model
