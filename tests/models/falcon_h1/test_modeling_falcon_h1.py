@@ -310,37 +310,6 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    # def test_initialization(self):
-    #     r"""
-    #     Overriding the test_initialization test as the A_log and D params of the FalconH1 mixer are initialized differently
-    #     """
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-    #     configs_no_init = _config_zero_init(config)
-    #     for model_class in self.all_model_classes:
-    #         model = model_class(config=configs_no_init)
-    #         for name, param in model.named_parameters():
-    #             if param.requires_grad:
-    #                 if "A_log" in name:
-    #                     A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)
-    #                     torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
-    #                 elif "D" in name:
-    #                     D = torch.ones(config.mamba_n_heads, dtype=torch.float32)
-    #                     torch.testing.assert_close(param.data, D, rtol=1e-5, atol=1e-5)
-    #                 else:
-    #                     self.assertIn(
-    #                         ((param.data.mean() * 1e9).round() / 1e9).item(),
-    #                         [0.0, 1.0],
-    #                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-    #                     )
-
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        r"""
-        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
-        FalconH1 mixer are initialized differently and we tested that in test_initialization
-        """
-        self.skipTest(reason="Cumbersome and redundant for FalconH1")
-
     def test_attention_outputs(self):
         r"""
         Overriding the test_attention_outputs test as the FalconH1 model outputs attention only for its attention layers

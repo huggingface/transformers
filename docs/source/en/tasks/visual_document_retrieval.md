@@ -38,10 +38,10 @@ from datasets import load_dataset
 dataset = load_dataset("davanstrien/ufo-ColPali")
 dataset = dataset["train"]
 dataset = dataset.filter(lambda example: example["specific_detail_query"] is not None)
-dataset
+print(dataset)
 ```
 
-```
+```text
 Dataset({
     features: ['image', 'raw_queries', 'broad_topical_query', 'broad_topical_explanation', 'specific_detail_query', 'specific_detail_explanation', 'visual_element_query', 'visual_element_explanation', 'parsed_into_json'],
     num_rows: 2172
@@ -120,7 +120,7 @@ indices, scores = find_top_k_indices_batched(ds_with_embeddings, text_embeds, pr
 print(indices, scores)
 ```
 
-```
+```text
 ([440, 442, 443],
  [14.370786666870117,
   13.675487518310547,
