@@ -19,7 +19,11 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_llava_onevision1_5 import *
-    from .modeling_llava_onevision1_5 import *
+    from .modeling_llava_onevision1_5 import (
+        LlavaOnevision1_5ForConditionalGeneration,
+        LlavaOnevision1_5Model,
+        LlavaOnevision1_5PreTrainedModel,
+    )
 else:
     import sys
 
