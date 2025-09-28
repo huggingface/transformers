@@ -97,8 +97,6 @@ OpenAI GPT를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤�
 
 [[autodoc]] models.openai.modeling_openai.OpenAIGPTDoubleHeadsModelOutput
 
-<frameworkcontent>
-<pt>
 
 ## OpenAIGPTModel [[transformers.OpenAIGPTModel]]
 
@@ -120,5 +118,3 @@ OpenAI GPT를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤�
 [[autodoc]] OpenAIGPTForSequenceClassification
     - forward
 
-</pt>
-</frameworkcontent>
