@@ -301,7 +301,6 @@ class RiceBlock(Qwen2_5_VLVisionBlock):
         )
 
 
-@auto_docstring
 class RicePretrainedModel(PreTrainedModel):
     config_class = RiceConfig
     supports_gradient_checkpointing = True
@@ -418,7 +417,6 @@ class RicePretrainedModel(PreTrainedModel):
 
         return window_index, cu_window_seqlens
 
-    @auto_docstring
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
