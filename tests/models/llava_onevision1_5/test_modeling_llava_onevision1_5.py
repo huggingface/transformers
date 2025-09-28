@@ -72,6 +72,9 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
         video_token_id=151656,
         vocab_size=151936,
         is_training=True,
+        use_return_dict=True,
+        output_attentions=False,
+        output_hidden_states=False,
         text_config={
             "attention_bias": False,
             "attention_dropout": 0.0,
@@ -133,14 +136,21 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
         self.pad_token_id = pad_token_id
         self.vision_start_token_id = vision_start_token_id
         self.is_training = is_training
+        self.use_return_dict = use_return_dict
+        self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
 
     def get_config(self):
         return LlavaOnevision1_5Config(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            image_token_id=151655,
-            video_token_id=151656,
-            vocab_size=152064,
+            image_token_id=self.image_token_id,
+            video_token_id=self.video_token_id,
+            vision_start_token_id=self.vision_start_token_id,
+            vocab_size=self.vocab_size,
+            use_return_dict=self.use_return_dict,
+            output_attentions=self.output_attentions,
+            output_hidden_states=self.output_hidden_states,
         )
 
     def prepare_config_and_inputs(self):
