@@ -142,9 +142,6 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
             video_token_id=self.video_token_id,
             vision_start_token_id=self.vision_start_token_id,
             vocab_size=self.vocab_size,
-            use_return_dict=self.use_return_dict,
-            output_attentions=self.output_attentions,
-            output_hidden_states=self.output_hidden_states,
         )
 
     def prepare_config_and_inputs(self):
