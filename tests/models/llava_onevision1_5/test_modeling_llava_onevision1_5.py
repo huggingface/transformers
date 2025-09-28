@@ -204,9 +204,7 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
 
     def setUp(self):
         self.model_tester = LlavaOnevisionVision1_5Text2TextModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=LlavaOnevision1_5Config, has_text_modality=False
-        )
+        self.config_tester = ConfigTester(self, config_class=LlavaOnevision1_5Config, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
