@@ -72,15 +72,27 @@ class RiceConfig(PretrainedConfig):
 
 class LlavaOnevision1_5Config(PretrainedConfig):
     r"""
-    Top-level multimodal config.
+    This is the configuration class to store the configuration of a `LlavaOnevision1_5` model.
 
     Args:
-        text_config (`Qwen3Config` or `dict`, *optional*, defaults to a new text config)
-        vision_config (`RiceConfig` or `dict`, *optional*, defaults to a new vision config)
-        image_token_id (`int`, *optional*, defaults to 151655)
-        video_token_id (`int`, *optional*, defaults to 151656)
-        vision_start_token_id (`int` or `None`, *optional*, defaults to `None`)
-        vocab_size (`int`, *optional*, defaults to 152064)
+        vision_config (`RiceConfig` or `dict`):
+            Vision tower config. If a dict is provided, it will be passed to `RiceConfig`.
+        text_config (`Qwen3Config` or `dict`):
+            Language model config. If a dict is provided, it will be passed to the text config class used by `AutoModel`.
+        image_token_id (`int`, *optional*, defaults to `151655`):
+            The special token id in `input_ids` used as a placeholder for image features.
+        video_token_id (`int`, *optional*, defaults to `151656`):
+            The special token id in `input_ids` used as a placeholder for video features.
+        vision_start_token_id (`int`, *optional*, defaults to `151657`):
+            The token id that precedes a vision placeholder token to mark the start of a vision segment.
+        use_return_dict (`bool`, *optional*, defaults to `True`):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        output_attentions (`bool`, *optional*, defaults to `False`):
+            Whether or not the model returns attentions.
+        output_hidden_states (`bool`, *optional*, defaults to `False`):
+            Whether or not the model returns all hidden states.
+        **kwargs:
+            Additional keyword arguments passed to `PretrainedConfig`.
     """
 
     model_type = "llava_onevision1_5"
@@ -89,12 +101,15 @@ class LlavaOnevision1_5Config(PretrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[dict] = None,
         vision_config: Optional[dict] = None,
+        text_config: Optional[dict] = None,
         image_token_id: int = 151655,
         video_token_id: int = 151656,
         vision_start_token_id: Optional[int] = None,
         vocab_size: int = 152064,
+        use_return_dict=True,
+        output_attentions=False,
+        output_hidden_states=False,
         **kwargs,
     ):
         # Vision
@@ -113,6 +128,9 @@ class LlavaOnevision1_5Config(PretrainedConfig):
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vocab_size = vocab_size
+        self.use_return_dict = use_return_dict
+        self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
 
         super().__init__(**kwargs)
 
