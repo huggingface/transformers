@@ -250,6 +250,7 @@ OBJECTS_TO_IGNORE = {
     "LevitConfig",
     "LiltConfig",
     "LiltModel",
+    "LlavaOnevision1_5Config",
     "LongT5Config",
     "LongformerConfig",
     "LongformerModel",
