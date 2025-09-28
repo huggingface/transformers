@@ -13,54 +13,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
-
-
-_import_structure = {
-    "configuration_beit3": ["BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP", "Beit3Config"],
-    "processing_beit3": ["Beit3Processor"],
-}
-
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_beit3"] = [
-        "Beit3Model",
-        "Beit3ForImagesAndTextClassification",
-        "Beit3ForImageClassification",
-        "Beit3ForCaptioning",
-        "Beit3ForQuestionAnswering",
-        "Beit3ForImageTextRetrieval",
-        "Beit3PreTrainedModel",
-    ]
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_beit3 import BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP, Beit3Config
-    from .processing_beit3 import Beit3Processor
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_beit3 import (
-            Beit3ForCaptioning,
-            Beit3ForImageClassification,
-            Beit3ForImagesAndTextClassification,
-            Beit3ForImageTextRetrieval,
-            Beit3ForQuestionAnswering,
-            Beit3Model,
-            Beit3PreTrainedModel,
-        )
-
-
+    from .configuration_beit3 import *
+    from .modeling_beit3 import *
+    from .processing_beit3 import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
