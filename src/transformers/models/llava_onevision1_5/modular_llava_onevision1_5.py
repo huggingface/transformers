@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
 import torch
@@ -167,14 +166,10 @@ class LlavaOnevision1_5Config(PretrainedConfig):
 # ------------------------- Outputs -------------------------
 
 
-@dataclass
-@auto_docstring
 class LlavaOnevision1_5ModelOutputWithPast(BaseModelOutputWithPast):
     pass
 
 
-@dataclass
-@auto_docstring
 class LlavaOnevision1_5CausalLMOutputWithPast(CausalLMOutputWithPast):
     pass
 

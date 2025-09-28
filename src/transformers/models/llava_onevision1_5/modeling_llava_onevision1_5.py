@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
 import torch
@@ -51,14 +50,10 @@ logger = logging.get_logger(__name__)
 # ------------------------- Outputs -------------------------
 
 
-@dataclass
-@auto_docstring
 class LlavaOnevision1_5ModelOutputWithPast(BaseModelOutputWithPast):
     pass
 
 
-@dataclass
-@auto_docstring
 class LlavaOnevision1_5CausalLMOutputWithPast(CausalLMOutputWithPast):
     pass
 
