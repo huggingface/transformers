@@ -137,13 +137,6 @@ class CwmTextConfig(PretrainedConfig):
         self.window_pattern = int(window_pattern) if window_pattern is not None else None
         self.global_window = None if global_window is None else int(global_window)
 
-        # use SDPA when sliding is active (dense additive mask)
-        try:
-            if any(t == "sliding_attention" for t in self.layer_types) and self.sliding_window > 0:
-                self._attn_implementation = "sdpa"
-        except Exception:
-            pass
-
 
 class CwmConfig(CwmTextConfig):
     pass

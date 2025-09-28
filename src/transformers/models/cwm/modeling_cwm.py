@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -183,64 +183,6 @@ class CwmAttention(nn.Module):
         return attn_output, attn_weights
 
 
-def _infer_past_len(past_key_value, layer_idx: int) -> int:
-    if past_key_value is None:
-        return 0
-    if hasattr(past_key_value, "get_seq_length"):
-        try:
-            return int(past_key_value.get_seq_length(layer_idx))
-        except Exception:
-            pass
-    if isinstance(past_key_value, (tuple, list)) and len(past_key_value) >= 2:
-        k0 = past_key_value[0]
-        if torch.is_tensor(k0) and k0.dim() >= 3:
-            return int(k0.size(-2))
-    return 0
-
-
-def _additive_mask_local(
-    position_ids: torch.LongTensor,  # [B,Q] absolute positions
-    kv_len: int,
-    window: int,
-    dtype: torch.dtype,
-    device: torch.device,
-) -> torch.Tensor:
-    # Local-causal additive mask [B,1,Q,K]: allow iff k <= q and k >= q-(window-1) | 0 = allow, else -inf
-    K = kv_len
-    last = position_ids[:, -1]
-    offset = last - (K - 1)
-    key_abs = offset[:, None] + torch.arange(K, device=device, dtype=position_ids.dtype)[None, :]
-    q_abs = position_ids[:, :, None]
-    causal_ok = key_abs[:, None, :] <= q_abs
-    local_ok = (
-        key_abs[:, None, :] >= (q_abs - (window - 1)) if window > 0 else torch.zeros_like(causal_ok, dtype=torch.bool)
-    )
-    allowed = causal_ok & local_ok
-    finfo = torch.finfo(dtype if dtype.is_floating_point else torch.float32)
-    neg_inf = torch.tensor(finfo.min, device=device, dtype=dtype if dtype.is_floating_point else torch.float32)
-    add = torch.where(allowed, torch.zeros((), device=device, dtype=dtype), neg_inf)
-    return add[:, None, :, :]
-
-
-def _additive_mask_causal(
-    position_ids: torch.LongTensor,  # [B,Q]
-    kv_len: int,
-    dtype: torch.dtype,
-    device: torch.device,
-) -> torch.Tensor:
-    # causal additive mask [B,1,Q,K]: allow if k <= q, 0 where allowed else -inf
-    K = kv_len
-    last = position_ids[:, -1]
-    offset = last - (K - 1)
-    key_abs = offset[:, None] + torch.arange(K, device=device, dtype=position_ids.dtype)[None, :]
-    q_abs = position_ids[:, :, None]
-    allowed = key_abs[:, None, :] <= q_abs
-    finfo = torch.finfo(dtype if dtype.is_floating_point else torch.float32)
-    neg_inf = torch.tensor(finfo.min, device=device, dtype=dtype if dtype.is_floating_point else torch.float32)
-    add = torch.where(allowed, torch.zeros((), device=device, dtype=dtype), neg_inf)
-    return add[:, None, :, :]
-
-
 class CwmDecoderLayer(GradientCheckpointingLayer):
     """
     Same as LlamaDecoderLayer, but we inject an additive mask (local or causal) per layer
@@ -258,10 +200,10 @@ class CwmDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = CwmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx  # Ensure layer_idx is stored as instance attribute
         self._cwm_layer_types = getattr(config, "layer_types", None)
-        self._cwm_W_local = int(getattr(config, "sliding_window", 0))
-        self._cwm_W_global = getattr(config, "global_window", None)
-        if self._cwm_W_global is not None:
-            self._cwm_W_global = int(self._cwm_W_global)
+        self.layer_type = None
+        if self._cwm_layer_types is not None:
+            self.layer_type = self._cwm_layer_types[self.layer_idx]
+        self.sliding_window = int(getattr(config, "sliding_window", 0))
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -269,7 +211,7 @@ class CwmDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -279,25 +221,17 @@ class CwmDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-
-        if position_ids is not None:
-            add = self._cwm_build_mask(
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                hidden_states_dtype=hidden_states.dtype,
-                device=hidden_states.device,
-            )
-            attention_mask = add if attention_mask is None else (attention_mask + add)
-
         attn_outputs = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
+            sliding_window=self.sliding_window if self.layer_type == "sliding_attention" else None,
+            **kwargs,
         )
 
         attn_output = attn_outputs[0]
@@ -316,27 +250,6 @@ class CwmDecoderLayer(GradientCheckpointingLayer):
             return outputs
         else:
             return hidden_states
-
-    def _cwm_build_mask(
-        self,
-        position_ids: torch.LongTensor,  # [B,Q]
-        past_key_value,  # cache for this layer
-        hidden_states_dtype: torch.dtype,
-        device: torch.device,
-    ) -> torch.Tensor:
-        kv_len = _infer_past_len(past_key_value, self.layer_idx) + position_ids.size(1)
-
-        layer_type = "full_attention"
-        if self._cwm_layer_types is not None:
-            layer_type = self._cwm_layer_types[self.layer_idx]
-
-        if layer_type == "sliding_attention":
-            return _additive_mask_local(position_ids, kv_len, self._cwm_W_local, hidden_states_dtype, device)
-        else:
-            if self._cwm_W_global is None:
-                return _additive_mask_causal(position_ids, kv_len, hidden_states_dtype, device)
-            else:
-                return _additive_mask_local(position_ids, kv_len, self._cwm_W_global, hidden_states_dtype, device)
 
 
 class CwmMLP(nn.Module):
@@ -412,6 +325,10 @@ class CwmRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+class CwmModelOutputWithPast(BaseModelOutputWithPast):
+    pass
+
+
 @auto_docstring
 class CwmPreTrainedModel(PreTrainedModel):
     config: CwmConfig
@@ -438,18 +355,10 @@ class CwmModel(CwmPreTrainedModel):
 
     def __init__(self, config: CwmTextConfig):
         super().__init__(config)
-        # Favor SDPA when sliding is active
-        try:
-            if any(t == "sliding_attention" for t in getattr(config, "layer_types", [])) and config.sliding_window > 0:
-                config._attn_implementation = "sdpa"
-        except Exception:
-            pass
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-
-        # Add attention masks masks per-layer
         self.layers = torch.nn.ModuleList(
             [CwmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -472,7 +381,7 @@ class CwmModel(CwmPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> CwmModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -491,14 +400,21 @@ class CwmModel(CwmPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            sliding_mask_kwargs = mask_kwargs.copy()
+
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -506,7 +422,7 @@ class CwmModel(CwmPreTrainedModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[decoder_layer.layer_type],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
@@ -515,7 +431,7 @@ class CwmModel(CwmPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return CwmModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -606,5 +522,4 @@ __all__ = [
     "CwmRMSNorm",
     "CwmRotaryEmbedding",
     "CwmDecoderLayer",
-    "ATTENTION_CLASSES",
 ]
