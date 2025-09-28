@@ -111,9 +111,9 @@ print(output_text)
 [[autodoc]] RicePretrainedModel
     - forward
 
-## LlavaOnevisionModel1_5Model
+## LlavaOnevision1_5Model
 
-[[autodoc]] LlavaOnevisionModel1_5Model
+[[autodoc]] LlavaOnevision1_5Model
     - forward
 
 ## LlavaOnevision1_5ForConditionalGeneration
