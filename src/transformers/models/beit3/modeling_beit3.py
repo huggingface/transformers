@@ -12,10 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BEiT3 model."""
+"""PyTorch BEiT3 model."""
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -277,7 +277,7 @@ class Beit3ImageTextMatchingOutput(ModelOutput):
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -451,7 +451,7 @@ class Beit3VisionEmbedding(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.num_position_embeddings = self.num_patches + 1
 
-    def forward(self, hidden_states: torch.Tensor, masked_position: bool = None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, masked_position: bool | None = None) -> torch.Tensor:
         hidden_states = self.projection(hidden_states).flatten(2).transpose(1, 2)
 
         batch_size, seq_len, _ = hidden_states.size()
@@ -493,11 +493,11 @@ class Beit3MultiheadAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        past_key_values: Optional[Tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         attention_mask: torch.Tensor = None,
         image_text_attention_mask: torch.Tensor = None,
         multiway_split_position=-1,
-        output_attentions: bool = None,
+        output_attentions: bool | None = None,
     ):
         batch_size, target_length, embed_dim = query.size()
 
@@ -796,7 +796,7 @@ class Beit3Model(Beit3PreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         image_text_mask: Optional[torch.FloatTensor] = None,
         vision_masked_position: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple] = None,
+        past_key_values: Optional[tuple] = None,
         output_hidden_states: Optional[torch.LongTensor] = None,
         output_attentions: Optional[torch.LongTensor] = None,
         return_dict: Optional[torch.LongTensor] = None,
@@ -895,7 +895,7 @@ class Beit3Model(Beit3PreTrainedModel):
 )
 class Beit3ForImagesAndTextClassification(Beit3PreTrainedModel):
     def __init__(self, config):
-        super(Beit3ForImagesAndTextClassification, self).__init__(config)
+        super().__init__(config)
         self.beit3 = Beit3Model(config)
         self.classifier = Beit3MLP(config)
         self.post_init()
@@ -1004,7 +1004,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
     main_input_name = "pixel_values"
 
     def __init__(self, config):
-        super(Beit3ForImageClassification, self).__init__(config)
+        super().__init__(config)
         embed_dim = config.hidden_size
         self.beit3 = Beit3Model(config)
         self.fc_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
@@ -1021,7 +1021,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[Any], ImageClassifierOutput]:
+    ) -> Union[tuple[Any], ImageClassifierOutput]:
         r"""
         Returns:
 
@@ -1105,7 +1105,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
 )
 class Beit3ForCaptioning(Beit3PreTrainedModel):
     def __init__(self, config):
-        super(Beit3ForCaptioning, self).__init__(config)
+        super().__init__(config)
 
         self.beit3 = Beit3Model(config)
         self.mlm_classifier = nn.Linear(config.hidden_size, config.vocab_size)
@@ -1121,7 +1121,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         language_masked_pos: Optional[torch.LongTensor] = None,
         text_len: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple] = None,
+        past_key_values: Optional[tuple] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1261,7 +1261,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[Any], SequenceClassifierOutput]:
+    ) -> Union[tuple[Any], SequenceClassifierOutput]:
         r"""
         Returns:
 
@@ -1361,7 +1361,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[Any], Beit3ImageTextMatchingOutput]:
+    ) -> Union[tuple[Any], Beit3ImageTextMatchingOutput]:
         r"""
         Returns:
 
