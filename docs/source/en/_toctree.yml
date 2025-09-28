@@ -1,4 +1,4 @@
-- sections:
+  - sections:
   - local: index
     title: Transformers
   - local: installation
@@ -1097,6 +1097,8 @@
         title: LLaVa-NeXT-Video
       - local: model_doc/llava_onevision
         title: LLaVA-Onevision
+      - local: model_doc/llava_onevision1_5
+        title: LLaVA-Onevision-1.5
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
