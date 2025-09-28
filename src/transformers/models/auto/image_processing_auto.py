@@ -64,7 +64,7 @@ else:
             ("align", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("aria", ("AriaImageProcessor", None)),
             ("beit", ("BeitImageProcessor", "BeitImageProcessorFast")),
-            ("beit3", "BeitImageProcessor", "BeitImageProcessorFast"),
+            ("beit3", ("BeitImageProcessor", "BeitImageProcessorFast")),
             ("bit", ("BitImageProcessor", "BitImageProcessorFast")),
             ("blip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("blip-2", ("BlipImageProcessor", "BlipImageProcessorFast")),
