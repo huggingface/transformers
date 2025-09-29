@@ -231,6 +231,7 @@ class RiceAttention(nn.Module):
         self.is_causal = False
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=True)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.num_key_value_groups = 1  # needed for eager attention
 
     def forward(
         self,
@@ -259,6 +260,7 @@ class RiceAttention(nn.Module):
         attention_mask = torch.zeros([1, seq_length, seq_length], device=q.device, dtype=torch.bool)
         for i in range(1, len(cu_seqlens)):
             attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
+        attention_mask = attention_mask.unsqueeze(1)  # [1,1,L,L]
         q = q.transpose(0, 1).unsqueeze(0)
         k = k.transpose(0, 1).unsqueeze(0)
         v = v.transpose(0, 1).unsqueeze(0)

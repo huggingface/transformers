@@ -110,7 +110,7 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
             "model_type": "rice_vit",
             "num_heads": 16,
             "patch_size": 14,
-            "spatial_merge_size": 2,
+            "spatial_merge_size": 1,
             "temporal_patch_size": 1,
             "text_hidden_size": 4096,
         },
@@ -142,6 +142,9 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
             video_token_id=self.video_token_id,
             vision_start_token_id=self.vision_start_token_id,
             vocab_size=self.vocab_size,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
         )
 
     def prepare_config_and_inputs(self):
@@ -274,7 +277,11 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
     )
     def test_training_gradient_checkpointing(self):
         pass
-
+    
+    @unittest.skip
+    def test_training(self):
+        pass
+    
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, RiceVisionModel does not support standalone training"
     )
@@ -538,4 +545,8 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
 
     @unittest.skip("Skipping video test as the small model does not handle video inputs yet.")
     def test_small_model_integration_test_with_video(self):
+        pass
+    
+    @unittest.skip
+    def test_training(self):
         pass

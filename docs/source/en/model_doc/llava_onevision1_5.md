@@ -106,10 +106,6 @@ print(output_text)
 
 [[autodoc]] LlavaOnevision1_5Config
 
-## RicePretrainedModel
-
-[[autodoc]] RicePretrainedModel
-    - forward
 
 ## LlavaOnevision1_5Model
 
