@@ -249,4 +249,4 @@ class DeepseekV32Config(PretrainedConfig):
         )
 
 
-__all__ = ["DeepseekV3Config"]
+__all__ = ["DeepseekV32Config"]
