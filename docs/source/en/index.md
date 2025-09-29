@@ -35,15 +35,7 @@ There are over 1M+ Transformers [model checkpoints](https://huggingface.co/model
 
 Explore the [Hub](https://huggingface.com/) today to find a model and use Transformers to help you get started right away.
 
-Here is an interactive timeline to explore the different model architectures supported by Transformers ([check it out directly on HF Spaces](https://huggingface.co/spaces/yonigozlan/Transformers-Timeline))
-
-<iframe
-	src="https://yonigozlan-transformers-timeline.hf.space"
-	frameborder="0"
-	width="125%"
-	height="1200"
-	style="transform: scale(0.8); transform-origin: top left; max-width: calc(100%/0.8); height: 1150px; margin-bottom: calc(-0.2*1150px);"
-></iframe>
+Want to find the latest model architecture for your specific task or modality? Explore the [Models Timeline](./models_timeline) to discover what's new in text, vision, audio, and multimodal models supported by the Transformers library.
 
 
 
