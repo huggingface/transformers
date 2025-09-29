@@ -56,7 +56,7 @@ jobs:
     runs-on:
       group: ${{ fromJson(inputs.runner_map)[matrix.folders][inputs.machine_type] }}
     container:
-      image: ${{ inputs.docker }}
+      image: huggingface/transformers-all-latest-gpu-test
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Echo input and matrix info
