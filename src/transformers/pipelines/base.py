@@ -957,7 +957,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self,
         save_directory: Union[str, os.PathLike],
         safe_serialization: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ):
         """
         Save the pipeline's model and tokenizer.
