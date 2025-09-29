@@ -452,7 +452,7 @@ For Ampere GPUs and PyTorch 1.7+, the more efficient [tf32](https://pytorch.org/
 </hfoption>
 <hfoption id="fp16">
 
-To configure AMP-like fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically enables or disables fp16 based on the value of `fp16_backend`, and the rest of the config can be set by you. fp16 is enabled from the command line when the following arguments are passed: `--fp16`, `--fp16_backend amp` or `--fp16_full_eval`.
+To configure fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically enables or disables fp16 based on the value of `fp16` or `fp16_full_eval`, and the rest of the config can be set by you. fp16 is enabled from the command line when the following arguments are passed: `--fp16` or `--fp16_full_eval` also.
 
 ```json
 {
