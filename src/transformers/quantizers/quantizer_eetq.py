@@ -100,7 +100,7 @@ class EetqHfQuantizer(HfQuantizer):
             logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with EETQ.")
         return dtype
 
-    def check_quantized_param(
+    def param_needs_quantization(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
@@ -130,7 +130,6 @@ class EetqHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
     ):
         """
         quantizes weights into qweight and weight_scales

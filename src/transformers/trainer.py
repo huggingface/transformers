@@ -49,7 +49,7 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import ModelCard, create_repo, upload_folder
+from huggingface_hub import CommitInfo, ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
@@ -497,26 +497,13 @@ class Trainer:
                 "https://huggingface.co/docs/transformers/model_doc/auto"
             )
 
-        if getattr(model, "is_parallelizable", False) and getattr(model, "model_parallel", False):
-            self.is_model_parallel = True
-        else:
-            self.is_model_parallel = False
-
+        self.is_model_parallel = False
         if getattr(model, "hf_device_map", None) is not None:
             devices = [device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]
             if len(devices) > 1:
                 self.is_model_parallel = True
             elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
-            else:
-                self.is_model_parallel = False
-
-            # warn users
-            if self.is_model_parallel:
-                logger.info(
-                    "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set"
-                    " to `True` to avoid any unexpected behavior such as device placement mismatching."
-                )
 
         if self.args.use_liger_kernel:
             if is_liger_kernel_available():
@@ -904,7 +891,7 @@ class Trainer:
         uses the new tokens as well.
         """
         if isinstance(self.processing_class, ProcessorMixin):
-            tokenizer = self.processing_class.tokenizer
+            tokenizer: PreTrainedTokenizerBase = self.processing_class.tokenizer
         else:
             tokenizer = self.processing_class
         model_has_generation_config = (
@@ -2189,7 +2176,7 @@ class Trainer:
         resume_from_checkpoint: Optional[Union[str, bool]] = None,
         trial: Union["optuna.Trial", dict[str, Any], None] = None,
         ignore_keys_for_eval: Optional[list[str]] = None,
-        **kwargs,
+        **kwargs: Any,
     ):
         """
         Main training entry point.
@@ -2385,7 +2372,7 @@ class Trainer:
                     " (torchrun or torch.distributed.launch (deprecated))."
                 )
             else:
-                debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
+                DebugUnderflowOverflow(self.model)
 
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
@@ -5067,7 +5054,7 @@ class Trainer:
         token: Optional[str] = None,
         revision: Optional[str] = None,
         **kwargs,
-    ) -> str:
+    ) -> CommitInfo:
         """
         Upload `self.model` and `self.processing_class` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
