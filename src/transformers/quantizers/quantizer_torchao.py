@@ -288,7 +288,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                 return
             # Sanity check for the new serialization format
             elif not (TORCHAO_VERSION >= version.parse("0.14.0") and is_metadata_torchao(self.metadata)):
-                raise ValueError("To use `safetensors` serialization, you should have `torch>=0.14.0` installed")
+                raise ValueError("To use `safetensors` serialization, you should have `torchao>=0.14.0` installed")
 
             # Save the states for later quantization when they are all gathered
             if not hasattr(self, "ao_params"):
