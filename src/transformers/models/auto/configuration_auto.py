@@ -539,6 +539,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("decision_transformer", "Decision Transformer"),
         ("deepseek_v2", "DeepSeek-V2"),
         ("deepseek_v3", "DeepSeek-V3"),
+        ("deepseek_v32", "DeepSeek-V3.2-Exp"),
         ("deepseek_vl", "DeepseekVL"),
         ("deepseek_vl_hybrid", "DeepseekVLHybrid"),
         ("deformable_detr", "Deformable DETR"),
