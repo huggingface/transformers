@@ -32,7 +32,6 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
-
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
