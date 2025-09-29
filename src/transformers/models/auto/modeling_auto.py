@@ -1216,7 +1216,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("code_llama", "LlamaForSequenceClassification"),
         ("convbert", "ConvBertForSequenceClassification"),
         ("ctrl", "CTRLForSequenceClassification"),
-        ("cwm", "CwmForSequenceClassification"),
         ("data2vec-text", "Data2VecTextForSequenceClassification"),
         ("deberta", "DebertaForSequenceClassification"),
         ("deberta-v2", "DebertaV2ForSequenceClassification"),
