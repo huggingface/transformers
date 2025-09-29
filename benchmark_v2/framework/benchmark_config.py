@@ -105,7 +105,7 @@ def cross_generate_configs(
                     name = [
                         str(attn_implementation[0]),
                         str(attn_implementation[1]),
-                        "compiled" if compiled_mode is not None else "uncompiled",
+                        f"compiled_{compiled_mode}" if compiled_mode is not None else "uncompiled",
                         "kernelized" if kernelized else "vanilla",
                         "with_cache" if use_cache else "no_cache",
                     ]

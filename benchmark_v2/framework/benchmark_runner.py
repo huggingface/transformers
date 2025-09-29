@@ -255,7 +255,7 @@ class BenchmarkRunner:
 
             # Skip if already run
             if config.name in all_results:
-                self.logger.info(f"Skipping benchmark of model {model_id} with scenario: {config.name} ({i+1}/{len(benchmark_configs)})")
+                self.logger.info(f"Skipping duplicate config {config.name} for model {model_id} ({i+1}/{len(benchmark_configs)})")
                 continue
 
             # Otherwise, run the benchmark
