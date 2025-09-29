@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -42,7 +41,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs, OutputRecorder
 from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerCrossAttention, T5LayerNorm, T5LayerSelfAttention
 from .configuration_switch_transformers import SwitchTransformersConfig
 
@@ -377,8 +376,8 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
 class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
-        "attentions": SwitchTransformersLayerSelfAttention,
-        "cross_attentions": SwitchTransformersLayerCrossAttention,
+        "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
+        "cross_attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.1"),
         "router_logits": SwitchTransformersTop1Router,
     }
 
@@ -682,6 +681,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -775,7 +775,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         return self.encoder
 
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -793,12 +793,10 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
+                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
             )
 
-        hidden_states = encoder_outputs.last_hidden_state
+        hidden_states = encoder_outputs[0]
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
@@ -813,6 +811,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             cache_position=cache_position,
+            **kwargs,
         )
 
         sequence_output = decoder_outputs.last_hidden_state
@@ -895,6 +894,14 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
+     _can_record_outputs = {
+        "hidden_states": SwitchTransformersBlock,
+        "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
+        "cross_attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.1"),
+        "router_logits": SwitchTransformersTop1Router,
+    }
+
+
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -927,12 +934,16 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], MoEModelOutput]:
+        use_cache = False
         encoder_outputs = self.encoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
         )
 
         return encoder_outputs
