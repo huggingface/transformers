@@ -1071,7 +1071,12 @@ def _get_resolved_checkpoint_files(
                         is_sharded = True
                 if not local_files_only and not is_offline_mode():
                     if resolved_archive_file is not None:
-                        if filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]:
+                        # In a CI environment (CircleCI / Github Actions workflow runs) or in a pytest run, don't perform the conversion
+                        if (
+                            filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]
+                            and os.getenv("CI", "false") != "true"
+                            and os.getenv("PYTEST_CURRENT_TEST", None) is None
+                        ):
                             # If the PyTorch file was found, check if there is a safetensors file on the repository
                             # If there is no safetensors file on the repositories, start an auto conversion
                             safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
