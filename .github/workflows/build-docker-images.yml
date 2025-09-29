@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - build_ci_docker_image*
+      - docker-quant
   repository_dispatch:
   workflow_call:
     inputs:
