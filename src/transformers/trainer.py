@@ -4897,7 +4897,7 @@ class Trainer:
             else:
                 if has_labels or loss_without_labels:
                     with self.compute_loss_context_manager():
-                        num_items_in_batch = self._get_num_items_in_batch([inputs], inputs["input_ids"].device)
+                        num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
                         loss, outputs = self.compute_loss(
                             model, inputs, return_outputs=True, num_items_in_batch=num_items_in_batch
                         )
