@@ -32,6 +32,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
+
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
@@ -112,7 +113,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists, get_last_checkpoint
+from transformers.trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    HPSearchBackend,
+    check_target_module_exists,
+    get_last_checkpoint,
+)
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -5283,6 +5289,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         Tests that the dataloader order is reproducible when resuming from partial checkpoints.
         """
         import shutil
+
         from safetensors.torch import load_file
 
         # --- Helper classes and functions defined locally for this test ---
@@ -5322,7 +5329,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 if labels is not None:
                     loss_fn = nn.CrossEntropyLoss()
                     loss = loss_fn(logits, labels)
-                
+
                 # Log the data order for verification
                 data_indices = input_ids[:, 0].int()
                 self.data_order = torch.cat([self.data_order, data_indices.detach().clone()])
@@ -5339,12 +5346,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             except Exception as e:
                 raise RuntimeError(f"Error loading safetensors file: {e}") from e
 
-        def run_training_experiment(seed: int, data_size: int, batch_size: int, grad_acc: int, 
-                                  save_steps: int, num_epochs: int, exp_dir, resume_from=None):
+        def run_training_experiment(
+            seed: int,
+            data_size: int,
+            batch_size: int,
+            grad_acc: int,
+            save_steps: int,
+            num_epochs: int,
+            exp_dir,
+            resume_from=None,
+        ):
             """Run a training experiment with the given parameters."""
             # Set random seeds for reproducibility
             set_seed(seed)
-            
+
             exp_dir.mkdir(parents=True, exist_ok=True)
             train_dataset = DummyDataset(size=data_size)
             model = DummyModel(size=data_size)
@@ -5377,7 +5392,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             print(f"Last checkpoint found in {exp_dir}: {last_checkpoint}")
 
             trainer.train(resume_from_checkpoint=last_checkpoint)
-        
+
         # Test parameters
         num_epochs = 3
         data_size = 10
@@ -5387,13 +5402,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         last_ckpt_num = int(data_size * num_epochs / (batch_size * grad_acc))
         seed = 42
 
-        # Test resuming from checkpoint 2 (within epoch 0) and checkpoint 7 (within epoch 1) 
+        # Test resuming from checkpoint 2 (within epoch 0) and checkpoint 7 (within epoch 1)
         for target_ckpt_num in [2, 7]:
-            print(f"\n{'='*80}")
+            print(f"\n{'=' * 80}")
             print(
-                f"Testing resuming from middle of epoch {round((target_ckpt_num-1) * batch_size / data_size)} (target_ckpt_num = {target_ckpt_num})"
+                f"Testing resuming from middle of epoch {round((target_ckpt_num - 1) * batch_size / data_size)} (target_ckpt_num = {target_ckpt_num})"
             )
-            print(f"{'='*80}")
+            print(f"{'=' * 80}")
 
             # Create temporary directories
             exp_dir_baseline = Path(self.get_auto_remove_tmp_dir())
@@ -5407,12 +5422,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 grad_acc=grad_acc,
                 save_steps=save_steps,
                 num_epochs=num_epochs,
-                exp_dir=exp_dir_baseline
+                exp_dir=exp_dir_baseline,
             )
 
-            baseline_data_order = load_data_order_from_safetensors(
-                exp_dir_baseline / f"checkpoint-{last_ckpt_num}"
-            )
+            baseline_data_order = load_data_order_from_safetensors(exp_dir_baseline / f"checkpoint-{last_ckpt_num}")
 
             # Scenario 2: Run training with checkpoint deletion and resume
             # First, run training to completion
@@ -5423,7 +5436,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 grad_acc=grad_acc,
                 save_steps=save_steps,
                 num_epochs=num_epochs,
-                exp_dir=exp_dir_checkpoint_deletion
+                exp_dir=exp_dir_checkpoint_deletion,
             )
 
             # Delete checkpoints from target_ckpt_num onwards
@@ -5444,7 +5457,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 save_steps=save_steps,
                 num_epochs=num_epochs,
                 exp_dir=exp_dir_checkpoint_deletion,
-                resume_from=str(checkpoint_path)
+                resume_from=str(checkpoint_path),
             )
 
             # Load the final results after resume
@@ -5457,8 +5470,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 torch.equal(baseline_data_order, resumed_data_order),
                 f"Data order mismatch after checkpoint deletion and resume.\n"
                 f"Baseline: {baseline_data_order}\n"
-                f"Resumed: {resumed_data_order}"
+                f"Resumed: {resumed_data_order}",
             )
+
 
 @require_torch
 @is_staging_test
