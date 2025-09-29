@@ -228,7 +228,7 @@ class CwmModel(LlamaModel):
 
     def __init__(self, config: CwmTextConfig):
         # Validate layer types at model creation time
-        if hasattr(config, 'layer_types') and config.layer_types is not None:
+        if hasattr(config, "layer_types") and config.layer_types is not None:
             _validate_layer_types(config.layer_types, config.num_hidden_layers)
 
         super().__init__(config)
