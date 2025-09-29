@@ -195,7 +195,7 @@ class SwitchTransformersSparseMLP(nn.Module):  # inherit from mixtral
         self.router = SwitchTransformersTop1Router(config)
         self.experts = SwitchTransformersExperts(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         _, selected_experts, routing_weights = self.router(hidden_states)
@@ -571,8 +571,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
-        layer_head_mask=None,
-        cross_attn_layer_head_mask=None,
         past_key_values=None,
         use_cache=False,
         cache_position=None,
@@ -582,7 +580,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -600,7 +597,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                layer_head_mask=cross_attn_layer_head_mask,
                 past_key_values=past_key_values,
                 query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
@@ -1183,7 +1179,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
             )
 
-        hidden_states = encoder_outputs.last_hidden_state
+        hidden_states = encoder_outputs[0]
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
@@ -1283,8 +1279,8 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
     _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
-        "attentions": SwitchTransformersLayerSelfAttention,
-        "cross_attentions": SwitchTransformersLayerCrossAttention,
+        "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
+        "cross_attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.1"),
         "router_logits": SwitchTransformersTop1Router,
     }
 
@@ -1318,7 +1314,6 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1328,7 +1323,6 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            head_mask=head_mask,
             use_cache=use_cache,
             **kwargs,
         )

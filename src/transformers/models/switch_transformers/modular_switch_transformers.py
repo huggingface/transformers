@@ -41,7 +41,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs, OutputRecorder
+from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
 from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerCrossAttention, T5LayerNorm, T5LayerSelfAttention
 from .configuration_switch_transformers import SwitchTransformersConfig
 
@@ -344,6 +344,44 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        factor = self.config.initializer_factor  # Used for testing weights initialization
+        if isinstance(module, SwitchTransformersLayerNorm):
+            module.weight.data.fill_(factor * 1.0)
+        elif isinstance(
+            module,
+            (SwitchTransformersModel, SwitchTransformersForConditionalGeneration, SwitchTransformersEncoderModel),
+        ):
+            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, SwitchTransformersDenseActDense):
+            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi, "bias") and module.wi.bias is not None:
+                module.wi.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                module.wo.bias.data.zero_()
+        elif isinstance(module, SwitchTransformersAttention):
+            d_model = self.config.d_model
+            key_value_proj_dim = self.config.d_kv
+            n_heads = self.config.num_heads
+            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            if module.has_relative_attention_bias:
+                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+        elif isinstance(module, SwitchTransformersSparseMLP):
+            d_model = self.config.d_model
+            key_value_proj_dim = self.config.d_kv
+            n_heads = self.config.num_heads
+            module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
+            for idx in range(self.config.num_experts):
+                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -700,7 +738,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
                 input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
             )
 
-        hidden_states = encoder_outputs.last_hidden_state
+        hidden_states = encoder_outputs[0]
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
@@ -894,14 +932,12 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
-     _can_record_outputs = {
+    _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
         "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
         "cross_attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.1"),
         "router_logits": SwitchTransformersTop1Router,
     }
-
-
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
