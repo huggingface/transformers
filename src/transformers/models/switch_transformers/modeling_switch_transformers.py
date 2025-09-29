@@ -50,7 +50,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -83,7 +83,7 @@ class SwitchTransformersTop1Router(nn.Module):
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         r"""
         Computes router probabilities from input hidden states.
 
@@ -1003,6 +1003,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1021,7 +1022,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
                 input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
             )
 
-        hidden_states = encoder_outputs.last_hidden_state
+        hidden_states = encoder_outputs[0]
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
@@ -1279,6 +1280,12 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
+    _can_record_outputs = {
+        "hidden_states": SwitchTransformersBlock,
+        "attentions": SwitchTransformersLayerSelfAttention,
+        "cross_attentions": SwitchTransformersLayerCrossAttention,
+        "router_logits": SwitchTransformersTop1Router,
+    }
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -1305,16 +1312,24 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         return self.encoder
 
     @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], MoEModelOutput]:
+        use_cache = False
         encoder_outputs = self.encoder(
-            input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            head_mask=head_mask,
+            use_cache=use_cache,
+            **kwargs,
         )
 
         return encoder_outputs
