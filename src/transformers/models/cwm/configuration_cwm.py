@@ -151,6 +151,35 @@ class CwmTextConfig(PretrainedConfig):
 
 
 class CwmConfig(CwmTextConfig):
+    """
+    A configuration for a `CwmModel`. Designed to yield a configuartion mirroring the model in the
+    [facebook/cwm](https://huggingface.co/facebook/cwm) architecture by default.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 128256):
+            Vocabulary size of the CWM model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`CwmModel`]
+        hidden_size (`int`, *optional*, defaults to 6144):
+            Dimension of the hidden representations
+        intermediate_size (`int`, *optional*, defaults to 21504):
+            Dimension of the MLP
+        num_hidden_layers (`int`, *optional*, defaults to 64):
+            Number of hidden layers in the Transformer decoder
+        num_attention_heads (`int`, *optional*, defaults to 48):
+            Number of attention heads for each attention layer in the Transformer decoder
+        num_key_value_heads (`int`, *optional*, defaults to 8):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention (GQA).
+            If it is not specified, will default to `num_attention_heads`
+        sliding_window (`int`, *optional*, defaults to 8192):
+            Sliding window attention window size.
+        layer_types (`List[str]`, *optional*):
+            List of layer types for each layer. Each element should be either "full_attention" or "sliding_attention".
+            If not specified, will default to alternating pattern with `window_pattern`
+        window_pattern (`int`, *optional*):
+            Pattern for alternating between full and sliding attention. Every `window_pattern` layers will use full
+            attention, others use sliding attention. If not specified, will default to 4
+    """
+
     pass
 
 
