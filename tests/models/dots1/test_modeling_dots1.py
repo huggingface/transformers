@@ -16,7 +16,7 @@
 import gc
 import unittest
 
-from transformers import AutoTokenizer, Dots1Config, is_torch_available
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
@@ -39,10 +39,8 @@ if is_torch_available():
 
 
 class Dots1ModelTester(CausalLMModelTester):
-    config_class = Dots1Config
     if is_torch_available():
         base_model_class = Dots1Model
-        causal_lm_class = Dots1ForCausalLM
 
     def __init__(
         self,

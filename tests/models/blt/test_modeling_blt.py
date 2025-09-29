@@ -46,9 +46,7 @@ from transformers.models.blt.modeling_blt import BltRotaryEmbedding
 
 class BltModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = BltConfig
         base_model_class = BltModel
-        causal_lm_class = BltForCausalLM
 
     def __init__(
         self,
