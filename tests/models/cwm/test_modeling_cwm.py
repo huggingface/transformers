@@ -14,13 +14,8 @@
 
 import unittest
 
-import pytest
-from packaging import version
-
-from transformers import AutoTokenizer, StaticCache, is_torch_available
-from transformers.generation.configuration_utils import GenerationConfig
+from transformers import is_torch_available
 from transformers.testing_utils import (
-    Expectations,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -39,7 +34,6 @@ if is_torch_available():
         CwmForCausalLM,
         CwmModel,
     )
-    from transformers import LlamaTokenizer  # CWM uses Llama tokenizer
 
 
 class CwmModelTester(CausalLMModelTester):

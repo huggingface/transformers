@@ -14,12 +14,10 @@
 
 import unittest
 
-from transformers import is_torch_available
 from transformers.models.cwm import CwmConfig, CwmTextConfig
 from transformers.testing_utils import require_torch
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ids_tensor
 
 
 class CwmConfigTest(unittest.TestCase):
