@@ -1,58 +1,9 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional, Union
 
+from .benchmark_config import BenchmarkConfig
 from .hardware_metrics import GPURawMetrics, HardwareInfo
-
-
-@dataclass
-class BenchmarkConfig:
-    """Configuration for a single benchmark scenario."""
-
-    # Basic parameters
-    name: str
-    # Benchmark parameters
-    warmup_iterations: int = 5
-    measurement_iterations: int = 20
-    gpu_monitoring: bool = True
-    # Generation parameters
-    batch_size: int = 1
-    sequence_length: int = 128
-    num_tokens_to_generate: int = 128
-    # Attention parameters
-    attn_implementation: str = "eager"  # "eager", "sdpa", "flash_attention_2"
-    use_cache: bool = True
-    sdpa_backend: Optional[str] = None  # None, "math", "flash_attention", "efficient_attention", "cudnn_attention"
-    # Compilation parameters
-    compilation: bool = False
-    compile_mode: Optional[str] = None  # None, "default", "reduce-overhead", "max-autotune"
-    compile_options: dict[str, Any] = field(default_factory=dict)
-    # Kernels parameters
-    kernelize: bool = False
-
-    # CONSTANTS (for now)
-    device: str = "cuda"
-    dtype: str = "torch.bfloat16"
-
-    def to_dict(self) -> dict[str, Union[None, int, float, str]]:
-        return {
-            "name": self.name,
-            "warmup_iterations": self.warmup_iterations,
-            "measurement_iterations": self.measurement_iterations,
-            "gpu_monitoring": self.gpu_monitoring,
-            "batch_size": self.batch_size,
-            "sequence_length": self.sequence_length,
-            "num_tokens_to_generate": self.num_tokens_to_generate,
-            "attn_implementation": self.attn_implementation,
-            "use_cache": self.use_cache,
-            "sdpa_backend": self.sdpa_backend,
-            "compilation": self.compilation,
-            "compile_mode": self.compile_mode,
-            "compile_options": self.compile_options,
-            "kernelize": self.kernelize,
-            "device": self.device,
-            "dtype": str(self.dtype),
-        }
 
 
 @dataclass

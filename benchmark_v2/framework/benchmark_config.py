@@ -1,4 +1,5 @@
-from .data_classes import BenchmarkConfig
+from dataclasses import dataclass, field
+from typing import Any, Optional, Union
 
 
 KERNELIZATION_AVAILABLE = False
@@ -8,6 +9,76 @@ try:
     KERNELIZATION_AVAILABLE = True
 except ImportError:
     pass
+
+
+@dataclass
+class BenchmarkConfig:
+    """Configuration for a single benchmark scenario."""
+
+    # Basic parameters
+    name: str
+    # Benchmark parameters
+    warmup_iterations: int = 5
+    measurement_iterations: int = 20
+    gpu_monitoring: bool = True
+    # Generation parameters
+    batch_size: int = 1
+    sequence_length: int = 128
+    num_tokens_to_generate: int = 128
+    # Attention parameters
+    attn_implementation: str = "eager"  # "eager", "sdpa", "flash_attention_2"
+    use_cache: bool = True
+    sdpa_backend: Optional[str] = None  # None, "math", "flash_attention", "efficient_attention", "cudnn_attention"
+    # Compilation parameters
+    compilation: bool = False
+    compile_mode: Optional[str] = None  # None, "default", "reduce-overhead", "max-autotune"
+    compile_options: dict[str, Any] = field(default_factory=dict)
+    # Kernels parameters
+    kernelize: bool = False
+    # CONSTANTS (for now)
+    device: str = "cuda"
+    dtype: str = "torch.bfloat16"
+
+    def to_dict(self) -> dict[str, Union[None, int, float, str]]:
+        return {
+            "name": self.name,
+            "warmup_iterations": self.warmup_iterations,
+            "measurement_iterations": self.measurement_iterations,
+            "gpu_monitoring": self.gpu_monitoring,
+            "batch_size": self.batch_size,
+            "sequence_length": self.sequence_length,
+            "num_tokens_to_generate": self.num_tokens_to_generate,
+            "attn_implementation": self.attn_implementation,
+            "use_cache": self.use_cache,
+            "sdpa_backend": self.sdpa_backend,
+            "compilation": self.compilation,
+            "compile_mode": self.compile_mode,
+            "compile_options": self.compile_options,
+            "kernelize": self.kernelize,
+            "device": self.device,
+            "dtype": self.dtype,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "BenchmarkConfig":
+        return cls(
+            name=data["name"],
+            warmup_iterations=data["warmup_iterations"],
+            measurement_iterations=data["measurement_iterations"],
+            gpu_monitoring=data["gpu_monitoring"],
+            batch_size=data["batch_size"],
+            sequence_length=data["sequence_length"],
+            num_tokens_to_generate=data["num_tokens_to_generate"],
+            attn_implementation=data["attn_implementation"],
+            use_cache=data["use_cache"],
+            sdpa_backend=data["sdpa_backend"],
+            compilation=data["compilation"],
+            compile_mode=data["compile_mode"],
+            compile_options=data["compile_options"],
+            kernelize=data["kernelize"],
+            device=data["device"],
+            dtype=data["dtype"],
+        )
 
 
 def cross_generate_configs(
@@ -27,7 +98,7 @@ def cross_generate_configs(
         "gpu_monitoring": gpu_monitoring,
     }
     configs = []
-    for attn_implementation in [("eager", None), ("sdpa", "math"), ("sdpa", "flash_attention"), ("sdpa", "efficient_attention")]:
+    for attn_implementation in [("flash_attention_2", None), ("eager", None), ("sdpa", "math"), ("sdpa", "flash_attention"), ("sdpa", "efficient_attention")]:
         for compiled_mode in [None, "default", "reduce-overhead", "max-autotune"]:
             for kernelized in {False, KERNELIZATION_AVAILABLE}:
                 for use_cache in [True, False]:
