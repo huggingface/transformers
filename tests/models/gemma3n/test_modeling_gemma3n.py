@@ -31,7 +31,6 @@ from transformers import (
     Gemma3nAudioConfig,
     Gemma3nAudioFeatureExtractor,
     Gemma3nConfig,
-    Gemma3nTextConfig,
     GenerationConfig,
     StaticCache,
     is_torch_available,
@@ -50,6 +49,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_flash_attn_2_available
 
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -59,7 +59,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
-from ..gemma.test_modeling_gemma import GemmaModelTester
 
 
 if is_torch_available():
@@ -248,9 +247,10 @@ class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(encoder_mask[1, :], self.expected_encoder_mask_slice.to(torch_device))
 
 
-class Gemma3nTextModelTester(GemmaModelTester):
-    activation_sparsity_pattern = None
-    forced_config_args = ["activation_sparsity_pattern"]
+class Gemma3nTextModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = Gemma3nTextModel
+        causal_lm_class = Gemma3nForCausalLM
 
     def __init__(
         self,
@@ -289,7 +289,7 @@ class Gemma3nTextModelTester(GemmaModelTester):
         eos_token_id=2,
         is_decoder=False,
     ):
-        self._verify_model_attributes()
+        self._verify_and_infer_model_attributes()
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
@@ -321,29 +321,20 @@ class Gemma3nTextModelTester(GemmaModelTester):
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.is_decoder = is_decoder
 
-    if is_torch_available():
-        config_class = Gemma3nTextConfig
-        model_class = Gemma3nTextModel
-        for_causal_lm_class = Gemma3nForCausalLM
-
 
 @require_torch
-class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3nTextModel, Gemma3nForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (Gemma3nForCausalLM,) if is_torch_available() else ()
-    test_headmasking = False
-    test_pruning = False
+class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = Gemma3nTextModelTester
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Gemma3nTextModel,
+            "text-generation": Gemma3nForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-
-    def setUp(self):
-        self.model_tester = Gemma3nTextModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=Gemma3nConfig,
-            hidden_size=37,
-            text_config={"activation_sparsity_pattern": None},
-        )
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
