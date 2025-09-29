@@ -204,7 +204,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         # Need to pop SCB and reset it because of bnb internals that modifies its value when switching devices ...
         SCB = kwargs.pop("SCB", None)
         new_value = bnb.nn.Int8Params(param_value.to("cpu"), requires_grad=False, **kwargs).to(target_device)
-        setattr(new_value, "SCB", SCB)
+        if SCB is not None:
+            setattr(new_value, "SCB", SCB)
         # Set it to the module
         module._parameters[tensor_name] = new_value
 
