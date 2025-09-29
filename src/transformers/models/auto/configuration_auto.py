@@ -106,6 +106,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("decision_transformer", "DecisionTransformerConfig"),
         ("deepseek_v2", "DeepseekV2Config"),
         ("deepseek_v3", "DeepseekV3Config"),
+        ("deepseek_v32", "DeepseekV32Config"),
         ("deepseek_vl", "DeepseekVLConfig"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridConfig"),
         ("deformable_detr", "DeformableDetrConfig"),
