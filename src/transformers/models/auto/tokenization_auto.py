@@ -158,13 +158,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("cohere", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
         ("cohere2", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
         ("colpali", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
-        (
-            "cwm",
-            (
-                "LlamaTokenizer" if is_sentencepiece_available() else None,
-                "LlamaTokenizerFast" if is_tokenizers_available() else None,
-            ),
-        ),
         ("colqwen2", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
         ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
         (
@@ -177,6 +170,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("cpmant", ("CpmAntTokenizer", None)),
         ("csm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("ctrl", ("CTRLTokenizer", None)),
+        (
+            "cwm",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("data2vec-audio", ("Wav2Vec2CTCTokenizer", None)),
         ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ("dbrx", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
