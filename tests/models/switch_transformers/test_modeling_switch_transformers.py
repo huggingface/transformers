@@ -262,8 +262,11 @@ class SwitchTransformersModelTester:
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             labels=lm_labels,
+            output_attentions=True,
+            output_router_logits=True,
+            output_hidden_states=True,
         )
-        self.parent.assertEqual(len(outputs), 10)
+        self.parent.assertEqual(len(outputs), 13)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
@@ -997,9 +1000,9 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         router_z_loss = router_z_loss_func(router_logits)
         auxiliary_loss = load_balancing_loss_func(router_probs, torch.argmax(expert_index, dim=-1))
 
-        self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
         self.assertAlmostEqual(router_z_loss.item(), 0.4789799, places=5)
-
+        self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
+        #
         # self.assertTrue(torch.allclose(expert_index.bool().unsqueeze(-1), expected_dispatch_mask))
 
     def test_max_routing_capacity(self):
@@ -1008,7 +1011,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         batch_size = 4
         hidden_states = torch.stack(batch_size * [torch.rand((seq_len, self.config.hidden_size))])
 
-        router_probs = model.forward(hidden_states)
+        _, _, router_probs = model.forward(hidden_states)
         expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.config.num_experts)
 
