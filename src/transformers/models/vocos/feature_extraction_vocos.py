@@ -18,7 +18,7 @@ from typing import Optional, Union
 
 import numpy as np
 
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
+from ...audio_utils import make_list_of_audio, mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
 from ...utils import PaddingStrategy, TensorType, is_torch_available, is_torchaudio_available, logging
 
@@ -242,28 +242,15 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
-        if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        if is_torch_available() and isinstance(raw_speech, torch.Tensor):
+            raw_speech = raw_speech.cpu().numpy()
 
-        acceptable_types = (
-            (torch.Tensor, np.ndarray, tuple, list) if is_torch_available() else (np.ndarray, tuple, list)
-        )
+        if isinstance(raw_speech, np.ndarray) and raw_speech.ndim == 2:
+            raw_speech = [raw_speech[i, :] for i in range(raw_speech.shape[0])]
+        else:
+            raw_speech = make_list_of_audio(raw_speech)
 
-        is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], acceptable_types))
-        )
-
-        if is_batched:
-            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
-            raw_speech = raw_speech.astype(np.float32)
-
-        # always return batch
-        if not is_batched:
-            raw_speech = [raw_speech]
+        raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
 
         if is_torchaudio_available():
             input_features = [self._torch_extract_fbank_features(speech) for speech in raw_speech]

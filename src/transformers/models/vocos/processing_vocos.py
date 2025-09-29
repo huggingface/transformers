@@ -19,6 +19,7 @@ from typing import Optional
 
 import numpy as np
 
+from ...audio_utils import make_list_of_audio
 from ...processing_utils import AudioKwargs, BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import is_torch_available
 
@@ -114,7 +115,7 @@ class VocosProcessor(ProcessorMixin):
                 # encode audio as in:
                 # https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L79
 
-                if isinstance(audio, (list, tuple)):
+                if isinstance(audio, list):
                     audio = self._batch_list_audio_for_encodec(audio)
                 if isinstance(audio, np.ndarray):
                     audio = torch.from_numpy(audio)
@@ -126,9 +127,6 @@ class VocosProcessor(ProcessorMixin):
                     encoded_frames = self.audio_tokenizer.encoder(audio)
                     codes = self.audio_tokenizer.quantizer.encode(encoded_frames, bandwidth=bandwidth)
             else:
-                # mel spectrogram path, TODO allow tensor input for feature extractor
-                if isinstance(audio, torch.Tensor):
-                    audio = audio.numpy()
                 features = self.feature_extractor(audio, **audio_kwargs).input_features
 
         if codes is not None:
@@ -160,12 +158,8 @@ class VocosProcessor(ProcessorMixin):
         return BatchFeature(data, tensor_type=return_tensors)
 
     def _batch_list_audio_for_encodec(self, audio_list):
-        audio_arrays = []
-        for audio in audio_list:
-            if torch.is_tensor(audio):
-                audio = audio.cpu().numpy()
-            audio_arrays.append(np.asarray(audio, dtype=np.float32))
-
+        audio_arrays = make_list_of_audio(audio_list)
+        audio_arrays = [np.asarray(a, dtype=np.float32) for a in audio_arrays]
         max_length = max(audio.shape[-1] for audio in audio_arrays)
         padded = [np.pad(audio, (0, max_length - audio.shape[-1]), mode="constant") for audio in audio_arrays]
         return np.stack(padded, axis=0)

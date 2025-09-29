@@ -273,8 +273,8 @@ class VocosModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             audio_output.squeeze(0)[: EXPECTED_AUDIO.shape[0]],
             EXPECTED_AUDIO,
-            rtol=self.mel_expected["rtol"],
-            atol=self.mel_expected["atol"],
+            rtol=1e-6,
+            atol=1e-6,
         )
 
     def test_inference_encodec_vocos(self):
@@ -296,8 +296,8 @@ class VocosModelIntegrationTest(unittest.TestCase):
             torch.testing.assert_close(
                 output_from_audio.squeeze(0)[: EXPECTED_AUDIO.shape[0]],
                 EXPECTED_AUDIO,
-                rtol=entry["rtol"],
-                atol=entry["atol"],
+                rtol=1e-5,
+                atol=1e-5,
             )
 
             # now testing resconstructing audio from quantized codes :
@@ -314,8 +314,8 @@ class VocosModelIntegrationTest(unittest.TestCase):
             torch.testing.assert_close(
                 output_from_codes.squeeze(0)[: EXPECTED_AUDIO_FROM_CODES.shape[0]],
                 EXPECTED_AUDIO_FROM_CODES,
-                rtol=entry["rtol"],
-                atol=entry["atol"],
+                rtol=1e-5,
+                atol=1e-5,
             )
 
     def test_inference_batch_mel_vocos(self):
@@ -333,8 +333,8 @@ class VocosModelIntegrationTest(unittest.TestCase):
             torch.testing.assert_close(
                 hf_batch_output[i, : expected.shape[0]],
                 expected,
-                rtol=self.mel_batch_expected["rtol"],
-                atol=self.mel_batch_expected["atol"],
+                rtol=1e-4,
+                atol=1e-4,
             )
 
     def test_batch_encodec_vocos(self):
@@ -357,8 +357,8 @@ class VocosModelIntegrationTest(unittest.TestCase):
                 torch.testing.assert_close(
                     hf_batch[idx, : expected.shape[0]],
                     expected,
-                    rtol=entry["rtol"],
-                    atol=entry["atol"],
+                    rtol=1e-4,
+                    atol=1e-4,
                 )
 
         # reconstruction from batch of quantized codes
@@ -375,6 +375,6 @@ class VocosModelIntegrationTest(unittest.TestCase):
                 torch.testing.assert_close(
                     hf_batch[idx, : expected.shape[0]],
                     expected,
-                    rtol=entry["rtol"],
-                    atol=entry["atol"],
+                    rtol=1e-4,
+                    atol=1e-4,
                 )
