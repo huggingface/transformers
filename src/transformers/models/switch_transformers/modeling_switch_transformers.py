@@ -50,7 +50,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -698,8 +698,8 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
 class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
-        "attentions": SwitchTransformersLayerSelfAttention,
-        "cross_attentions": SwitchTransformersLayerCrossAttention,
+        "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
+        "cross_attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.1"),
         "router_logits": SwitchTransformersTop1Router,
     }
 
@@ -1162,6 +1162,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         return self.encoder
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
