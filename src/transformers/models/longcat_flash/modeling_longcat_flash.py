@@ -530,7 +530,7 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
         self.rotary_emb = LongcatFlashRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         # Each layer above has 2 sublayers, config hack to have a correct cache (to avoid a checkpoint change)
-        self.head_dim = config.head_dim  # For CI happiness (we didn't convert so head_dim is not directly used) # noqa
+        self.head_dim = config.head_dim  # For CI happiness (we didn't convert so head_dim is not directly used)
 
         self.config.num_hidden_layers = 2 * config.num_layers
 

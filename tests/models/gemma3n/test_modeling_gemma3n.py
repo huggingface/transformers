@@ -31,7 +31,6 @@ from transformers import (
     Gemma3nAudioConfig,
     Gemma3nAudioFeatureExtractor,
     Gemma3nConfig,
-    Gemma3nTextConfig,
     GenerationConfig,
     StaticCache,
     is_torch_available,
@@ -50,6 +49,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_flash_attn_2_available
 
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -59,7 +59,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
-from ..gemma.test_modeling_gemma import GemmaModelTester
 
 
 if is_torch_available():
@@ -248,9 +247,10 @@ class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(encoder_mask[1, :], self.expected_encoder_mask_slice.to(torch_device))
 
 
-class Gemma3nTextModelTester(GemmaModelTester):
-    activation_sparsity_pattern = None
-    forced_config_args = ["activation_sparsity_pattern"]
+class Gemma3nTextModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = Gemma3nTextModel
+        causal_lm_class = Gemma3nForCausalLM
 
     def __init__(
         self,
@@ -289,7 +289,7 @@ class Gemma3nTextModelTester(GemmaModelTester):
         eos_token_id=2,
         is_decoder=False,
     ):
-        self._verify_model_attributes()
+        self._verify_and_infer_model_attributes()
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
@@ -321,29 +321,20 @@ class Gemma3nTextModelTester(GemmaModelTester):
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.is_decoder = is_decoder
 
-    if is_torch_available():
-        config_class = Gemma3nTextConfig
-        model_class = Gemma3nTextModel
-        for_causal_lm_class = Gemma3nForCausalLM
-
 
 @require_torch
-class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3nTextModel, Gemma3nForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (Gemma3nForCausalLM,) if is_torch_available() else ()
-    test_headmasking = False
-    test_pruning = False
+class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = Gemma3nTextModelTester
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Gemma3nTextModel,
+            "text-generation": Gemma3nForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-
-    def setUp(self):
-        self.model_tester = Gemma3nTextModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=Gemma3nConfig,
-            hidden_size=37,
-            text_config={"activation_sparsity_pattern": None},
-        )
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
@@ -785,7 +776,10 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly']  # fmt: skip
+        EXPECTED_TEXTS = Expectations({
+            ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The sky is blue with a few white clouds. The'],
+        }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_with_audio(self):
@@ -866,18 +860,11 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-
-        # fmt: off
-        EXPECTATIONS = Expectations(
-            {
-                ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
-                ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
-            }
-        )
-
-        EXPECTED_TEXTS = EXPECTATIONS.get_expectation()
-        # fmt: on
-
+        EXPECTED_TEXTS = Expectations({
+            ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject Matter:** The first image shows a"],
+            ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
+        }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_image(self):
@@ -899,18 +886,11 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_NUM_IMAGES = 1  # Gemma3n does not support crops
-
-        # fmt: off
-        EXPECTATIONS = Expectations(
-            {
-                ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
-                ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
-            }
-        )
-
-        EXPECTED_TEXTS = EXPECTATIONS.get_expectation()
-        # fmt: on
-
+        EXPECTED_TEXTS = Expectations({
+            ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
+            ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The sky is blue with a few white clouds. The'],
+        }).get_expectation()  # fmt: skip
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -948,17 +928,11 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        # fmt: off
-        EXPECTATIONS = Expectations(
-            {
-                ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are some key elements:\n\n* **A prominent red'],
-                ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
-            }
-        )
-
-        EXPECTED_TEXTS = EXPECTATIONS.get_expectation()
-        # fmt: on
-
+        EXPECTED_TEXTS = Expectations({
+            ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are some key elements:\n\n* **A prominent red'],
+            ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
+        }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @unittest.skip("For now, using a gemma model with the 3n class is not supported")
@@ -1034,15 +1008,10 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         ]
         output_text = tokenizer.batch_decode(out)
 
-        # fmt: off
-        EXPECTATIONS = Expectations(
-            {
-                ("cuda", None): [" and I am glad to be here. This is a nice place. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
-                ("xpu", None): [" and I think it is very nice. I think it is nice. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
-            }
-        )
-
-        EXPECTED_COMPLETIONS = EXPECTATIONS.get_expectation()
-        # fmt: on
-
+        EXPECTED_COMPLETIONS = Expectations({
+            # FIXME: This test is VERY flaky on ROCm
+            ("cuda", None): [" and I am glad to be here. This is a nice place. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
+            ("rocm", (9, 4)): [' and I think it makes this place special. This is a nice place. This is a nice place', ', green, yellow, purple, orange, pink, brown, black, white.\n\nHere are'],
+            ("xpu", None): [" and I think it is very nice. I think it is nice. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
+        }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
