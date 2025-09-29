@@ -13,14 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, List, Tuple
+from typing import Optional
 
 import torch
+
+from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import logging, TransformersKwargs
-from ...masking_utils import create_sliding_window_causal_mask, create_causal_mask
-from ...cache_utils import Cache, DynamicCache
+from ...utils import TransformersKwargs, logging
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -31,6 +32,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
+
 
 logger = logging.get_logger(__name__)
 
@@ -69,7 +71,7 @@ class CwmTextConfig(LlamaConfig):
         rope_scaling: Optional[dict] = None,
         # CWM interleaved sliding window fields
         sliding_window: int = 8192,
-        layer_types: Optional[List[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
+        layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
         window_pattern: Optional[int] = None,
         global_window: Optional[int] = None,  # causal
         **kwargs,
@@ -157,11 +159,11 @@ class CwmDecoderLayer(LlamaDecoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ):
         residual = hidden_states

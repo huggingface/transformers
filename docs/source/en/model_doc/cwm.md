@@ -198,10 +198,6 @@ print(tokenizer.decode(output_ids))
 [[autodoc]] CwmModel
     - forward
 
-## CwmForSequenceClassification
-
-[[autodoc]] CwmForSequenceClassification
-
 ## CwmTextForSequenceClassification
 
 [[autodoc]] CwmTextForSequenceClassification
