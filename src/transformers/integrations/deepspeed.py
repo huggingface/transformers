@@ -562,6 +562,7 @@ def deepspeed_load_checkpoint(
             assert len(deepspeed_checkpoint_dirs) == 1
             import os
 
+            deepspeed_engine._config.load_universal_checkpoint = True
             ckpt_list = deepspeed_engine._get_all_ckpt_names(
                 checkpoint_path, os.path.basename(deepspeed_checkpoint_dirs[0])
             )
