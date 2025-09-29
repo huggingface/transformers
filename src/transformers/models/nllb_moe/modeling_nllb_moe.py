@@ -386,7 +386,7 @@ class NllbMoeSparseMLP(nn.Module):
         self.num_experts = config.num_experts
         self.experts = NllbMoeExperts(config, ffn_dim)
 
-    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.Tensor] = False):
+    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.Tensor] = None):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         top_1_mask, router_probs, _ = self.router(hidden_states, padding_mask)
@@ -465,8 +465,7 @@ class NllbMoeAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         is_cross_attention = key_value_states is not None
         bsz, tgt_len = hidden_states.shape[:-1]
         src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
@@ -609,7 +608,7 @@ class NllbMoeDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = True,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -846,7 +845,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = True,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         if inputs_embeds is None:
@@ -1031,7 +1030,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = True,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], Seq2SeqMoEModelOutput]:
         if encoder_outputs is None:
