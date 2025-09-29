@@ -73,6 +73,7 @@ class RiceConfig(PretrainedConfig):
 class LlavaOnevision1_5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a `LlavaOnevision1_5` model.
+    [Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf](https://huggingface.co/Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf) architecture.
 
     Args:
         vision_config (`RiceConfig` or `dict`):

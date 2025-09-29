@@ -277,11 +277,11 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
     )
     def test_training_gradient_checkpointing(self):
         pass
-    
+
     @unittest.skip
     def test_training(self):
         pass
-    
+
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, RiceVisionModel does not support standalone training"
     )
@@ -546,7 +546,7 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
     @unittest.skip("Skipping video test as the small model does not handle video inputs yet.")
     def test_small_model_integration_test_with_video(self):
         pass
-    
+
     @unittest.skip
     def test_training(self):
         pass
