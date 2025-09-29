@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -11,7 +11,7 @@ SHELL ["sh", "-lc"]
 
 ARG PYTORCH='2.8.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu126'
+ARG CUDA='cu128'
 # Disable kernel mapping for now until all tests pass
 ENV DISABLE_KERNEL_MAPPING=1
 
