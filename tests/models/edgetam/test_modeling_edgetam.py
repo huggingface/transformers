@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch SAM2 model."""
+"""Testing suite for the PyTorch EDGETAM model."""
 
 import gc
 import tempfile
@@ -21,12 +21,11 @@ import unittest
 import requests
 
 from transformers import (
-    Sam2Config,
-    Sam2HieraDetConfig,
-    Sam2MaskDecoderConfig,
+    EdgeTamConfig,
+    EdgeTamMaskDecoderConfig,
+    EdgeTamPromptEncoderConfig,
+    EdgeTamVisionConfig,
     Sam2Processor,
-    Sam2PromptEncoderConfig,
-    Sam2VisionConfig,
     pipeline,
 )
 from transformers.testing_utils import (
@@ -45,241 +44,15 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    from torch import nn
 
-    from transformers import Sam2Model, Sam2Processor, Sam2VisionModel
+    from transformers import AutoConfig, EdgeTamModel, Sam2Processor
 
 
 if is_vision_available():
     from PIL import Image
 
 
-class Sam2VisionModelTester:
-    def __init__(
-        self,
-        parent,
-        hidden_size=12,
-        embed_dim_per_stage=[12, 24, 48, 96],
-        num_attention_heads_per_stage=[1, 2, 4, 8],
-        num_channels=3,
-        image_size=128,
-        patch_kernel_size=7,
-        patch_stride=4,
-        patch_padding=3,
-        batch_size=2,
-        blocks_per_stage=[1, 2, 7, 2],
-        backbone_channel_list=[96, 48, 24, 12],
-        backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
-        fpn_hidden_size=32,
-        is_training=False,
-    ):
-        self.parent = parent
-        self.hidden_size = hidden_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.patch_kernel_size = patch_kernel_size
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.blocks_per_stage = blocks_per_stage
-        self.embed_dim_per_stage = embed_dim_per_stage
-        self.num_attention_heads_per_stage = num_attention_heads_per_stage
-        self.backbone_channel_list = backbone_channel_list
-        self.backbone_feature_sizes = backbone_feature_sizes
-        self.fpn_hidden_size = fpn_hidden_size
-
-    def get_config(self):
-        backbone_config = Sam2HieraDetConfig(
-            hidden_size=self.hidden_size,
-            num_channels=self.num_channels,
-            image_size=self.image_size,
-            patch_stride=self.patch_stride,
-            patch_kernel_size=self.patch_kernel_size,
-            patch_padding=self.patch_padding,
-            blocks_per_stage=self.blocks_per_stage,
-            embed_dim_per_stage=self.embed_dim_per_stage,
-            num_attention_heads_per_stage=self.num_attention_heads_per_stage,
-        )
-        return Sam2VisionConfig(
-            backbone_config=backbone_config,
-            backbone_channel_list=self.backbone_channel_list,
-            backbone_feature_sizes=self.backbone_feature_sizes,
-            fpn_hidden_size=self.fpn_hidden_size,
-        )
-
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        config = self.get_config()
-
-        return config, pixel_values
-
-    def create_and_check_model(self, config, pixel_values):
-        model = Sam2VisionModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
-        output_size = self.image_size // self.patch_stride // (2 * len(self.blocks_per_stage))
-        output_channels = self.hidden_size * 2 * len(self.blocks_per_stage)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, output_size, output_size, output_channels)
-        )
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
-        return config, inputs_dict
-
-
-@require_torch
-class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
-    """
-    Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
-    attention_mask and seq_length.
-    """
-
-    all_model_classes = (Sam2VisionModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
-    test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
-    test_torch_exportable = True
-
-    def setUp(self):
-        self.model_tester = Sam2VisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Sam2VisionConfig, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    @unittest.skip(reason="SAM's vision encoder does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    def test_model_get_set_embeddings(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    # Overriding as attention shape depends on window_size
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class._from_config(config, attn_implementation="eager")
-            config = model.config
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            expected_num_attentions = sum(self.model_tester.blocks_per_stage)
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            window_size = config.backbone_config.window_size_per_stage[0]
-            out_dim = config.backbone_config.hidden_size
-            patch_stride = config.backbone_config.patch_stride
-            num_windows = (
-                self.model_tester.batch_size * (config.backbone_config.image_size // (window_size * patch_stride)) ** 2
-            )
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
-            self.assertListEqual(
-                list(attentions[0].shape[-4:]),
-                [num_windows, window_size, window_size, out_dim],
-            )
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
-            self.assertListEqual(
-                list(attentions[0].shape[-4:]),
-                [num_windows, window_size, window_size, out_dim],
-            )
-
-    # Overriding as attention shape depends on window_size
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class, image_size):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_layers = sum(self.model_tester.blocks_per_stage) + 1
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-4:]),
-                [
-                    self.model_tester.batch_size,
-                    self.model_tester.image_size // self.model_tester.patch_stride,
-                    self.model_tester.image_size // self.model_tester.patch_stride,
-                    self.model_tester.hidden_size,
-                ],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        image_size = self.model_tester.image_size
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class, image_size)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class, image_size)
-
-    # Override as diffence slightly higher than the threshold
-    def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
-        super().test_batching_equivalence(atol=atol, rtol=rtol)
-
-    def test_sdpa_can_compile_dynamic(self):
-        self.skipTest(reason="SAM model can't be compiled dynamic yet")
-
-
-class Sam2PromptEncoderTester:
+class EdgeTamPromptEncoderTester:
     def __init__(
         self,
         hidden_size=32,
@@ -297,7 +70,7 @@ class Sam2PromptEncoderTester:
         self.hidden_act = hidden_act
 
     def get_config(self):
-        return Sam2PromptEncoderConfig(
+        return EdgeTamPromptEncoderConfig(
             image_size=self.input_image_size,
             patch_size=self.patch_size,
             mask_input_channels=self.mask_input_channels,
@@ -313,7 +86,7 @@ class Sam2PromptEncoderTester:
         return config, dummy_points
 
 
-class Sam2MaskDecoderTester:
+class EdgeTamMaskDecoderTester:
     def __init__(
         self,
         hidden_size=32,
@@ -337,7 +110,7 @@ class Sam2MaskDecoderTester:
         self.iou_head_hidden_dim = iou_head_hidden_dim
 
     def get_config(self):
-        return Sam2MaskDecoderConfig(
+        return EdgeTamMaskDecoderConfig(
             hidden_size=self.hidden_size,
             hidden_act=self.hidden_act,
             mlp_dim=self.mlp_dim,
@@ -359,7 +132,7 @@ class Sam2MaskDecoderTester:
         return config, dummy_inputs
 
 
-class Sam2ModelTester:
+class EdgeTamModelTester:
     def __init__(
         self,
         parent,
@@ -369,8 +142,7 @@ class Sam2ModelTester:
         patch_kernel_size=7,
         patch_stride=4,
         patch_padding=3,
-        blocks_per_stage=[1, 2, 7, 2],
-        embed_dim_per_stage=[12, 24, 48, 96],
+        dim_mul=2.0,
         backbone_channel_list=[96, 48, 24, 12],
         backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
         fpn_hidden_size=32,
@@ -384,8 +156,7 @@ class Sam2ModelTester:
         self.patch_kernel_size = patch_kernel_size
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
-        self.blocks_per_stage = blocks_per_stage
-        self.embed_dim_per_stage = embed_dim_per_stage
+        self.dim_mul = dim_mul
         self.backbone_channel_list = backbone_channel_list
         self.backbone_feature_sizes = backbone_feature_sizes
         self.fpn_hidden_size = fpn_hidden_size
@@ -394,8 +165,8 @@ class Sam2ModelTester:
         self.is_training = is_training
         self.memory_encoder_hidden_size = memory_encoder_hidden_size
 
-        self.prompt_encoder_tester = Sam2PromptEncoderTester()
-        self.mask_decoder_tester = Sam2MaskDecoderTester()
+        self.prompt_encoder_tester = EdgeTamPromptEncoderTester()
+        self.mask_decoder_tester = EdgeTamMaskDecoderTester()
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -404,18 +175,16 @@ class Sam2ModelTester:
         return config, pixel_values
 
     def get_config(self):
-        backbone_config = Sam2HieraDetConfig(
-            hidden_size=self.hidden_size,
-            num_channels=self.num_channels,
-            image_size=self.image_size,
-            patch_stride=self.patch_stride,
-            patch_kernel_size=self.patch_kernel_size,
-            patch_padding=self.patch_padding,
-            blocks_per_stage=self.blocks_per_stage,
-            embed_dim_per_stage=self.embed_dim_per_stage,
-        )
-        vision_config = Sam2VisionConfig(
-            backbone_config=backbone_config,
+        vision_config = EdgeTamVisionConfig(
+            backbone_config=AutoConfig.from_pretrained(
+                "timm/repvit_m1.dist_in1k",
+                model_args={
+                    "in_chans": 3,
+                    "features_only": True,
+                    "out_indices": (0, 1, 2, 3),
+                    "embed_dim": self.backbone_channel_list[::-1],
+                },
+            ),
             backbone_channel_list=self.backbone_channel_list,
             backbone_feature_sizes=self.backbone_feature_sizes,
             fpn_hidden_size=self.fpn_hidden_size,
@@ -425,7 +194,7 @@ class Sam2ModelTester:
 
         mask_decoder_config = self.mask_decoder_tester.get_config()
 
-        return Sam2Config(
+        return EdgeTamConfig(
             vision_config=vision_config,
             prompt_encoder_config=prompt_encoder_config,
             mask_decoder_config=mask_decoder_config,
@@ -439,7 +208,7 @@ class Sam2ModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = Sam2Model(config=config)
+        model = EdgeTamModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -455,15 +224,15 @@ class Sam2ModelTester:
 
 
 @require_torch
-class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (Sam2Model,) if is_torch_available() else ()
+    all_model_classes = (EdgeTamModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Sam2Model, "mask-generation": Sam2Model} if is_torch_available() else {}
+        {"feature-extraction": EdgeTamModel, "mask-generation": EdgeTamModel} if is_torch_available() else {}
     )
     fx_compatible = False
     test_pruning = False
@@ -473,144 +242,32 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = Sam2ModelTester(self)
+        self.model_tester = EdgeTamModelTester(self)
         common_properties = ["initializer_range"]
         self.config_tester = ConfigTester(
-            self, config_class=Sam2Config, has_text_modality=False, common_properties=common_properties
+            self, config_class=EdgeTamConfig, has_text_modality=False, common_properties=common_properties
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="SAM's vision encoder does not use inputs_embeds")
+    @unittest.skip(reason="Timm model does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Can't get or set embeddings for Timm model")
     def test_model_get_set_embeddings(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+        pass
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Overriding as attention shape depends on window_size
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class._from_config(config, attn_implementation="eager")
-            config = model.config
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.vision_attentions
-            expected_num_attentions = sum(self.model_tester.blocks_per_stage)
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.mask_decoder_config.output_attentions = True
-            config.vision_config.output_attentions = True
-            config.output_attentions = True
-            model = model_class._from_config(config, attn_implementation="eager")
-            window_size = config.vision_config.backbone_config.window_size_per_stage[0]
-            out_dim = self.model_tester.hidden_size
-            patch_stride = self.model_tester.patch_stride
-            num_windows = (
-                self.model_tester.batch_size * (self.model_tester.image_size // (window_size * patch_stride)) ** 2
-            )
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.vision_attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
-            self.assertListEqual(
-                list(attentions[0].shape[-4:]),
-                [num_windows, window_size, window_size, out_dim],
-            )
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.vision_attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
-            self.assertListEqual(
-                list(attentions[0].shape[-4:]),
-                [num_windows, window_size, window_size, out_dim],
-            )
-
-    # Override as Sam2Model has different sub-modules
-    def test_sdpa_can_dispatch_composite_models(self):
-        """
-        Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
-        This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
-        is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
-        See https://github.com/huggingface/transformers/pull/32238 for more info
-
-        The test tries to cover most general cases of composite models, VLMs with vision and text configs. Any model
-        that has a different set of sub-configs has to overwrite this test.
-        """
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
-                model_sdpa = model_sdpa.eval().to(torch_device)
-
-                vision_encoder_sdpa = getattr(model_sdpa, "vision_encoder")
-                mask_decoder_sdpa = getattr(model_sdpa, "mask_decoder")
-
-                # `None` as it is the requested one which will be assigned to each sub-config
-                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(mask_decoder_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(vision_encoder_sdpa.config._attn_implementation == "sdpa")
-
-                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
-                self.assertTrue(getattr(model_eager, "mask_decoder").config._attn_implementation == "eager")
-                self.assertTrue(getattr(model_eager, "vision_encoder").config._attn_implementation == "eager")
-
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if (
-                        class_name.endswith("Attention")
-                        and getattr(submodule, "config", None)
-                        and submodule.config._attn_implementation == "sdpa"
-                    ):
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-    # Override as Sam2Model doesn't have hidden states
+    # Override as EdgeTamModel doesn't have hidden states
     def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
-        This test is only for inference and runs with `dtype=torch.bfloat16`.
+        This test is only for inference and runs with `torch_dtype=torch.bfloat16`.
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -627,11 +284,11 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation=attn_implementation
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -695,26 +352,95 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 else:
                     assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
-    # Override as difference slightly higher than the threshold
-    def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
-        super().test_batching_equivalence(atol=atol, rtol=rtol)
+    # Override as diffence slightly higher than the threshold
+    # def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
+    #     super().test_batching_equivalence(atol=atol, rtol=rtol)
 
-    @unittest.skip(reason="Sam2Model does not support training")
+    @unittest.skip(reason="TimmWrapperModel does not support an attention implementation")
+    def test_can_set_attention_dynamically_composite_model(self):
+        pass
+
+    @unittest.skip(reason="vision_hidden_states from TimmWrapperModel")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Timm weights cannot be fully constructed in _init_weights")
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="Timm weights cannot be fully constructed in _init_weights")
+    def test_initialization(self):
+        pass
+
+    @unittest.skip(
+        reason="TIMM's attention implementation is self configured and won't raise ValueError on global attention implementation."
+    )
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip("TimmWrapperModel cannot be tested with meta device")
+    def test_can_be_initialized_on_meta(self):
+        pass
+
+    @unittest.skip("TimmWrapperModel cannot be tested with meta device")
+    def test_can_load_with_meta_device_context_manager(self):
+        pass
+
+    ## Skip flash attention releated tests below
+    ## correct configuration:
+    ## from_pretrained(model_id, attn_implementation={"text_config": "flash_attention_2", "vision_config": "eager"}
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_eager_matches_fa2_generate(self):
+        pass
+
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_flash_attn_2_from_config(self):
+        pass
+
+    @unittest.skip("SDPA test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_eager_matches_sdpa_generate_with_dynamic_cache(self):
+        pass
+
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip("SDPA test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @unittest.skip("Flash attn test is not configured correctly as we need to configure vision/timm model to 'eager'.")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip("EdgeTAM does not have language_model, vision_tower, multi_modal_projector.")
+    def test_sdpa_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip("Cannot set `output_attentions` for timm models.")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Hidden_states is tested in sub modules tests")
-    def test_hidden_states_output(self):
+    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    def test_generate_compilation_all_outputs(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/sam2.1-hiera-tiny"
-        model = Sam2Model.from_pretrained(model_name)
+        model_name = "yonigozlan/EdgeTAM-hf"
+        model = EdgeTamModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     def test_sdpa_can_compile_dynamic(self):
-        self.skipTest(reason="SAM2 model can't be compiled dynamic yet")
+        self.skipTest(reason="EDGETAM model can't be compiled dynamic yet")
 
 
 def prepare_image():
@@ -742,11 +468,11 @@ def prepare_video():
 
 
 @slow
-class Sam2ModelIntegrationTest(unittest.TestCase):
+class EdgeTamModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-tiny").to(torch.float32)
-        self.processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-tiny")
+        self.model = EdgeTamModel.from_pretrained("yonigozlan/EdgeTAM-hf").to(torch.float32)
+        self.processor = Sam2Processor.from_pretrained("yonigozlan/EdgeTAM-hf")
         self.model.to(torch_device)
         self.model.eval()
 
@@ -773,12 +499,12 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze()[sorted_indices]
         masks_logits = outputs.pred_masks.squeeze()[sorted_indices][0, :3, :3]
         torch.testing.assert_close(
-            scores, torch.tensor([0.9547, 0.4932, 0.0427]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores, torch.tensor([0.7621, 0.4859, 0.0461]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-24.9288, -41.7466, -31.0128], [-34.5113, -31.1054, -36.5913], [-25.2597, -37.5912, -33.4030]]
+                [[-19.5483, -22.3549, -26.0962], [-18.1821, -23.4761, -24.2262], [-20.3549, -24.5518, -22.7232]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -799,11 +525,11 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
         masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
-        torch.testing.assert_close(scores, torch.tensor([0.9364]).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(scores, torch.tensor([0.7621]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-7.0462, -13.3857, -9.6419], [-10.4565, -9.7174, -12.3528], [-7.3704, -12.4391, -10.5539]]
+                [[-19.5483, -22.3549, -26.0962], [-18.1821, -23.4761, -24.2262], [-20.3549, -24.5518, -22.7232]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -831,25 +557,25 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         scores2 = outputs.iou_scores[1].squeeze()[sorted_indices]
         masks_logits2 = outputs.pred_masks[1].squeeze()[sorted_indices][0, :3, :3]
         torch.testing.assert_close(
-            scores1, torch.tensor([0.9586, 0.4913, 0.0448]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores1, torch.tensor([0.7490, 0.4685, 0.0463]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits1,
             torch.tensor(
-                [[-22.2555, -37.9250, -27.8928], [-30.8681, -27.9519, -32.8032], [-22.4133, -33.9966, -29.7111]]
+                [[-19.1423, -21.6488, -25.6816], [-17.8018, -22.6512, -23.5699], [-19.9140, -23.6919, -22.3147]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
 
         torch.testing.assert_close(
-            scores2, torch.tensor([0.9504, 0.8117, 0.7426]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores2, torch.tensor([0.7225, 0.6515, 0.6350]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits2,
-            torch.tensor(
-                [[-13.1182, -17.3217, -14.9651], [-16.2372, -12.7739, -17.6346], [-13.5013, -17.1549, -15.6614]]
-            ).to(torch_device),
+            torch.tensor([[-8.8259, -7.7961, -9.3665], [-8.2648, -8.7771, -9.1390], [-9.5951, -8.3995, -9.0599]]).to(
+                torch_device
+            ),
             atol=1e-4,
             rtol=1e-4,
         )
@@ -868,7 +594,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_masks.shape, (2, 2, 1, 256, 256))
         torch.testing.assert_close(
             outputs.iou_scores,
-            torch.tensor([[[0.9500], [0.9718]], [[0.9568], [0.9114]]]).to(torch_device),
+            torch.tensor([[[0.7490], [0.9397]], [[0.7952], [0.8723]]]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
@@ -876,8 +602,8 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             outputs.pred_masks[:, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-5.8131, -11.3020], [-8.6487, -8.0690]]], [[[-4.7731, -8.7606], [-6.2399, -7.0738]]]],
-                    [[[[-13.8661, -19.1254], [-20.2477, -14.1636]]], [[[-8.8229, -10.2760], [-11.3797, -8.7189]]]],
+                    [[[[-19.1423, -21.6488], [-17.8018, -22.6512]]], [[[-7.1591, -9.8201], [-7.4133, -9.2781]]]],
+                    [[[[-16.7645, -15.2790], [-16.1805, -16.2937]]], [[[-8.5934, -8.4215], [-8.1873, -8.3722]]]],
                 ]
             ).to(torch_device),
             atol=1e-4,
@@ -900,7 +626,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_masks.shape, (2, 4, 1, 256, 256))
         torch.testing.assert_close(
             outputs.iou_scores,
-            torch.tensor([[[0.9904], [0.9689], [0.9770], [0.9079]], [[0.9739], [0.9816], [0.9838], [0.9781]]]).to(
+            torch.tensor([[[0.9773], [0.9415], [0.9683], [0.8792]], [[0.9721], [0.9852], [0.9812], [0.9760]]]).to(
                 torch_device
             ),
             atol=1e-4,
@@ -911,16 +637,16 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [
-                        [[[-11.1540, -18.3994], [-12.4230, -17.4403]]],
-                        [[[-19.3144, -29.3947], [-24.6341, -24.1144]]],
-                        [[[-24.2983, -37.6470], [-31.6659, -31.0893]]],
-                        [[[-25.4313, -44.0231], [-34.0903, -34.7447]]],
+                        [[[-12.6412, -12.0553], [-11.8415, -13.1696]]],
+                        [[[-16.0378, -19.9641], [-15.4939, -19.0260]]],
+                        [[[-18.8254, -23.6185], [-17.7889, -23.2116]]],
+                        [[[-25.7024, -29.8722], [-22.9264, -30.0557]]],
                     ],
                     [
-                        [[[-22.5539, -30.4633], [-32.8940, -21.6813]]],
-                        [[[-23.6637, -31.3489], [-32.5095, -22.4442]]],
-                        [[[-25.2987, -30.9999], [-34.6243, -24.1717]]],
-                        [[[-26.3150, -30.5313], [-35.0152, -24.0271]]],
+                        [[[-19.0264, -17.0396], [-16.9458, -16.3287]]],
+                        [[[-20.9671, -19.2132], [-18.5827, -18.0511]]],
+                        [[[-22.4642, -19.7389], [-19.4541, -19.4717]]],
+                        [[[-21.9226, -18.6297], [-18.9272, -18.8151]]],
                     ],
                 ]
             ).to(torch_device),
@@ -961,10 +687,10 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
         masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
-        torch.testing.assert_close(scores, torch.tensor([0.9738]).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(scores, torch.tensor([0.9431]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
-            torch.tensor([[-5.3899, -9.7908, -8.4931], [-5.5144, -8.8731, -8.3000], [-5.5976, -9.9249, -9.0761]]).to(
+            torch.tensor([[-4.1968, -4.9034, -6.0680], [-4.4053, -5.1200, -5.8580], [-4.3920, -5.5096, -5.8166]]).to(
                 torch_device
             ),
             atol=1e-4,
@@ -991,18 +717,18 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
         masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
-        torch.testing.assert_close(scores, torch.tensor([0.9719]).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(scores, torch.tensor([0.9695]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-15.5081, -21.8641, -18.0479], [-17.4401, -17.4754, -23.6469], [-14.3975, -19.4346, -18.5884]]
+                [[-14.3212, -15.4295, -17.4482], [-13.2246, -15.9468, -17.1341], [-15.1678, -16.4498, -14.7385]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-tiny", device=torch_device)
+        generator = pipeline("mask-generation", model="yonigozlan/EdgeTAM-hf", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)
