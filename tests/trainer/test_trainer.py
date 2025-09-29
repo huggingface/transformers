@@ -2882,7 +2882,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(
                 a=1.5, b=2.5, compute_metrics=AlmostAccuracy(), jit_mode_eval=True, output_dir=tmp_dir
             )
-            # Make sure the trainer doesn't pass num_items_in_batch to the model's forward method, 
+            # Make sure the trainer doesn't pass num_items_in_batch to the model's forward method,
             # since it's not in the model forward's signature when using JIT
             trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
@@ -3063,7 +3063,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_predict_with_jit(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(a=1.5, b=2.5, jit_mode_eval=True, output_dir=tmp_dir)
-            # Make sure the trainer doesn't pass num_items_in_batch to the model's forward method, 
+            # Make sure the trainer doesn't pass num_items_in_batch to the model's forward method,
             # since it's not in the model forward's signature when using JIT
             trainer.model_accepts_loss_kwargs = False
             preds = trainer.predict(trainer.eval_dataset).predictions
