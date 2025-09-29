@@ -46,6 +46,7 @@ if is_torchao_available():
             flatten_tensor_state_dict,
             unflatten_tensor_state_dict,
         )
+        from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
 
 
 logger = logging.get_logger(__name__)
@@ -285,6 +286,9 @@ class TorchAoHfQuantizer(HfQuantizer):
                     param_value.to(target_device), requires_grad=param_value.requires_grad
                 )
                 return
+            # Sanity check for the new serialization format
+            elif not (TORCHAO_VERSION >= version.parse("0.14.0") and is_metadata_torchao(self.metadata)):
+                raise ValueError("To use `safetensors` serialization, you should have `torch>=0.14.0` installed")
 
             # Save the states for later quantization when they are all gathered
             if not hasattr(self, "ao_params"):
