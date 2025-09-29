@@ -66,6 +66,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("deepseek_vl", "DeepseekVLProcessor"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
         ("dia", "DiaProcessor"),
+        ("edgetam", "Sam2Processor"),
         ("emu3", "Emu3Processor"),
         ("evolla", "EvollaProcessor"),
         ("flava", "FlavaProcessor"),
