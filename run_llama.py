@@ -35,13 +35,13 @@ if __name__ == "__main__":
 
     #TOOD(3outeille): Refacto so that we can handle both without specifying tp and pp size
     if args.tp_size:
-        device_map_args = {"tp_plan": "auto", "tp_size": args.tp_size, "pp_size": 1 if args.pp_size is None else args.pp_size}
+        device_map_args = {"tp_plan": "auto", "pp_plan": "auto", "tp_size": args.tp_size, "pp_size": 1 if args.pp_size is None else args.pp_size}
         if rank == 0:
             print(f"Running with tensor parallelism enabled (tp_size={args.tp_size}).")
         prompt_color = Colors.BLUE
         generated_color = Colors.GREEN
     elif args.pp_size:
-        device_map_args = {"pp_plan": "auto", "pp_size": args.pp_size, "tp_size": 1 if args.tp_size is None else args.tp_size}
+        device_map_args = {"tp_plan": "auto", "pp_plan": "auto", "pp_size": args.pp_size, "tp_size": 1 if args.tp_size is None else args.tp_size}
         if rank == 0:   
             print(f"Running with pipeline parallelism enabled (pp_size={args.pp_size}).")
         prompt_color = Colors.BLUE

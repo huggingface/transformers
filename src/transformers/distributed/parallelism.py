@@ -44,12 +44,12 @@ def initialize_parallelism(tp_plan, pp_plan, tp_size=None, pp_size=None):
         current_device.set_device(int(os.environ["LOCAL_RANK"]))
     index = current_device.current_device() if device_type != "cpu" else None
 
-    # Silence output for non-primary ranks
-    if index is not None and index > 0:
-        import sys
+    # # Silence output for non-primary ranks
+    # if index is not None and index > 0:
+    #     import sys
 
-        sys.stdout = open(os.devnull, "w")
-        sys.stderr = open(os.devnull, "w")
+    #     sys.stdout = open(os.devnull, "w")
+    #     sys.stderr = open(os.devnull, "w")
 
     device_mesh = torch.distributed.init_device_mesh(device_type, (tp_size, pp_size), mesh_dim_names=("tp", "pp"))
 

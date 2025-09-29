@@ -5171,11 +5171,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
             # model = distribute_model(model, distributed_config, tp_mesh, tp_size)
 
+            #TODO(3outeille): if too slow, do everything in one function)
             if device_mesh["tp"].size() > 1:
                 model = distribute_model_on_tp_axis(model, distributed_config, device_mesh["tp"])
 
             if device_mesh["pp"].size() > 1:
                 model = distribute_model_on_pp_axis(model, distributed_config, device_mesh["pp"])
+
+        # check if any layer has a pipeline parallel hook
+        for name, module in model.named_modules():
+            if hasattr(module, "_hf_pp_plan"):
+                print(f"{name}: {module.__repr__()}")
 
 
         # Prepare the full device map
