@@ -346,7 +346,6 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
 
-
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
@@ -376,7 +375,7 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
 
 
 class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
-     _can_record_outputs = {
+    _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
         "attentions": SwitchTransformersLayerSelfAttention,
         "cross_attentions": SwitchTransformersLayerCrossAttention,
