@@ -171,41 +171,16 @@ print(tokenizer.decode(output_ids))
 
 [[autodoc]] CwmConfig
 
-## CwmTextConfig
-
-[[autodoc]] CwmTextConfig
-
 ## CwmPreTrainedModel
 
 [[autodoc]] CwmPreTrainedModel
     - forward
-
-## CwmTextModel
-
-[[autodoc]] CwmTextModel
-    - forward
-
-## CwmForCausalLM
-
-[[autodoc]] CwmForCausalLM
-
-## CwmForConditionalGeneration
-
-[[autodoc]] CwmForConditionalGeneration
 
 ## CwmModel
 
 [[autodoc]] CwmModel
     - forward
 
-## CwmTextForSequenceClassification
+## CwmForCausalLM
 
-[[autodoc]] CwmTextForSequenceClassification
-
-## CwmTokenizerFast
-
-[[autodoc]] CwmTokenizerFast
-
-## CwmProcessor
-
-[[autodoc]] CwmProcessor
+[[autodoc]] CwmForCausalLM

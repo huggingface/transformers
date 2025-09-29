@@ -311,7 +311,6 @@ class CwmForCausalLM(LlamaForCausalLM):
 
 
 __all__ = [
-    "CwmTextConfig",
     "CwmConfig",
     "CwmPreTrainedModel",
     "CwmModel",

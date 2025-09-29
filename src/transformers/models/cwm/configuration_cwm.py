@@ -154,4 +154,4 @@ class CwmConfig(CwmTextConfig):
     pass
 
 
-__all__ = ["CwmTextConfig", "CwmConfig"]
+__all__ = ["CwmConfig"]

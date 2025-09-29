@@ -19,7 +19,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_cwm": ["CwmConfig", "CwmTextConfig"],
+    "configuration_cwm": ["CwmConfig"],
 }
 
 try:
@@ -35,7 +35,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_cwm import CwmConfig, CwmTextConfig
+    from .configuration_cwm import CwmConfig
 
     try:
         if not is_torch_available():
