@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from .base import HfQuantizer
 
@@ -153,14 +153,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
         return dtype
 
-    def param_needs_quantization(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ):
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from ..integrations import Mxfp4GptOssExperts
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
@@ -183,7 +176,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
         **kwargs,
     ):
         from ..integrations import (
