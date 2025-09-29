@@ -27,8 +27,6 @@ class CwmConfigTest(unittest.TestCase):
 
         # CWM defaults
         self.assertEqual(config.sliding_window, 8192)
-        self.assertEqual(config.window_pattern, 4)
-        self.assertIsNone(config.global_window)
         self.assertIsInstance(config.layer_types, list)
 
         # Llama3 defaults
@@ -38,11 +36,9 @@ class CwmConfigTest(unittest.TestCase):
         self.assertEqual(config.rope_scaling["rope_type"], "llama3")
 
     def test_custom_sliding_window_config(self):
-        config = CwmConfig(sliding_window=4096, window_pattern=3, global_window=1024)
+        config = CwmConfig(sliding_window=4096)
 
         self.assertEqual(config.sliding_window, 4096)
-        self.assertEqual(config.window_pattern, 3)
-        self.assertEqual(config.global_window, 1024)
 
     def test_custom_layer_types_config(self):
         layer_types = ["full_attention", "sliding_attention", "sliding_attention", "full_attention"]
@@ -63,15 +59,18 @@ class CwmConfigTest(unittest.TestCase):
             CwmConfig(num_hidden_layers=2, layer_types=["full_attention", "invalid_attention"])
 
     def test_automatic_layer_types_generation(self):
-        config = CwmConfig(num_hidden_layers=6, window_pattern=3)
+        # Test default pattern (every 4th layer uses full attention)
+        config = CwmConfig(num_hidden_layers=8)
 
         expected_types = [
-            "full_attention",  # layer 0: 0 % 3 == 0
-            "sliding_attention",  # layer 1: 1 % 3 != 0
-            "sliding_attention",  # layer 2: 2 % 3 != 0
-            "full_attention",  # layer 3: 3 % 3 == 0
-            "sliding_attention",  # layer 4: 4 % 3 != 0
-            "sliding_attention",  # layer 5: 5 % 3 != 0
+            "full_attention",  # layer 0: 0 % 4 == 0
+            "sliding_attention",  # layer 1: 1 % 4 != 0
+            "sliding_attention",  # layer 2: 2 % 4 != 0
+            "sliding_attention",  # layer 3: 3 % 4 != 0
+            "full_attention",  # layer 4: 4 % 4 == 0
+            "sliding_attention",  # layer 5: 5 % 4 != 0
+            "sliding_attention",  # layer 6: 6 % 4 != 0
+            "sliding_attention",  # layer 7: 7 % 4 != 0
         ]
 
         self.assertEqual(config.layer_types, expected_types)
@@ -92,19 +91,16 @@ class CwmConfigTest(unittest.TestCase):
     def test_config_serialization(self):
         config = CwmConfig(
             sliding_window=4096,
-            window_pattern=2,
             layer_types=["full_attention", "sliding_attention"] * 3,
             num_hidden_layers=6,
         )
 
         config_dict = config.to_dict()
         self.assertIn("sliding_window", config_dict)
-        self.assertIn("window_pattern", config_dict)
         self.assertIn("layer_types", config_dict)
 
         new_config = CwmConfig.from_dict(config_dict)
         self.assertEqual(new_config.sliding_window, config.sliding_window)
-        self.assertEqual(new_config.window_pattern, config.window_pattern)
         self.assertEqual(new_config.layer_types, config.layer_types)
 
     def test_config_inheritance_from_llama(self):

@@ -82,8 +82,6 @@ class CwmTextConfig(LlamaConfig):
         # CWM interleaved sliding window fields
         sliding_window: int = 8192,
         layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
-        window_pattern: Optional[int] = None,
-        global_window: Optional[int] = None,  # causal
         **kwargs,
     ):
         if rope_scaling is None:
@@ -96,8 +94,8 @@ class CwmTextConfig(LlamaConfig):
             }
 
         if layer_types is None:
-            if window_pattern is None or window_pattern <= 0:
-                window_pattern = 4
+            # Default pattern: every 4th layer uses full attention, others use sliding attention
+            window_pattern = 4
             layer_types = [
                 ("full_attention" if (i % window_pattern == 0) else "sliding_attention")
                 for i in range(num_hidden_layers)
@@ -133,14 +131,14 @@ class CwmTextConfig(LlamaConfig):
 
         self.sliding_window = int(sliding_window)
         self.layer_types = list(layer_types)
-        self.window_pattern = int(window_pattern) if window_pattern is not None else None
-        self.global_window = None if global_window is None else int(global_window)
 
 
 class CwmConfig(CwmTextConfig):
     """
     A configuration for a `CwmModel`. Designed to yield a configuartion mirroring the model in the
-    [facebook/cwm](https://huggingface.co/facebook/cwm) architecture by default.
+    [facebook/cwm](https://huggingface.co/facebook/cwm) architecture by default. Other models include:
+    - [facebook/cwm-sft](https://huggingface.co/facebook/cwm-sft)
+    - [facebook/cwm-pretrain](https://huggingface.co/facebook/cwm-pretrain)
 
     Args:
         vocab_size (`int`, *optional*, defaults to 128256):
@@ -149,7 +147,7 @@ class CwmConfig(CwmTextConfig):
         hidden_size (`int`, *optional*, defaults to 6144):
             Dimension of the hidden representations
         intermediate_size (`int`, *optional*, defaults to 21504):
-            Dimension of the MLP
+            Dimension of the MLP representations
         num_hidden_layers (`int`, *optional*, defaults to 64):
             Number of hidden layers in the Transformer decoder
         num_attention_heads (`int`, *optional*, defaults to 48):
@@ -161,10 +159,8 @@ class CwmConfig(CwmTextConfig):
             Sliding window attention window size.
         layer_types (`List[str]`, *optional*):
             List of layer types for each layer. Each element should be either "full_attention" or "sliding_attention".
-            If not specified, will default to alternating pattern with `window_pattern`
-        window_pattern (`int`, *optional*):
-            Pattern for alternating between full and sliding attention. Every `window_pattern` layers will use full
-            attention, others use sliding attention. If not specified, will default to 4
+            If not specified, will default to alternating pattern based on the provided window pattern.
+
     """
 
     pass

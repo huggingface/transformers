@@ -56,7 +56,6 @@ class CwmModelTester(CausalLMModelTester):
         kwargs.update(
             {
                 "sliding_window": 32,  # Small sliding window for tests
-                "window_pattern": 2,  # Every 2nd layer uses sliding attention
                 "rope_scaling": {
                     "factor": 16.0,
                     "high_freq_factor": 4.0,
@@ -105,8 +104,10 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
         model.to(torch_device)
         model.eval()
 
+        # The pattern used in get_config() is window_pattern=2
+        window_pattern = 2
         expected_layer_types = [
-            "full_attention" if (i % config.window_pattern == 0) else "sliding_attention"
+            "full_attention" if (i % window_pattern == 0) else "sliding_attention"
             for i in range(config.num_hidden_layers)
         ]
 
@@ -201,7 +202,6 @@ class CwmIntegrationTest(unittest.TestCase):
             num_key_value_heads=2,
             max_position_embeddings=256,
             sliding_window=32,
-            window_pattern=2,
         )
 
         model = CwmForCausalLM(config)
@@ -324,7 +324,6 @@ class CwmIntegrationTest(unittest.TestCase):
             num_key_value_heads=4,
             max_position_embeddings=256,
             sliding_window=64,
-            window_pattern=2,
         )
 
         model = CwmForCausalLM(config)
