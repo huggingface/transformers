@@ -279,7 +279,6 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
     test_cpu_offload = False
     # The small UDOP model needs higher percentages for CPU/MP tests
@@ -551,8 +550,6 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_model_parallel = False
-    all_parallelizable_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = UdopEncoderOnlyModelTester(self)

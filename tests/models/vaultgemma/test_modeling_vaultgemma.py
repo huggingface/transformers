@@ -24,7 +24,6 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     DynamicCache,
-    VaultGemmaConfig,
     is_torch_available,
     pipeline,
 )
@@ -42,7 +41,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
@@ -56,22 +54,11 @@ if is_torch_available():
 
 class VaultGemmaModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = VaultGemmaConfig
         base_model_class = VaultGemmaModel
-        causal_lm_class = VaultGemmaForCausalLM
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": VaultGemmaModel,
-            "text-generation": VaultGemmaForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch
 class VaultGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (VaultGemmaModel, VaultGemmaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": VaultGemmaModel,
@@ -81,14 +68,9 @@ class VaultGemmaModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = VaultGemmaModelTester
-
-    def setUp(self):
-        self.model_tester = VaultGemmaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VaultGemmaConfig, hidden_size=37)
 
 
 @slow

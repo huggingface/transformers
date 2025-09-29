@@ -67,7 +67,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 The SDPA implementation is currently available for the Data2VecAudio and Data2VecVision models.
 
-```
+```py
 from transformers import Data2VecVisionForImageClassification
 model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa", dtype=torch.float16)
 ...

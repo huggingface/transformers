@@ -1825,7 +1825,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     test_resize_position_embeddings = False
     test_mismatched_shapes = False
     test_missing_keys = False
-    test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = False
 

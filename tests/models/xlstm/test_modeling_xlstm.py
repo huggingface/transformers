@@ -156,7 +156,6 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     has_attentions = False  # xLSTM does not support attentions
     fx_compatible = False
     test_torchscript = False
-    test_model_parallel = False
     test_pruning = False
 
     pipeline_model_mapping = (

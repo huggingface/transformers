@@ -20,7 +20,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, DynamicCache, MistralConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, DynamicCache, is_torch_available, set_seed
 from transformers.cache_utils import DynamicSlidingWindowLayer
 from transformers.testing_utils import (
     DeviceProperties,
@@ -52,28 +52,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MistralModelTester(CausalLMModelTester):
-    config_class = MistralConfig
     if is_torch_available():
         base_model_class = MistralModel
-        causal_lm_class = MistralForCausalLM
-        sequence_class = MistralForSequenceClassification
-        token_class = MistralForTokenClassification
-        question_answering_class = MistralForQuestionAnswering
 
 
 @require_torch
 class MistralModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MistralModel,
-            MistralForCausalLM,
-            MistralForSequenceClassification,
-            MistralForTokenClassification,
-            MistralForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": MistralModel,
@@ -85,7 +69,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
     model_tester_class = MistralModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146

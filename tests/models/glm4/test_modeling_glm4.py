@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, Glm4Config, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -46,21 +46,12 @@ if is_torch_available():
 
 class Glm4ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Glm4Config
         base_model_class = Glm4Model
-        causal_lm_class = Glm4ForCausalLM
-        sequence_classification_class = Glm4ForSequenceClassification
-        token_classification_class = Glm4ForTokenClassification
 
 
 @require_torch
 class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Glm4ModelTester
-    all_model_classes = (
-        (Glm4Model, Glm4ForCausalLM, Glm4ForSequenceClassification, Glm4ForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Glm4Model,
@@ -72,7 +63,6 @@ class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 

@@ -808,7 +808,7 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             loss = self.loss_function(
                 logits,

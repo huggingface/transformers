@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_read_token,
@@ -40,20 +40,11 @@ if is_torch_available():
 
 class HeliumModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = HeliumConfig
         base_model_class = HeliumModel
-        causal_lm_class = HeliumForCausalLM
-        sequence_classification_class = HeliumForSequenceClassification
-        token_classification_class = HeliumForTokenClassification
 
 
 @require_torch
 class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (HeliumModel, HeliumForCausalLM, HeliumForSequenceClassification, HeliumForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": HeliumModel,
@@ -65,10 +56,10 @@ class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    model_tester_class = HeliumModelTester
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+
+    model_tester_class = HeliumModelTester
 
 
 @slow

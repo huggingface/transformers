@@ -58,25 +58,13 @@ class SmolLM3ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = SmolLM3Model
         causal_lm_class = SmolLM3ForCausalLM
-        sequence_class = SmolLM3ForSequenceClassification
-        token_class = SmolLM3ForTokenClassification
         question_answering_class = SmolLM3ForQuestionAnswering
+        sequence_classification_class = SmolLM3ForSequenceClassification
+        token_classification_class = SmolLM3ForTokenClassification
 
 
 @require_torch
 class SmolLM3ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            SmolLM3Model,
-            SmolLM3ForCausalLM,
-            SmolLM3ForSequenceClassification,
-            SmolLM3ForTokenClassification,
-            SmolLM3ForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_pruning = False
     model_tester_class = SmolLM3ModelTester
     pipeline_model_mapping = (
         {

@@ -15,7 +15,7 @@ import unittest
 
 from packaging import version
 
-from transformers import AutoTokenizer, ModernBertDecoderConfig, is_torch_available
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -36,19 +36,12 @@ if is_torch_available():
 
 
 class ModernBertDecoderModelTester(CausalLMModelTester):
-    config_class = ModernBertDecoderConfig
     if is_torch_available():
         base_model_class = ModernBertDecoderModel
-        causal_lm_class = ModernBertDecoderForCausalLM
 
 
 @require_torch
 class ModernBertDecoderModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (ModernBertDecoderModel, ModernBertDecoderForCausalLM, ModernBertDecoderForSequenceClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": ModernBertDecoderModel,
@@ -58,8 +51,6 @@ class ModernBertDecoderModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-
-    test_pruning = False
     model_tester_class = ModernBertDecoderModelTester
 
     def test_initialization(self):

@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import StableLmConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -43,25 +43,11 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 class StableLmModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = StableLmConfig
         base_model_class = StableLmModel
-        causal_lm_class = StableLmForCausalLM
-        sequence_class = StableLmForSequenceClassification
-        token_class = StableLmForTokenClassification
 
 
 @require_torch
 class StableLmModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            StableLmModel,
-            StableLmForCausalLM,
-            StableLmForSequenceClassification,
-            StableLmForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": StableLmModel,
@@ -73,7 +59,6 @@ class StableLmModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = StableLmModelTester
 

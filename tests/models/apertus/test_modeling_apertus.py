@@ -33,7 +33,6 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 if is_torch_available():
     from transformers import (
-        ApertusConfig,
         ApertusForCausalLM,
         ApertusForTokenClassification,
         ApertusModel,
@@ -42,23 +41,11 @@ if is_torch_available():
 
 class ApertusModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = ApertusConfig
         base_model_class = ApertusModel
-        causal_lm_class = ApertusForCausalLM
-        token_class = ApertusForTokenClassification
 
 
 @require_torch
 class ApertusModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            ApertusModel,
-            ApertusForCausalLM,
-            ApertusForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": ApertusModel,
@@ -68,7 +55,6 @@ class ApertusModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
     model_tester_class = ApertusModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`

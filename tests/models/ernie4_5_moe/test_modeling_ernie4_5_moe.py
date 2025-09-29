@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import Ernie4_5_MoeConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
     is_flaky,
@@ -46,22 +46,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Ernie4_5_MoeModelTester(CausalLMModelTester):
-    config_class = Ernie4_5_MoeConfig
     if is_torch_available():
         base_model_class = Ernie4_5_MoeModel
-        causal_lm_class = Ernie4_5_MoeForCausalLM
 
 
 @require_torch
 class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Ernie4_5_MoeModel,
-            Ernie4_5_MoeForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Ernie4_5_MoeModel,
@@ -71,7 +61,6 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = Ernie4_5_MoeModelTester
 

@@ -16,7 +16,7 @@ import unittest
 
 import pytest
 
-from transformers import GPT2Config, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -47,12 +47,8 @@ if is_torch_available():
 
 class GPT2ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = GPT2Config
         base_model_class = GPT2Model
         causal_lm_class = GPT2LMHeadModel
-        sequence_classification_class = GPT2ForSequenceClassification
-        token_classification_class = GPT2ForTokenClassification
-        question_answering_class = GPT2ForQuestionAnswering
 
     def __init__(
         self,
@@ -147,6 +143,7 @@ class GPT2ModelTester(CausalLMModelTester):
 
 @require_torch
 class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
+    # `all_model_classes` is overwritten because of `GPT2DoubleHeadsModel`
     all_model_classes = (
         (
             GPT2Model,
@@ -171,10 +168,8 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     test_missing_keys = False
-    test_model_parallel = True
     model_tester_class = GPT2ModelTester
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

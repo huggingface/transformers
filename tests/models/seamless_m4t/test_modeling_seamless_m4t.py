@@ -342,7 +342,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    test_model_parallel = False
     test_resize_embeddings = False
     test_torchscript = False
 
@@ -575,7 +574,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, u
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    test_model_parallel = False
     test_resize_embeddings = True
     test_torchscript = False
 

@@ -33,14 +33,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    from transformers import AutoTokenizer, Glm4MoeConfig, Glm4MoeForCausalLM, Glm4MoeModel
+    from transformers import AutoTokenizer, Glm4MoeForCausalLM, Glm4MoeModel
 
 
 class Glm4MoeModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Glm4MoeConfig
         base_model_class = Glm4MoeModel
-        causal_lm_class = Glm4MoeForCausalLM
 
     def __init__(
         self,
@@ -60,14 +58,6 @@ class Glm4MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Glm4MoeModel,
-            Glm4MoeForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Glm4MoeModel,
@@ -76,7 +66,6 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
     fx_compatible = False
     model_tester_class = Glm4MoeModelTester
     # used in `test_torch_compile_for_training`. Skip as "Dynamic control flow in MoE"

@@ -1444,8 +1444,6 @@ class UMT5ForSequenceClassification(UMT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self.model_parallel = False
-
     @auto_docstring
     def forward(
         self,
