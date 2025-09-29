@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers.models.cwm import CwmConfig, CwmTextConfig
+from transformers.models.cwm import CwmConfig
 from transformers.testing_utils import require_torch
 
 from ...test_configuration_common import ConfigTester
@@ -117,11 +117,6 @@ class CwmConfigTest(unittest.TestCase):
         self.assertTrue(hasattr(config, "intermediate_size"))
         self.assertTrue(hasattr(config, "rope_theta"))
         self.assertTrue(hasattr(config, "attention_dropout"))
-
-    def test_cwm_text_config_alias(self):
-        config = CwmTextConfig(sliding_window=2048)
-        self.assertEqual(config.sliding_window, 2048)
-        self.assertEqual(config.model_type, "cwm")
 
 
 @require_torch
