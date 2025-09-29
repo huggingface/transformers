@@ -21,7 +21,6 @@ from packaging import version
 
 from transformers import (
     AutoTokenizer,
-    Exaone4Config,
     GenerationConfig,
     is_torch_available,
 )
@@ -35,7 +34,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
@@ -51,28 +49,12 @@ if is_torch_available():
 
 
 class Exaone4ModelTester(CausalLMModelTester):
-    config_class = Exaone4Config
     if is_torch_available():
         base_model_class = Exaone4Model
-        causal_lm_class = Exaone4ForCausalLM
-        sequence_class = Exaone4ForSequenceClassification
-        token_class = Exaone4ForTokenClassification
-        question_answering_class = Exaone4ForQuestionAnswering
 
 
 @require_torch
 class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Exaone4Model,
-            Exaone4ForCausalLM,
-            Exaone4ForSequenceClassification,
-            Exaone4ForQuestionAnswering,
-            Exaone4ForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Exaone4Model,
@@ -85,15 +67,9 @@ class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Exaone4ModelTester
     model_split_percents = [0.5, 0.6]
-
-    def setUp(self):
-        self.model_tester = Exaone4ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Exaone4Config, hidden_size=37)
 
 
 @require_torch

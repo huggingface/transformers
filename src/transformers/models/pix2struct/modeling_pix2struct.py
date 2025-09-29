@@ -86,7 +86,7 @@ class Pix2StructLayerNorm(nn.Module):
 try:
     from apex.normalization import FusedRMSNorm
 
-    Pix2StructLayerNorm = FusedRMSNorm  # noqa
+    Pix2StructLayerNorm = FusedRMSNorm
 
     logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pix2StructLayerNorm")
 except ImportError:
@@ -1229,7 +1229,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             loss_fct = nn.CrossEntropyLoss(ignore_index=-100, reduction="mean")
 
