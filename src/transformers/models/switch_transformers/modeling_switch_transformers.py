@@ -628,11 +628,6 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
-    _can_record_outputs = {
-        "hidden_states": SwitchTransformersBlock,
-        "attentions": SwitchTransformersLayerSelfAttention,
-        "cross_attentions": SwitchTransformersLayerCrossAttention,
-    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -701,6 +696,13 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
 
 
 class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": SwitchTransformersBlock,
+        "attentions": SwitchTransformersLayerSelfAttention,
+        "cross_attentions": SwitchTransformersLayerCrossAttention,
+        "router_logits": SwitchTransformersTop1Router,
+    }
+
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
@@ -1176,9 +1178,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
+                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
             )
 
         hidden_states = encoder_outputs.last_hidden_state
@@ -1196,6 +1196,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             cache_position=cache_position,
+            **kwargs,
         )
 
         sequence_output = decoder_outputs.last_hidden_state
@@ -1304,7 +1305,6 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         return self.encoder
 
     @auto_docstring
-    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
