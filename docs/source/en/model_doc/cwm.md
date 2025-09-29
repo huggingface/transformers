@@ -32,7 +32,7 @@ extensive multi-task RL in verifiable coding, math, and multi-turn software engi
 
 The abstract from the paper is the following:
 
-We release Code World Model (CWM), a 32-billion-parameter open-weights LLM, to advance research
+> *We release Code World Model (CWM), a 32-billion-parameter open-weights LLM, to advance research
 on code generation with world models. To improve code understanding beyond what can be learned
 from training on static code alone, we mid-train CWM on a large amount of observation-action
 trajectories from Python interpreter and agentic Docker environments, and perform extensive multi-
@@ -45,7 +45,7 @@ a dense, decoder-only LLM trained with a context size of up to 131 k tokens. Ind
 modeling capabilities, CWM offers strong performance on general coding and math tasks: it reaches
 pass@1 scores of 65.8 % on SWE-bench Verified (with test-time scaling), 68.9 % on LiveCodeBench,
 96.6 % on Math-500, and 76.0 % on AIME 2024. To support further research on code world modeling,
-we release model checkpoints after mid-training, SFT, and RL.
+we release model checkpoints after mid-training, SFT, and RL.*
 
 Tips:
 
@@ -74,7 +74,7 @@ model_name = 'facebook/cwm'
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto"
 )
 
@@ -111,6 +111,61 @@ generated_ids = model.generate(
 output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
 print(tokenizer.decode(output_ids))
 ```
+<details>
+<summary>Produces the following output:</summary>
+
+    Okay, I need to write a haiku about recursion in programming. Let's start by recalling what recursion is. Recursion is a programming technique where a function calls itself in its own definition, often used to solve problems that can be broken down into smaller, similar sub-problems.
+
+    A haiku is a three-line poem with a syllable count of 5-7-5. So, I need to capture the essence of recursion in a concise and poetic way. Let's think about the key elements of recursion: the function calling itself, the base case that stops the recursion, and the idea of breaking down problems into smaller parts.
+
+    Maybe I can use imagery related to mirrors or reflections, since recursion often involves a function reflecting or repeating itself. Alternatively, I could use natural imagery like a spiral or a tree, which suggests self-similar patterns.
+
+    Let me try to come up with some ideas. For example, "Function calls itself" could be a starting point. But how to make that into a haiku? Maybe something like:
+
+    Function calls itself
+    Base case stops the endless loop
+    Spiral of code
+
+    Hmm, that's a start. But maybe I can make it more poetic. Let's think about the idea of a function calling itself as a kind of infinite loop, but with a base case that stops it. That's like a spiral that unwinds at the center.
+
+    Another angle: recursion is often used for problems that have a recursive structure, like tree traversals or factorial calculations. Maybe I can use a natural image to represent that.
+
+    How about:
+
+    Branches split again
+    Leaves unfold in endless dance
+    Roots hold the base case
+
+    That's a bit more poetic. The branches splitting represent the recursive calls, the leaves unfolding could represent the processing of each sub-problem, and the roots holding the base case are what stops the recursion.
+
+    Alternatively, maybe something simpler:
+
+    Mirror within mirror
+    Reflections infinite deep
+    Base case breaks the glass
+
+    This uses the mirror metaphor to represent the function calling itself, with the base case being the point where the recursion stops, breaking the infinite reflection.
+
+    I think I like the mirror idea better. Let me refine that:
+
+    Mirror within mirror
+    Infinite reflections dance
+    Base case shatters glass
+
+    Yes, that seems to capture the idea of recursion well. The mirror represents the function calling itself, the infinite reflections are the recursive calls, and the base case shattering the glass is what stops the recursion.
+
+    Let me check the syllable count:
+
+    Mirror within mirror (5 syllables: Mir-ror-with-in-mir-ror)
+    Infinite reflections dance (7 syllables: In-fi-nite-ref-lec-tions-dance)
+    Base case shatters glass (5 syllables: Base-case-shat-ters-glass)
+
+    Yes, that fits the 5-7-5 structure. I think that's a good haiku about recursion.
+    </think>
+    Mirror within mirror
+    Infinite reflections dance
+    Base case shatters glass<|eot_id|>
+</details>
 
 ## CwmConfig
 

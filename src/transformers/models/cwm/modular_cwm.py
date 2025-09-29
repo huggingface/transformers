@@ -35,16 +35,12 @@ from ..llama.modeling_llama import (
 logger = logging.get_logger(__name__)
 
 
-# -----------------------------------------------------------------------------
-# Config (Llama-compatible weights; model_type='cwm' for modular converter routing)
-# -----------------------------------------------------------------------------
 class CwmTextConfig(LlamaConfig):
     """
     Llama3-compatible configuration with layer-interleaved sliding-window attention
     """
 
     model_type = "llama"  # for VLLM too
-
 
     def __init__(
         self,
@@ -127,7 +123,6 @@ class CwmTextConfig(LlamaConfig):
         self.global_window = None if global_window is None else int(global_window)
 
 
-
 class CwmConfig(CwmTextConfig):
     pass
 
@@ -204,6 +199,7 @@ class CwmRMSNorm(LlamaRMSNorm):
 class CwmRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
+
 class CwmModelOutputWithPast(BaseModelOutputWithPast):
     pass
 
@@ -266,7 +262,6 @@ class CwmModel(LlamaModel):
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
             }
-
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
