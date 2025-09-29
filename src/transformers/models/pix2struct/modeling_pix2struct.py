@@ -86,7 +86,7 @@ class Pix2StructLayerNorm(nn.Module):
 try:
     from apex.normalization import FusedRMSNorm
 
-    Pix2StructLayerNorm = FusedRMSNorm  # noqa
+    Pix2StructLayerNorm = FusedRMSNorm
 
     logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pix2StructLayerNorm")
 except ImportError:

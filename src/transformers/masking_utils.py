@@ -26,7 +26,7 @@ from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_o
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size  # noqa: N811
+    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 else:
     # Register a fake type to avoid crashing for annotations and `isinstance` checks
@@ -43,7 +43,7 @@ if _is_torch_greater_or_equal_than_2_6:
 logger = logging.get_logger(__name__)
 
 
-def and_masks(*mask_functions: list[Callable]) -> Callable:
+def and_masks(*mask_functions: Callable) -> Callable:
     """Returns a mask function that is the intersection of provided mask functions"""
     if not all(callable(arg) for arg in mask_functions):
         raise RuntimeError(f"All inputs should be callable mask_functions: {mask_functions}")
@@ -57,7 +57,7 @@ def and_masks(*mask_functions: list[Callable]) -> Callable:
     return and_mask
 
 
-def or_masks(*mask_functions: list[Callable]) -> Callable:
+def or_masks(*mask_functions: Callable) -> Callable:
     """Returns a mask function that is the union of provided mask functions"""
     if not all(callable(arg) for arg in mask_functions):
         raise RuntimeError(f"All inputs should be callable mask_functions: {mask_functions}")

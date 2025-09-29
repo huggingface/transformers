@@ -922,7 +922,7 @@ class Trainer:
         uses the new tokens as well.
         """
         if isinstance(self.processing_class, ProcessorMixin):
-            tokenizer = self.processing_class.tokenizer
+            tokenizer: PreTrainedTokenizerBase = self.processing_class.tokenizer
         else:
             tokenizer = self.processing_class
         model_has_generation_config = (
@@ -2215,7 +2215,7 @@ class Trainer:
         resume_from_checkpoint: Optional[Union[str, bool]] = None,
         trial: Union["optuna.Trial", dict[str, Any], None] = None,
         ignore_keys_for_eval: Optional[list[str]] = None,
-        **kwargs,
+        **kwargs: Any,
     ):
         """
         Main training entry point.
@@ -2411,7 +2411,7 @@ class Trainer:
                     " (torchrun or torch.distributed.launch (deprecated))."
                 )
             else:
-                debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
+                DebugUnderflowOverflow(self.model)
 
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
