@@ -435,7 +435,7 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "../EdgeTAM-hf"
+        model_name = "yonigozlan/EdgeTAM-hf"
         model = EdgeTamModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -471,8 +471,8 @@ def prepare_video():
 class EdgeTamModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.model = EdgeTamModel.from_pretrained("../EdgeTAM-hf").to(torch.float32)
-        self.processor = Sam2Processor.from_pretrained("../EdgeTAM-hf")
+        self.model = EdgeTamModel.from_pretrained("yonigozlan/EdgeTAM-hf").to(torch.float32)
+        self.processor = Sam2Processor.from_pretrained("yonigozlan/EdgeTAM-hf")
         self.model.to(torch_device)
         self.model.eval()
 
@@ -728,7 +728,7 @@ class EdgeTamModelIntegrationTest(unittest.TestCase):
         )
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline("mask-generation", model="../EdgeTAM-hf", device=torch_device)
+        generator = pipeline("mask-generation", model="yonigozlan/EdgeTAM-hf", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)

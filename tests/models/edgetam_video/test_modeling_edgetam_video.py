@@ -66,8 +66,8 @@ def prepare_video():
 class EdgeTamVideoModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.video_model = EdgeTamVideoModel.from_pretrained("../EdgeTAM-hf").to(torch.float32)
-        self.processor = Sam2VideoProcessor.from_pretrained("../EdgeTAM-hf")
+        self.video_model = EdgeTamVideoModel.from_pretrained("yonigozlan/EdgeTAM-hf").to(torch.float32)
+        self.processor = Sam2VideoProcessor.from_pretrained("yonigozlan/EdgeTAM-hf")
         self.video_model.to(torch_device)
         self.video_model.eval()
 
