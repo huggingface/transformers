@@ -2574,35 +2574,39 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         applicable_attn_implementation = attn_implementation
+
         # If FA not installed, do not fail but use kernels instead
         if (
-            applicable_attn_implementation == "flash_attention_2"
+            attn_implementation is not None
+            and attn_implementation.startswith("flash_attention")
             and self._supports_flash_attn
-            and not is_flash_attn_2_available()
+            and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
         ):
-            applicable_attn_implementation = "kernels-community/flash-attn"
+            if attn_implementation.endswith("2"):
+                applicable_attn_implementation = "kernels-community/flash-attn"
+            else:
+                applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
+
         if is_kernel(applicable_attn_implementation):
             try:
                 load_and_register_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
-                if attn_implementation == "flash_attention_2":
+                if attn_implementation.startswith("flash_attention"):
                     logger.warning_once(
-                        "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` "
-                        "library instead!"
+                        f"You do not have `flash_attn` installed, using `{applicable_attn_implementation}` "
+                        "from the `kernels` library instead!"
                     )
             except Exception as e:
-                if attn_implementation == "flash_attention_2":
-                    self._flash_attn_2_can_dispatch()  # will fail as fa2 is not available but raise the proper exception
-                logger.warning_once(
-                    f"Could not find a kernel matching `{applicable_attn_implementation}` compatible with your device in the "
-                    f"hub:\n{e}.\nUsing default attention implementation instead (sdpa if available, eager otherwise)."
-                )
-                try:
-                    self._sdpa_can_dispatch(is_init_check)
-                    applicable_attn_implementation = "sdpa"
-                except (ValueError, ImportError):
-                    applicable_attn_implementation = "eager"
+                # raise the proper exception for requested flash attention
+                if attn_implementation.startswith("flash_attention"):
+                    if attn_implementation.endswith("2"):
+                        self._flash_attn_2_can_dispatch()
+                    else:
+                        self._flash_attn_3_can_dispatch()
+
+                # error properly out if a kernel was specifically requested
+                raise e
         else:
             applicable_attn_implementation = self.get_correct_attn_implementation(
                 applicable_attn_implementation, is_init_check
