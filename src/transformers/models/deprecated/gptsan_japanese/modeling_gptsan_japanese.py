@@ -1214,7 +1214,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         router_probs = None
         aux_loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(lm_logits.device)
 
             loss_fct = nn.CrossEntropyLoss(ignore_index=-100)

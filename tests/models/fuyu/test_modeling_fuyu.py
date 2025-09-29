@@ -173,7 +173,6 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_pruning = False
     test_cpu_offload = False
     test_disk_offload = False
-    test_model_parallel = False
 
     def setUp(self):
         self.model_tester = FuyuModelTester(self)

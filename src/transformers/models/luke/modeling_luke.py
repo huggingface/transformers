@@ -1177,7 +1177,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
         mlm_loss = None
         logits = self.lm_head(outputs.last_hidden_state)
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             mlm_loss = self.loss_fn(logits.view(-1, self.config.vocab_size), labels.view(-1))
             if loss is None:
@@ -1329,7 +1329,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
         if labels is not None:
             # When the number of dimension of `labels` is 1, cross entropy is used as the loss function. The binary
             # cross entropy is used otherwise.
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             if labels.ndim == 1:
                 loss = nn.functional.cross_entropy(logits, labels)
@@ -1464,7 +1464,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         if labels is not None:
             # When the number of dimension of `labels` is 1, cross entropy is used as the loss function. The binary
             # cross entropy is used otherwise.
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             if labels.ndim == 1:
                 loss = nn.functional.cross_entropy(logits, labels)
@@ -1621,7 +1621,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             # When the number of dimension of `labels` is 2, cross entropy is used as the loss function. The binary
             # cross entropy is used otherwise.
@@ -1733,7 +1733,7 @@ class LukeForSequenceClassification(LukePreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             if self.config.problem_type is None:
                 if self.num_labels == 1:
@@ -1861,7 +1861,7 @@ class LukeForTokenClassification(LukePreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
@@ -2136,7 +2136,7 @@ class LukeForMultipleChoice(LukePreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(reshaped_logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
