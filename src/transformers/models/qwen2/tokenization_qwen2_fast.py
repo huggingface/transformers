@@ -14,11 +14,16 @@
 # limitations under the License.
 """Tokenization classes for Qwen2."""
 
+import os
 from typing import Optional
 
-from ...tokenization_utils import AddedToken
+import regex as re
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers.models import BPE
+
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...create_fast_tokenizer import generate_merges
 from .tokenization_qwen2 import Qwen2Tokenizer
 
 
@@ -30,8 +35,9 @@ VOCAB_FILES_NAMES = {
     "tokenizer_file": "tokenizer.json",
 }
 
-
 MAX_MODEL_INPUT_SIZES = {"qwen/qwen-tokenizer": 32768}
+
+PRETOKENIZE_REGEX = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
 
 
 class Qwen2TokenizerFast(PreTrainedTokenizerFast):
@@ -67,13 +73,18 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
             contains everything needed to load the tokenizer.
         unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead. Not applicable to this tokenizer.
+            token instead.
         bos_token (`str`, *optional*):
-            The beginning of sequence token. Not applicable for this tokenizer.
+            The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
         pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The token used for padding, for example when batching sequences of different lengths.
+        add_prefix_space (`bool`, *optional*):
+            Whether or not the tokenizer should automatically add a prefix space
+        from_scratch (`bool`, *optional*, defaults to `False`):
+            Whether to create an empty trainable tokenizer from scratch. When `True`, creates a minimal tokenizer
+            with only basic special tokens that can be trained on new data.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -89,49 +100,92 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         bos_token=None,
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",
+        add_prefix_space=None,
+        vocab=None,
+        merges=None,
         **kwargs,
     ):
-        # We need to at least pass vocab_file and merges_file to base class
-        # in case a slow tokenizer needs to be initialized; other can be
-        # configured through files.
-        # following GPT2TokenizerFast, also adding unk_token, bos_token, and eos_token
+        # Set add_prefix_space attribute for use in override methods
+        self.add_prefix_space = add_prefix_space if add_prefix_space is not None else False
 
-        bos_token = (
-            AddedToken(bos_token, lstrip=False, rstrip=False, special=True, normalized=False)
-            if isinstance(bos_token, str)
-            else bos_token
-        )
-        eos_token = (
-            AddedToken(eos_token, lstrip=False, rstrip=False, special=True, normalized=False)
-            if isinstance(eos_token, str)
-            else eos_token
-        )
-        unk_token = (
-            AddedToken(unk_token, lstrip=False, rstrip=False, special=True, normalized=False)
-            if isinstance(unk_token, str)
-            else unk_token
-        )
-        pad_token = (
-            AddedToken(pad_token, lstrip=False, rstrip=False, special=True, normalized=False)
-            if isinstance(pad_token, str)
-            else pad_token
-        )
+        self._vocab = vocab if vocab is not None else self._vocab()
+        self._merges = merges if merges is not None else generate_merges(self._vocab)
 
+        # Prepare base-class construction helpers
+        tokenizer_backend_config = None
+        if tokenizer_file is None:
+            tokenizer_backend_config = {
+                "type": "bpe",
+                "vocab": self._vocab,
+                "merges": self._merges,
+                "normalizer": self._normalizer,
+                "pre_tokenizer": self._pre_tokenizer,
+                "decoder": self._decoder,
+                "tokenizer": self._tokenizer,
+            }
+
+        # Initialize the base class which will build the backend tokenizer
         super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
             tokenizer_file=tokenizer_file,
+            tokenizer_backend_config=tokenizer_backend_config,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
+        # Add special tokens after tokenizer is initialized
+        self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
+
+    def _tokenizer(self):
+        """Tokenizer configuration for this tokenizer."""
+        return Tokenizer(
+            BPE(
+                vocab=self._vocab,
+                merges=self._merges,
+                dropout=None,
+                unk_token=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+                byte_fallback=False,
+            )
+        )
+
+    def _vocab(self):
+        """Vocabulary handling for this tokenizer."""
+        vocab = {
+            "<|endoftext|>": 0,
+        }
+        return vocab
+
+    def _decoder(self, replacement, add_prefix_space):
+        """Decoder configuration for this tokenizer."""
+        return decoders.ByteLevel()
+
+    def _normalizer(self):
+        """Normalizer configuration for this tokenizer."""
+        return normalizers.NFC()
+
+    def _pre_tokenizer(self, replacement, add_prefix_space):
+        """Pre-tokenizer configuration for this tokenizer."""
+        return pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(
+                    Regex(PRETOKENIZE_REGEX),
+                    behavior="isolated",
+                    invert=False,
+                ),
+                pre_tokenizers.ByteLevel(
+                    add_prefix_space=add_prefix_space,
+                    use_regex=False,
+                ),
+            ]
+        )
 
 
 __all__ = ["Qwen2TokenizerFast"]

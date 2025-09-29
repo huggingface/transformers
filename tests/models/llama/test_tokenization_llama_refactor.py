@@ -1,17 +1,12 @@
-import pytest
 import unittest
 import tempfile
-import shutil
 
 from transformers import AutoTokenizer, AddedToken, PreTrainedTokenizerFast
 from transformers.models.llama.tokenization_llama_fast import LlamaTokenizerFast
 from transformers.create_fast_tokenizer import SentencePieceExtractor
 from transformers.testing_utils import (
     require_sentencepiece, 
-    require_tokenizers, 
-    require_tiktoken, 
-    require_read_token,
-    get_tests_dir
+    require_tokenizers,
 )
 from tests.test_tokenization_common import TokenizerTesterMixin
 
@@ -44,7 +39,7 @@ class LlamaTokenizationRefactorTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = ["hf-internal-testing/llama-tokenizer"]
     tokenizer_class = LlamaTokenizerFast  # We'll set this dynamically
     rust_tokenizer_class = LlamaTokenizerFast
-    test_rust_tokenizer = False
+    test_rust_tokenizer = False # we're going to just test the fast one I'll remove this
     test_sentencepiece = True
     from_pretrained_kwargs = {}
     @classmethod
@@ -71,11 +66,11 @@ class LlamaTokenizationRefactorTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs.update({"pad_token": "<PAD>"})
         return super().get_tokenizers(**kwargs)
 
-    def test_llama_tokenizers_match_expected_tokens(self):
+    def test_integration_expected_tokens(self):
         for tok in self.tokenizers:
             self.assertEqual(tok.tokenize(input_string), expected_tokens)
 
-    def test_llama_tokenizers_match_expected_ids(self):
+    def test_integration_expected_token_ids(self):
         for tok in self.tokenizers:
             self.assertEqual(tok.encode(input_string), expected_token_ids)
 
