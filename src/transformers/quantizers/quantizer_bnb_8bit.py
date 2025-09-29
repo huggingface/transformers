@@ -185,7 +185,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
                 "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
             )
-
         # Those 2 can only happen when self.pre_quantized == True
         if tensor_name == "SCB":
             setattr(module.weight, "SCB", param_value.to(target_device))
@@ -202,8 +201,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         old_value = getattr(module, tensor_name)
         kwargs = old_value.__dict__
         kwargs.pop("_is_hf_initialized", None)
+        # Need to pop SCB and reset it because of bnb internals that modifies its value when switching devices ...
+        SCB = kwargs.pop("SCB", None)
         new_value = bnb.nn.Int8Params(param_value.to("cpu"), requires_grad=False, **kwargs).to(target_device)
-
+        setattr(new_value, "SCB", SCB)
         # Set it to the module
         module._parameters[tensor_name] = new_value
 
