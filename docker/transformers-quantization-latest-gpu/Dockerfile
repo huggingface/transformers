@@ -30,21 +30,20 @@ RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio tor
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
-# needed in bnb and awq
-RUN python3 -m pip install --no-cache-dir einops
-
-# Add bitsandbytes for mixed int8 testing
-RUN python3 -m pip install --no-cache-dir bitsandbytes
-
-# Add gptqmodel for gtpq quantization testing, installed from source for pytorch==2.6.0 compatibility
-RUN python3 -m pip install lm_eval
-RUN git clone https://github.com/ModelCloud/GPTQModel.git && cd GPTQModel && pip install -v . --no-build-isolation
-
 # Add optimum for gptq quantization testing
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # Add PEFT
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/peft@main#egg=peft
+
+# needed in bnb and awq
+RUN python3 -m pip install --no-cache-dir einops
+
+# Add bitsandbytes
+RUN python3 -m pip install --no-cache-dir bitsandbytes
+
+# Add gptqmodel
+RUN python3 -m pip install --no-cache-dir gptqmodel
 
 # Add hqq for quantization testing
 RUN python3 -m pip install --no-cache-dir hqq
