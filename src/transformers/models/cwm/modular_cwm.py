@@ -99,9 +99,7 @@ class CwmTextConfig(LlamaConfig):
                     f"hidden layer, got length {len(layer_types)}"
                 )
             if any(t not in ("full_attention", "sliding_attention") for t in layer_types):
-                raise ValueError(
-                    "Layer types must be either 'full_attention' or 'sliding_attention"
-                )
+                raise ValueError("Layer types must be either 'full_attention' or 'sliding_attention")
 
         super().__init__(
             vocab_size=vocab_size,
@@ -226,9 +224,9 @@ class CwmModel(LlamaModel):
 
     def __init__(self, config: CwmTextConfig):
         super().__init__(config)
-        self.layers = torch.nn.ModuleList([
-            CwmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = torch.nn.ModuleList(
+            [CwmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
     def forward(
         self,
