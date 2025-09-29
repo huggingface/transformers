@@ -49,12 +49,10 @@ class LlamaTokenizationRefactorTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_kwargs = {}
     @classmethod
     def setUpClass(cls):
-        # Call TokenizerTesterMixin's setUpClass first
         super().setUpClass()
 
         from_pretrained_id = "hf-internal-testing/llama-tokenizer"
         
-        # Your custom tokenizer setup
         tok_auto = AutoTokenizer.from_pretrained(from_pretrained_id)
         tok_auto.pad_token = tok_auto.eos_token
         tok_auto.save_pretrained(cls.tmpdirname)
@@ -67,7 +65,6 @@ class LlamaTokenizationRefactorTest(TokenizerTesterMixin, unittest.TestCase):
         tok_from_vocab = LlamaTokenizerFast(vocab=vocab, merges=merges)
         tok_from_vocab.pad_token = tok_from_vocab.eos_token
 
-        # Store your custom tokenizers for your specific tests
         cls.tokenizers = [tok_auto, tok_from_vocab]
 
     def get_tokenizers(self, **kwargs):
@@ -82,11 +79,9 @@ class LlamaTokenizationRefactorTest(TokenizerTesterMixin, unittest.TestCase):
         for tok in self.tokenizers:
             self.assertEqual(tok.encode(input_string), expected_token_ids)
 
-    def test_save_and_reload_preserves_tokenization(self):
-        """Test that tokenizer produces same results after save_pretrained and reloading."""
+    def test_save_and_reload(self):
         for tok in self.tokenizers:
             with self.subTest(f"{tok.__class__.__name__}"):
-                # Get original tokenization results
                 original_tokens = tok.tokenize(input_string)
                 original_ids = tok.encode(input_string)
                 
