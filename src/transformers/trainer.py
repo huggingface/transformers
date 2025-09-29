@@ -894,6 +894,11 @@ class Trainer:
         self.callback_handler.remove_callback(callback)
 
     def _move_model_to_device(self, model, device):
+        if getattr(model, "hf_device_map", None) is not None:
+            logger.warning(
+                "The model is already on multiple devices. Skipping the move to device specified in `args`."
+            )
+            return
         model = model.to(device)
         # Moving a model to an XLA device disconnects the tied weights, so we have to retie them.
         if self.args.parallel_mode == ParallelMode.TPU and hasattr(model, "tie_weights"):
