@@ -7,12 +7,14 @@ import time
 from contextlib import nullcontext
 from datetime import datetime
 from math import ceil
+from queue import Queue
 from typing import Any, Optional
 
 import torch
 from tqdm import trange
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, GenerationMixin, StaticCache
+from transformers.generation.streamers import BaseStreamer
 
 from .benchmark_config import BenchmarkConfig
 from .data_classes import BenchmarkMetadata, TimingResult
@@ -70,6 +72,30 @@ def flush_memory():
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
 
+class BenchmarkStreamer(BaseStreamer):
+
+    def __init__(self, **kwargs) -> None:
+        self.timestamps = []
+        self.text_queue = Queue()
+
+    def put(self, value):
+        """Receives tokens and logs the timestamp of the generation."""
+        self.timestamps.append(time.perf_counter())
+
+    def end(self):
+        self.timestamps.append(time.perf_counter())
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        value = self.text_queue.get(timeout=self.timeout)
+        if value == self.stop_signal:
+            raise StopIteration()
+        else:
+            return value
+
+
 
 def time_generate(
     model: GenerationMixin,
@@ -82,30 +108,28 @@ def time_generate(
     # Prepare gpu monitoring if needed
     if gpu_monitor is not None:
         gpu_monitor.start()
-    # Prepare cuda events
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-    torch.cuda.synchronize()
-    # Start timing
+    # Prepare streamer
+    streamer = BenchmarkStreamer()
+    # Generate and time
     wall_time_0 = time.perf_counter()
-    start_event.record()
-    # Generate
-    outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
-    # Stop timing
-    end_event.record()
-    torch.cuda.synchronize()
+    outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, streamer=streamer)
     wall_time_1 = time.perf_counter()
     # Stop gpu monitoring if needed
     gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
-    # Infer and return times
-    wall_time = wall_time_1 - wall_time_0
-    cuda_time = start_event.elapsed_time(end_event) / 1000.0  # convert from milliseconds to seconds
     # Check if generation had the right number of tokens
     batch_size, output_tokens = outputs.shape
     new_tokens = output_tokens - inputs["input_ids"].size(-1)
     if new_tokens != max_new_tokens:
         raise RuntimeError(f"Generated {new_tokens} tokens, expected {max_new_tokens}")
-    return TimingResult(wall_time, cuda_time, batch_size, new_tokens, gpu_metrics=gpu_metrics)
+    return TimingResult(
+        wall_time_start=wall_time_0,
+        e2e_latency=wall_time_1 - wall_time_0,
+        t_tokens=streamer.timestamps[1:],
+        batch_size=batch_size,
+        sequence_length=inputs["input_ids"].size(-1),
+        new_tokens=new_tokens,
+        gpu_metrics=gpu_metrics
+    )
 
 
 class BenchmarkRunner:
@@ -184,74 +208,74 @@ class BenchmarkRunner:
                 )
                 self.logger.debug(f"StaticCache created on device: {config.device} with dtype: {dtype}")
 
+    def run_one_benchmark(self, model_id: str, config: BenchmarkConfig) -> None:
+        sdpa_ctx = nullcontext()
+        sdpa_backend = get_sdpa_backend(config.sdpa_backend)
+        if sdpa_backend is not None:
+            sdpa_ctx = torch.nn.attention.sdpa_kernel(sdpa_backend)
+
+        with sdpa_ctx, torch.no_grad():
+            self.logger.info(f"Running benchmark scenario: {config.name}")
+
+            # Quick validation: try one measurement first to see if this scenario works
+            flush_memory()
+            timing_result = time_generate(self.model, self.inputs, max_new_tokens=1)
+            if timing_result.time_to_first_token is None:
+                self.logger.warning(f"Skipping config {config.name}: {timing_result.time_to_first_token = }")
+                return None
+
+            # Warmup runs
+            self.logger.info(f"Warming up with {config.warmup_iterations} iterations...")
+            for _ in trange(config.warmup_iterations):
+                _ = time_generate(self.model, self.inputs, max_new_tokens=config.num_tokens_to_generate)
+            self.logger.info("Warmup over.")
+
+            # Measurement time to first token
+            measures = []
+            self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
+            for _ in trange(config.measurement_iterations):
+                measures.append(time_generate(
+                    self.model,
+                    self.inputs,
+                    max_new_tokens=config.num_tokens_to_generate,
+                    gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
+                ))
+            self.logger.info("Benchmarking done. Cleaning up.")
+
+            return {
+                "metadata": BenchmarkMetadata(model_id=model_id, commit_id=self.commit_id, config=config),
+                "measures": measures,
+            }
+
     def run_benchmarks(self, model_id: str, benchmark_configs: list[BenchmarkConfig]) -> dict[str, Any]:
         all_results = {}
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         for i, config in enumerate(benchmark_configs):
+
+            # Skip if already run
+            if config.name in all_results:
+                self.logger.info(f"Skipping benchmark of model {model_id} with scenario: {config.name} ({i+1}/{len(benchmark_configs)})")
+                continue
+
+            # Otherwise, run the benchmark
             self.setup_one_run(model_id, config)
             self.logger.info(
                 f"Running benchmark of model {model_id} with scenario: {config.name} ({i+1}/{len(benchmark_configs)})"
             )
 
-            # Setup context managers
-            sdpa_ctx = nullcontext()
-            sdpa_backend = get_sdpa_backend(config.sdpa_backend)
-            if sdpa_backend is not None:
-                sdpa_ctx = torch.nn.attention.sdpa_kernel(sdpa_backend)
+            # Launch benchmark in a try/except block to avoid stopping the whole run if one benchmark fails
+            try:
+                results = self.run_one_benchmark(model_id, config)
+                if results is not None:
+                    all_results[config.name] = results
 
-            with sdpa_ctx, torch.no_grad():
-                self.logger.info(f"Running benchmark scenario: {config.name}")
+            except Exception as e:
+                self.logger.error(f"Error running benchmark of model {model_id} with scenario: {config.name} ({i+1}/{len(benchmark_configs)}): {e}")
 
-                # Quick validation: try one measurement first to see if this scenario works
-                flush_memory()
-                timing_result = time_generate(self.model, self.inputs, max_new_tokens=1)
-                if timing_result.time_to_first_token is None:
-                    self.logger.warning(f"Skipping config {config.name}: {timing_result.time_to_first_token = }")
-                    self.cleanup()
-                    continue
-
-                # Warmup runs
-                self.logger.info(f"Warming up with {config.warmup_iterations} iterations...")
-                for _ in trange(config.warmup_iterations):
-                    _ = time_generate(self.model, self.inputs, max_new_tokens=config.num_tokens_to_generate)
-                self.logger.info("Warmup over.")
-
-                # Measurement time to first token
-                self.logger.info(f"Measuring latency with {config.measurement_iterations} iterations.")
-                self.logger.info("Measuring time to first token...")
-                ttft_measurements = []
-                for _ in trange(config.measurement_iterations):
-                    results = time_generate(
-                        self.model,
-                        self.inputs,
-                        max_new_tokens=1,
-                        gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
-                    )
-                    ttft_measurements.append(results)
-
-                # Measurement time per output token
-                self.logger.info("Time to first token done. Now measuring time per output token...")
-                tpot_measurements = []
-                for _ in trange(config.measurement_iterations):
-                    results = time_generate(
-                        self.model,
-                        self.inputs,
-                        max_new_tokens=config.num_tokens_to_generate,
-                        gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
-                    )
-                    tpot_measurements.append(results)
-                self.logger.info("Time per output token done. Cleaning up.")
-
-                all_results[config.name] = {
-                    "metadata": BenchmarkMetadata(model_id=model_id, commit_id=self.commit_id, config=config),
-                    "ttft": ttft_measurements,
-                    "tpot": tpot_measurements,
-                }
-
-                # Cleanup model
-                self.cleanup()
-                self.save_results(model_id, all_results, timestamp=timestamp)
+            # Cleanup model and save results
+            self.cleanup()
+            self.save_results(model_id, all_results, timestamp=timestamp)
         self.logger.info("All benchmarks done.")
         return all_results
 
@@ -272,8 +296,7 @@ class BenchmarkRunner:
         for cfg_name in results.keys():
             converted_results[cfg_name] = {
                 "metadata": results[cfg_name]["metadata"].to_dict(),
-                "ttft": [result.to_dict() for result in results[cfg_name]["ttft"]],
-                "tpot": [result.to_dict() for result in results[cfg_name]["tpot"]],
+                "measures": [result.to_dict() for result in results[cfg_name]["measures"]],
             }
 
         # Save to JSON file

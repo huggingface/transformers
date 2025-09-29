@@ -23,7 +23,7 @@ import logging
 import sys
 import uuid
 
-from framework.benchmark_config import cross_generate_configs
+from framework.benchmark_config import cross_generate_configs, smart_generate_configs
 from framework.benchmark_runner import BenchmarkRunner
 
 
@@ -66,6 +66,7 @@ if __name__ == "__main__":
         measurement_iterations=args.iterations,
         batch_size=args.batch_size,
         sequence_length=args.sequence_length,
+        num_tokens_to_generate=args.num_tokens_to_generate,
     )
 
     runner = BenchmarkRunner(logger, args.output_dir, args.commit_id)

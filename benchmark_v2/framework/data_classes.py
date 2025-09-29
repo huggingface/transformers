@@ -86,8 +86,6 @@ class TimingResult:
     """Result from a timing measurement."""
 
     wall_time: float
-    cuda_time: float
-    use_cuda_time: bool
 
     batch_size: int
     new_tokens: int
@@ -99,37 +97,46 @@ class TimingResult:
     gpu_metrics: Optional[GPURawMetrics]
 
     def __init__(
-        self, wall_time: float, cuda_time: float, batch_size: int, new_tokens: int, use_cuda_time: bool = False, gpu_metrics: Optional[GPURawMetrics] = None
+        self,
+        wall_time_start: float,
+        e2e_latency: float,
+        t_tokens: list[float],
+        batch_size: int,
+        sequence_length: int,
+        new_tokens: int,
+        gpu_metrics: Optional[GPURawMetrics] = None
     ) -> None:
-        self.wall_time = wall_time
-        self.cuda_time = cuda_time
+        self.wall_time_start = wall_time_start
+        self.e2e_latency = e2e_latency
+        self.t_tokens = t_tokens
         self.batch_size = batch_size
+        self.sequence_length = sequence_length
         self.new_tokens = new_tokens
-        self.use_cuda_time = use_cuda_time
         self.gpu_metrics = gpu_metrics
 
-        self.latency = self.cuda_time if self.use_cuda_time else self.wall_time
-        self.time_to_first_token = self.latency if self.new_tokens == 1 else None
-        self.tokens_per_second = (self.batch_size * self.new_tokens) / self.latency
-        self.time_per_output_token = self.latency / self.new_tokens
+        self.time_to_first_token = self.t_tokens[0] - self.wall_time_start
+        if len(self.t_tokens) > 1:
+            self.inter_token_latency = (self.t_tokens[1] - self.t_tokens[-1]) / (len(self.t_tokens) - 1)
+        else:
+            self.inter_token_latency = None
 
     def to_dict(self) -> dict[str, Union[None, int, float]]:
         return {
-            "wall_time": self.wall_time,
-            "cuda_time": self.cuda_time,
+            "wall_time_start": self.wall_time_start,
+            "e2e_latency": self.e2e_latency,
+            "t_tokens": self.t_tokens,
             "batch_size": self.batch_size,
             "new_tokens": self.new_tokens,
-            "use_cuda_time": self.use_cuda_time,
             "gpu_metrics": self.gpu_metrics.to_dict() if self.gpu_metrics is not None else None,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Union[None, int, float]]) -> "TimingResult":
         return cls(
-            wall_time=data["wall_time"],
-            cuda_time=data["cuda_time"],
+            wall_time_start=data["wall_time_start"],
+            e2e_latency=data["e2e_latency"],
+            t_tokens=data["t_tokens"],
             batch_size=data["batch_size"],
             new_tokens=data["new_tokens"],
-            use_cuda_time=data["use_cuda_time"],
             gpu_metrics=None if data["gpu_metrics"] is None else GPURawMetrics(data["gpu_metrics"]),
         )
