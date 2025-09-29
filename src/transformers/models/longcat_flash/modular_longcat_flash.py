@@ -300,7 +300,7 @@ class LongcatFlashModel(DeepseekV3Model):
             [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
         # Each layer above has 2 sublayers, config hack to have a correct cache (to avoid a checkpoint change)
-        self.head_dim = config.head_dim  # For CI happiness (we didn't convert so head_dim is not directly used) # noqa
+        self.head_dim = config.head_dim  # For CI happiness (we didn't convert so head_dim is not directly used)
 
         self.config.num_hidden_layers = 2 * config.num_layers
         self.norm = LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

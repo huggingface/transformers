@@ -2674,7 +2674,7 @@ __all__ = [
     "Gemma3nForCausalLM",
     "Gemma3nForConditionalGeneration",
     "Gemma3nModel",
-    "Gemma3nPreTrainedModel",  # noqa: F822
+    "Gemma3nPreTrainedModel",
     "Gemma3nTextConfig",
     "Gemma3nTextModel",
     "Gemma3nVisionConfig",

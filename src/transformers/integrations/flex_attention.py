@@ -36,7 +36,7 @@ from ..utils.import_utils import _torch_version, is_torch_less_or_equal, is_torc
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size  # noqa: N811
+    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
 
