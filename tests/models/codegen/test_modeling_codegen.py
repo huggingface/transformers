@@ -327,7 +327,6 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     fx_compatible = False
     test_pruning = False
     test_missing_keys = False
-    test_model_parallel = False
     test_head_masking = False
 
     # special case for DoubleHeads model
@@ -379,7 +378,7 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.config.pad_token_id = model.config.eos_token_id
 
         # use different length sentences to test batching
-        sentences = ["def hellow_world():", "def greet(name):"]
+        sentences = ["def hello_world():", "def greet(name):"]
 
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
@@ -415,7 +414,7 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
-            'def hellow_world():\n    print("Hello World")\n\nhellow_world()',
+            'def hello_world():\n    print("Hello World")\n\nhellow_world()',
             'def greet(name):\n    print(f"Hello {name}")\n\ng',
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)

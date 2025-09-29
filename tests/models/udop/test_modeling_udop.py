@@ -55,7 +55,7 @@ class UdopModelTester:
         use_attention_mask=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=32,
@@ -280,7 +280,6 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_torchscript = False
     test_head_masking = False
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
     test_cpu_offload = False
     # The small UDOP model needs higher percentages for CPU/MP tests
@@ -425,7 +424,7 @@ class UdopEncoderOnlyModelTester:
         is_training=False,
         use_attention_mask=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         decoder_layers=2,
         num_attention_heads=4,
         d_ff=37,
@@ -556,8 +555,6 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_head_masking = False
     test_resize_embeddings = False
-    test_model_parallel = False
-    all_parallelizable_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = UdopEncoderOnlyModelTester(self)

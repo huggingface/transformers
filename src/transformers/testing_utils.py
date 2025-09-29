@@ -45,10 +45,9 @@ from typing import Any, Callable, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
-import huggingface_hub.utils
-import requests
+import httpx
 import urllib3
-from huggingface_hub import delete_repo
+from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
 from transformers import Trainer
@@ -91,7 +90,6 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_flax_available,
     is_flute_available,
     is_fp_quant_available,
     is_fsdp_available,
@@ -107,7 +105,6 @@ from .utils import (
     is_ipex_available,
     is_jinja_available,
     is_jumanpp_available,
-    is_keras_nlp_available,
     is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
@@ -143,7 +140,6 @@ from .utils import (
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
-    is_tf_available,
     is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
@@ -207,6 +203,17 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 
 # Not critical, only usable on the sandboxed CI instance.
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
+
+
+# Used in CausalLMModelTester (and related classes/methods) to infer the common model classes from the base model class
+_COMMON_MODEL_NAMES_MAP = {
+    "config_class": "Config",
+    "causal_lm_class": "ForCausalLM",
+    "question_answering_class": "ForQuestionAnswering",
+    "sequence_classification_class": "ForSequenceClassification",
+    "token_classification_class": "ForTokenClassification",
+}
+
 
 if is_torch_available():
     import torch
@@ -680,18 +687,6 @@ def require_torchcodec(test_case):
     return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
 
 
-def require_torch_or_tf(test_case):
-    """
-    Decorator marking a test that requires PyTorch or TensorFlow.
-
-    These tests are skipped when neither PyTorch not TensorFlow is installed.
-
-    """
-    return unittest.skipUnless(is_torch_available() or is_tf_available(), "test requires PyTorch or TensorFlow")(
-        test_case
-    )
-
-
 def require_intel_extension_for_pytorch(test_case):
     """
     Decorator marking a test that requires Intel Extension for PyTorch.
@@ -747,13 +742,6 @@ def require_tokenizers(test_case):
     Decorator marking a test that requires 🤗 Tokenizers. These tests are skipped when 🤗 Tokenizers isn't installed.
     """
     return unittest.skipUnless(is_tokenizers_available(), "test requires tokenizers")(test_case)
-
-
-def require_keras_nlp(test_case):
-    """
-    Decorator marking a test that requires keras_nlp. These tests are skipped when keras_nlp isn't installed.
-    """
-    return unittest.skipUnless(is_keras_nlp_available(), "test requires keras_nlp")(test_case)
 
 
 def require_pandas(test_case):
@@ -1022,16 +1010,6 @@ if is_torch_available():
         torch_device = "cpu"
 else:
     torch_device = None
-
-if is_tf_available():
-    import tensorflow as tf
-
-if is_flax_available():
-    import jax
-
-    jax_device = jax.default_backend()
-else:
-    jax_device = None
 
 
 def require_torchdynamo(test_case):
@@ -1545,20 +1523,12 @@ def require_mistral_common(test_case):
 
 def get_gpu_count():
     """
-    Return the number of available gpus (regardless of whether torch, tf or jax is used)
+    Return the number of available gpus
     """
     if is_torch_available():
         import torch
 
         return torch.cuda.device_count()
-    elif is_tf_available():
-        import tensorflow as tf
-
-        return len(tf.config.list_physical_devices("GPU"))
-    elif is_flax_available():
-        import jax
-
-        return jax.device_count()
     else:
         return 0
 
@@ -1636,58 +1606,6 @@ def assert_screenout(out, what):
     out_pr = apply_print_resets(out).lower()
     match_str = out_pr.find(what.lower())
     assert match_str != -1, f"expecting to find {what} in output: f{out_pr}"
-
-
-def set_model_tester_for_less_flaky_test(test_case):
-    # NOTE: this function edits the config object, which may lead to hard-to-debug side-effects. Use with caution.
-    # Do not use in tests/models where objects behave very differently based on the config's hidden layer settings
-    # (e.g. KV caches, sliding window attention, ...)
-
-    # TODO (if possible): Avoid exceptional cases
-    exceptional_classes = [
-        "ZambaModelTester",
-        "Zamba2ModelTester",
-        "RwkvModelTester",
-        "AriaVisionText2TextModelTester",
-        "GPTNeoModelTester",
-        "DPTModelTester",
-        "Qwen3NextModelTester",
-    ]
-    if test_case.model_tester.__class__.__name__ in exceptional_classes:
-        return
-
-    target_num_hidden_layers = 1
-    if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
-        target_num_hidden_layers = None
-
-    if hasattr(test_case.model_tester, "num_hidden_layers") and target_num_hidden_layers is not None:
-        test_case.model_tester.num_hidden_layers = target_num_hidden_layers
-    if (
-        hasattr(test_case.model_tester, "vision_config")
-        and "num_hidden_layers" in test_case.model_tester.vision_config
-        and target_num_hidden_layers is not None
-    ):
-        test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
-        if isinstance(test_case.model_tester.vision_config, dict):
-            test_case.model_tester.vision_config["num_hidden_layers"] = 1
-        else:
-            test_case.model_tester.vision_config.num_hidden_layers = 1
-    if (
-        hasattr(test_case.model_tester, "text_config")
-        and "num_hidden_layers" in test_case.model_tester.text_config
-        and target_num_hidden_layers is not None
-    ):
-        test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
-        if isinstance(test_case.model_tester.text_config, dict):
-            test_case.model_tester.text_config["num_hidden_layers"] = 1
-        else:
-            test_case.model_tester.text_config.num_hidden_layers = 1
-
-    # A few model class specific handling
-
-    # For Albert
-    if hasattr(test_case.model_tester, "num_hidden_groups"):
-        test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
 
 
 def set_config_for_less_flaky_test(config):
@@ -1940,7 +1858,7 @@ class TemporaryHubRepo:
             repo_id = Path(tmp_dir).name
             if namespace is not None:
                 repo_id = f"{namespace}/{repo_id}"
-            self.repo_url = huggingface_hub.create_repo(repo_id, token=self.token)
+            self.repo_url = create_repo(repo_id, token=self.token)
 
     def __enter__(self):
         return self.repo_url
@@ -2581,8 +2499,6 @@ def nested_simplify(obj, decimals=3):
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
         return nested_simplify(obj.tolist(), decimals)
-    elif is_tf_available() and tf.is_tensor(obj):
-        return nested_simplify(obj.numpy().tolist())
     elif isinstance(obj, float):
         return round(obj, decimals)
     elif isinstance(obj, (np.int32, np.float32, np.float16)):
@@ -2754,13 +2670,14 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
             while retry_count < max_attempts:
                 try:
                     return test_func_ref(*args, **kwargs)
-                # We catch all exceptions related to network issues from requests
+                # We catch all exceptions related to network issues from httpx
                 except (
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout,
-                    requests.exceptions.ReadTimeout,
-                    requests.exceptions.HTTPError,
-                    requests.exceptions.RequestException,
+                    httpx.HTTPError,
+                    httpx.RequestError,
+                    httpx.TimeoutException,
+                    httpx.ReadTimeout,
+                    httpx.ConnectError,
+                    httpx.NetworkError,
                 ) as err:
                     logger.error(
                         f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
@@ -2847,8 +2764,6 @@ def run_test_using_subprocess(func):
         else:
             test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
             try:
-                import copy
-
                 env = copy.deepcopy(os.environ)
                 env["_INSIDE_SUB_PROCESS"] = "1"
                 # This prevents the entries in `short test summary info` given by the subprocess being truncated. so the
@@ -3340,7 +3255,9 @@ def unpack_device_properties(
 class Expectations(UserDict[PackedDeviceProperties, Any]):
     def get_expectation(self) -> Any:
         """
-        Find best matching expectation based on environment device properties.
+        Find best matching expectation based on environment device properties. We look at device_type, major and minor
+        versions of the drivers. Expectations are stored as a dictionary with keys of the form
+        (device_type, (major, minor)). If the major and minor versions are not provided, we use None.
         """
         return self.find_expectation(get_device_properties())
 
@@ -3453,15 +3370,27 @@ def _get_test_info():
     stack_from_inspect = inspect.stack()
     # but visit from the top frame to the most recent frame
 
+    actual_test_file, _actual_test_class = test_file, test_class
     test_frame, test_obj, test_method = None, None, None
     for frame in reversed(stack_from_inspect):
-        if test_file in str(frame).replace(r"\\", "/"):
-            if test_name == frame.frame.f_locals["self"]._testMethodName:
-                test_frame = frame
-                # The test instance
-                test_obj = frame.frame.f_locals["self"]
-                test_method = getattr(test_obj, test_name)
-                break
+        # if test_file in str(frame).replace(r"\\", "/"):
+        # check frame's function + if it has `self` as locals; double check if self has the (function) name
+        # TODO: Question: How about expanded?
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
+            # if test_name == frame.frame.f_locals["self"]._testMethodName:
+            test_frame = frame
+            # The test instance
+            test_obj = frame.frame.f_locals["self"]
+            # TODO: Do we get the (relative?) path or it's just a file name?
+            # TODO: Does `test_obj` always have `tearDown` object?
+            actual_test_file = frame.filename
+            # TODO: check `test_method` will work used at the several places!
+            test_method = getattr(test_obj, test_name)
+            break
 
     if test_frame is not None:
         line_number = test_frame.lineno
@@ -3475,9 +3404,12 @@ def _get_test_info():
     # From the most outer (i.e. python's `runpy.py`) frame to most inner frame (i.e. the frame of this method)
     # Between `the test method being called` and `before entering `patched``.
     for frame in reversed(stack_from_inspect):
-        if test_file in str(frame).replace(r"\\", "/"):
-            if "self" in frame.frame.f_locals and test_name == frame.frame.f_locals["self"]._testMethodName:
-                to_capture = True
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
+            to_capture = True
         # TODO: check simply with the name is not robust.
         elif "patched" == frame.frame.f_code.co_name:
             frame_of_patched_obj = frame
@@ -3511,7 +3443,7 @@ def _get_test_info():
     # Get the code context in the test function/method.
     from _pytest._code.source import Source
 
-    with open(test_file) as fp:
+    with open(actual_test_file) as fp:
         s = fp.read()
         source = Source(s)
         test_code_context = "\n".join(source.getstatement(test_lineno - 1).lines)
@@ -3522,9 +3454,7 @@ def _get_test_info():
         source = Source(s)
         caller_code_context = "\n".join(source.getstatement(caller_lineno - 1).lines)
 
-    test_info = (
-        f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {test_file}:{test_lineno}\n\n{test_code_context}"
-    )
+    test_info = f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {actual_test_file}:{test_lineno}\n\n{test_code_context}"
     test_info = f"{test_info}\n\n{'-' * 80}\n\ncaller context: {caller_path}:{caller_lineno}\n\n{caller_code_context}"
 
     return (
@@ -3745,6 +3675,17 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
             info = _prepare_debugging_info(test_info, info)
 
+            # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
+            # behaves as usual.
+            # On Github Actions or CircleCI, this is set automatically.
+            # When running manually, it's the user to determine if to set it.
+            # This is to avoid the patched function being called `with self.assertRaises(AssertionError):` and fails
+            # because of the missing expected `AssertionError`.
+            # TODO (ydshieh): If there is way to raise only when we are inside such context managers?
+            # TODO (ydshieh): How not to record the failure if it happens inside `self.assertRaises(AssertionError)`?
+            if os.getenv("CI") == "true":
+                raise captured_exception.with_traceback(test_traceback)
+
             # Save this, so we can raise at the end of the current test
             captured_failure = {
                 "result": "failed",
@@ -3827,6 +3768,18 @@ def patch_testing_methods_to_collect_info():
         _patch_with_call_info(torch.testing, "assert_close", _parse_call_info, target_args=("actual", "expected"))
 
     _patch_with_call_info(unittest.case.TestCase, "assertEqual", _parse_call_info, target_args=("first", "second"))
+    _patch_with_call_info(unittest.case.TestCase, "assertListEqual", _parse_call_info, target_args=("list1", "list2"))
+    _patch_with_call_info(
+        unittest.case.TestCase, "assertTupleEqual", _parse_call_info, target_args=("tuple1", "tuple2")
+    )
+    _patch_with_call_info(unittest.case.TestCase, "assertSetEqual", _parse_call_info, target_args=("set1", "set1"))
+    _patch_with_call_info(unittest.case.TestCase, "assertDictEqual", _parse_call_info, target_args=("d1", "d2"))
+    _patch_with_call_info(unittest.case.TestCase, "assertIn", _parse_call_info, target_args=("member", "container"))
+    _patch_with_call_info(unittest.case.TestCase, "assertNotIn", _parse_call_info, target_args=("member", "container"))
+    _patch_with_call_info(unittest.case.TestCase, "assertLess", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertLessEqual", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertGreater", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertGreaterEqual", _parse_call_info, target_args=("a", "b"))
 
 
 def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: Optional[dict] = None):

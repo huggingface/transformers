@@ -441,8 +441,6 @@ class BloomPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -890,7 +888,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(lm_logits.device)
             # Flatten the tokens
             loss = self.loss_function(
@@ -1135,7 +1133,7 @@ class BloomForTokenClassification(BloomPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             batch_size, seq_length = labels.shape
             loss_fct = CrossEntropyLoss()

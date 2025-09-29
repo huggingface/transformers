@@ -180,7 +180,6 @@ class UMT5Attention(nn.Module):
                 "when creating this class."
             )
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -1505,8 +1504,6 @@ class UMT5ForSequenceClassification(UMT5PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-        self.model_parallel = False
 
     @auto_docstring
     def forward(

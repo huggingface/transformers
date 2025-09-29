@@ -48,7 +48,6 @@ transformers chat -h
 
 The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating). It uses the `transformers serve` CLI under the hood ([docs](./serving.md#serve-cli)).
 
-
 ## TextGenerationPipeline
 
 [`TextGenerationPipeline`] is a high-level text generation class with a "chat mode". Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
@@ -109,7 +108,7 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 pipeline = pipeline(task="text-generation", model="meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", model_kwargs={"quantization_config": quantization_config})
 ```
 
-In general, model size and performance are directly correlated. Larger models are slower in addition to requiring more memory because each active parameter must be read from memory for every generated token. 
+In general, model size and performance are directly correlated. Larger models are slower in addition to requiring more memory because each active parameter must be read from memory for every generated token.
 This is a bottleneck for LLM text generation and the main options for improving generation speed are to either quantize a model or use hardware with higher memory bandwidth. Adding more compute power doesn't meaningfully help.
 
 You can also try techniques like [speculative decoding](./generation_strategies#speculative-decoding), where a smaller model generates candidate tokens that are verified by the larger model. If the candidate tokens are correct, the larger model can generate more than one token at a time. This significantly alleviates the bandwidth bottleneck and improves generation speed.

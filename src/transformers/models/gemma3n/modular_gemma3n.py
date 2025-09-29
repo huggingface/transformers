@@ -304,9 +304,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
 
         if activation_sparsity_pattern is None:
             num_sparse_layers = 10 if num_hidden_layers > 10 else 0
-            activation_sparsity_pattern = (0.95,) * num_sparse_layers + (0.0,) * (
-                num_hidden_layers - num_sparse_layers
-            )
+            activation_sparsity_pattern = [0.95] * num_sparse_layers + [0.0] * (num_hidden_layers - num_sparse_layers)
 
         if (len_asp := len(activation_sparsity_pattern)) != num_hidden_layers:
             raise ValueError(
@@ -2472,9 +2470,6 @@ class Gemma3nModel(PaliGemmaModel):
         audio_outputs, audio_mask = self.audio_tower(input_features, input_features_mask)
         return self.embed_audio(inputs_embeds=audio_outputs), audio_mask
 
-    def _update_causal_mask(self, **super_kwargs):
-        raise AttributeError("We don't want to inherit it")
-
 
 @auto_docstring(
     custom_intro="""
@@ -2668,8 +2663,8 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         return model_inputs
 
-    def _prepare_4d_causal_attention_mask_with_cache_position(self, **super_kwargs):
-        raise AttributeError("Do not inherit _prepare_4d_causal_attention_mask_with_cache_position from PaliGemma")
+    def create_masks_for_generate(self, **super_kwargs):
+        raise AttributeError("Do not inherit create_masks_for_generate from PaliGemma")
 
 
 __all__ = [
@@ -2679,7 +2674,7 @@ __all__ = [
     "Gemma3nForCausalLM",
     "Gemma3nForConditionalGeneration",
     "Gemma3nModel",
-    "Gemma3nPreTrainedModel",  # noqa: F822
+    "Gemma3nPreTrainedModel",
     "Gemma3nTextConfig",
     "Gemma3nTextModel",
     "Gemma3nVisionConfig",

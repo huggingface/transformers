@@ -32,7 +32,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ids_tensor
 
 
@@ -44,9 +43,7 @@ if is_torch_available():
 
 class LongcatFlashModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = LongcatFlashConfig
         base_model_class = LongcatFlashModel
-        causal_lm_class = LongcatFlashForCausalLM
 
     def __init__(
         self,
@@ -60,7 +57,7 @@ class LongcatFlashModelTester(CausalLMModelTester):
         hidden_size=144,
         ffn_hidden_size=288,
         expert_ffn_hidden_size=48,
-        num_layers=2,
+        num_layers=1,  # We have `self.num_hidden_layers = 2 * num_layers` in the body. See `LongcatFlashConfig`.
         num_attention_heads=8,
         num_key_value_heads=8,
         kv_lora_rank=16,
@@ -84,6 +81,7 @@ class LongcatFlashModelTester(CausalLMModelTester):
         num_labels=3,
         num_choices=4,
     ):
+        super().__init__(parent)
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
@@ -96,7 +94,7 @@ class LongcatFlashModelTester(CausalLMModelTester):
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
         self.num_layers = num_layers
         self.num_hidden_layers = 2 * num_layers  # for compatibility
-        self.expected_num_hidden_layers = 3  # embedding + 2 layers
+        self.expected_num_hidden_layers = 2  # embedding + 2 layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.kv_lora_rank = kv_lora_rank
@@ -212,9 +210,6 @@ class LongcatFlashModelTester(CausalLMModelTester):
 
 @require_torch
 class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (LongcatFlashModel, LongcatFlashForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (LongcatFlashForCausalLM,) if is_torch_available() else ()
-
     pipeline_model_mapping = (
         {
             "feature-extraction": LongcatFlashModel,
@@ -226,25 +221,7 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
 
     model_split_percents = [0.5, 0.8]
 
-    test_headmasking = False
-    test_pruning = False
-
     model_tester_class = LongcatFlashModelTester
-
-    def setUp(self):
-        self.model_tester = LongcatFlashModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LongcatFlashConfig, hidden_size=37, num_attention_heads=3)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_causal_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
     @unittest.skip("LongcatFlash buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
