@@ -64,7 +64,6 @@ class RiceConfig(PretrainedConfig):
     def __init__(
         self,
         depth=24,
-        embed_dim=1024,
         hidden_size=1024,
         hidden_act="gelu",
         intermediate_size=4096,
@@ -83,7 +82,6 @@ class RiceConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.depth = depth
-        self.embed_dim = embed_dim
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
         self.intermediate_size = intermediate_size
@@ -96,7 +94,7 @@ class RiceConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.text_hidden_size = text_hidden_size
         self.attention_dropout = attention_dropout
-        self._attn_implementation = attn_implementation
+        self.attn_implementation = attn_implementation
 
 
 class LlavaOnevision1_5Config(PretrainedConfig):
@@ -267,8 +265,8 @@ class RiceAttention(nn.Module):
         v = v.transpose(0, 1).unsqueeze(0)
 
         attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        if self.config.attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config.attn_implementation]
 
         attn_output, _ = attention_interface(
             self,

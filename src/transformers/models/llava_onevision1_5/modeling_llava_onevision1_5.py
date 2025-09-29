@@ -227,8 +227,8 @@ class RiceAttention(nn.Module):
         v = v.transpose(0, 1).unsqueeze(0)
 
         attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        if self.config.attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config.attn_implementation]
 
         attn_output, _ = attention_interface(
             self,
