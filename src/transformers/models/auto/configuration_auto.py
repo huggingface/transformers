@@ -94,6 +94,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("csm", "CsmConfig"),
         ("ctrl", "CTRLConfig"),
         ("cvt", "CvtConfig"),
+        ("cwm", "CwmConfig"),
         ("d_fine", "DFineConfig"),
         ("dab-detr", "DabDetrConfig"),
         ("dac", "DacConfig"),
@@ -526,6 +527,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("csm", "CSM"),
         ("ctrl", "CTRL"),
         ("cvt", "CvT"),
+        ("cwm", "Code World Model (CWM)"),
         ("d_fine", "D-FINE"),
         ("dab-detr", "DAB-DETR"),
         ("dac", "DAC"),
@@ -1348,6 +1350,16 @@ class AutoConfig:
                     "Detected mistral model with layer_types, treating as ministral for alternating attention compatibility. "
                 )
                 config_dict["model_type"] = "ministral"
+
+            # Apply heuristic: if model_type is llama but layer_types is present, treat as cwm
+            # TODO: remove this when VLLM 0.11 is released with https://github.com/vllm-project/vllm/pull/25611
+            # Model repos to be updated when requisite transformers version is released with cwm model type
+            if config_dict["model_type"] == "llama" and "layer_types" in config_dict:
+                logger.info(
+                    "Detected llama model with layer_types, treating as cwm for interleaved sliding window "
+                    "attention compatibility. "
+                )
+                config_dict["model_type"] = "cwm"
 
             try:
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]
