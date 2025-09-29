@@ -240,6 +240,9 @@ def _pad_to_max_length(
         return sequences
 
 
+from ...utils.deprecation import deprecate_audio_kwargs
+
+
 class WhisperGenerationMixin(GenerationMixin):
     def _extract_token_timestamps(
         self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None, num_input_ids=None
@@ -383,9 +386,10 @@ class WhisperGenerationMixin(GenerationMixin):
 
         return timestamps
 
+    @deprecate_audio_kwargs
     def generate(
         self,
-        input_features: Optional[torch.Tensor] = None,
+        audio_spectrogram: Optional[torch.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
@@ -428,11 +432,11 @@ class WhisperGenerationMixin(GenerationMixin):
         </Tip>
 
         Parameters:
-            input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`, *optional*):
+            audio_spectrogram (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`, *optional*):
                 Float values of log-mel features extracted from the raw speech waveform. The raw speech waveform can be obtained by
                 loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`,
                 *e.g.*  via the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
-                To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel
+                To prepare the array into `audio_spectrogram`, the [`AutoFeatureExtractor`] should be used for extracting the mel
                 features, padding and conversion into a tensor of type `torch.FloatTensor`.
                 See [`~WhisperFeatureExtractor.__call__`] for details.
             generation_config ([`~generation.GenerationConfig`], *optional*):
@@ -639,9 +643,9 @@ class WhisperGenerationMixin(GenerationMixin):
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
-        >>> input_features = inputs.input_features
+        >>> audio_spectrogram = inputs.audio_spectrogram
 
-        >>> generated_ids = model.generate(inputs=input_features)
+        >>> generated_ids = model.generate(inputs=audio_spectrogram)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
@@ -651,9 +655,9 @@ class WhisperGenerationMixin(GenerationMixin):
         """
         # 0. deprecate old inputs
         if "inputs" in kwargs:
-            input_features = kwargs.pop("inputs")
+            audio_spectrogram = kwargs.pop("inputs")
             warnings.warn(
-                "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
+                "The input name `inputs` is deprecated. Please make sure to use `audio_spectrogram` instead.",
                 FutureWarning,
             )
 
@@ -664,7 +668,7 @@ class WhisperGenerationMixin(GenerationMixin):
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
         num_segment_frames = input_stride * self.config.max_source_positions
         batch_size, total_input_frames = self._retrieve_total_input_frames(
-            input_features=input_features, input_stride=input_stride, kwargs=kwargs
+            audio_spectrogram=audio_spectrogram, input_stride=input_stride, kwargs=kwargs
         )
         is_shortform = total_input_frames <= num_segment_frames
 
@@ -702,7 +706,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
         # pass self.config for backward compatibility
         init_tokens = self._retrieve_init_tokens(
-            input_features,
+            audio_spectrogram,
             batch_size=batch_size,
             generation_config=generation_config,
             config=self.config,
@@ -718,7 +722,7 @@ class WhisperGenerationMixin(GenerationMixin):
             self.model.config._attn_implementation = "eager"
 
         # 3. Retrieve logits processors
-        device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
+        device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else audio_spectrogram.device
         begin_index = init_tokens.shape[1]
         num_beams = kwargs.get(
             "num_beams",
@@ -758,13 +762,13 @@ class WhisperGenerationMixin(GenerationMixin):
         (
             batch_idx_map,
             cur_bsz,
-            input_features,
+            audio_spectrogram,
             seek,
             max_frames,
             init_tokens,
             do_condition_on_prev_tokens,
         ) = self._expand_variables_for_generation(
-            input_features=input_features,
+            audio_spectrogram=audio_spectrogram,
             seek=seek,
             max_frames=max_frames,
             init_tokens=init_tokens,
@@ -801,8 +805,8 @@ class WhisperGenerationMixin(GenerationMixin):
             # in case one audio finished earlier than another one. Thus, we need to keep a table of "previous-index-2-current-index" in order
             # to know which original audio is being decoded
             # Set updated index map, duration of previously decoded chunks and number of max frames of current decoding chunk
-            input_features, cur_bsz, batch_idx_map = self._maybe_reduce_batch(
-                input_features=input_features,
+            audio_spectrogram, cur_bsz, batch_idx_map = self._maybe_reduce_batch(
+                audio_spectrogram=audio_spectrogram,
                 seek=seek,
                 max_frames=max_frames,
                 cur_bsz=cur_bsz,
@@ -815,7 +819,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
             # 6.2 cut out next 30s segment from input features
             segment_input = self._get_input_segment(
-                input_features=input_features,
+                audio_spectrogram=audio_spectrogram,
                 seek=seek,
                 seek_num_frames=seek_num_frames,
                 num_segment_frames=num_segment_frames,
@@ -1299,13 +1303,13 @@ class WhisperGenerationMixin(GenerationMixin):
         return needs_fallback, should_skip
 
     def _expand_variables_for_generation(
-        self, input_features, seek, max_frames, init_tokens, batch_size, condition_on_prev_tokens, generation_config
+        self, audio_spectrogram, seek, max_frames, init_tokens, batch_size, condition_on_prev_tokens, generation_config
     ):
         if generation_config.num_return_sequences is not None and generation_config.num_return_sequences > 1:
             batch_idx_map = list(range(batch_size * generation_config.num_return_sequences))
             cur_bsz = len(batch_idx_map)
             do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(len(batch_idx_map))]
-            input_features = input_features.repeat_interleave(generation_config.num_return_sequences, dim=0)
+            audio_spectrogram = audio_spectrogram.repeat_interleave(generation_config.num_return_sequences, dim=0)
             seek = seek.repeat_interleave(generation_config.num_return_sequences, dim=0)
             max_frames = max_frames.repeat_interleave(generation_config.num_return_sequences, dim=0)
             init_tokens = init_tokens.repeat_interleave(generation_config.num_return_sequences, dim=0)
@@ -1318,7 +1322,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return (
             batch_idx_map,
             cur_bsz,
-            input_features,
+            audio_spectrogram,
             seek,
             max_frames,
             init_tokens,
@@ -1332,9 +1336,9 @@ class WhisperGenerationMixin(GenerationMixin):
         set_inputs({"inputs": segment_input, "input_ids": decoder_input_ids, **extra_kwargs})
 
     @staticmethod
-    def _retrieve_total_input_frames(input_features, input_stride, kwargs):
-        if input_features is not None:
-            return input_features.shape[0], input_features.shape[-1]
+    def _retrieve_total_input_frames(audio_spectrogram, input_stride, kwargs):
+        if audio_spectrogram is not None:
+            return audio_spectrogram.shape[0], audio_spectrogram.shape[-1]
 
         if "encoder_outputs" in kwargs:
             encoder_outputs_shape = (
@@ -1344,7 +1348,7 @@ class WhisperGenerationMixin(GenerationMixin):
             )
             return encoder_outputs_shape[0], encoder_outputs_shape[1] * input_stride
 
-        raise ValueError("Make sure to provide either `input_features` or `encoder_outputs` to `generate`.")
+        raise ValueError("Make sure to provide either `audio_spectrogram` or `encoder_outputs` to `generate`.")
 
     @staticmethod
     def _maybe_warn_unused_inputs(
@@ -1464,7 +1468,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 )
             generation_config.task = task
 
-    def _retrieve_init_tokens(self, input_features, batch_size, generation_config, config, num_segment_frames, kwargs):
+    def _retrieve_init_tokens(self, audio_spectrogram, batch_size, generation_config, config, num_segment_frames, kwargs):
         def replace_or_add(lst: list[int], num: int, itr: Iterator[int]):
             """short function to replace num with a itr in lst"""
             found = any(i in lst for i in itr)
@@ -1570,7 +1574,7 @@ class WhisperGenerationMixin(GenerationMixin):
         elif hasattr(generation_config, "lang_to_id") and is_lang_id_undefined:
             # language is not defined or intentionally set to `None` to trigger language detection
             lang_ids = self.detect_language(
-                input_features=input_features,
+                audio_spectrogram=audio_spectrogram,
                 encoder_outputs=kwargs.get("encoder_outputs", None),
                 generation_config=generation_config,
                 num_segment_frames=num_segment_frames,
@@ -1621,7 +1625,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
     def detect_language(
         self,
-        input_features: Optional[torch.FloatTensor] = None,
+        audio_spectrogram: Optional[torch.FloatTensor] = None,
         encoder_outputs: Optional[Union[torch.FloatTensor, BaseModelOutput]] = None,
         generation_config: Optional[GenerationConfig] = None,
         num_segment_frames: int = 3000,
@@ -1630,10 +1634,10 @@ class WhisperGenerationMixin(GenerationMixin):
         Detects language from log-mel input features or encoder_outputs
 
         Parameters:
-            input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`, *optional*):
+            audio_spectrogram (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`, *optional*):
                 Float values of log-mel features extracted from the raw speech waveform. The raw speech waveform can be obtained by
                 loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
-                the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+                the soundfile library (`pip install soundfile`). To prepare the array into `audio_spectrogram`, the
                 [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
                 tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
             encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
@@ -1653,13 +1657,13 @@ class WhisperGenerationMixin(GenerationMixin):
         Return:
             A `torch.LongTensor` representing the detected language ids.
         """
-        if input_features is None and encoder_outputs is None:
-            raise ValueError("You have to specify either `input_features` or `encoder_outputs`")
-        elif input_features is not None and encoder_outputs is not None:
-            raise ValueError("Make sure to specify only one of `input_features` or `encoder_outputs` - not both!")
-        elif input_features is not None:
-            inputs = {"input_features": input_features[:, :, :num_segment_frames]}
-            batch_size = input_features.shape[0]
+        if audio_spectrogram is None and encoder_outputs is None:
+            raise ValueError("You have to specify either `audio_spectrogram` or `encoder_outputs`")
+        elif audio_spectrogram is not None and encoder_outputs is not None:
+            raise ValueError("Make sure to specify only one of `audio_spectrogram` or `encoder_outputs` - not both!")
+        elif audio_spectrogram is not None:
+            inputs = {"audio_spectrogram": audio_spectrogram[:, :, :num_segment_frames]}
+            batch_size = audio_spectrogram.shape[0]
         elif encoder_outputs is not None:
             inputs = {"encoder_outputs": encoder_outputs}
             batch_size = (
@@ -1835,7 +1839,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return logits_processor
 
     @staticmethod
-    def _maybe_reduce_batch(input_features, seek, max_frames, cur_bsz, batch_idx_map):
+    def _maybe_reduce_batch(audio_spectrogram, seek, max_frames, cur_bsz, batch_idx_map):
         prev_bsz = cur_bsz
         new_batch_idx_map = []
         for i in range(prev_bsz):
@@ -1843,22 +1847,22 @@ class WhisperGenerationMixin(GenerationMixin):
             if seek[prev_i] >= max_frames[prev_i]:
                 cut_index = i + (cur_bsz - prev_bsz)
                 cur_bsz -= 1
-                input_features = torch.cat([input_features[:cut_index], input_features[cut_index + 1 :]], dim=0)
+                audio_spectrogram = torch.cat([audio_spectrogram[:cut_index], audio_spectrogram[cut_index + 1 :]], dim=0)
             else:
                 # cut out index that goes away
                 new_batch_idx_map.append(prev_i)
 
-        return input_features, cur_bsz, new_batch_idx_map
+        return audio_spectrogram, cur_bsz, new_batch_idx_map
 
     @staticmethod
-    def _get_input_segment(input_features, seek, seek_num_frames, num_segment_frames, cur_bsz, batch_idx_map):
-        if input_features is None:
+    def _get_input_segment(audio_spectrogram, seek, seek_num_frames, num_segment_frames, cur_bsz, batch_idx_map):
+        if audio_spectrogram is None:
             return None
 
         segment_input = []
         for i in range(cur_bsz):
             prev_i = batch_idx_map[i]
-            segment_input_slice = input_features[i : i + 1, :, seek[prev_i] : seek[prev_i] + seek_num_frames[prev_i]]
+            segment_input_slice = audio_spectrogram[i : i + 1, :, seek[prev_i] : seek[prev_i] + seek_num_frames[prev_i]]
 
             if segment_input_slice.shape[-1] < num_segment_frames:
                 # pad to 3000 if necessary
