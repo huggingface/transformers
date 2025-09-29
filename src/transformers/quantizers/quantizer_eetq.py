@@ -114,7 +114,10 @@ class EetqHfQuantizer(HfQuantizer):
 
         if isinstance(module, EetqLinear):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.int8:
+                if tensor_name == "weight" and (
+                    (hasattr(param_value, "dtype") and param_value.dtype != torch.int8)
+                    or (hasattr(param_value, "get_dtype") and param_value.get_dtype() != "I8")
+                ):
                     raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:

@@ -119,7 +119,10 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
 
         if isinstance(module, FbgemmFp8Linear):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
+                if tensor_name == "weight" and (
+                    (hasattr(param_value, "dtype") and param_value.dtype != torch.float8_e4m3fn)
+                    or (hasattr(param_value, "get_dtype") and param_value.get_dtype != "F8_E4M3")
+                ):
                     raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:

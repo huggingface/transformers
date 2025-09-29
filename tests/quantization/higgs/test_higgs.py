@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import os
 import tempfile
 import unittest
 
@@ -34,6 +35,14 @@ if is_torch_available():
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
+
+try:
+    from safetensors import safe_open
+    from safetensors.torch import save_file as save_file_pt
+
+    _safetensors_available = True
+except ImportError:
+    _safetensors_available = False
 
 
 @require_torch_gpu
@@ -137,6 +146,109 @@ class HiggsTest(unittest.TestCase):
 
         output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_check_quantized_param_as_tensor(self):
+        r"""
+        Test the `check_quantized_param` method with torch.Tensor objects.
+        This verifies that the method correctly handles regular torch tensors with dtype attribute.
+        """
+        from unittest.mock import Mock
+
+        from transformers.integrations.higgs import HiggsLinear
+        from transformers.quantizers.quantizer_higgs import HiggsHfQuantizer
+
+        # Create quantizer directly
+        config = HiggsConfig()
+        quantizer = HiggsHfQuantizer(config)
+
+        # Create a mock model with a mock module that has HiggsLinear
+        mock_model = Mock()
+        mock_module = Mock(spec=HiggsLinear)
+
+        # Mock the get_module_from_name function
+        def mock_get_module_from_name(model, param_name):
+            return mock_module, "weight"
+
+        # Patch the function
+        import transformers.quantizers.quantizer_higgs as quantizer_module
+
+        original_get_module_from_name = quantizer_module.get_module_from_name
+        quantizer_module.get_module_from_name = mock_get_module_from_name
+
+        try:
+            param_name = "test.weight"
+            state_dict = {}
+
+            # Test with unquantized tensor (should return True for quantization)
+            float16_tensor = torch.randn(10, 5, dtype=torch.float16)
+            result = quantizer.check_quantized_param(mock_model, float16_tensor, param_name, state_dict)
+            self.assertTrue(result)  # Unquantized weights should be quantized
+
+        finally:
+            # Restore original function
+            quantizer_module.get_module_from_name = original_get_module_from_name
+
+    @unittest.skipIf(not _safetensors_available, "safetensors not available")
+    def test_check_quantized_param_as_slice(self):
+        r"""
+        Test the `check_quantized_param` method with PySafeSlice objects.
+        This verifies that the method correctly handles safetensors slices with get_dtype() method.
+        """
+        from unittest.mock import Mock
+
+        from transformers.integrations.higgs import HiggsLinear
+        from transformers.quantizers.quantizer_higgs import HiggsHfQuantizer
+
+        # Create quantizer directly
+        config = HiggsConfig()
+        quantizer = HiggsHfQuantizer(config)
+
+        # Create a mock model with a mock module that has HiggsLinear
+        mock_model = Mock()
+        mock_module = Mock(spec=HiggsLinear)
+
+        # Mock the get_module_from_name function
+        def mock_get_module_from_name(model, param_name):
+            return mock_module, "weight"
+
+        # Patch the function
+        import transformers.quantizers.quantizer_higgs as quantizer_module
+
+        original_get_module_from_name = quantizer_module.get_module_from_name
+        quantizer_module.get_module_from_name = mock_get_module_from_name
+
+        try:
+            param_name = "test.weight"
+            state_dict = {}
+
+            # Create a safetensors file with float16 data (unquantized)
+            A = torch.randn(10, 5, dtype=torch.float16)
+            tensors = {"test_tensor": A}
+            safetensors_path = "./slice.safetensors"
+
+            try:
+                save_file_pt(tensors, safetensors_path)
+
+                # Load and test with safetensors slice (should return True for quantization)
+                with safe_open(safetensors_path, framework="pt", device="cpu") as f:
+                    slice_ = f.get_slice("test_tensor")
+
+                    # Verify the slice has get_dtype method and returns "F16" for float16
+                    self.assertTrue(hasattr(slice_, "get_dtype"))
+                    self.assertEqual(slice_.get_dtype(), "F16")
+
+                    # Test the check_quantized_param method with the slice
+                    result = quantizer.check_quantized_param(mock_model, slice_, param_name, state_dict)
+                    self.assertTrue(result)  # Unquantized weights should be quantized
+
+            finally:
+                # Clean up safetensors file
+                if os.path.exists(safetensors_path):
+                    os.remove(safetensors_path)
+
+        finally:
+            # Restore original function
+            quantizer_module.get_module_from_name = original_get_module_from_name
 
     def test_save_pretrained(self):
         """

@@ -191,7 +191,14 @@ class HiggsHfQuantizer(HfQuantizer):
         from ..integrations import HiggsLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, HiggsLinear) and tensor_name == "weight" and param_value.dtype != torch.int16:
+        if (
+            isinstance(module, HiggsLinear)
+            and tensor_name == "weight"
+            and (
+                (hasattr(param_value, "dtype") and param_value.dtype != torch.int16)
+                or (hasattr(param_value, "get_dtype") and param_value.get_dtype() != "I16")
+            )
+        ):
             # Only quantize weights of HiggsLinear modules that are not already quantized
             return True
         else:
