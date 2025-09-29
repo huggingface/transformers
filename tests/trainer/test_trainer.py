@@ -1428,6 +1428,24 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.evaluate()
         _ = trainer.predict(eval_dataset)
 
+    def test_init_with_offloaded_model(self):
+        # Test that Trainer can be initialized with a model that has been offloaded to CPU
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+
+        # Simulate a model with some parts offloaded to CPU
+        device_map = {"a": "cpu"}
+        if torch.cuda.is_available():
+            device_map["b"] = "cuda:0"
+        else:
+            device_map["b"] = "cpu"
+        model.hf_device_map = device_map
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(output_dir=tmp_dir, report_to="none")
+            # This should not raise an error.
+            _ = Trainer(model, args=args, train_dataset=RegressionDataset())
+
     def test_training_arguments_are_left_untouched(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(output_dir=tmp_dir)
