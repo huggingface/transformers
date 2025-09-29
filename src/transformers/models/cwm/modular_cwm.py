@@ -40,7 +40,7 @@ class CwmTextConfig(LlamaConfig):
     Llama3-compatible configuration with layer-interleaved sliding-window attention
     """
 
-    model_type = "llama"  # for VLLM too
+    model_type = "cwm"
 
     def __init__(
         self,
@@ -90,6 +90,16 @@ class CwmTextConfig(LlamaConfig):
                 ("full_attention" if (i % window_pattern == 0) else "sliding_attention")
                 for i in range(num_hidden_layers)
             ]
+        else:
+            if len(layer_types) != num_hidden_layers:
+                raise ValueError(
+                    f"layer_types must be a list of length {num_hidden_layers} for each "
+                    f"hidden layer, got length {len(layer_types)}"
+                )
+            if any(t not in ("full_attention", "sliding_attention") for t in layer_types):
+                raise ValueError(
+                    "Layer types must be either 'full_attention' or 'sliding_attention"
+                )
 
         super().__init__(
             vocab_size=vocab_size,

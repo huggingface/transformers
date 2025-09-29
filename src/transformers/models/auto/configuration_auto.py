@@ -1353,6 +1353,7 @@ class AutoConfig:
 
             # Apply heuristic: if model_type is llama but layer_types is present, treat as cwm
             # TODO: remove this when VLLM 0.11 is released with https://github.com/vllm-project/vllm/pull/25611
+            # Model repos to be updated when requisite transformers version is released with cwm model type
             if config_dict["model_type"] == "llama" and "layer_types" in config_dict:
                 logger.info(
                     "Detected llama model with layer_types, treating as cwm for interleaved sliding window "
