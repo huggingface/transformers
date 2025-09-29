@@ -25,6 +25,16 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
+def _validate_layer_types(layer_types: list[str], num_hidden_layers: int) -> None:
+    if len(layer_types) != num_hidden_layers:
+        raise ValueError(
+            f"layer_types must be a list of length {num_hidden_layers} for each "
+            f"hidden layer, got length {len(layer_types)}"
+        )
+    if any(t not in ("full_attention", "sliding_attention") for t in layer_types):
+        raise ValueError("Layer types must be either 'full_attention' or 'sliding_attention'")
+
+
 class CwmTextConfig(PretrainedConfig):
     """
     Llama3-compatible configuration with layer-interleaved sliding-window attention
@@ -64,7 +74,7 @@ class CwmTextConfig(PretrainedConfig):
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
         pad_token_id: Optional[int] = None,
-        eos_token_id=(128001, 128008, 128009),
+        eos_token_id=[128001, 128008, 128009],
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
         rope_theta: float = 1_000_000.0,
@@ -104,13 +114,7 @@ class CwmTextConfig(PretrainedConfig):
                 for i in range(num_hidden_layers)
             ]
         else:
-            if len(layer_types) != num_hidden_layers:
-                raise ValueError(
-                    f"layer_types must be a list of length {num_hidden_layers} for each "
-                    f"hidden layer, got length {len(layer_types)}"
-                )
-            if any(t not in ("full_attention", "sliding_attention") for t in layer_types):
-                raise ValueError("Layer types must be either 'full_attention' or 'sliding_attention")
+            _validate_layer_types(layer_types, num_hidden_layers)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

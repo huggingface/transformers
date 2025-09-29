@@ -37,6 +37,16 @@ from ..llama.modeling_llama import (
 logger = logging.get_logger(__name__)
 
 
+def _validate_layer_types(layer_types: list[str], num_hidden_layers: int) -> None:
+    if len(layer_types) != num_hidden_layers:
+        raise ValueError(
+            f"layer_types must be a list of length {num_hidden_layers} for each "
+            f"hidden layer, got length {len(layer_types)}"
+        )
+    if any(t not in ("full_attention", "sliding_attention") for t in layer_types):
+        raise ValueError("Layer types must be either 'full_attention' or 'sliding_attention'")
+
+
 class CwmTextConfig(LlamaConfig):
     """
     Llama3-compatible configuration with layer-interleaved sliding-window attention
@@ -60,7 +70,7 @@ class CwmTextConfig(LlamaConfig):
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
         pad_token_id: Optional[int] = None,
-        eos_token_id=(128001, 128008, 128009),
+        eos_token_id=[128001, 128008, 128009],
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
         rope_theta: float = 1_000_000.0,
@@ -93,13 +103,7 @@ class CwmTextConfig(LlamaConfig):
                 for i in range(num_hidden_layers)
             ]
         else:
-            if len(layer_types) != num_hidden_layers:
-                raise ValueError(
-                    f"layer_types must be a list of length {num_hidden_layers} for each "
-                    f"hidden layer, got length {len(layer_types)}"
-                )
-            if any(t not in ("full_attention", "sliding_attention") for t in layer_types):
-                raise ValueError("Layer types must be either 'full_attention' or 'sliding_attention")
+            _validate_layer_types(layer_types, num_hidden_layers)
 
         super().__init__(
             vocab_size=vocab_size,
@@ -223,6 +227,10 @@ class CwmModel(LlamaModel):
     config_class = CwmTextConfig
 
     def __init__(self, config: CwmTextConfig):
+        # Validate layer types at model creation time
+        if hasattr(config, 'layer_types') and config.layer_types is not None:
+            _validate_layer_types(config.layer_types, config.num_hidden_layers)
+
         super().__init__(config)
         self.layers = torch.nn.ModuleList(
             [CwmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -308,8 +316,4 @@ __all__ = [
     "CwmPreTrainedModel",
     "CwmModel",
     "CwmForCausalLM",
-    "CwmMLP",
-    "CwmRMSNorm",
-    "CwmRotaryEmbedding",
-    "CwmDecoderLayer",
 ]
