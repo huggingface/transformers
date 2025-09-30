@@ -367,6 +367,14 @@ class GemmaMLP(LlamaMLP):
 
 
 class GemmaModel(LlamaModel):
+    def _init_weights(self, module):
+        if isinstance(module, GemmaRMSNorm):
+            # The norm uses the weight additively as in `...*(1+weight)`,
+            # so those should init `weight` to 0 (https://github.com/huggingface/transformers/issues/40224).
+            module.weight.zero_()
+        else:
+            super()._init_weights(module)
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
