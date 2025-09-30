@@ -313,6 +313,11 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         vision_end_token_id=151653,
         **kwargs,
     ):
+        # We need to init super() here so that it does not reset values
+        # that are in text config to the BaseClass defaults. The Base
+        # config has many text related defaults and not all defaults are same as for `Qwen2_5_VLTextConfig`
+        super().__init__(**kwargs)
+
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
@@ -320,9 +325,6 @@ class Qwen2_5_VLConfig(PretrainedConfig):
 
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
-            # We need to pass text kwargs further, otherwise the default BaseClass values (`None`)
-            # will be used to set text config fields.
-            kwargs.update(text_config)
         elif text_config is None:
             # For BC use all kwargs to init `TextConfig`
             self.text_config = self.sub_configs["text_config"](**kwargs)
@@ -332,7 +334,8 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
 
-        super().__init__(**kwargs)
+        # Attention implementation to use. It sets it recursively on sub-configs so we call it again in the end
+        self._attn_implementation = kwargs.pop("attn_implementation", None)
 
     def __setattr__(self, key, value):
         if (
