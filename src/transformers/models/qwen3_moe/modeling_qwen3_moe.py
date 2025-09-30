@@ -339,6 +339,25 @@ class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
+class Qwen3MoePreTrainedModel(PreTrainedModel):
+    config: Qwen3MoeConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Qwen3MoeDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "hidden_states": Qwen3MoeDecoderLayer,
+        "attentions": Qwen3MoeAttention,
+    }
+
+
 class Qwen3MoeRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -373,25 +392,6 @@ class Qwen3MoeRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-@auto_docstring
-class Qwen3MoePreTrainedModel(PreTrainedModel):
-    config: Qwen3MoeConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3MoeDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
-        "hidden_states": Qwen3MoeDecoderLayer,
-        "attentions": Qwen3MoeAttention,
-    }
 
 
 @auto_docstring
