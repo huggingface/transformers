@@ -114,12 +114,12 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub>=0.34.0,<1.0",
+    "huggingface-hub==1.0.0.rc2",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "kenlm",
-    "kernels>=0.6.1,<=0.9",
+    "kernels>=0.10.2,<0.11",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -132,7 +132,6 @@ _deps = [
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
-    "optax>=0.0.8,<=0.1.4",
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
@@ -154,7 +153,7 @@ _deps = [
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff==0.11.2",
+    "ruff==0.13.1",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
     # `Trainer` tests (see references to `run_translation.py`).
@@ -439,7 +438,6 @@ setup(
     entry_points={
         "console_scripts": [
             "transformers=transformers.commands.transformers_cli:main",
-            "transformers-cli=transformers.commands.transformers_cli:main_cli",
         ]
     },
     python_requires=">=3.9.0",

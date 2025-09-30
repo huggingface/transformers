@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch FalconH1 model."""
 
-import inspect
 import unittest
 
 import pytest
@@ -311,37 +310,6 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    # def test_initialization(self):
-    #     r"""
-    #     Overriding the test_initialization test as the A_log and D params of the FalconH1 mixer are initialized differently
-    #     """
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-    #     configs_no_init = _config_zero_init(config)
-    #     for model_class in self.all_model_classes:
-    #         model = model_class(config=configs_no_init)
-    #         for name, param in model.named_parameters():
-    #             if param.requires_grad:
-    #                 if "A_log" in name:
-    #                     A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)
-    #                     torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
-    #                 elif "D" in name:
-    #                     D = torch.ones(config.mamba_n_heads, dtype=torch.float32)
-    #                     torch.testing.assert_close(param.data, D, rtol=1e-5, atol=1e-5)
-    #                 else:
-    #                     self.assertIn(
-    #                         ((param.data.mean() * 1e9).round() / 1e9).item(),
-    #                         [0.0, 1.0],
-    #                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-    #                     )
-
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        r"""
-        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
-        FalconH1 mixer are initialized differently and we tested that in test_initialization
-        """
-        self.skipTest(reason="Cumbersome and redundant for FalconH1")
-
     def test_attention_outputs(self):
         r"""
         Overriding the test_attention_outputs test as the FalconH1 model outputs attention only for its attention layers
@@ -413,88 +381,11 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         super().test_batching_equivalence()
         self.model_tester.use_input_mask = orig
 
-    # essentially the same test in test_utils, just adjustment for rtol for this model
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
-
-        # First, filter out models that don't support left padding
-        # - The model must have generative capabilities
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(reason="No generative architecture available for this model.")
-
-        # - The model must support padding
-        if not self.has_attentions:
-            self.skipTest(reason="This model doesn't support padding.")
-
-        # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
-        decoder_only_classes = []
-        for model_class in self.all_generative_model_classes:
-            config, _ = self.prepare_config_and_inputs_for_generate()
-            if config.is_encoder_decoder:
-                continue
-            else:
-                decoder_only_classes.append(model_class)
-        if len(decoder_only_classes) == 0:
-            self.skipTest(reason="No decoder-only architecture available for this model.")
-
-        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
-        #   added support for it yet. We skip these models for now.
-        has_encoder_attributes = any(
-            attr_name
-            for attr_name in config.to_dict()
-            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
-        )
-        if has_encoder_attributes:
-            self.skipTest(
-                reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
-            )
-
-        # Then, test left-padding
-        def _prepare_model_kwargs(input_ids, attention_mask, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            return model_kwargs
-
-        for model_class in decoder_only_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
-
-            # - for left padding we absolutely need to use an all ones
-            #   attention mask, so we do not use the one in inputs_dict
-            attention_mask = torch.ones_like(input_ids)
-
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
-
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
-            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
-            )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
-            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
+        # TODO: document why a random attention mask causes this test to fail, but a full mask doesn't
+        unpadded_custom_inputs = {"attention_mask": None}
+        super().test_left_padding_compatibility(unpadded_custom_inputs=unpadded_custom_inputs)
 
 
 @slow

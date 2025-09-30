@@ -37,53 +37,55 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoption id="Pipeline">
 
 ```python
-import torch  
-from transformers import pipeline  
+import torch
+from transformers import pipeline
 
-pipeline = pipeline(  
-    task="fill-mask",  
-    model="facebook/xlm-roberta-xl",  
-    dtype=torch.float16,  
-    device=0  
-)  
-pipeline("Bonjour, je suis un modèle <mask>.")  
+pipeline = pipeline(
+    task="fill-mask",
+    model="facebook/xlm-roberta-xl",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("Bonjour, je suis un modèle <mask>.")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```python
-import torch  
-from transformers import AutoModelForMaskedLM, AutoTokenizer  
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(  
-    "facebook/xlm-roberta-xl",  
-)  
-model = AutoModelForMaskedLM.from_pretrained(  
-    "facebook/xlm-roberta-xl",  
-    dtype=torch.float16,  
-    device_map="auto",  
-    attn_implementation="sdpa"  
-)  
-inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)  
+tokenizer = AutoTokenizer.from_pretrained(
+    "facebook/xlm-roberta-xl",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "facebook/xlm-roberta-xl",
+    dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)
 
-with torch.no_grad():  
-    outputs = model(**inputs)  
-    predictions = outputs.logits  
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
 
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]  
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)  
-predicted_token = tokenizer.decode(predicted_token_id)  
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
 ```
+
 </hfoption>
 
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers-cli run --task fill-mask --model facebook/xlm-roberta-xl --device 0
+echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model facebook/xlm-roberta-xl --device 0
 ```
+
 </hfoption>
 </hfoptions>
 

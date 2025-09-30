@@ -790,7 +790,7 @@ class Cache:
         for layer in self.layers:
             layer.lazy_initialization(fake_keys_tensor)
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cache for the given layer."""
         if layer_idx >= len(self.layers):
             return 0
@@ -1286,7 +1286,7 @@ class EncoderDecoderCache(Cache):
                     cache.is_updated[layer_idx] = True
         return cache
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         return self.self_attention_cache.get_seq_length(layer_idx)
 

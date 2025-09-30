@@ -311,7 +311,7 @@ class AudioKwargs(TypedDict, total=False):
     """
 
     sampling_rate: Optional[int]
-    raw_speech: Optional[Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]]]
+    raw_speech: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]]
     padding: Optional[Union[bool, str, PaddingStrategy]]
     max_length: Optional[int]
     truncation: Optional[bool]
@@ -1266,7 +1266,7 @@ class ProcessorMixin(PushToHubMixin):
         used_keys = set()
 
         # get defaults from set model processor kwargs if they exist
-        for modality in default_kwargs:  # noqa: PLC0206
+        for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
             # update defaults with arguments from tokenizer init
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:

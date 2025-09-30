@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
-    import torch  # noqa: F401
+    import torch
 
     from ..model_debugging_utils import model_addition_debugger_context
 
@@ -380,7 +380,7 @@ class ModelOutput(OrderedDict):
         args = tuple(getattr(self, field.name) for field in fields(self))
         return callable, args, *remaining
 
-    def to_tuple(self) -> tuple[Any]:
+    def to_tuple(self) -> tuple:
         """
         Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
@@ -804,7 +804,7 @@ class OutputRecorder:
     """
 
     target_class: "type[torch.nn.Module]"
-    index: Optional[int] = 0
+    index: int = 0
     layer_name: Optional[str] = None
     class_name: Optional[str] = None
 

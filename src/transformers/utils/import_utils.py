@@ -236,9 +236,9 @@ _triton_available, _triton_version = _is_package_available("triton", return_vers
 
 _torch_available, _torch_version = _is_package_available("torch", return_version=True)
 if _torch_available:
-    _torch_available = version.parse(_torch_version) >= version.parse("2.1.0")
+    _torch_available = version.parse(_torch_version) >= version.parse("2.2.0")
     if not _torch_available:
-        logger.warning(f"Disabling PyTorch because PyTorch >= 2.1 is required but found {_torch_version}")
+        logger.warning(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {_torch_version}")
 
 
 _essentia_available = importlib.util.find_spec("essentia") is not None
@@ -762,7 +762,7 @@ def is_torch_npu_available(check_device=False) -> bool:
 
 
 @lru_cache
-def is_torch_mlu_available(check_device=False) -> bool:
+def is_torch_mlu_available() -> bool:
     """
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
     uninitialized.
@@ -911,7 +911,7 @@ def is_habana_gaudi1() -> bool:
     if not is_torch_hpu_available():
         return False
 
-    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+    import habana_frameworks.torch.utils.experimental as htexp
 
     # Check if the device is Gaudi1 (vs Gaudi2, Gaudi3)
     return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
@@ -937,7 +937,7 @@ def is_torchdynamo_compiling() -> Union[tuple[bool, str], bool]:
         return torch.compiler.is_compiling()
     except Exception:
         try:
-            import torch._dynamo as dynamo  # noqa: F401
+            import torch._dynamo as dynamo
 
             return dynamo.is_compiling()
         except Exception:
@@ -954,7 +954,7 @@ def is_torchdynamo_exporting() -> bool:
         return torch.compiler.is_exporting()
     except Exception:
         try:
-            import torch._dynamo as dynamo  # noqa: F401
+            import torch._dynamo as dynamo
 
             return dynamo.is_exporting()
         except Exception:

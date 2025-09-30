@@ -32,7 +32,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
-from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
+from huggingface_hub import ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
 
@@ -1428,6 +1428,24 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.evaluate()
         _ = trainer.predict(eval_dataset)
 
+    def test_init_with_offloaded_model(self):
+        # Test that Trainer can be initialized with a model that has been offloaded to CPU
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+
+        # Simulate a model with some parts offloaded to CPU
+        device_map = {"a": "cpu"}
+        if torch.cuda.is_available():
+            device_map["b"] = "cuda:0"
+        else:
+            device_map["b"] = "cpu"
+        model.hf_device_map = device_map
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(output_dir=tmp_dir, report_to="none")
+            # This should not raise an error.
+            _ = Trainer(model, args=args, train_dataset=RegressionDataset())
+
     def test_training_arguments_are_left_untouched(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(output_dir=tmp_dir)
@@ -2763,27 +2781,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # warm up steps << total steps
         self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
-
-    @require_torch_multi_accelerator
-    def test_data_is_not_parallelized_when_model_is_parallel(self):
-        model = RegressionModel()
-        # Make the Trainer believe it's a parallelized model
-        model.is_parallelizable = True
-        model.model_parallel = True
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir, per_device_train_batch_size=16, per_device_eval_batch_size=16, report_to="none"
-            )
-            trainer = Trainer(model, args, train_dataset=RegressionDataset(), eval_dataset=RegressionDataset())
-            # Check the Trainer was fooled
-            self.assertTrue(trainer.is_model_parallel)
-            self.assertEqual(trainer.args.n_gpu, 1)
-
-            # The batch size of the training and evaluation dataloaders should be 16, not 16 * n_gpu
-            self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16)
-            self.assertEqual(len(trainer.get_train_dataloader()), 64 // 16)
-            self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16)
-            self.assertEqual(len(trainer.get_eval_dataloader()), 64 // 16)
 
     def test_evaluate(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -5284,7 +5281,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
@@ -5469,14 +5465,10 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 )
                 branch = "v1.0"
                 create_branch(repo_id=trainer.hub_model_id, branch=branch, token=self._token, exist_ok=True)
-                url = trainer.push_to_hub(revision=branch)
+                push_commit = trainer.push_to_hub(revision=branch)
 
-            # Extract branch from the url
-            re_search = re.search(r"tree/([^/]+)/", url)
-            self.assertIsNotNone(re_search)
-
-            branch_name = re_search.groups()[0]
-            self.assertEqual(branch_name, branch)
+            commits = list_repo_commits(repo_id=trainer.hub_model_id, revision=branch, token=self._token)
+            self.assertEqual(commits[0].commit_id, push_commit.oid)
 
 
 @require_torch

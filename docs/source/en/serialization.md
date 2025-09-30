@@ -38,6 +38,7 @@ pip install optimum[exporters]
 
 > [!TIP]
 > Refer to the [Export a model to ONNX with optimum.exporters.onnx](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model#exporting-a-model-to-onnx-using-the-cli) guide for all available arguments or with the command below.
+>
 > ```bash
 > optimum-cli export onnx --help
 > ```
@@ -50,7 +51,7 @@ optimum-cli export onnx --model distilbert/distilbert-base-uncased-distilled-squ
 
 You should see logs indicating the progress and showing where the resulting `model.onnx` is saved.
 
-```bash
+```text
 Validating ONNX model distilbert_base_uncased_squad_onnx/model.onnx...
 	-[✓] ONNX model output names match reference model (start_logits, end_logits)
 	- Validating ONNX Model output "start_logits":

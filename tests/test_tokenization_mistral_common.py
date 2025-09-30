@@ -34,7 +34,7 @@ if is_mistral_common_available():
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
     from mistral_common.tokens.tokenizers.utils import list_local_hf_repo_files
 
-    # To avoid unnecessary `requests.get` calls which give us `Error: Too Many Requests for url` on CircleCI
+    # To avoid unnecessary `httpx.get` calls which give us `Error: Too Many Requests for url` on CircleCI
     mistral_common.tokens.tokenizers.image.download_image = load_image
 
 
