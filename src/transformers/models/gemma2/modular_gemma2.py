@@ -55,6 +55,7 @@ class Gemma2Config(PretrainedConfig):
     e.g. [google/gemma2-7b](https://huggingface.co/google/gemma2-7b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the Gemma2 model. Defines the number of different tokens that can be represented by the
@@ -113,6 +114,8 @@ class Gemma2Config(PretrainedConfig):
             scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             scaling factor when applying tanh softcapping on the attention scores.
+        use_bidirectional_attention (`bool`, *optional*):
+            If True, the model will attend to all text tokens instead of using a causal mask.
 
     ```python
     >>> from transformers import Gemma2Model, Gemma2Config
@@ -167,6 +170,7 @@ class Gemma2Config(PretrainedConfig):
         layer_types=None,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
+        use_bidirectional_attention=None,
         **kwargs,
     ):
         super().__init__(
@@ -196,6 +200,7 @@ class Gemma2Config(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        self.use_bidirectional_attention = use_bidirectional_attention
 
         if self.layer_types is None:
             self.layer_types = [
@@ -258,7 +263,7 @@ class Gemma2Attention(GemmaAttention):
         super().__init__(config, layer_idx)
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.attention_dropout = self.config.attention_dropout
-        self.is_causal = True
+        self.is_causal = not getattr(config, "use_bidirectional_attention", False)
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
@@ -581,7 +586,7 @@ __all__ = [
     "Gemma2Config",
     "Gemma2ForCausalLM",
     "Gemma2Model",
-    "Gemma2PreTrainedModel",  # noqa: F822
+    "Gemma2PreTrainedModel",
     "Gemma2ForSequenceClassification",
     "Gemma2ForTokenClassification",
 ]

@@ -24,7 +24,7 @@ import random
 import re
 import threading
 import time
-from typing import Any, NamedTuple, Optional, Union
+from typing import Any, Callable, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -294,7 +294,7 @@ def default_hp_space_optuna(trial) -> dict[str, float]:
     }
 
 
-def default_hp_space_ray(trial) -> dict[str, float]:
+def default_hp_space_ray(trial) -> dict[str, Any]:
     from .integrations import is_ray_tune_available
 
     assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
@@ -321,7 +321,7 @@ def default_hp_space_sigopt(trial):
     ]
 
 
-def default_hp_space_wandb(trial) -> dict[str, float]:
+def default_hp_space_wandb(trial) -> dict[str, Any]:
     from .integrations import is_wandb_available
 
     if not is_wandb_available():
@@ -474,7 +474,7 @@ class TrainerMemoryTracker:
         if self.skip_memory_metrics:
             return
 
-        import psutil  # noqa
+        import psutil
 
         if is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available():
             import torch
@@ -778,14 +778,14 @@ def number_of_arguments(func):
 
 
 def find_executable_batch_size(
-    function: Optional[callable] = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: Optional[Callable] = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
 ):
     """
     Args:
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
     CUDNN, the batch size is multiplied by 0.9 and passed to `function`. `function` must take in a `batch_size` parameter as
     its first argument.
-        function (`callable`, *optional*)
+        function (`Callable`, *optional*)
             A function to wrap
         starting_batch_size (`int`, *optional*)
             The batch size to try and fit into memory

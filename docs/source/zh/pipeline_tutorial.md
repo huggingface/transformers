@@ -306,5 +306,5 @@ pipe = pipeline(model="facebook/opt-1.3b", device_map="auto", model_kwargs={"loa
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 
-请注意，您可以将`checkpoint `替换为任何支持大模型加载的Hugging Face模型，比如BLOOM！
+请注意，您可以将`checkpoint`替换为任何支持大模型加载的Hugging Face模型，比如BLOOM！
 

@@ -625,6 +625,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -1858,7 +1859,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_mismatched_shapes = False
     test_missing_keys = False
-    test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = False
 
