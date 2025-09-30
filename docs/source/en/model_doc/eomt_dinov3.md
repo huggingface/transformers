@@ -19,10 +19,8 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The **EoMT-DINOv3** family extends the [Encoder-only Mask Transformer](https://www.tue-mps.org/eomt) architecture with
-Vision Transformers that are pre-trained using [DINOv3](https://github.com/facebookresearch/dinov3). The update was
-released alongside the *🚀 NEW: DINOv3 Support* announcement in the official
-[EoMT repository](https://github.com/tue-mps/eomt), delivering stronger segmentation quality across ADE20K and COCO
+The **EoMT-DINOv3** family extends the [Encoder-only Mask Transformer](eomt) architecture with
+Vision Transformers that are pre-trained using [DINOv3](dinov3). The update delivers stronger segmentation quality across ADE20K and COCO
 benchmarks while preserving the encoder-only design that made EoMT attractive for real-time applications.
 
 Compared to the DINOv2-based models, the DINOv3 variants leverage rotary position embeddings, optional gated MLP blocks
