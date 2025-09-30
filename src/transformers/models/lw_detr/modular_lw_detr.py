@@ -642,17 +642,38 @@ class LwDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAtte
         )
 
 
+class LwDetrMLP(nn.Module):
+    def __init__(self, config: LwDetrConfig):
+        super().__init__()
+        # feedforward neural networks
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.decoder_activation_function]
+        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
+        self.layer_norm = nn.LayerNorm(config.d_model)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.layer_norm(hidden_states)
+        return hidden_states
+
+
 class LwDetrDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LwDetrConfig, layer_idx: int):
         GradientCheckpointingLayer.__init__(self)
-        self.embed_dim = config.d_model
 
         # self-attention
         self.self_attn = LwDetrAttention(config, layer_idx=layer_idx)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.activation_dropout = config.activation_dropout
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(config.d_model)
 
         # cross-attention
         self.cross_attn = LwDetrMultiscaleDeformableAttention(
@@ -660,12 +681,10 @@ class LwDetrDecoderLayer(GradientCheckpointingLayer):
             num_heads=config.decoder_cross_attention_heads,
             n_points=config.decoder_n_points,
         )
-        self.cross_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.cross_attn_layer_norm = nn.LayerNorm(config.d_model)
 
-        # feedforward neural networks
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        # ffn
+        self.ffn = LwDetrMLP(config)
 
     def forward(
         self,
@@ -703,15 +722,7 @@ class LwDetrDecoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states + cross_attention_output
         hidden_states = self.cross_attn_layer_norm(hidden_states)
 
-        # FFN
-        residual = hidden_states
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.ffn(hidden_states)
 
         return hidden_states
 
@@ -891,10 +902,7 @@ class LwDetrModel(DeformableDetrModel):
         self.enc_output_norm = nn.ModuleList([nn.LayerNorm(hidden_dim) for _ in range(self.group_detr)])
         # Should normally be None and then instantiated in the ForObjectDetection class
         self.enc_out_bbox_embed = nn.ModuleList(
-            [
-                LwDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
-                for _ in range(self.group_detr)
-            ]
+            [LwDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3) for _ in range(self.group_detr)]
         )
         self.enc_out_class_embed = nn.ModuleList(
             [nn.Linear(config.d_model, config.num_labels) for _ in range(self.group_detr)]
@@ -1162,9 +1170,7 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
         pred_class = []
         group_detr = self.config.group_detr if self.training else 1
         for group_index in range(group_detr):
-            group_pred_class = self.model.enc_out_class_embed[group_index](
-                enc_outputs_class_logits_list[group_index]
-            )
+            group_pred_class = self.model.enc_out_class_embed[group_index](enc_outputs_class_logits_list[group_index])
             pred_class.append(group_pred_class)
         enc_outputs_class_logits = torch.cat(pred_class, dim=1)
 
