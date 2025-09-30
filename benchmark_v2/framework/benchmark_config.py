@@ -99,7 +99,7 @@ def cross_generate_configs(
     }
     configs = []
     for attn_implementation in [("flash_attention_2", None), ("eager", None), ("sdpa", "math"), ("sdpa", "flash_attention"), ("sdpa", "efficient_attention")]:
-        for compiled_mode in [None, "default", "reduce-overhead", "max-autotune"]:
+        for compiled_mode in [None, "default", "max-autotune", "reduce-overhead"]:
             for kernelized in {False, KERNELIZATION_AVAILABLE}:
                 for use_cache in [True, False]:
                     name = [
