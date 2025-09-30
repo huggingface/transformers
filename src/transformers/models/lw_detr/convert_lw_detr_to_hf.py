@@ -28,7 +28,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import LwDetrConfig, LwDetrForObjectDetection, LwDetrImageProcessor
+from transformers import DeformableDetrImageProcessor, LwDetrConfig, LwDetrForObjectDetection
 from transformers.image_utils import load_image
 
 
@@ -176,9 +176,9 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer.decoder.layers.(\d+).cross_attn.value_proj.(weight|bias)":            r"decoder.layers.\1.cross_attn.value_proj.\2",
     r"transformer.decoder.layers.(\d+).cross_attn.output_proj.(weight|bias)":           r"decoder.layers.\1.cross_attn.output_proj.\2",
     r"transformer.decoder.layers.(\d+).norm2.(weight|bias)":                            r"decoder.layers.\1.cross_attn_layer_norm.\2",
-    r"transformer.decoder.layers.(\d+).linear1.(weight|bias)":                          r"decoder.layers.\1.fc1.\2",
-    r"transformer.decoder.layers.(\d+).linear2.(weight|bias)":                          r"decoder.layers.\1.fc2.\2",
-    r"transformer.decoder.layers.(\d+).norm3.(weight|bias)":                            r"decoder.layers.\1.final_layer_norm.\2",
+    r"transformer.decoder.layers.(\d+).linear1.(weight|bias)":                          r"decoder.layers.\1.ffn.fc1.\2",
+    r"transformer.decoder.layers.(\d+).linear2.(weight|bias)":                          r"decoder.layers.\1.ffn.fc2.\2",
+    r"transformer.decoder.layers.(\d+).norm3.(weight|bias)":                            r"decoder.layers.\1.ffn.layer_norm.\2",
     r"transformer.decoder.norm.(weight|bias)":                                          r"decoder.layernorm.\1",
     r"transformer.decoder.ref_point_head.layers.(\d+).(weight|bias)":                   r"decoder.ref_point_head.layers.\1.\2",
 
@@ -313,7 +313,7 @@ def original_preprocess_image(image_url):
     image = transform(image)
     return image
 
-def test_models_outputs(model: LwDetrForObjectDetection, image_processor: LwDetrImageProcessor, model_name: str):
+def test_models_outputs(model: LwDetrForObjectDetection, image_processor: DeformableDetrImageProcessor, model_name: str):
     expected_outputs = {
     "lwdetr_tiny_30e_objects365": {
         "logits": [-7.76931, -4.12702, -2.90175, -4.06055, -2.95753],
@@ -479,7 +479,7 @@ def convert_lw_detr_checkpoint(
 
     # Save image processor
     print("Saving image processor...")
-    image_processor = LwDetrImageProcessor(size={"height": 640, "width": 640})
+    image_processor = DeformableDetrImageProcessor(size={"height": 640, "width": 640})
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
     test_models_outputs(model, image_processor, model_name)
