@@ -313,8 +313,6 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         vision_end_token_id=151653,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
@@ -331,16 +329,17 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
 
-    def __setattr__(self, key, value):
-        if "text_config" in super().__getattribute__("__dict__") and key not in [
-            "dtype",
-            "_attn_implementation_internal",
-        ]:
-            text_config = super().__getattribute__("text_config")
-            if key in text_config.__dict__:
-                return setattr(text_config, key, value)
+        super().__init__(**kwargs)
 
-        return super().__setattr__(key, value)
+    def __setattr__(self, key, value):
+        if (
+            (text_config := super().__getattribute__("__dict__").get("text_config")) is not None
+            and key not in ["dtype", "_attn_implementation_internal"]
+            and key in text_config.__dict__
+        ):
+            setattr(text_config, key, value)
+        else:
+            super().__setattr__(key, value)
 
     def __getattribute__(self, key):
         if "text_config" in super().__getattribute__("__dict__") and key not in [
