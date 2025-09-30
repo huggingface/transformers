@@ -39,31 +39,15 @@ if is_torch_available():
         ArceeForTokenClassification,
         ArceeModel,
     )
-    from transformers.models.arcee.modeling_arcee import ArceeRotaryEmbedding
 
 
 class ArceeModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = ArceeConfig
         base_model_class = ArceeModel
-        causal_lm_class = ArceeForCausalLM
-        sequence_class = ArceeForSequenceClassification
-        token_class = ArceeForTokenClassification
 
 
 @require_torch
 class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            ArceeModel,
-            ArceeForCausalLM,
-            ArceeForSequenceClassification,
-            ArceeForQuestionAnswering,
-            ArceeForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": ArceeModel,
@@ -76,11 +60,8 @@ class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False
     model_tester_class = ArceeModelTester
-    rotary_embedding_layer = ArceeRotaryEmbedding  # Enables RoPE tests if set
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

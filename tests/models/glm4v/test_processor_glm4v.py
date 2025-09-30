@@ -23,12 +23,11 @@ from transformers import AutoProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
     from transformers import Glm4vProcessor
-
 
 if is_torch_available():
     import torch
@@ -142,7 +141,10 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors=return_tensors,
-            fps=2,  # by default no more than 2 frames per second, otherwise too slow
+            fps=2
+            if isinstance(input_data[0], str)
+            else None,  # by default no more than 2 frames per second, otherwise too slow
+            do_sample_frames=bool(isinstance(input_data[0], str)),  # don't sample frames if decoded video is used
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)
@@ -162,16 +164,6 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:
             self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
-
-    @require_av
-    @unittest.skip("GLM4V can't sample frames from image frames")
-    def test_apply_chat_template_video_1(self):
-        pass
-
-    @require_av
-    @unittest.skip("GLM4V can't sample frames from image frames")
-    def test_apply_chat_template_video_2(self):
-        pass
 
     @require_av
     def test_apply_chat_template_video_frame_sampling(self):
@@ -211,11 +203,13 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {
             "type": "video",
-            "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
+            "url": url_to_local_path(
+                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+            ),
         }
 
         # Load with `video_fps` arg
-        video_fps = 1
+        video_fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -224,9 +218,9 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             video_fps=video_fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 40)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 8)
 
-        # Load without any arg should load the whole video
+        # Load the whole video
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -235,15 +229,19 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             do_sample_frames=False,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 600)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 24)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
             ],
         }
         out_dict_with_video = processor.apply_chat_template(
@@ -255,6 +253,19 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 4)
+
+        # When the inputs are frame URLs/paths we expect that those are already
+        # sampled and will raise an error is asked to sample again.
+        with self.assertRaisesRegex(
+            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
+        ):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                do_sample_frames=True,
+            )
 
     def test_model_input_names(self):
         processor = self.get_processor()

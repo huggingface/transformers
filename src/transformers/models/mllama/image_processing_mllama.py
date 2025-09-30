@@ -655,10 +655,8 @@ class MllamaImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
 
         Returns:
             `BatchFeature` of the following structure:
@@ -692,6 +690,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         # extra validation
         _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles)
 
+        images = self.fetch_images(images)
         images_list = make_nested_list_of_images(images)
 
         if self.do_convert_rgb:

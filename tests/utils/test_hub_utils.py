@@ -19,16 +19,15 @@ import unittest.mock as mock
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download
-from requests.exceptions import HTTPError
+from huggingface_hub.errors import HfHubHTTPError, LocalEntryNotFoundError, OfflineModeIsEnabled
 
 from transformers.utils import (
     CONFIG_NAME,
-    FLAX_WEIGHTS_NAME,
-    TF2_WEIGHTS_NAME,
     TRANSFORMERS_CACHE,
     WEIGHTS_NAME,
     cached_file,
     has_file,
+    list_repo_templates,
 )
 
 
@@ -87,7 +86,10 @@ class GetFromCacheTests(unittest.TestCase):
         self.assertIsNone(path)
 
         # Under the mock environment, hf_hub_download will always raise an HTTPError
-        with mock.patch("transformers.utils.hub.hf_hub_download", side_effect=HTTPError) as mock_head:
+        with mock.patch(
+            "transformers.utils.hub.hf_hub_download",
+            side_effect=HfHubHTTPError("failed", response=mock.Mock(status_code=404)),
+        ) as mock_head:
             path = cached_file(RANDOM_BERT, "conf", _raise_exceptions_for_connection_errors=False)
             self.assertIsNone(path)
             # This check we did call the fake head request
@@ -95,8 +97,8 @@ class GetFromCacheTests(unittest.TestCase):
 
     def test_has_file(self):
         self.assertTrue(has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME))
-        self.assertFalse(has_file(TINY_BERT_PT_ONLY, TF2_WEIGHTS_NAME))
-        self.assertFalse(has_file(TINY_BERT_PT_ONLY, FLAX_WEIGHTS_NAME))
+        self.assertFalse(has_file(TINY_BERT_PT_ONLY, "tf_model.h5"))
+        self.assertFalse(has_file(TINY_BERT_PT_ONLY, "flax_model.msgpack"))
 
     def test_has_file_in_cache(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -198,3 +200,12 @@ class GetFromCacheTests(unittest.TestCase):
             with self.assertRaises(ModuleNotFoundError):
                 # The error should be re-raised by cached_files, not caught in the exception handling block
                 cached_file(RANDOM_BERT, "nonexistent.json")
+
+
+class OfflineModeTests(unittest.TestCase):
+    def test_list_repo_templates_w_offline(self):
+        with mock.patch("transformers.utils.hub.list_repo_tree", side_effect=OfflineModeIsEnabled()):
+            with mock.patch(
+                "transformers.utils.hub.snapshot_download", side_effect=LocalEntryNotFoundError("no snapshot found")
+            ):
+                self.assertEqual(list_repo_templates(RANDOM_BERT, local_files_only=False), [])

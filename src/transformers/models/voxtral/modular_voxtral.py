@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from typing import Optional, Union
 
 import torch
@@ -166,7 +167,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def get_audio_embeds(self, input_features: torch.FloatTensor):
+    def get_audio_features(self, input_features: torch.FloatTensor):
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
         Args:
@@ -186,6 +187,12 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         return audio_embeds
+
+    def get_audio_embeds(self, input_features: torch.FloatTensor):
+        warnings.warn(
+            "The method `get_audio_embeds` is deprecated. Please use `get_audio_features` instead.", FutureWarning
+        )
+        return self.get_audio_features(input_features)
 
     @can_return_tuple
     @auto_docstring
@@ -239,12 +246,14 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if input_features is not None:
-            audio_embeds = self.get_audio_embeds(input_features)
+        if input_features is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(input_features)
 
             # replace text-audio token placeholders with audio embeddings
-            audio_token_mask = input_ids == self.config.audio_token_id
-            inputs_embeds[audio_token_mask] = audio_embeds
+            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            )
 
         outputs: BaseModelOutputWithPast = self.language_model(
             attention_mask=attention_mask,

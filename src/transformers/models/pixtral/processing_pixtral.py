@@ -16,12 +16,12 @@
 Processor class for Pixtral.
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, load_image
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
@@ -118,7 +118,7 @@ class PixtralProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -127,7 +127,7 @@ class PixtralProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -142,10 +142,8 @@ class PixtralProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -166,21 +164,6 @@ class PixtralProcessor(ProcessorMixin):
         patch_size = self.patch_size * self.spatial_merge_size
 
         if images is not None:
-            if is_image_or_image_url(images):
-                images = [images]
-            elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
-                pass
-            elif (
-                isinstance(images, (list, tuple))
-                and isinstance(images[0], (list, tuple))
-                and is_image_or_image_url(images[0][0])
-            ):
-                images = [image for sublist in images for image in sublist]
-            else:
-                raise ValueError(
-                    "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
-                )
-            images = [load_image(im) if isinstance(im, str) else im for im in images]
             image_inputs = self.image_processor(images, patch_size=patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}

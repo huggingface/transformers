@@ -18,7 +18,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -69,12 +68,12 @@ else:
         matV: torch.Tensor,
         vecB: torch.Tensor,
         vecI: torch.Tensor,
-        matC_states: torch.Tensor = None,
-        vecN_states: torch.Tensor = None,
-        scaMinter_states: torch.Tensor = None,
-        matC_initial: torch.Tensor = None,
-        vecN_initial: torch.Tensor = None,
-        scaMinter_initial: torch.Tensor = None,
+        matC_states: Optional[torch.Tensor] = None,
+        vecN_states: Optional[torch.Tensor] = None,
+        scaMinter_states: Optional[torch.Tensor] = None,
+        matC_initial: Optional[torch.Tensor] = None,
+        vecN_initial: Optional[torch.Tensor] = None,
+        scaMinter_initial: Optional[torch.Tensor] = None,
         qk_scale: Optional[float] = None,
         chunk_size: int = 64,
         num_chunks: int = 1,
@@ -170,7 +169,7 @@ else:
         eps: float = 1e-6,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         _device = matQ.device
-        nc, chunk_size = num_chunks, chunk_size
+        nc = num_chunks
         batch_size, nh, dqk, dhv = matC_states.shape
         matC_k_states = matC_states.view(batch_size, nh, nc, dqk // nc, dhv)
         vecN_k_states = vecN_states.view(batch_size, nh, nc, dqk // nc)
@@ -237,9 +236,9 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        cstate: torch.Tensor = None,
-        nstate: torch.Tensor = None,
-        mstate: torch.Tensor = None,
+        cstate: Optional[torch.Tensor] = None,
+        nstate: Optional[torch.Tensor] = None,
+        mstate: Optional[torch.Tensor] = None,
         qk_scale: Optional[float] = None,
         return_last_states: bool = False,
         return_all_states: bool = False,
@@ -318,9 +317,9 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        c_initial: torch.Tensor = None,
-        n_initial: torch.Tensor = None,
-        m_initial: torch.Tensor = None,
+        c_initial: Optional[torch.Tensor] = None,
+        n_initial: Optional[torch.Tensor] = None,
+        m_initial: Optional[torch.Tensor] = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         chunk_size: int = 64,
@@ -446,9 +445,9 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        c_initial: torch.Tensor = None,
-        n_initial: torch.Tensor = None,
-        m_initial: torch.Tensor = None,
+        c_initial: Optional[torch.Tensor] = None,
+        n_initial: Optional[torch.Tensor] = None,
+        m_initial: Optional[torch.Tensor] = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         dtype_state: torch.dtype = torch.float32,
@@ -520,9 +519,9 @@ else:
         value: torch.Tensor,
         fgate: torch.Tensor,
         igate: torch.Tensor,
-        c_initial: torch.Tensor = None,
-        n_initial: torch.Tensor = None,
-        m_initial: torch.Tensor = None,
+        c_initial: Optional[torch.Tensor] = None,
+        n_initial: Optional[torch.Tensor] = None,
+        m_initial: Optional[torch.Tensor] = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         autocast_kernel_dtype: torch.dtype = torch.bfloat16,
@@ -584,9 +583,9 @@ else:
         value: torch.Tensor,
         fgate: torch.Tensor,
         igate: torch.Tensor,
-        c_initial: torch.Tensor = None,
-        n_initial: torch.Tensor = None,
-        m_initial: torch.Tensor = None,
+        c_initial: Optional[torch.Tensor] = None,
+        n_initial: Optional[torch.Tensor] = None,
+        m_initial: Optional[torch.Tensor] = None,
         return_last_states: bool = True,
         eps: float = 1e-6,
         autocast_kernel_dtype: torch.dtype = torch.bfloat16,
@@ -773,9 +772,9 @@ else:
             value: torch.Tensor,
             igate: torch.Tensor,
             fgate: torch.Tensor,
-            c_initial: torch.Tensor = None,
-            n_initial: torch.Tensor = None,
-            m_initial: torch.Tensor = None,
+            c_initial: Optional[torch.Tensor] = None,
+            n_initial: Optional[torch.Tensor] = None,
+            m_initial: Optional[torch.Tensor] = None,
             return_last_states: bool = False,
             mode: Optional[Literal["train", "inference"]] = None,
         ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
@@ -1434,7 +1433,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
             offset = 0
             with torch.no_grad():
                 if cache_params is None:
-                    cache_params = xLSTMCache(config=self.config, batch_size=hidden_states.shape[0])
+                    cache_params = xLSTMCache(config=self.config, max_batch_size=hidden_states.shape[0])
                 final_state = torch.zeros_like(hidden_states)
                 while offset < hidden_states.shape[1]:
                     hidden_states_chunk = hidden_states[
@@ -1556,6 +1555,12 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
             model_inputs = {"input_ids": input_ids}
 
         model_inputs.update({"cache_params": cache_params, "use_cache": use_cache})
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
     @can_return_tuple
@@ -1600,7 +1605,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             # Shift so that tokens < nstate predict nstate
             shift_logits = logits[..., :-1, :].contiguous()

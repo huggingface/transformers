@@ -18,8 +18,10 @@ from inspect import signature
 import pytest
 from parameterized import parameterized
 
-from transformers import set_seed
+from transformers import AutoModelForCausalLM, PretrainedConfig, set_seed
+from transformers.models.auto.auto_factory import getattribute_from_module
 from transformers.testing_utils import (
+    _COMMON_MODEL_NAMES_MAP,
     is_flaky,
     require_flash_attn,
     require_torch_gpu,
@@ -43,31 +45,99 @@ if is_torch_available():
 
 
 class CausalLMModelTester:
-    _required_attributes = ("base_model_class", "config_class", "causal_lm_class")
-    forced_config_args = [
-        "pad_token_id"
-    ]  # Arguments that should be passed to the config class even if not in its signature
-    config_class = None
+    # If the model follows the standard naming conventions, only `base_model_class` needs to be set (the others are
+    # inferred from available public classes).
     base_model_class = None
+    # ⚠️ Don't set these unless the model does NOT follow the standard naming conventions ⚠️
+    config_class = None
     causal_lm_class = None
+    question_answering_class = None
     sequence_classification_class = None
     token_classification_class = None
-    question_answering_class = None
+    # These attributes are required after the initialization phase of the tester.
+    _required_attributes = ("base_model_class", "config_class", "causal_lm_class")
 
-    def _verify_model_attributes(self):
-        for required_attribute in self._required_attributes:
-            if getattr(self, required_attribute) is None:
+    # Arguments that should be passed to the config class even if not in its signature
+    forced_config_args = ["pad_token_id"]
+
+    @classmethod
+    def _verify_and_infer_model_attributes(cls):
+        """
+        Verifies that the required tester attributes are set correctly, and infers unset tester attributes.
+        Intentionally nitpicks the tester class attributes, to prevent human errors.
+        """
+        # `base_model_class` is mandatory, and it must be a valid model class.
+        base_model_class = getattr(cls, "base_model_class")
+        if base_model_class is None or "PreTrainedModel" not in str(base_model_class.__mro__):
+            raise ValueError(
+                f"You have inherited from `CausalLMModelTester` but did not set the `base_model_class` "
+                f"attribute to a valid model class. (It's set to `{base_model_class}`)"
+            )
+
+        # Infers other model classes from the base class name and available public classes, if the corresponding
+        # attributes are not set explicitly. If they are set, they must be set to a valid class (config or model).
+        model_name = base_model_class.__name__.replace("Model", "")
+        base_class_module = ".".join(base_model_class.__module__.split(".")[:-1])
+        for tester_attribute_name, model_class_termination in _COMMON_MODEL_NAMES_MAP.items():
+            if getattr(cls, tester_attribute_name) is None:
+                try:
+                    model_class = getattribute_from_module(base_class_module, model_name + model_class_termination)
+                    setattr(cls, tester_attribute_name, model_class)
+                except ValueError:
+                    pass
+            else:
+                if tester_attribute_name == "config_class":
+                    if "PretrainedConfig" not in str(getattr(cls, tester_attribute_name).__mro__):
+                        raise ValueError(
+                            f"You have inherited from `CausalLMModelTester` but did not set the "
+                            f"`{tester_attribute_name}` attribute to a valid config class. (It's set to "
+                            f"`{getattr(cls, tester_attribute_name)}`). If the config class follows a standard "
+                            f"naming convention, you should unset `{tester_attribute_name}`."
+                        )
+                else:
+                    if "PreTrainedModel" not in str(getattr(cls, tester_attribute_name).__mro__):
+                        raise ValueError(
+                            f"You have inherited from `CausalLMModelTester` but did not set the "
+                            f"`{tester_attribute_name}` attribute to a valid model class. (It's set to "
+                            f"`{getattr(cls, tester_attribute_name)}`). If the model class follows a standard "
+                            f"naming convention, you should unset `{tester_attribute_name}`."
+                        )
+
+        # After inferring, if we don't have the basic classes set, we raise an error.
+        for required_attribute in cls._required_attributes:
+            if getattr(cls, required_attribute) is None:
                 raise ValueError(
-                    f"You have inherited from CausalLMModelTester but did not set the {required_attribute} attribute."
+                    f"You have inherited from `CausalLMModelTester` but did not set the `{required_attribute}` "
+                    "attribute. It can't be automatically inferred either -- this means it is not following a "
+                    "standard naming convention. If this is intentional, please set the attribute explicitly."
+                )
+
+        # To prevent issues with typos, no other attributes can be set to a model class
+        for instance_attribute_name, instance_attribute in cls.__dict__.items():
+            if (
+                (
+                    instance_attribute_name not in _COMMON_MODEL_NAMES_MAP
+                    and instance_attribute_name != "base_model_class"
+                )
+                and isinstance(instance_attribute, type)
+                and "PreTrainedModel" in str(instance_attribute.__mro__)
+            ):
+                raise ValueError(
+                    f"You have inherited from `CausalLMModelTester` but set an unexpected attribute to a model class "
+                    f"(`{instance_attribute_name}` is set to `{instance_attribute}`). "
+                    f"Only the following attributes can be set to model classes: {_COMMON_MODEL_NAMES_MAP.keys()}."
                 )
 
     @property
     def all_model_classes(self):
+        # Models that set `all_model_classes` in their `XXXModelTest` class must have a new class that doesn't fit
+        # any of the common classes.
         return [
             model_class
             for model_class in (
                 self.base_model_class,
                 self.causal_lm_class,
+                self.question_answering_class,
                 self.sequence_classification_class,
                 self.token_classification_class,
             )
@@ -118,7 +188,7 @@ class CausalLMModelTester:
         mamba_expand=2,
         mamba_chunk_size=16,
     ):
-        self._verify_model_attributes()
+        self._verify_and_infer_model_attributes()
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
@@ -210,16 +280,7 @@ class CausalLMModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
+        config, input_ids, _, input_mask, _, _, _ = self.prepare_config_and_inputs()
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
@@ -230,7 +291,6 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     test_pruning = False
     model_tester_class = None
     all_model_classes = None
-    rotary_embedding_layer = None  # Enables RoPE tests if set
     pipeline_model_mapping = None
 
     def setUp(self):
@@ -317,15 +377,43 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
+    def test_question_answering_model(self):
+        if self.model_tester.question_answering_class is None:
+            self.skipTest("Model does not support question answering")
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        model = self.model_tester.question_answering_class(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask)
+        self.assertEqual(
+            result.start_logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
+        )
+        self.assertEqual(
+            result.end_logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
+        )
+
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
-        if self.rotary_embedding_layer is None:
-            self.skipTest("Rotary embedding layer not set")
+        """
+        Tests that we can initialize a model with RoPE scaling in the config, that it can run a forward pass, and
+        that a few basic model output properties are honored.
+        """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        if not _config_supports_rope_scaling(config):
+            self.skipTest("This model does not support RoPE scaling")
+
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        config.rope_scaling = {"rope_type": "default"}
         original_model = self.model_tester_class.base_model_class(config)
         original_model.to(torch_device)
         original_model.eval()
@@ -333,7 +421,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         original_long_output = original_model(long_input).last_hidden_state
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        config.rope_scaling = {"rope_type": scaling_type, "factor": 10.0}
         scaled_model = self.model_tester_class.base_model_class(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
@@ -350,10 +438,26 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    def test_model_rope_scaling(self):
-        if self.rotary_embedding_layer is None:
-            self.skipTest("Rotary embedding layer not set")
+    def test_model_rope_scaling_frequencies(self):
+        """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        if not _config_supports_rope_scaling(config):
+            self.skipTest("This model does not support RoPE scaling")
+
+        # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
+        # named location of the RoPE layer class.
+        base_model = self.model_tester.base_model_class(config)
+        possible_rope_attributes = [
+            "rotary_emb",  # most common case
+            "global_rotary_emb",
+            "local_rotary_emb",
+        ]
+        for name, module in base_model.named_modules():
+            if any(potential_name in name for potential_name in possible_rope_attributes):
+                rope_class = type(module)
+                break
+
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)
@@ -368,7 +472,8 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
-        original_rope = self.rotary_embedding_layer(config=config).to(torch_device)
+        config.rope_scaling = {"rope_type": "default"}
+        original_rope = rope_class(config=config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -376,8 +481,8 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-        linear_scaling_rope = self.rotary_embedding_layer(config=config).to(torch_device)
+        config.rope_scaling = {"rope_type": "linear", "factor": scaling_factor}
+        linear_scaling_rope = rope_class(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -390,8 +495,8 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
-        ntk_scaling_rope = self.rotary_embedding_layer(config=config).to(torch_device)
+        config.rope_scaling = {"rope_type": "dynamic", "factor": scaling_factor}
+        ntk_scaling_rope = rope_class(config=config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -404,8 +509,8 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
-        config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
-        yarn_scaling_rope = self.rotary_embedding_layer(config=config).to(torch_device)
+        config.rope_scaling = {"rope_type": "yarn", "factor": scaling_factor}
+        yarn_scaling_rope = rope_class(config=config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
@@ -450,3 +555,31 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 logits = outputs.hidden_states[-1]
                 logits_fa = outputs_fa.hidden_states[-1]
                 torch.testing.assert_close(logits_fa, logits, atol=3e-2, rtol=3e-2)
+
+    def test_causal_lm_can_accept_training_kwargs(self):
+        if not getattr(self.model_tester, "is_training", False):
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with torch.device(torch_device):
+                model_eager = AutoModelForCausalLM.from_config(config, dtype=torch.float32)
+
+            model_eager.save_pretrained(tmpdir)
+            model = AutoModelForCausalLM.from_pretrained(tmpdir, dtype=torch.float32, device_map=torch_device)
+            inputs_dict["num_items_in_batch"] = torch.tensor(inputs_dict["input_ids"].shape[0])
+            inputs_dict["labels"] = inputs_dict["input_ids"]
+            _ = model(**inputs_dict, return_dict=False)
+
+
+def _config_supports_rope_scaling(config: PretrainedConfig) -> bool:
+    """Returns whether a certain model config supports RoPE scaling parameterization."""
+    # Has rope_scaling -> model was designed with rope scaling in mind
+    # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
+    main_config_has_rope = hasattr(config, "rope_scaling") or hasattr(config, "rope_theta")
+    sub_config_has_rope = any(
+        hasattr(getattr(config, sub_config), "rope_scaling") or hasattr(getattr(config, sub_config), "rope_theta")
+        for sub_config in config.sub_configs.keys()
+    )
+    return main_config_has_rope or sub_config_has_rope

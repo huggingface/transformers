@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from .image_processing_segformer import *
     from .image_processing_segformer_fast import *
     from .modeling_segformer import *
-    from .modeling_tf_segformer import *
 else:
     import sys
 

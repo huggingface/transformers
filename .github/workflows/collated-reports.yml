@@ -41,9 +41,3 @@ jobs:
             --job ${{ inputs.job }}                          \
             --report-repo-id ${{ inputs.report_repo_id }}    \
             --gpu-name ${{ inputs.gpu_name }}
-
-      - name: Upload collated reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: collated_reports_${{ env.CI_SHA }}.json
-          path: collated_reports_${{ env.CI_SHA }}.json

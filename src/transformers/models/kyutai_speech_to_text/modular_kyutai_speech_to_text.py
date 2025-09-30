@@ -105,7 +105,6 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -183,7 +182,7 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
             if padding:
                 padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
 
-        # now let's padd left and right
+        # now let's pad left and right
         pad_left = int(self.audio_silence_prefix_seconds * self.sampling_rate)
         pad_right = int((self.audio_delay_seconds + 1.0) * self.sampling_rate)
         padded_inputs["input_values"] = np.pad(
@@ -251,7 +250,7 @@ class KyutaiSpeechToTextModel(MoshiModel):
         self.embed_tokens = KyutaiSpeechToTextEmbeddings(config)
 
 
-class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTrainedModel):
+class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
     _keep_in_fp32_modules_strict = ["codec_model"]
 
     def __init__(self, config):
@@ -259,7 +258,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         self.codec_model = AutoModel.from_config(config.codec_config)
 
         # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
-        # yet the codec_model needs a generation config to initalize it's cache for streaming inference
+        # yet the codec_model needs a generation config to initialize it's cache for streaming inference
         # we therefore initialize a generation config for the codec model
         self.codec_model.generation_config = GenerationConfig.from_model_config(config.codec_config)
 
@@ -299,7 +298,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         super().forward(**super_kwargs)
 
     def _prepare_generation_config(self, *args, **kwargs):
-        generation_config, model_kwargs = GenerationMixin._prepare_generation_config(*args, **kwargs)
+        generation_config, model_kwargs = GenerationMixin._prepare_generation_config(self, *args, **kwargs)
         # this should be passed to the model kwargs for the input preparation
         model_kwargs["audio_window_size"] = (
             generation_config.audio_window_size if hasattr(generation_config, "audio_window_size") else None
@@ -313,6 +312,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         model_kwargs: Optional[dict[str, torch.Tensor]] = None,
     ) -> tuple[torch.Tensor, Optional[str], dict[str, torch.Tensor]]:
         inputs, input_name, model_kwargs = GenerationMixin._prepare_model_inputs(
+            self,
             inputs=inputs,
             bos_token_id=bos_token_id,
             model_kwargs=model_kwargs,
@@ -356,7 +356,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         self.codec_model._prepare_cache_for_generation(
             generation_config=self.codec_model.generation_config,
             model_kwargs=temporary_model_kwargs,
-            assistant_model=None,
+            generation_mode=None,
             batch_size=batch_size,
             max_cache_length=self.config.codec_config.sliding_window,
         )
@@ -397,7 +397,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         padding_cache: Optional[KyutaiSpeechToTextConv1dPaddingCache] = None,
         **kwargs,
     ):
-        model_inputs = GenerationMixin.prepare_inputs_for_generation(*args, **kwargs)
+        model_inputs = GenerationMixin.prepare_inputs_for_generation(self, *args, **kwargs)
 
         if input_values is not None:
             cache_position = model_inputs["cache_position"]

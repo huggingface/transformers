@@ -20,7 +20,7 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, Gemma2Config, is_torch_available, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, is_torch_available, pipeline
 from transformers.cache_utils import DynamicLayer, DynamicSlidingWindowLayer
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
@@ -39,7 +39,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
@@ -55,31 +54,11 @@ if is_torch_available():
 
 class Gemma2ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Gemma2Config
         base_model_class = Gemma2Model
-        causal_lm_class = Gemma2ForCausalLM
-        sequence_class = Gemma2ForSequenceClassification
-        token_class = Gemma2ForTokenClassification
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Gemma2Model,
-            "text-classification": Gemma2ForSequenceClassification,
-            "token-classification": Gemma2ForTokenClassification,
-            "text-generation": Gemma2ForCausalLM,
-            "zero-shot": Gemma2ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch
 class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (Gemma2Model, Gemma2ForCausalLM, Gemma2ForSequenceClassification, Gemma2ForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Gemma2Model,
@@ -92,15 +71,9 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = Gemma2ModelTester
-
-    def setUp(self):
-        self.model_tester = Gemma2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma2Config, hidden_size=37)
 
 
 @slow
@@ -255,6 +228,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     "Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a"
                 ],
+                ("rocm", (9, 5)): [
+                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
+                ],
             }
         )
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -320,7 +296,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         # Export + hybrid cache
         model.eval()
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=1024)
         exported_program = exportable_module.export(
             input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
             cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
@@ -374,11 +350,17 @@ class Gemma2IntegrationTest(unittest.TestCase):
         we need to correctly slice the attention mask in all cases (because we use a hybrid cache).
         Outputs for every attention functions should be coherent and identical.
         """
+        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
+        if attn_implementation == "flex_attention":
+            self.skipTest(
+                reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
+            )
+
         if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
             self.skipTest("FlashAttention2 is required for this test.")
 
         if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "google/gemma-2-2b"
         EXPECTED_COMPLETIONS = [
@@ -414,11 +396,17 @@ class Gemma2IntegrationTest(unittest.TestCase):
         Same as above, but explicitly setting the cache to Dynamic, as it's otherwise static by default for
         the model on the hub
         """
+        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
+        if attn_implementation == "flex_attention":
+            self.skipTest(
+                reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
+            )
+
         if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
             self.skipTest("FlashAttention2 is required for this test.")
 
         if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "google/gemma-2-2b"
         EXPECTED_COMPLETIONS = [

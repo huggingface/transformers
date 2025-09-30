@@ -1444,15 +1444,12 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces diverse beam search.
-
     Note that this logits processor is only effective for [`PreTrainedModel.group_beam_search`]. See [Diverse Beam
     Search: Decoding Diverse Solutions from Neural Sequence Models](https://huggingface.co/papers/1610.02424) for more
     details.
-
     Traditional beam search often generates very similar sequences across different beams.
     `HammingDiversityLogitsProcessor` addresses this by penalizing beams that generate tokens already chosen by other
     beams in the same time step.
-
     Args:
         diversity_penalty (`float`):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
@@ -1463,17 +1460,13 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
         num_beam_groups (`int`):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             [this paper](https://huggingface.co/papers/1610.02424) for more details.
-
     Examples:
-
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
     >>> import torch
-
     >>> # Initialize the model and tokenizer
     >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
     >>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
-
     >>> # A long text about the solar system
     >>> text = (
     ...     "The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, "
@@ -1483,7 +1476,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     ...     "interstellar molecular cloud."
     ... )
     >>> inputs = tokenizer("summarize: " + text, return_tensors="pt")
-
     >>> # Generate diverse summary
     >>> outputs_diverse = model.generate(
     ...     **inputs,
@@ -1494,7 +1486,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     ...     num_return_sequences=2,
     ... )
     >>> summaries_diverse = tokenizer.batch_decode(outputs_diverse, skip_special_tokens=True)
-
     >>> # Generate non-diverse summary
     >>> outputs_non_diverse = model.generate(
     ...     **inputs,
@@ -1503,12 +1494,10 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     ...     num_return_sequences=2,
     ... )
     >>> summary_non_diverse = tokenizer.batch_decode(outputs_non_diverse, skip_special_tokens=True)
-
     >>> # With `diversity_penalty`, the resulting beams are much more diverse
     >>> print(summary_non_diverse)
     ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
     'the Solar System formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.']
-
     >>> print(summaries_diverse)
     ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
     'the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets. the rest of the objects are smaller objects, such as the five dwarf planets and small solar system bodies.']
@@ -1516,6 +1505,9 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, diversity_penalty: float, num_beams: int, num_beam_groups: int):
+        logger.warning_once(
+            "`HammingDiversityLogitsProcessor` is deprecated and will be removed in v4.62.0, as constrained beam search has been moved to the Hub: https://hf.co/transformers-community/constrained-beam-search."
+        )
         if not isinstance(diversity_penalty, float) or (not diversity_penalty > 0.0):
             raise ValueError("`diversity_penalty` should be a float strictly larger than 0.")
         self._diversity_penalty = diversity_penalty
@@ -1547,7 +1539,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
                 beam groups in the current generation step.
             beam_group_idx (`int`):
                 The index of the beam group currently being processed.
-
         Return:
             `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`:
                 The processed prediction scores.
@@ -2298,7 +2289,7 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         model,
         unconditional_ids: Optional[torch.LongTensor] = None,
         unconditional_attention_mask: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = True,
+        use_cache: bool = True,
     ):
         self.guidance_scale = guidance_scale
         self.model = model
