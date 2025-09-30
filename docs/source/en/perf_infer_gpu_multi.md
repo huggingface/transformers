@@ -45,13 +45,7 @@ This guide shows how to enable tensor parallelism with Transformers and differen
 
 ## Partitioning a model
 
-Transformers supports tensor parallelism if a model has a `tp_plan`. There are two plans to partition a model.
-
-- The `auto` tensor parallelism plan partitions a model (see the supported models above) based on a predefined configuration.
-- You can also manually specify your own partitioning plan and pass it to the `tp_plan` parameter in [`~PreTrainedModel.from_pretrained`].
-
-<hfoptions id="sharding">
-<hfoption id="auto plan">
+Transformers supports tensor parallelism if a model has a `tp_plan`. Set `tp_plan="auto"` to automatically use a tensor parallelism plan based on a model's predefined configuration.
 
 ```py
 import os
@@ -77,32 +71,6 @@ Launch the inference script above on [torchrun](https://pytorch.org/docs/stable/
 ```bash
 torchrun --nproc-per-node 4 demo.py
 ```
-
-</hfoption>
-<hfoption id="manual plan">
-
-Define a tensor parallel plan for each layer in `tp_plan` and pass it to [`~PreTrainedModel.from_pretrained`]. The example below uses a combination of column and row partitioning. Refer to the [Partitioning strategies](#partitioning-strategies) section to learn about other supported partitioning strategies.
-
-> [!WARNING]
-> Manually specifying your own partitioning plan requires a good understanding of the model architecture and how the partitioning strategies interact together. If you are not sure about the partitioning strategies, the resulting model can be very slow, even failing or incorrect. Refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) to learn more.
-
-```py
-from transformers import AutoModelForCausalLM
-
-tp_plan = {
-    "model.layers.*.self_attn.q_proj": "colwise",
-    "model.layers.*.self_attn.k_proj": "colwise",
-    "model.layers.*.self_attn.v_proj": "colwise",
-    "model.layers.*.self_attn.o_proj": "rowwise",
-    ...
-}
-
-model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
-print(model._tp_plan)
-```
-
-</hfoption>
-</hfoptions>
 
 ## Partitioning strategies
 
