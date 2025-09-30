@@ -248,7 +248,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         pad_size: SizeDict = None,
         fill_value: Optional[int] = 0,
         padding_mode: Optional[str] = "constant",
-        return_mask: Optional[bool] = False,
+        return_mask: bool = False,
         disable_grouping: Optional[bool] = False,
         **kwargs,
     ) -> "torch.Tensor":

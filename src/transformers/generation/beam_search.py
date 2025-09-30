@@ -331,7 +331,7 @@ class BeamSearchScorer(BeamScorer):
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
         eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
-        decoder_prompt_len: Optional[int] = 0,
+        decoder_prompt_len: int = 0,
     ) -> tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
@@ -804,7 +804,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
         eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
-        decoder_prompt_len: Optional[int] = 0,
+        decoder_prompt_len: int = 0,
     ) -> tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps)
 
@@ -965,7 +965,7 @@ class BeamHypotheses:
             else:
                 self.worst_score = min(score, self.worst_score)
 
-    def is_done(self, best_sum_logprobs: float, cur_len: int, decoder_prompt_len: Optional[int] = 0) -> bool:
+    def is_done(self, best_sum_logprobs: float, cur_len: int, decoder_prompt_len: int = 0) -> bool:
         """
         If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
         one in the heap, then we are done with this sentence.
