@@ -21,8 +21,6 @@ from ..conditional_detr.modeling_conditional_detr import (
 )
 from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..dab_detr.modeling_dab_detr import gen_sine_position_embeddings
-from ..deformable_detr.image_processing_deformable_detr import DeformableDetrImageProcessor
-from ..deformable_detr.image_processing_deformable_detr_fast import DeformableDetrImageProcessorFast
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoderOutput,
     DeformableDetrForObjectDetection,
@@ -39,67 +37,6 @@ from .configuration_lw_detr_vit import LwDetrViTConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class LwDetrImageProcessor(DeformableDetrImageProcessor):
-    r"""
-    Constructs a LW DETR image processor.
-
-    Args:
-        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
-            overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
-            Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
-            in the `preprocess` method. Available options are:
-                - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
-                    Do NOT keep the aspect ratio.
-                - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
-                    the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
-                    less or equal to `longest_edge`.
-                - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
-                    aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
-                    `max_width`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Resampling filter to use if resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
-            Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
-            `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`): Controls whether to normalize the image.
-            Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
-            Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
-            channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
-            Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
-            for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_annotations (`bool`, *optional*, defaults to `True`):
-            Controls whether to convert the annotations to the format expected by the DETR model. Converts the
-            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-            If `pad_size` is provided, the image will be padded to the specified dimensions.
-            Otherwise, the image will be padded to the maximum height and width of the batch.
-        pad_size (`dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-            height and width in the batch.
-    """
-
-    pass
-
-
-class LwDetrImageProcessorFast(DeformableDetrImageProcessorFast):
-    pass
 
 
 @dataclass
@@ -1290,6 +1227,4 @@ __all__ = [
     "LwDetrPreTrainedModel",
     "LwDetrModel",
     "LwDetrForObjectDetection",
-    "LwDetrImageProcessorFast",
-    "LwDetrImageProcessor",
 ]

@@ -22,8 +22,8 @@ import numpy as np
 
 from transformers import (
     CONFIG_NAME,
+    DeformableDetrImageProcessor,
     LwDetrConfig,
-    LwDetrImageProcessor,
     LwDetrViTConfig,
     is_torch_available,
     is_vision_available,
@@ -556,7 +556,7 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class LwDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return LwDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return DeformableDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     @slow
     def test_inference_object_detection_head(self):
