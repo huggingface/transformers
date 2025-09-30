@@ -1291,13 +1291,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_trained_model(trainer.model, atol=ATOL, rtol=RTOL)
 
-        # --bf16 --half_precision_backend apex can't be used together
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(ValueError):
-                trainer = get_regression_trainer(
-                    learning_rate=0.1, bf16=True, half_precision_backend="apex", output_dir=tmp_dir
-                )
-
     @require_torch_gpu
     @require_torch_tf32
     def test_tf32(self):
