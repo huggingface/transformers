@@ -75,6 +75,7 @@ messages = [
 ]
 pipe(text=messages,max_new_tokens=20, return_full_text=False)
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -123,6 +124,7 @@ output_text = processor.batch_decode(
 )
 print(output_text)
 ```
+
 </hfoption>
 </hfoptions>
 

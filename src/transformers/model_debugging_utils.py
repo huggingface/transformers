@@ -21,6 +21,7 @@ from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 from typing import Optional
 
+from .utils import logging
 from .utils.import_utils import is_torch_available, requires
 
 
@@ -28,6 +29,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import save_file
 
+    _torch_distributed_available = False
     # Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
     if torch.distributed.is_available():
         import torch.distributed.tensor
@@ -35,7 +37,6 @@ if is_torch_available():
         _torch_distributed_available = True
 else:
     _torch_distributed_available = False
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -224,7 +225,7 @@ def prune_intermediate_layers(node):
         prune_intermediate_layers(child)
 
 
-def log_model_debug_trace(debug_path, model):
+def log_model_debug_trace(debug_path: Optional[str], model):
     if debug_path:
         try:
             os.makedirs(debug_path, exist_ok=True)
@@ -269,8 +270,8 @@ def log_model_debug_trace(debug_path, model):
 
 def _attach_debugger_logic(
     model,
-    debug_path: Optional[str] = ".",
-    do_prune_layers: Optional[bool] = True,
+    debug_path: str = ".",
+    do_prune_layers: bool = True,
     use_repr: bool = True,
 ):
     """
@@ -283,7 +284,7 @@ def _attach_debugger_logic(
         debug_path (`str`): Optional directory to dump debug JSON files.
         do_prune_layers (`bool`, *optional*, defaults to `True`): Whether to prune intermediate layers.
         use_repr (bool, *optional*, defaults to `True`): Whether to save a `repr()`-ized version of the tensors as the
-            `value` property in the asscoiated FULL_TENSORS.json file, or to store full tensors in separate SafeTensors
+            `value` property in the associated FULL_TENSORS.json file, or to store full tensors in separate SafeTensors
             files and store the relative path to that file in the `value` property.
     """
     class_name = model.__class__.__name__
@@ -399,8 +400,8 @@ def _attach_debugger_logic(
 def model_addition_debugger_context(
     model,
     debug_path: Optional[str] = None,
-    do_prune_layers: Optional[bool] = True,
-    use_repr: Optional[bool] = True,
+    do_prune_layers: bool = True,
+    use_repr: bool = True,
 ):
     """
     # Model addition debugger - context manager for model adders

@@ -810,7 +810,6 @@ src/transformers/utils/hp_naming.py
 src/transformers/utils/hub.py
 src/transformers/utils/import_utils.py
 src/transformers/utils/logging.py
-src/transformers/utils/model_parallel_utils.py
 src/transformers/utils/notebook.py
 src/transformers/utils/peft_utils.py
 src/transformers/utils/quantization_config.py

@@ -83,7 +83,7 @@ DatasetDict({
 })
 ```
 
-虽然数据集包含 `lang_id `和 `english_transcription` 等许多有用的信息，但在本指南中，
+虽然数据集包含 `lang_id` 和 `english_transcription` 等许多有用的信息，但在本指南中，
 您将专注于 `audio` 和 `transcription`。使用 [`~datasets.Dataset.remove_columns`] 方法删除其他列：
 
 ```py
@@ -167,7 +167,7 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 它还会动态地将您的文本和标签填充到其批次中最长元素的长度（而不是整个数据集），以使它们具有统一的长度。
 虽然可以通过在 `tokenizer` 函数中设置 `padding=True` 来填充文本，但动态填充更有效。
 
-与其他数据整理器不同，这个特定的数据整理器需要对 `input_values` 和 `labels `应用不同的填充方法：
+与其他数据整理器不同，这个特定的数据整理器需要对 `input_values` 和 `labels` 应用不同的填充方法：
 
 ```py
 >>> import torch
@@ -242,8 +242,6 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 
 ## 训练
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 如果您不熟悉使用[`Trainer`]微调模型，请查看这里的基本教程[here](../training#train-with-pytorch-trainer)！
@@ -311,8 +309,6 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -356,8 +352,6 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 
 如果您愿意，您也可以手动复制 `pipeline` 的结果：
 
-<frameworkcontent>
-<pt>
 
 加载一个处理器来预处理音频文件和转录，并将 `input` 返回为 PyTorch 张量：
 
@@ -388,5 +382,3 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 >>> transcription
 ['I WOUL LIKE O SET UP JOINT ACOUNT WTH Y PARTNER']
 ```
-</pt>
-</frameworkcontent>

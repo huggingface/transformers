@@ -195,6 +195,7 @@ def upload_results_to_hf_dataset(
     summary_file: str,
     dataset_name: str,
     run_id: Optional[str] = None,
+    token: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
 ) -> Optional[str]:
     """
@@ -205,6 +206,7 @@ def upload_results_to_hf_dataset(
         summary_file: Path to the summary file
         dataset_name: Name of the HuggingFace dataset to upload to
         run_id: Unique run identifier (if None, will generate one)
+        token: HuggingFace token for authentication (if None, will use environment variables)
         logger: Logger instance
     Returns:
         The run_id used for the upload, None if upload failed
@@ -237,9 +239,6 @@ def upload_results_to_hf_dataset(
     logger.info(f"Uploading benchmark results to dataset '{dataset_name}' at path '{repo_path}'")
 
     try:
-        # Get the authentication token (prioritize specific token, fallback to HF_TOKEN)
-        token = os.getenv("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN") or os.getenv("HF_TOKEN")
-
         # Upload all files in the output directory
         from pathlib import Path
 
@@ -348,13 +347,19 @@ Examples:
     )
 
     parser.add_argument(
-        "--upload-to-hub",
+        "--push-to-hub",
         type=str,
         help="Upload results to HuggingFace Dataset (provide dataset name, e.g., 'username/benchmark-results')",
     )
 
     parser.add_argument(
         "--run-id", type=str, help="Custom run ID for organizing results (if not provided, will generate a unique ID)"
+    )
+
+    parser.add_argument(
+        "--token",
+        type=str,
+        help="HuggingFace token for dataset uploads (if not provided, will use HF_TOKEN environment variable)",
     )
 
     args = parser.parse_args()
@@ -429,7 +434,7 @@ Examples:
 
         # Upload results to HuggingFace Dataset if requested
         upload_run_id = None
-        if args.upload_to_hub:
+        if args.push_to_hub:
             logger.info("=" * 60)
             logger.info("UPLOADING TO HUGGINGFACE DATASET")
             logger.info("=" * 60)
@@ -438,8 +443,9 @@ Examples:
             upload_run_id = upload_results_to_hf_dataset(
                 output_dir=args.output_dir,
                 summary_file=summary_file,
-                dataset_name=args.upload_to_hub,
+                dataset_name=args.push_to_hub,
                 run_id=effective_run_id,
+                token=args.token,
                 logger=logger,
             )
             if upload_run_id:
@@ -460,12 +466,12 @@ Examples:
         logger.info(f"Output directory: {args.output_dir}")
         logger.info(f"Summary report: {summary_file}")
 
-        if args.upload_to_hub:
+        if args.push_to_hub:
             if upload_run_id:
-                logger.info(f"HuggingFace Dataset: {args.upload_to_hub}")
+                logger.info(f"HuggingFace Dataset: {args.push_to_hub}")
                 logger.info(f"Run ID: {upload_run_id}")
                 logger.info(
-                    f"View results: https://huggingface.co/datasets/{args.upload_to_hub}/tree/main/{datetime.now().strftime('%Y-%m-%d')}/runs/{upload_run_id}"
+                    f"View results: https://huggingface.co/datasets/{args.push_to_hub}/tree/main/{datetime.now().strftime('%Y-%m-%d')}/runs/{upload_run_id}"
                 )
             else:
                 logger.warning("Upload to HuggingFace Dataset failed")

@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_as_a_model_definition.png"/>
 </h3>
 
-
 Transformers acts as the model-definition framework for state-of-the-art machine learning models in text, computer
 vision, audio, video, and multimodal model, for both inference and training.
 

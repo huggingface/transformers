@@ -21,10 +21,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from functools import cached_property
-from pathlib import Path
 from typing import Any, Optional, Union
-
-from huggingface_hub import get_full_repo_name
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
@@ -383,7 +380,7 @@ class TrainingArguments:
             Whether to restore the callback states from the checkpoint. If `True`, will override
             callbacks passed to the `Trainer` if they exist in the checkpoint."
         use_cpu (`bool`, *optional*, defaults to `False`):
-            Whether or not to use cpu. If set to False, we will use cuda or mps device if available.
+            Whether or not to use cpu. If set to False, we will use the available torch device/backend.
         seed (`int`, *optional*, defaults to 42):
             Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
             [`~Trainer.model_init`] function to instantiate the model if it has some randomly initialized parameters.
@@ -401,8 +398,6 @@ class TrainingArguments:
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
             For `fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details on
             the [Apex documentation](https://nvidia.github.io/apex/amp).
-        fp16_backend (`str`, *optional*, defaults to `"auto"`):
-            This argument is deprecated. Use `half_precision_backend` instead.
         half_precision_backend (`str`, *optional*, defaults to `"auto"`):
             The backend to use for mixed precision training. Must be one of `"auto", "apex", "cpu_amp"`. `"auto"` will
             use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices will force the
@@ -519,11 +514,9 @@ class TrainingArguments:
                     A list of options along the following:
 
                     - `"backward_pre"` : Prefetches the next set of parameters before the current set of parameter's
-                      gradient
-                        computation.
+                      gradient computation.
                     - `"backward_post"` : This prefetches the next set of parameters after the current set of
-                      parameter’s
-                        gradient computation.
+                      parameter's gradient computation.
                 - forward_prefetch (`bool`, *optional*, defaults to `False`)
                     FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
                      If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the
@@ -706,8 +699,6 @@ class TrainingArguments:
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Key word arguments to be passed to the `gradient_checkpointing_enable` method.
-        include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
-            This argument is deprecated. Use `include_for_metrics` instead, e.g, `include_for_metrics = ["inputs"]`.
         include_for_metrics (`list[str]`, *optional*, defaults to `[]`):
             Include additional data in the `compute_metrics` function if needed for metrics computation.
             Possible options to add to `include_for_metrics` list:
@@ -722,9 +713,6 @@ class TrainingArguments:
         full_determinism (`bool`, *optional*, defaults to `False`)
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
             distributed training. Important: this will negatively impact the performance, so only use it for debugging.
-        torchdynamo (`str`, *optional*):
-            If set, the backend compiler for TorchDynamo. Possible choices are `"eager"`, `"aot_eager"`, `"inductor"`,
-            `"nvfuser"`, `"aot_nvfuser"`, `"aot_cudagraphs"`, `"ofi"`, `"fx2trt"`, `"onnxrt"` and `"ipex"`.
         ray_scope (`str`, *optional*, defaults to `"last"`):
             The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray will
             then use the last checkpoint of all trials, compare those, and select the best one. However, other options
@@ -736,8 +724,6 @@ class TrainingArguments:
             performing slow operations in distributed runnings. Please refer the [PyTorch documentation]
             (https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
             information.
-        use_mps_device (`bool`, *optional*, defaults to `False`):
-            This argument is deprecated.`mps` device will be used if it is available similar to `cuda` device.
         torch_compile (`bool`, *optional*, defaults to `False`):
             Whether or not to compile the model using PyTorch 2.0
             [`torch.compile`](https://pytorch.org/get-started/pytorch-2.0/).
@@ -856,25 +842,6 @@ class TrainingArguments:
     )
     per_device_eval_batch_size: int = field(
         default=8, metadata={"help": "Batch size per device accelerator core/CPU for evaluation."}
-    )
-
-    per_gpu_train_batch_size: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": (
-                "Deprecated, the use of `--per_device_train_batch_size` is preferred. "
-                "Batch size per GPU/TPU core/CPU for training."
-            )
-        },
-    )
-    per_gpu_eval_batch_size: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": (
-                "Deprecated, the use of `--per_device_eval_batch_size` is preferred. "
-                "Batch size per GPU/TPU core/CPU for evaluation."
-            )
-        },
     )
 
     gradient_accumulation_steps: int = field(
@@ -1036,21 +1003,10 @@ class TrainingArguments:
             "help": "Whether to restore the callback states from the checkpoint. If `True`, will override callbacks passed to the `Trainer` if they exist in the checkpoint."
         },
     )
-    no_cuda: bool = field(
-        default=False,
-        metadata={"help": "This argument is deprecated. It will be removed in version 5.0 of 🤗 Transformers."},
-    )
     use_cpu: bool = field(
         default=False,
         metadata={
             "help": "Whether or not to use cpu. If left to False, we will use the available torch device/backend (cuda/mps/xpu/hpu etc.)"
-        },
-    )
-    use_mps_device: bool = field(
-        default=False,
-        metadata={
-            "help": "This argument is deprecated. `mps` device will be used if available similar to `cuda` device."
-            " It will be removed in version 5.0 of 🤗 Transformers"
         },
     )
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
@@ -1119,14 +1075,6 @@ class TrainingArguments:
     )
     tpu_num_cores: Optional[int] = field(
         default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
-    )
-    tpu_metrics_debug: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Deprecated, the use of `--debug tpu_metrics_debug` is preferred. TPU: Whether to print debug metrics"
-            )
-        },
     )
     debug: Union[str, list[DebugOption]] = field(
         default="",
@@ -1229,30 +1177,12 @@ class TrainingArguments:
             ),
         },
     )
-    fsdp_min_num_params: int = field(
-        default=0,
-        metadata={
-            "help": (
-                "This parameter is deprecated. FSDP's minimum number of parameters for Default Auto Wrapping. (useful"
-                " only when `fsdp` field is passed)."
-            )
-        },
-    )
     fsdp_config: Optional[Union[dict[str, Any], str]] = field(
         default=None,
         metadata={
             "help": (
                 "Config to be used with FSDP (Pytorch Fully Sharded Data Parallel). The value is either a "
                 "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
-            )
-        },
-    )
-    fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": (
-                "This parameter is deprecated. Transformer layer class name (case-sensitive) to wrap, e.g,"
-                " `BertLayer`, `GPTJBlock`, `T5Block` .... (useful only when `fsdp` flag is passed)."
             )
         },
     )
@@ -1293,7 +1223,6 @@ class TrainingArguments:
         metadata={"help": "The optimizer to use."},
     )
     optim_args: Optional[str] = field(default=None, metadata={"help": "Optional arguments to supply to optimizer."})
-    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
         default=False,
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
@@ -1390,12 +1319,6 @@ class TrainingArguments:
             "help": "Gradient checkpointing key word arguments such as `use_reentrant`. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
         },
     )
-    include_inputs_for_metrics: bool = field(
-        default=False,
-        metadata={
-            "help": "This argument is deprecated and will be removed in version 5 of 🤗 Transformers. Use `include_for_metrics` instead."
-        },
-    )
     include_for_metrics: list[str] = field(
         default_factory=list,
         metadata={
@@ -1408,23 +1331,6 @@ class TrainingArguments:
         metadata={
             "help": "Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`, will instead store them as lists, with each batch kept separate."
         },
-    )
-    # Deprecated arguments
-    fp16_backend: str = field(
-        default="auto",
-        metadata={
-            "help": "Deprecated. Use half_precision_backend instead",
-            "choices": ["auto", "apex", "cpu_amp"],
-        },
-    )
-    push_to_hub_model_id: Optional[str] = field(
-        default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
-    )
-    push_to_hub_organization: Optional[str] = field(
-        default=None, metadata={"help": "The name of the organization in with to which push the `Trainer`."}
-    )
-    push_to_hub_token: Optional[str] = field(
-        default=None, metadata={"help": "The token to use to push to the Model Hub."}
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
@@ -1448,12 +1354,6 @@ class TrainingArguments:
                 "Whether to call enable_full_determinism instead of set_seed for reproducibility in distributed"
                 " training. Important: this will negatively impact the performance, so only use it for debugging."
             )
-        },
-    )
-    torchdynamo: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "This argument is deprecated, use `--torch_compile_backend` instead.",
         },
     )
     ray_scope: Optional[str] = field(
@@ -1608,13 +1508,6 @@ class TrainingArguments:
             )
             # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
             self.eval_strategy = self.eval_strategy.value
-        if self.no_cuda:
-            warnings.warn(
-                "using `no_cuda` is deprecated and will be removed in version 5.0 of 🤗 Transformers. "
-                "Use `use_cpu` instead",
-                FutureWarning,
-            )
-            self.use_cpu = self.no_cuda
 
         self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
@@ -1631,7 +1524,7 @@ class TrainingArguments:
                     f"`torch_empty_cache_steps` must be an integer bigger than 0, got {self.torch_empty_cache_steps}."
                 )
 
-        # eval_steps has to be defined and non-zero, fallbacks to logging_steps if the latter is non-zero
+        # eval_steps has to be defined and non-zero, falls back to logging_steps if the latter is non-zero
         if self.eval_strategy == IntervalStrategy.STEPS and (self.eval_steps is None or self.eval_steps == 0):
             if self.logging_steps > 0:
                 logger.info(f"using `logging_steps` to initialize `eval_steps` to {self.logging_steps}")
@@ -1705,16 +1598,8 @@ class TrainingArguments:
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
         if is_torch_available():
-            if self.fp16_backend and self.fp16_backend != "auto":
-                warnings.warn(
-                    "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
-                    " `half_precision_backend` instead",
-                    FutureWarning,
-                )
-                self.half_precision_backend = self.fp16_backend
-
             if self.bf16 or self.bf16_full_eval:
-                if self.use_cpu and not is_torch_available() and not is_torch_xla_available():
+                if self.use_cpu and not is_torch_xla_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.use_cpu:
@@ -1755,13 +1640,6 @@ class TrainingArguments:
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires torch>=0.2.0")
 
         self.optim = OptimizerNames(self.optim)
-        if self.adafactor:
-            warnings.warn(
-                "`--adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim"
-                " adafactor` instead",
-                FutureWarning,
-            )
-            self.optim = OptimizerNames.ADAFACTOR
 
         # We need to setup the accelerator config here *before* the first call to `self.device`
         if is_accelerate_available():
@@ -1789,13 +1667,6 @@ class TrainingArguments:
         if is_torch_available():
             self.device
 
-        if self.torchdynamo is not None:
-            warnings.warn(
-                "`torchdynamo` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
-                " `torch_compile_backend` instead",
-                FutureWarning,
-            )
-            self.torch_compile_backend = self.torchdynamo
         if (self.torch_compile_mode is not None or self.torch_compile_backend is not None) and not self.torch_compile:
             self.torch_compile = True
         if self.torch_compile and self.torch_compile_backend is None:
@@ -1922,22 +1793,11 @@ class TrainingArguments:
                     v = self.fsdp_config.pop(k)
                     self.fsdp_config[k[5:]] = v
 
-        if self.fsdp_min_num_params > 0:
-            warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
-
-        self.fsdp_config["min_num_params"] = max(self.fsdp_config.get("min_num_params", 0), self.fsdp_min_num_params)
+        self.fsdp_config["min_num_params"] = self.fsdp_config.get("min_num_params", 0)
 
         # if fsdp_config["transformer_layer_cls_to_wrap"] is specified as a string, convert it to a list with a single object
         if isinstance(self.fsdp_config.get("transformer_layer_cls_to_wrap", None), str):
             self.fsdp_config["transformer_layer_cls_to_wrap"] = [self.fsdp_config["transformer_layer_cls_to_wrap"]]
-
-        if self.fsdp_transformer_layer_cls_to_wrap is not None:
-            warnings.warn(
-                "using `--fsdp_transformer_layer_cls_to_wrap` is deprecated. Use fsdp_config instead ", FutureWarning
-            )
-            self.fsdp_config["transformer_layer_cls_to_wrap"] = self.fsdp_config.get(
-                "transformer_layer_cls_to_wrap", []
-            ) + [self.fsdp_transformer_layer_cls_to_wrap]
 
         if len(self.fsdp) == 0 and self.fsdp_config["min_num_params"] > 0:
             warnings.warn("`min_num_params` is useful only when `--fsdp` is specified.")
@@ -2013,18 +1873,6 @@ class TrainingArguments:
 
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
 
-        if self.tpu_metrics_debug:
-            warnings.warn(
-                "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
-                " `--debug tpu_metrics_debug` instead",
-                FutureWarning,
-            )
-            if self.debug is None:
-                self.debug = " tpu_metrics_debug"
-            else:
-                self.debug += " tpu_metrics_debug"
-            self.tpu_metrics_debug = False
-
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
         elif self.debug is None:
@@ -2078,41 +1926,6 @@ class TrainingArguments:
                 " when --dataloader_num_workers > 1."
             )
 
-        if self.push_to_hub_token is not None:
-            warnings.warn(
-                "`--push_to_hub_token` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "
-                "`--hub_token` instead.",
-                FutureWarning,
-            )
-            self.hub_token = self.push_to_hub_token
-
-        if self.push_to_hub_model_id is not None:
-            self.hub_model_id = get_full_repo_name(
-                self.push_to_hub_model_id, organization=self.push_to_hub_organization, token=self.hub_token
-            )
-            if self.push_to_hub_organization is not None:
-                warnings.warn(
-                    "`--push_to_hub_model_id` and `--push_to_hub_organization` are deprecated and will be removed in "
-                    "version 5 of 🤗 Transformers. Use `--hub_model_id` instead and pass the full repo name to this "
-                    f"argument (in this case {self.hub_model_id}).",
-                    FutureWarning,
-                )
-            else:
-                warnings.warn(
-                    "`--push_to_hub_model_id` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "
-                    "`--hub_model_id` instead and pass the full repo name to this argument (in this case "
-                    f"{self.hub_model_id}).",
-                    FutureWarning,
-                )
-        elif self.push_to_hub_organization is not None:
-            self.hub_model_id = f"{self.push_to_hub_organization}/{Path(self.output_dir).name}"
-            warnings.warn(
-                "`--push_to_hub_organization` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "
-                "`--hub_model_id` instead and pass the full repo name to this argument (in this case "
-                f"{self.hub_model_id}).",
-                FutureWarning,
-            )
-
         if self.eval_use_gather_object and not is_accelerate_available("0.30.0"):
             raise ValueError(
                 "--eval_use_gather_object requires Accelerate to be version of `accelerate` > 0.30.0."
@@ -2126,12 +1939,6 @@ class TrainingArguments:
                     "This is not supported and we recommend you to update your version."
                 )
 
-        if self.include_inputs_for_metrics:
-            logger.warning(
-                "Using `include_inputs_for_metrics` is deprecated and will be removed in version 5 of 🤗 Transformers. Please use `include_for_metrics` list argument instead."
-            )
-            self.include_for_metrics.append("inputs")
-
         if self.include_num_input_tokens_seen is True:
             self.include_num_input_tokens_seen = "all"
         elif self.include_num_input_tokens_seen is False:
@@ -2139,11 +1946,6 @@ class TrainingArguments:
 
     def __str__(self):
         self_as_dict = asdict(self)
-
-        # Remove deprecated arguments. That code should be removed once
-        # those deprecated arguments are removed from TrainingArguments. (TODO: v5)
-        del self_as_dict["per_gpu_train_batch_size"]
-        del self_as_dict["per_gpu_eval_batch_size"]
 
         self_as_dict = {k: f"<{k.upper()}>" if k.endswith("_token") else v for k, v in self_as_dict.items()}
 
@@ -2155,29 +1957,17 @@ class TrainingArguments:
     @property
     def train_batch_size(self) -> int:
         """
-        The actual batch size for training (may differ from `per_gpu_train_batch_size` in distributed training).
+        The actual batch size for training.
         """
-        if self.per_gpu_train_batch_size:
-            logger.warning(
-                "Using deprecated `--per_gpu_train_batch_size` argument which will be removed in a future "
-                "version. Using `--per_device_train_batch_size` is preferred."
-            )
-        per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        train_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        train_batch_size = self.per_device_train_batch_size * max(1, self.n_gpu)
         return train_batch_size
 
     @property
     def eval_batch_size(self) -> int:
         """
-        The actual batch size for evaluation (may differ from `per_gpu_eval_batch_size` in distributed training).
+        The actual batch size for evaluation.
         """
-        if self.per_gpu_eval_batch_size:
-            logger.warning(
-                "Using deprecated `--per_gpu_eval_batch_size` argument which will be removed in a future "
-                "version. Using `--per_device_eval_batch_size` is preferred."
-            )
-        per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        eval_batch_size = self.per_device_eval_batch_size * max(1, self.n_gpu)
         return eval_batch_size
 
     @property
@@ -2268,17 +2058,6 @@ class TrainingArguments:
             # Already set _n_gpu
             pass
         elif self.distributed_state.distributed_type == DistributedType.NO:
-            if self.use_mps_device:
-                warnings.warn(
-                    "`use_mps_device` is deprecated and will be removed in version 5.0 of 🤗 Transformers. "
-                    "`mps` device will be used by default if available similar to the way `cuda` device is used."
-                    "Therefore, no action from user is required. "
-                )
-                if device.type != "mps":
-                    raise ValueError(
-                        "Either you do not have an MPS-enabled device on this machine or MacOS version is not 12.3+ "
-                        "or current PyTorch install was not built with MPS enabled."
-                    )
             if self.use_cpu:
                 device = torch.device("cpu")
             elif is_torch_mps_available():
@@ -2578,7 +2357,7 @@ class TrainingArguments:
 
     def to_sanitized_dict(self) -> dict[str, Any]:
         """
-        Sanitized serialization to use with TensorBoard’s hparams
+        Sanitized serialization to use with TensorBoard's hparams
         """
         d = self.to_dict()
         d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}

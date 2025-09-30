@@ -532,8 +532,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    test_model_parallel = False
-    # no model_parallel for now
 
     test_resize_embeddings = True
 
@@ -622,9 +620,6 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    test_model_parallel = False
-    # no model_parallel for now
-
     test_resize_embeddings = True
 
     def setUp(self):
@@ -709,9 +704,6 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    # no model_parallel for now
-    test_model_parallel = False
-
     # torchscript disabled for now because forward with an int
     test_torchscript = False
 
@@ -884,6 +876,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:

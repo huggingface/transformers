@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 from packaging import version
+from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 from transformers.testing_utils import (
@@ -37,6 +38,8 @@ if is_torch_available():
     import torch
 
 if is_torchao_available():
+    import torchao
+
     # renamed in torchao 0.7.0, please install the latest torchao
     from torchao.dtypes import (
         AffineQuantizedTensor,
@@ -135,7 +138,7 @@ class TorchAoTest(unittest.TestCase):
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     device = "cpu"
     quant_scheme_kwargs = (
-        {"group_size": 32, "layout": Int4CPULayout()}
+        {"group_size": 32, "layout": Int4CPULayout(), "version": 1}
         if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
         else {"group_size": 32}
     )
@@ -225,6 +228,7 @@ class TorchAoTest(unittest.TestCase):
             weight_dtype=weight_dtype,
             granularity=granularity,
             mapping_type=mapping_type,
+            version=1,
         )
         config = ModuleFqnToConfig(
             {"_default": None, "model.embed_tokens": embedding_config, "lm_head": embedding_config}
@@ -277,7 +281,7 @@ class TorchAoTest(unittest.TestCase):
 @require_torch_accelerator
 class TorchAoAcceleratorTest(TorchAoTest):
     device = torch_device
-    quant_scheme_kwargs = {"group_size": 32}
+    quant_scheme_kwargs = {"group_size": 32, "version": 1}
 
     # called only once for all test in this class
     @classmethod
@@ -327,7 +331,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
             "lm_head": 0,
         }
 
-        quant_config = TorchAoConfig("int4_weight_only", group_size=32)
+        quant_config = TorchAoConfig("int4_weight_only", **self.quant_scheme_kwargs)
 
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
@@ -399,7 +403,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         check_autoquantized(self, quantized_model.model.layers[0].self_attn.v_proj)
 
-        EXPECTED_OUTPUT = "What are we having for dinner?\n\nJane: (sighs)"
+        EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
         output = quantized_model.generate(
             **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"
         )
@@ -414,7 +418,7 @@ class TorchAoSerializationTest(unittest.TestCase):
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     quant_scheme = "int4_weight_only"
     quant_scheme_kwargs = (
-        {"group_size": 32, "layout": Int4CPULayout()}
+        {"group_size": 32, "layout": Int4CPULayout(), "version": 1}
         if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
         else {"group_size": 32}
     )
@@ -447,13 +451,13 @@ class TorchAoSerializationTest(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def check_serialization_expected_output(self, device, expected_output):
+    def check_serialization_expected_output(self, device, expected_output, safe_serialization=False):
         """
         Test if we can serialize and load/infer the model again on the same device
         """
         dtype = torch.bfloat16 if self.quant_scheme == "int4_weight_only" else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
+            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
             loaded_quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, dtype=dtype, device_map=device)
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
 
@@ -462,6 +466,48 @@ class TorchAoSerializationTest(unittest.TestCase):
 
     def test_serialization_expected_output(self):
         self.check_serialization_expected_output(self.device, self.EXPECTED_OUTPUT)
+
+
+@require_torchao
+@require_torchao_version_greater_or_equal("0.14.0")
+class TorchAoSafeSerializationTest(TorchAoSerializationTest):
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+
+    def tearDown(self):
+        gc.collect()
+        backend_empty_cache(torch_device)
+        gc.collect()
+        if hasattr(self, "quantized_model"):
+            del self.quantized_model
+        gc.collect()
+
+    test_params = (
+        [
+            (
+                torchao.quantization.Float8DynamicActivationFloat8WeightConfig(),
+                "What are we having for dinner?\n\nJess: (smiling) I",
+            ),
+            (torchao.quantization.Float8WeightOnlyConfig(), "What are we having for dinner?\n\nJessica: (smiling)"),
+        ]
+        if is_torchao_available()
+        else []
+    )
+
+    @parameterized.expand(test_params, skip_on_empty=True)
+    def test_serialization_expected_output(self, config, expected_output):
+        device = "cuda"
+        self.quant_config = TorchAoConfig(config)
+        self.quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            dtype=torch.bfloat16,
+            device_map=device,
+            quantization_config=self.quant_config,
+        )
+        self.check_serialization_expected_output(device, expected_output, safe_serialization=True)
 
 
 class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):
@@ -500,7 +546,7 @@ class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
 
 @require_torch_accelerator
 class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = "int4_weight_only", {"group_size": 32}
+    quant_scheme, quant_scheme_kwargs = "int4_weight_only", {"group_size": 32, "version": 1}
     device = f"{torch_device}:0"
 
     # called only once for all test in this class

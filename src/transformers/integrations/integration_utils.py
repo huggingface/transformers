@@ -544,8 +544,6 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-    from ..integrations import is_wandb_available
-
     if not is_wandb_available():
         raise ImportError("This function needs wandb installed: `pip install wandb`")
     import wandb
@@ -683,7 +681,7 @@ class TensorBoardCallback(TrainerCallback):
             )
         if has_tensorboard:
             try:
-                from torch.utils.tensorboard import SummaryWriter  # noqa: F401
+                from torch.utils.tensorboard import SummaryWriter
 
                 self._SummaryWriter = SummaryWriter
             except ImportError:

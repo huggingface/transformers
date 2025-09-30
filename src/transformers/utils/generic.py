@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
-    import torch  # noqa: F401
+    import torch
 
     from ..model_debugging_utils import model_addition_debugger_context
 
@@ -318,6 +318,8 @@ class ModelOutput(OrderedDict):
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:
+                # reset first field to None
+                setattr(self, class_fields[0].name, None)
                 for idx, element in enumerate(iterator):
                     if not isinstance(element, (list, tuple)) or len(element) != 2 or not isinstance(element[0], str):
                         if idx == 0:
@@ -378,7 +380,7 @@ class ModelOutput(OrderedDict):
         args = tuple(getattr(self, field.name) for field in fields(self))
         return callable, args, *remaining
 
-    def to_tuple(self) -> tuple[Any]:
+    def to_tuple(self) -> tuple:
         """
         Convert self to a tuple containing all the attributes/keys that are not `None`.
         """

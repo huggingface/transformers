@@ -81,6 +81,7 @@ ALWAYS_OVERRIDE = ["labels"]
 OBJECTS_TO_IGNORE = {
     "ApertusConfig",
     "Mxfp4Config",
+    "Qwen3OmniMoeConfig",
     "Exaone4Config",
     "SmolLM3Config",
     "Gemma3nVisionConfig",
@@ -314,6 +315,7 @@ OBJECTS_TO_IGNORE = {
     "OpenAIGPTTokenizerFast",
     "OpenLlamaConfig",
     "PLBartConfig",
+    "ParakeetCTCConfig",
     "PegasusConfig",
     "PegasusTokenizer",
     "PegasusTokenizerFast",

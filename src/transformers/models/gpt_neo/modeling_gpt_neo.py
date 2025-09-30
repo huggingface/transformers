@@ -757,7 +757,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(lm_logits.device)
             lm_logits = lm_logits.to(torch.float32)
 
