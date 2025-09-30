@@ -16,8 +16,6 @@
 
 from functools import lru_cache
 
-from huggingface_hub import get_full_repo_name  # for backward compatibility
-from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
 from packaging import version
 
 from .. import __version__
@@ -51,19 +49,14 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     TransformersKwargs,
-    cached_property,
     can_return_loss,
     can_return_tuple,
     expand_dims,
     filter_out_non_signature_kwargs,
     find_labels,
     flatten_dict,
-    infer_framework,
-    is_jax_tensor,
     is_numpy_array,
     is_tensor,
-    is_tf_symbolic_tensor,
-    is_tf_tensor,
     is_timm_config_dict,
     is_timm_local_checkpoint,
     is_torch_device,
@@ -108,7 +101,6 @@ from .hub import (
     is_offline_mode,
     is_remote_url,
     list_repo_templates,
-    send_example_telemetry,
     try_to_load_from_cache,
 )
 from .import_utils import (
@@ -118,9 +110,6 @@ from .import_utils import (
     GGUF_MIN_VERSION,
     TORCH_FX_REQUIRED_VERSION,
     TRITON_MIN_VERSION,
-    USE_JAX,
-    USE_TF,
-    USE_TORCH,
     XLA_FSDPV2_MIN_VERSION,
     DummyObject,
     OptionalDependencyNotAvailable,
@@ -157,7 +146,6 @@ from .import_utils import (
     is_flash_attn_3_available,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
-    is_flax_available,
     is_flute_available,
     is_fp_quant_available,
     is_fsdp_available,
@@ -176,7 +164,6 @@ from .import_utils import (
     is_jinja_available,
     is_jumanpp_available,
     is_kenlm_available,
-    is_keras_nlp_available,
     is_kernels_available,
     is_levenshtein_available,
     is_libcst_available,
@@ -226,10 +213,6 @@ from .import_utils import (
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
-    is_tensorflow_probability_available,
-    is_tensorflow_text_available,
-    is_tf2onnx_available,
-    is_tf_available,
     is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
@@ -289,11 +272,6 @@ from .peft_utils import (
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
-TF2_WEIGHTS_NAME = "tf_model.h5"
-TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
-TF_WEIGHTS_NAME = "model.ckpt"
-FLAX_WEIGHTS_NAME = "flax_model.msgpack"
-FLAX_WEIGHTS_INDEX_NAME = "flax_model.msgpack.index.json"
 SAFE_WEIGHTS_NAME = "model.safetensors"
 SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"

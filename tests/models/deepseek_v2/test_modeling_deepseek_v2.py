@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import BitsAndBytesConfig, Cache, DeepseekV2Config, is_torch_available
+from transformers import BitsAndBytesConfig, Cache, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -33,10 +33,7 @@ if is_torch_available():
 
 class DeepseekV2ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = DeepseekV2Config
         base_model_class = DeepseekV2Model
-        causal_lm_class = DeepseekV2ForCausalLM
-        sequence_class = DeepseekV2ForSequenceClassification
 
     def __init__(
         self,
@@ -57,15 +54,6 @@ class DeepseekV2ModelTester(CausalLMModelTester):
 
 @require_torch
 class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            DeepseekV2ForCausalLM,
-            DeepseekV2ForSequenceClassification,
-            DeepseekV2Model,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekV2Model,
@@ -76,26 +64,29 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False
     test_torchscript = False
     test_all_params_have_gradient = False
     model_tester_class = DeepseekV2ModelTester
-    rotary_embedding_layer = DeepseekV2RotaryEmbedding
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV2ForCausalLM if is_torch_available() else None
 
-    def test_model_rope_scaling(self):
+    def test_model_rope_scaling_frequencies(self):
+        """
+        Overwritten: DeepseekV2 implements RoPE in the complex domain, as opposed to in the real domain with
+        `sin` and `cos`. Nevertheless, the checks are the same as in the original test.
+        """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -109,7 +100,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
+        config.rope_scaling = {"rope_type": "linear", "factor": scaling_factor}
         linear_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
         linear_freqs_cis_short = linear_scaling_rope(x, position_ids_short)
         linear_freqs_cis_long = linear_scaling_rope(x, position_ids_long)
@@ -118,7 +109,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
+        config.rope_scaling = {"rope_type": "dynamic", "factor": scaling_factor}
         ntk_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
         ntk_freqs_cis_short = ntk_scaling_rope(x, position_ids_short)
         ntk_freqs_cis_long = ntk_scaling_rope(x, position_ids_long)
@@ -129,7 +120,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
-        config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
+        config.rope_scaling = {"rope_type": "yarn", "factor": scaling_factor}
         yarn_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
         yarn_freqs_cis_short = yarn_scaling_rope(x, position_ids_short)
         yarn_freqs_cis_long = yarn_scaling_rope(x, position_ids_long)
@@ -158,7 +149,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        """Needs to be overriden as deepseek has special MLA cache format (though we don't really use the MLA)"""
+        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
         self.assertIsInstance(decoder_past_key_values, Cache)
 
         # (batch, head, seq_length, head_features)

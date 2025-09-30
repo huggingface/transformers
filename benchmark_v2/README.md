@@ -21,6 +21,46 @@ python run_benchmarks.py \
     --num-tokens-to-generate 200
 ```
 
+### Uploading Results to HuggingFace Dataset
+
+You can automatically upload benchmark results to a HuggingFace Dataset for tracking and analysis:
+
+```bash
+# Upload to a public dataset with auto-generated run ID
+python run_benchmarks.py --upload-to-hub username/benchmark-results
+
+# Upload with a custom run ID for easy identification
+python run_benchmarks.py --upload-to-hub username/benchmark-results --run-id experiment_v1
+
+# Upload with custom HuggingFace token (if not set in environment)
+python run_benchmarks.py --upload-to-hub username/benchmark-results --token hf_your_token_here
+```
+
+**Dataset Directory Structure:**
+```
+dataset_name/
+├── 2025-01-15/
+│   ├── runs/                       # Non-scheduled runs (manual, PR, etc.)
+│   │   └── 123-1245151651/         # GitHub run number and ID
+│   │       └── benchmark_results/
+│   │           ├── benchmark_summary_20250115_143022.json
+│   │           └── model-name/
+│   │               └── model-name_benchmark_20250115_143022.json
+│   └── benchmark_results_abc123de/ # Scheduled runs (daily CI)
+│       ├── benchmark_summary_20250115_143022.json
+│       └── model-name/
+│           └── model-name_benchmark_20250115_143022.json
+└── 2025-01-16/
+    └── ...
+```
+
+**Authentication for Uploads:**
+
+For uploading results, you need a HuggingFace token with write permissions to the target dataset. You can provide the token in several ways (in order of precedence):
+
+1. Command line: `--token hf_your_token_here`
+3. Environment variable: `HF_TOKEN`
+
 ### Running Specific Benchmarks
 
 ```bash

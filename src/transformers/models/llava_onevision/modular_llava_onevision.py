@@ -50,18 +50,15 @@ from ...utils import (
     TensorType,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
 
 
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -72,13 +69,9 @@ class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         A list of possible resolutions to use for processing high resolution images. The best resolution is selected
         based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
         method.
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
     """
 
     image_grid_pinpoints: Optional[list[list[int]]]
-    do_pad: Optional[bool]
 
 
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
@@ -416,8 +409,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
 
@@ -466,8 +457,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         if vision_feature_select_strategy == "default":
             selected_video_feature = selected_video_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_video_feature = selected_video_feature
         video_features = self.multi_modal_projector(selected_video_feature)
 
         video_features = self.apply_pooling(video_features)

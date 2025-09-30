@@ -15,13 +15,11 @@
 """PyTorch OpenAI ImageGPT model."""
 
 import math
-import os
 from typing import Any, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -43,114 +41,6 @@ from .configuration_imagegpt import ImageGPTConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
-    """
-    Load tf checkpoints in a pytorch model
-    """
-    try:
-        import re
-
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(imagegpt_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array.squeeze())
-
-    for name, array in zip(names, arrays):
-        name = name[6:]  # skip "model/"
-        name = name.split("/")
-
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ) or name[-1] in ["_step"]:
-            logger.info("Skipping {}".format("/".join(name)))
-            continue
-
-        pointer = model
-        if name[-1] not in ["wtet"]:
-            pointer = getattr(pointer, "transformer")
-
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+\d+", m_name):
-                scope_names = re.split(r"(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-
-            if scope_names[0] == "w" or scope_names[0] == "g":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "b":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "wpe" or scope_names[0] == "wte":
-                pointer = getattr(pointer, scope_names[0])
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] in ["q_proj", "k_proj", "v_proj"]:
-                pointer = getattr(pointer, "c_attn")
-                pointer = getattr(pointer, "weight")
-            elif len(name) == 3 and name[1] == "attn" and scope_names[0] == "c_proj":
-                pointer = getattr(pointer, scope_names[0])
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "wtet":
-                pointer = getattr(pointer, "lm_head")
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "sos":
-                pointer = getattr(pointer, "wte")
-                pointer = getattr(pointer, "weight")
-            else:
-                pointer = getattr(pointer, scope_names[0])
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-
-        if len(name) > 1 and name[1] == "attn" or name[-1] == "wtet" or name[-1] == "sos" or name[-1] == "wte":
-            pass  # array is used to initialize only part of the pointer so sizes won't match
-        else:
-            try:
-                assert pointer.shape == array.shape
-            except AssertionError as e:
-                e.args += (pointer.shape, array.shape)
-                raise
-
-        logger.info(f"Initialize PyTorch weight {name}")
-
-        if name[-1] == "q_proj":
-            pointer.data[:, : config.n_embd] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
-        elif name[-1] == "k_proj":
-            pointer.data[:, config.n_embd : 2 * config.n_embd] = torch.from_numpy(
-                array.reshape(config.n_embd, config.n_embd)
-            ).T
-        elif name[-1] == "v_proj":
-            pointer.data[:, 2 * config.n_embd :] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
-        elif len(name) == 3 and name[1] == "attn" and name[2] == "c_proj":
-            pointer.data = torch.from_numpy(array.reshape(config.n_embd, config.n_embd))
-        elif name[-1] == "wtet":
-            pointer.data = torch.from_numpy(array)
-        elif name[-1] == "wte":
-            pointer.data[: config.vocab_size - 1, :] = torch.from_numpy(array)
-        elif name[-1] == "sos":
-            pointer.data[-1] = torch.from_numpy(array)
-        else:
-            pointer.data = torch.from_numpy(array)
-
-    return model
 
 
 class ImageGPTLayerNorm(nn.Module):
@@ -499,7 +389,6 @@ class ImageGPTBlock(GradientCheckpointingLayer):
 @auto_docstring
 class ImageGPTPreTrainedModel(PreTrainedModel):
     config: ImageGPTConfig
-    load_tf_weights = load_tf_weights_in_imagegpt
     base_model_prefix = "transformer"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
@@ -511,8 +400,6 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, Conv1D)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -549,9 +436,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         self.h = nn.ModuleList([ImageGPTBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.ln_f = ImageGPTLayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -573,7 +457,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -718,14 +602,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
         for i, block in enumerate(self.h):
-            # Model parallel
-            if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
-                if isinstance(head_mask, torch.Tensor):
-                    head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -746,12 +622,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 all_self_attentions = all_self_attentions + (outputs[1],)
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (outputs[2],)
-
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
         hidden_states = self.ln_f(hidden_states)
         hidden_states = hidden_states.view(*output_shape)
@@ -790,9 +660,6 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         self.transformer = ImageGPTModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size - 1, bias=False)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -800,7 +667,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -932,7 +799,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1001,26 +868,8 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+            loss = self.loss_function(labels, logits, self.config)
 
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -1039,5 +888,4 @@ __all__ = [
     "ImageGPTForImageClassification",
     "ImageGPTModel",
     "ImageGPTPreTrainedModel",
-    "load_tf_weights_in_imagegpt",
 ]

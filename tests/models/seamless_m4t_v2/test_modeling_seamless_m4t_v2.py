@@ -16,11 +16,11 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import SeamlessM4Tv2Config, is_speech_available, is_torch_available
 from transformers.testing_utils import require_speech, require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -368,7 +368,6 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    test_model_parallel = False
     test_resize_embeddings = False
     test_headmasking = False
     test_torchscript = False
@@ -601,7 +600,6 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    test_model_parallel = False
     test_resize_embeddings = True
     test_headmasking = False
     test_torchscript = False

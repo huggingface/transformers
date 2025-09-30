@@ -15,7 +15,9 @@
 
 import unittest
 
-from transformers import DbrxConfig, is_torch_available
+from parameterized import parameterized
+
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -28,10 +30,8 @@ if is_torch_available():
 
 
 class DbrxModelTester(CausalLMModelTester):
-    config_class = DbrxConfig
     if is_torch_available():
         base_model_class = DbrxModel
-        causal_lm_class = DbrxForCausalLM
 
     def __init__(
         self,
@@ -120,6 +120,15 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="Dbrx models do not work with offload")
     def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip("Dbrx doesn't have RoPE scaling implemented")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("Dbrx doesn't have RoPE scaling implemented")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 

@@ -14,8 +14,8 @@
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Optional, Union
 
+import httpx
 import numpy as np
-import requests
 
 from ..generation import GenerationConfig
 from ..tokenization_utils import PreTrainedTokenizer
@@ -134,9 +134,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model ([`PreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
+            [`PreTrainedModel`].
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
         tokenizer ([`PreTrainedTokenizer`]):
@@ -168,11 +168,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             </Tip>
 
-        framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
-            installed. If no framework is specified, will default to the one currently installed. If no framework is
-            specified and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
-            no model is provided.
         device (Union[`int`, `torch.device`], *optional*):
             Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
             model on the associated CUDA device id.
@@ -282,10 +277,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         decoder_kwargs=None,
         return_timestamps=None,
         return_language=None,
-        generate_kwargs=None,
+        **generate_kwargs,
     ):
-        # No parameters on this pipeline right now
         preprocess_params = {}
+        forward_params = {}
+        postprocess_params = {}
+
+        # Preprocess params
         if chunk_length_s is not None:
             if self.type in ["seq2seq", "seq2seq_whisper"] and not ignore_warning:
                 type_warning = (
@@ -305,14 +303,28 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if stride_length_s is not None:
             preprocess_params["stride_length_s"] = stride_length_s
 
-        forward_params = defaultdict(dict)
-        if generate_kwargs is not None:
-            forward_params.update(generate_kwargs)
+        # Forward params
+        # BC: accept a dictionary of generation kwargs (as opposed to **generate_kwargs)
+        if "generate_kwargs" in generate_kwargs:
+            forward_params.update(generate_kwargs.pop("generate_kwargs"))
+        # Default use for kwargs: they are generation-time kwargs
+        forward_params.update(generate_kwargs)
 
-        postprocess_params = {}
+        if getattr(self, "assistant_model", None) is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if getattr(self, "assistant_tokenizer", None) is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
+        # Postprocess params
         if decoder_kwargs is not None:
             postprocess_params["decoder_kwargs"] = decoder_kwargs
+        if return_language is not None:
+            if self.type != "seq2seq_whisper":
+                raise ValueError("Only Whisper can return language for now.")
+            postprocess_params["return_language"] = return_language
 
+        # Parameter used in more than one place
         # in some models like whisper, the generation config has a `return_timestamps` key
         if hasattr(self, "generation_config") and hasattr(self.generation_config, "return_timestamps"):
             return_timestamps = return_timestamps or self.generation_config.return_timestamps
@@ -335,16 +347,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 )
             forward_params["return_timestamps"] = return_timestamps
             postprocess_params["return_timestamps"] = return_timestamps
-        if return_language is not None:
-            if self.type != "seq2seq_whisper":
-                raise ValueError("Only Whisper can return language for now.")
-            postprocess_params["return_language"] = return_language
-
-        if getattr(self, "assistant_model", None) is not None:
-            forward_params["assistant_model"] = self.assistant_model
-        if getattr(self, "assistant_tokenizer", None) is not None:
-            forward_params["tokenizer"] = self.tokenizer
-            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -353,7 +355,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                inputs = requests.get(inputs).content
+                inputs = httpx.get(inputs, follow_redirects=True).content
             else:
                 with open(inputs, "rb") as f:
                     inputs = f.read()
@@ -585,7 +587,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
         stride = None
         for outputs in model_outputs:
-            if self.framework == "pt" and outputs[key].dtype in (torch.bfloat16, torch.float16):
+            if outputs[key].dtype in (torch.bfloat16, torch.float16):
                 items = outputs[key].to(torch.float32).numpy()
             else:
                 items = outputs[key].numpy()

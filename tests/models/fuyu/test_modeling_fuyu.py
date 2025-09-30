@@ -16,6 +16,7 @@
 import copy
 import io
 import unittest
+from functools import cached_property
 
 import pytest
 import requests
@@ -24,7 +25,6 @@ from parameterized import parameterized
 
 from transformers import FuyuConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -173,7 +173,6 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_pruning = False
     test_cpu_offload = False
     test_disk_offload = False
-    test_model_parallel = False
 
     def setUp(self):
         self.model_tester = FuyuModelTester(self)

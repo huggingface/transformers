@@ -17,6 +17,8 @@
 from collections.abc import Iterable
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
@@ -25,22 +27,17 @@ from ...image_processing_utils_fast import (
     SizeDict,
     TensorType,
     Unpack,
-    get_max_height_width,
     group_images_by_shape,
     reorder_images,
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available
+from ...utils import auto_docstring, is_torchvision_v2_available
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 
 def make_pixel_mask(
@@ -99,13 +96,9 @@ class BridgeTowerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         size_divisor (`int`, *optional*, defaults to 32):
             The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
             is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
-            the `do_pad` parameter in the `preprocess` method.
     """
 
     size_divisor: Optional[int]
-    do_pad: Optional[bool]
 
 
 @auto_docstring
@@ -224,59 +217,6 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         )
         return padded_image
 
-    def pad(
-        self,
-        images: list["torch.Tensor"],
-        constant_values: Union[float, Iterable[float]] = 0,
-        return_pixel_mask: bool = True,
-        disable_grouping: Optional[bool] = False,
-    ) -> tuple:
-        """
-        Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
-        in the batch and optionally returns their corresponding pixel mask.
-
-        Args:
-            image (`torch.Tensor`):
-                Image to pad.
-            constant_values (`float` or `Iterable[float]`, *optional*):
-                The value to use for the padding if `mode` is `"constant"`.
-            return_pixel_mask (`bool`, *optional*, defaults to `True`):
-                Whether to return a pixel mask.
-            disable_grouping (`bool`, *optional*, defaults to `False`):
-                Whether to disable grouping of images by size.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-        """
-        pad_size = get_max_height_width(images)
-
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        processed_masks_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            stacked_images = self._pad_image(
-                stacked_images,
-                pad_size,
-                constant_values=constant_values,
-            )
-            processed_images_grouped[shape] = stacked_images
-
-            if return_pixel_mask:
-                stacked_masks = make_pixel_mask(image=stacked_images, output_size=pad_size)
-                processed_masks_grouped[shape] = stacked_masks
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        processed_masks = None
-        if return_pixel_mask:
-            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index)
-
-        return processed_images, processed_masks
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -325,7 +265,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         data = {}
         if do_pad:
             processed_images, processed_masks = self.pad(
-                processed_images, return_pixel_mask=True, disable_grouping=disable_grouping
+                processed_images, return_mask=True, disable_grouping=disable_grouping
             )
             processed_masks = torch.stack(processed_masks, dim=0) if return_tensors else processed_masks
             data["pixel_mask"] = processed_masks

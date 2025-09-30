@@ -86,7 +86,6 @@ output = model(**inputs)
 print(output.probabilities)
 ```
 
-
 ## ShieldGemma2Processor
 
 [[autodoc]] ShieldGemma2Processor

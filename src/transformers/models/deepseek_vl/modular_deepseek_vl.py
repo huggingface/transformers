@@ -14,6 +14,9 @@
 
 from typing import Optional, Union
 
+import torch
+import torch.nn as nn
+
 from ...configuration_utils import PretrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -24,7 +27,6 @@ from ...tokenization_utils_base import (
 )
 from ...utils import (
     auto_docstring,
-    is_torch_available,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -33,10 +35,6 @@ from ..janus.image_processing_janus import JanusImageProcessor
 from ..janus.image_processing_janus_fast import JanusImageProcessorFast
 from ..janus.modeling_janus import JanusForConditionalGeneration, JanusModel, JanusPreTrainedModel
 
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
@@ -249,7 +247,7 @@ class DeepseekVLProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         DeepseekVLImageProcessor's [`~DeepseekVLImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
@@ -263,10 +261,8 @@ class DeepseekVLProcessor(ProcessorMixin):
                 tensor. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

@@ -18,7 +18,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -33,22 +33,18 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import RecurrentGemmaConfig, RecurrentGemmaForCausalLM, RecurrentGemmaModel
-
+    from transformers import RecurrentGemmaForCausalLM, RecurrentGemmaModel
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class RecurrentGemmaModelTester(CausalLMModelTester):
-    config_class = RecurrentGemmaConfig
     if is_torch_available():
         base_model_class = RecurrentGemmaModel
-        causal_lm_class = RecurrentGemmaForCausalLM
 
 
 @require_torch
 class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (RecurrentGemmaModel, RecurrentGemmaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": RecurrentGemmaModel,
@@ -57,8 +53,6 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     has_attentions = False
     model_tester_class = RecurrentGemmaModelTester
 
@@ -133,6 +127,15 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
     def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("RecurrentGemma doesn't have RoPE scaling implemented")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("RecurrentGemma doesn't have RoPE scaling implemented")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 

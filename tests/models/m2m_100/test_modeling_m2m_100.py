@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 import pytest
 
@@ -30,7 +31,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -117,7 +117,7 @@ class M2M100ModelTester:
         # all pad tokens have pos id = 2 and rest are between 2..seq_length
         # and the seq_length here is seq_length - num_pad_tokens
         # but when using past, there is no way of knowing if the past input ids had
-        # pad tokens in them, which results in incorrect seq_lenth and which in turn results in
+        # pad tokens in them, which results in incorrect seq_length and which in turn results in
         # position_ids being off by num_pad_tokens in past input
         input_ids = input_ids.clamp(self.pad_token_id + 1)
         decoder_input_ids = decoder_input_ids.clamp(self.pad_token_id + 1)

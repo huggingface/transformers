@@ -564,12 +564,6 @@ class GenerationConfig(PushToHubMixin):
             )
         # 1.4. Watermarking attributes
         if self.watermarking_config is not None:
-            if not (isinstance(self.watermarking_config, (WatermarkingConfig, SynthIDTextWatermarkingConfig))):
-                minor_issues["watermarking_config"] = (
-                    "`watermarking_config` as a dict is deprecated and will be removed in v4.54.0. Please construct "
-                    "`watermarking_config` object with `WatermarkingConfig` or `SynthIDTextWatermarkingConfig` class."
-                )
-                self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
         # 2. Validation of attribute combinations
@@ -1288,11 +1282,11 @@ class WatermarkingConfig(BaseWatermarkingConfig):
 
     def __init__(
         self,
-        greenlist_ratio: Optional[float] = 0.25,
-        bias: Optional[float] = 2.0,
-        hashing_key: Optional[int] = 15485863,
-        seeding_scheme: Optional[str] = "lefthash",
-        context_width: Optional[int] = 1,
+        greenlist_ratio: float = 0.25,
+        bias: float = 2.0,
+        hashing_key: int = 15485863,
+        seeding_scheme: str = "lefthash",
+        context_width: int = 1,
     ):
         self.greenlist_ratio = greenlist_ratio
         self.bias = bias

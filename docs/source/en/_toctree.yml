@@ -199,6 +199,8 @@
     title: HIGGS
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/mxfp4
+    title: MXFP4
   - local: quantization/optimum
     title: Optimum
   - local: quantization/quanto
@@ -218,8 +220,6 @@
   sections:
   - local: serialization
     title: ONNX
-  - local: tflite
-    title: LiteRT
   - local: executorch
     title: ExecuTorch
   - local: torchscript
@@ -305,6 +305,8 @@
     title: Glossary
   - local: philosophy
     title: Philosophy
+  - local: models_timeline
+    title: Models Timeline
   - local: notebooks
     title: Notebooks with examples
   - local: community
@@ -334,8 +336,6 @@
       title: Configuration
     - local: main_classes/data_collator
       title: Data Collator
-    - local: main_classes/keras_callbacks
-      title: Keras callbacks
     - local: main_classes/logging
       title: Logging
     - local: main_classes/model
@@ -409,6 +409,8 @@
         title: Blenderbot Small
       - local: model_doc/bloom
         title: BLOOM
+      - local: model_doc/blt
+        title: BLT
       - local: model_doc/bort
         title: BORT
       - local: model_doc/byt5
@@ -439,6 +441,8 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
+      - local: model_doc/deepseek_v2
+        title: DeepSeek-V2
       - local: model_doc/deepseek_v3
         title: DeepSeek-V3
       - local: model_doc/dialogpt
@@ -483,6 +487,8 @@
         title: FLAN-UL2
       - local: model_doc/flaubert
         title: FlauBERT
+      - local: model_doc/flex_olmo
+        title: FlexOlmo
       - local: model_doc/fnet
         title: FNet
       - local: model_doc/fsmt
@@ -557,6 +563,8 @@
         title: Llama2
       - local: model_doc/llama3
         title: Llama3
+      - local: model_doc/longcat_flash
+        title: LongCatFlash
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -585,6 +593,8 @@
         title: MegatronGPT2
       - local: model_doc/minimax
         title: MiniMax
+      - local: model_doc/ministral
+        title: Ministral
       - local: model_doc/mistral
         title: Mistral
       - local: model_doc/mixtral
@@ -623,6 +633,8 @@
         title: OLMo
       - local: model_doc/olmo2
         title: OLMo2
+      - local: model_doc/olmo3
+        title: Olmo3
       - local: model_doc/olmoe
         title: OLMoE
       - local: model_doc/open-llama
@@ -657,6 +669,8 @@
         title: Qwen3
       - local: model_doc/qwen3_moe
         title: Qwen3MoE
+      - local: model_doc/qwen3_next
+        title: Qwen3Next
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -705,6 +719,8 @@
         title: UL2
       - local: model_doc/umt5
         title: UMT5
+      - local: model_doc/vaultgemma
+        title: VaultGemma
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm
@@ -749,12 +765,6 @@
         title: D-FINE
       - local: model_doc/dab-detr
         title: DAB-DETR
-      - local: model_doc/deepseek_v2
-        title: DeepSeek-V2
-      - local: model_doc/deepseek_vl
-        title: DeepseekVL
-      - local: model_doc/deepseek_vl_hybrid
-        title: DeepseekVLHybrid
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
@@ -837,10 +847,16 @@
         title: RT-DETR
       - local: model_doc/rt_detr_v2
         title: RT-DETRv2
+      - local: model_doc/sam2
+        title: SAM2
       - local: model_doc/segformer
         title: SegFormer
       - local: model_doc/seggpt
         title: SegGpt
+      - local: model_doc/sam
+        title: Segment Anything
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality
       - local: model_doc/superglue
         title: SuperGlue
       - local: model_doc/superpoint
@@ -919,6 +935,8 @@
         title: MusicGen
       - local: model_doc/musicgen_melody
         title: MusicGen Melody
+      - local: model_doc/parakeet
+        title: Parakeet
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
@@ -963,6 +981,8 @@
         title: XLSR-Wav2Vec2
       title: Audio models
     - sections:
+      - local: model_doc/sam2_video
+        title: SAM2 Video
       - local: model_doc/timesformer
         title: TimeSformer
       - local: model_doc/vjepa2
@@ -1007,10 +1027,18 @@
         title: ColQwen2
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deepseek_vl
+        title: DeepseekVL
+      - local: model_doc/deepseek_vl_hybrid
+        title: DeepseekVLHybrid
       - local: model_doc/deplot
         title: DePlot
       - local: model_doc/donut
         title: Donut
+      - local: model_doc/edgetam
+        title: EdgeTAM
+      - local: model_doc/edgetam_video
+        title: EdgeTamVideo
       - local: model_doc/emu3
         title: Emu3
       - local: model_doc/evolla
@@ -1063,6 +1091,8 @@
         title: LayoutLMV3
       - local: model_doc/layoutxlm
         title: LayoutXLM
+      - local: model_doc/lfm2_vl
+        title: LFM2-VL
       - local: model_doc/lilt
         title: LiLT
       - local: model_doc/llama4
@@ -1121,14 +1151,12 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
         title: Qwen2VL
-      - local: model_doc/sam2
-        title: SAM2
-      - local: model_doc/sam2_video
-        title: SAM2 Video
-      - local: model_doc/sam
-        title: Segment Anything
-      - local: model_doc/sam_hq
-        title: Segment Anything High Quality
+      - local: model_doc/qwen3_omni_moe
+        title: Qwen3-Omni-MoE
+      - local: model_doc/qwen3_vl
+        title: Qwen3VL
+      - local: model_doc/qwen3_vl_moe
+        title: Qwen3VLMoe
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip

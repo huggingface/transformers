@@ -89,6 +89,8 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to square or not.
     """
 
     model_input_names = ["pixel_values"]
@@ -105,6 +107,7 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
+        do_pad: Optional[bool] = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -121,6 +124,7 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
 
+        self.do_pad = do_pad
         self.min_size = min_size
         if image_mean is None:
             self.background_color = (127, 127, 127)
@@ -131,7 +135,6 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Union[dict[str, int], int],
-        background_color: Optional[tuple[int, int, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -145,8 +148,6 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`dict[str, int]` or `int`):
                 The size to resize the image to. If a dictionary, it should have the keys `"height"` and `"width"`.
-            background_color (`tuple[int, int, int]`):
-                The background color to use for the padding.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
@@ -165,7 +166,6 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        background_color = background_color if background_color is not None else self.background_color
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -194,12 +194,6 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
             **kwargs,
         )
-        # Expand and pad the images to obtain a square image of dimensions `size x size`
-        image = self.pad_to_square(
-            image=image,
-            background_color=background_color,
-            input_data_format=input_data_format,
-        )
         return image
 
     @filter_out_non_signature_kwargs()
@@ -216,6 +210,8 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         do_convert_rgb: Optional[bool] = None,
+        background_color: Optional[Union[int, tuple[int, int, int]]] = None,
+        do_pad: Optional[bool] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> PIL.Image.Image:
@@ -247,13 +243,15 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
                 Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
+            background_color (`tuple[int, int, int]`):
+                The background color to use for the padding.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the image to square or not.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -274,6 +272,8 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_pad = do_pad if do_pad is not None else self.do_pad
+        background_color = background_color if background_color is not None else self.background_color
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
@@ -281,10 +281,7 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -319,6 +316,17 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
+        if do_pad:
+            # Expand and pad the images to obtain a square image of dimensions `size x size`
+            images = [
+                self.pad_to_square(
+                    image=image,
+                    background_color=background_color,
+                    input_data_format=input_data_format,
+                )
+                for image in images
+            ]
+
         if do_rescale:
             images = [
                 self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
@@ -345,7 +353,7 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         background_color: Union[int, tuple[int, int, int]] = 0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Pads an image to a square based on the longest edge.
 
@@ -355,7 +363,7 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.

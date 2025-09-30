@@ -253,6 +253,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
             if model_class == PerceptionLMModel:
                 continue
             model = model_class(config).to(torch_device)
+            model.eval()
             _ = model(**input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
@@ -311,10 +312,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
     @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
     def test_can_be_initialized_on_meta(self):
-        pass
-
-    @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
-    def test_can_load_with_meta_device_context_manager(self):
         pass
 
     @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
@@ -436,7 +433,6 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            video_load_backend="decord",
             padding=True,
             padding_side="left",
         ).to(torch_device)
@@ -462,7 +458,6 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            video_load_backend="decord",
             padding=True,
             padding_side="left",
         ).to(torch_device)

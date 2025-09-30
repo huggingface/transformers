@@ -22,8 +22,8 @@ from io import BytesIO
 from typing import Callable, NewType, Optional, Union
 from urllib.parse import urlparse
 
+import httpx
 import numpy as np
-import requests
 
 from .image_transforms import PaddingMode, to_channel_dimension_format
 from .image_utils import ChannelDimension, infer_channel_dimension_format, is_valid_image
@@ -74,7 +74,7 @@ VideoInput = Union[
     Path,
     list[Path],
     list[list[Path]],
-]  # noqa
+]
 
 
 @dataclass
@@ -100,7 +100,7 @@ class VideoMetadata(Mapping):
         return setattr(self, key, value)
 
     @property
-    def timestamps(self) -> float:
+    def timestamps(self) -> list[float]:
         "Timestamps of the sampled frames in seconds."
         if self.fps is None or self.frames_indices is None:
             raise ValueError("Cannot infer video `timestamps` when `fps` or `frames_indices` is None.")
@@ -329,7 +329,7 @@ def read_video_opencv(
     video_path: Union["URL", "Path"],
     sample_indices_fn: Callable,
     **kwargs,
-):
+) -> tuple[np.ndarray, VideoMetadata]:
     """
     Decode a video using the OpenCV backend.
 
@@ -345,7 +345,7 @@ def read_video_opencv(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
+        tuple[`np.ndarray`, `VideoMetadata`]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
@@ -546,8 +546,8 @@ def read_video_torchvision(
     metadata.update(
         {
             "frames_indices": indices,
-            "height": video.shape[1],
-            "width": video.shape[2],
+            "height": video.shape[2],
+            "width": video.shape[3],
         }
     )
     return video, metadata
@@ -620,7 +620,7 @@ def load_video(
     backend: str = "pyav",
     sample_indices_fn: Optional[Callable] = None,
     **kwargs,
-) -> np.array:
+) -> np.ndarray:
     """
     Loads `video` to a numpy array.
 
@@ -646,7 +646,7 @@ def load_video(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        tuple[`np.array`, Dict]: A tuple containing:
+        tuple[`np.ndarray`, Dict]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - Metadata dictionary.
     """
@@ -683,7 +683,7 @@ def load_video(
         bytes_obj = buffer.getvalue()
         file_obj = BytesIO(bytes_obj)
     elif video.startswith("http://") or video.startswith("https://"):
-        file_obj = BytesIO(requests.get(video).content)
+        file_obj = BytesIO(httpx.get(video, follow_redirects=True).content)
     elif os.path.isfile(video):
         file_obj = video
     else:
@@ -714,24 +714,21 @@ def load_video(
 
 def convert_to_rgb(
     video: np.ndarray,
-    data_format: Optional[ChannelDimension] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
     """
     Convert video to RGB by blending the transparency layer if it's in RGBA format, otherwise simply returns it.
 
     Args:
-        video (`np.array`):
+        video (`np.ndarray`):
             The video to convert.
-        data_format (`ChannelDimension`, *optional*):
-            The channel dimension format of the output video. If unset, will use the inferred format from the input.
         input_data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the input video. If unset, will use the inferred format from the input.
     """
     if not isinstance(video, np.ndarray):
         raise TypeError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
 
-    # np.array usually comes with ChannelDimension.LAST so leet's convert it
+    # np.array usually comes with ChannelDimension.LAST so let's convert it
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(video)
     video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_channel_dim=input_data_format)
@@ -845,7 +842,7 @@ def pad(
 
 def group_videos_by_shape(
     videos: list["torch.Tensor"],
-) -> tuple[dict[tuple[int, int], list["torch.Tensor"]], dict[int, tuple[tuple[int, int], int]]]:
+) -> tuple[dict[tuple[int, int], "torch.Tensor"], dict[int, tuple[tuple[int, int], int]]]:
     """
     Groups videos by shape.
     Returns a dictionary with the shape as key and a list of videos with that shape as value,
@@ -867,7 +864,8 @@ def group_videos_by_shape(
 
 
 def reorder_videos(
-    processed_videos: dict[tuple[int, int], "torch.Tensor"], grouped_videos_index: dict[int, tuple[int, int]]
+    processed_videos: dict[tuple[int, int], "torch.Tensor"],
+    grouped_videos_index: dict[int, tuple[tuple[int, int], int]],
 ) -> list["torch.Tensor"]:
     """
     Reconstructs a list of videos in the original order.

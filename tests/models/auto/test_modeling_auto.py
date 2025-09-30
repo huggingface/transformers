@@ -13,9 +13,6 @@
 # limitations under the License.
 
 import copy
-import os
-import os.path
-import shutil
 import sys
 import tempfile
 import unittest
@@ -23,7 +20,6 @@ from collections import OrderedDict
 from pathlib import Path
 
 import pytest
-from huggingface_hub import Repository
 
 import transformers
 from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
@@ -42,7 +38,6 @@ from ..bert.test_modeling_bert import BertModelTester
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
-from utils.fetch_hub_objects_for_ci import url_to_local_path
 
 
 if is_torch_available():
@@ -514,12 +509,16 @@ class AutoModelTest(unittest.TestCase):
         ):
             _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
 
-    def test_model_from_tf_suggestion(self):
-        with self.assertRaisesRegex(EnvironmentError, "Use `from_tf=True` to load this model"):
+    def test_model_from_tf_error(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
+        ):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
 
-    def test_model_from_flax_suggestion(self):
-        with self.assertRaisesRegex(EnvironmentError, "Use `from_flax=True` to load this model"):
+    def test_model_from_flax_error(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
+        ):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
 
     @unittest.skip("Failing on main")
@@ -558,26 +557,6 @@ class AutoModelTest(unittest.TestCase):
         _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
         self.assertEqual(_MODEL_MAPPING[BertConfig], GPT2Model)
 
-    def test_dynamic_saving_from_local_repo(self):
-        with tempfile.TemporaryDirectory() as tmp_dir, tempfile.TemporaryDirectory() as tmp_dir_out:
-            # `Repository` is deprecated and will be removed in `huggingface_hub v1.0`.
-            # TODO: Remove this test when this comes.
-            # Here is a ugly approach to avoid `too many requests`
-            repo_id = url_to_local_path("hf-internal-testing/tiny-random-custom-architecture")
-            if os.path.isdir(repo_id):
-                shutil.copytree(repo_id, tmp_dir, dirs_exist_ok=True)
-            else:
-                _ = Repository(
-                    local_dir=tmp_dir,
-                    clone_from=url_to_local_path("hf-internal-testing/tiny-random-custom-architecture"),
-                )
-
-            model = AutoModelForCausalLM.from_pretrained(tmp_dir, trust_remote_code=True)
-            model.save_pretrained(tmp_dir_out)
-            _ = AutoModelForCausalLM.from_pretrained(tmp_dir_out, trust_remote_code=True)
-            self.assertTrue((Path(tmp_dir_out) / "modeling_fake_custom.py").is_file())
-            self.assertTrue((Path(tmp_dir_out) / "configuration_fake_custom.py").is_file())
-
     def test_custom_model_patched_generation_inheritance(self):
         """
         Tests that our inheritance patching for generate-compatible models works as expected. Without this feature,
@@ -594,3 +573,15 @@ class AutoModelTest(unittest.TestCase):
         # More precisely, it directly inherits from GenerationMixin. This check would fail prior to v4.45 (inheritance
         # patching was added in v4.45)
         self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))
+
+    def test_model_with_dotted_name_and_relative_imports(self):
+        """
+        Test for issue #40496: AutoModel.from_pretrained() doesn't work for models with '.' in their name
+        when there's a relative import.
+
+        Without the fix, this raises: ModuleNotFoundError: No module named 'transformers_modules.test-model_v1'
+        """
+        model_id = "hf-internal-testing/remote_code_model_with_dots"
+
+        model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
+        self.assertIsNotNone(model)

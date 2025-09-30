@@ -346,7 +346,6 @@ out.loss.backward()
 This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb).
 The original code can be found [here](https://github.com/SesameAILabs/csm).
 
-
 ## CsmConfig
 
 [[autodoc]] CsmConfig
