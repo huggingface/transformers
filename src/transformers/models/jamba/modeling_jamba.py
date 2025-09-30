@@ -330,16 +330,14 @@ class JambaMambaMixer(nn.Module):
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         batch_size, seq_len, _ = hidden_states.shape
-        if cache_params is None:
-            use_precomputed_states = False
-        else:
-            use_precomputed_states = (
-                cache_params.has_previous_state
-                and seq_len == 1
-                and cache_params.conv_states[self.layer_idx].shape[0]
-                == cache_params.ssm_states[self.layer_idx].shape[0]
-                == batch_size
-            )
+        use_precomputed_states = (
+            cache_params is not None
+            and cache_params.has_previous_state
+            and seq_len == 1
+            and cache_params.conv_states[self.layer_idx].shape[0]
+            == cache_params.ssm_states[self.layer_idx].shape[0]
+            == batch_size
+        )
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -353,8 +351,6 @@ class JambaMambaMixer(nn.Module):
         # 2. Convolution sequence transformation
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
         if use_precomputed_states:
-            if causal_conv1d_update is None:
-                raise ImportError("causal_conv1d_update is not available")
             hidden_states = causal_conv1d_update(
                 hidden_states.squeeze(-1),
                 cache_params.conv_states[self.layer_idx],
@@ -367,8 +363,6 @@ class JambaMambaMixer(nn.Module):
             if cache_params is not None:
                 conv_states = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx].copy_(conv_states)
-            if causal_conv1d_fn is None:
-                raise ImportError("causal_conv1d_fn is not available")
             hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
 
         if attention_mask is not None:
@@ -402,8 +396,6 @@ class JambaMambaMixer(nn.Module):
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         time_proj_bias = time_proj_bias.float() if time_proj_bias is not None else None
         if use_precomputed_states:
-            if selective_state_update is None:
-                raise ImportError("selective_state_update is not available")
             scan_outputs = selective_state_update(
                 cache_params.ssm_states[self.layer_idx],
                 hidden_states[..., 0],
@@ -417,8 +409,6 @@ class JambaMambaMixer(nn.Module):
                 dt_softplus=True,
             ).unsqueeze(-1)
         else:
-            if selective_scan_fn is None:
-                raise ImportError("selective_scan_fn is not available")
             scan_outputs, ssm_state = selective_scan_fn(
                 hidden_states,
                 discrete_time_step,
@@ -1113,11 +1103,16 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
                 "logits_to_keep": self.config.num_logits_to_keep,
             }
         )
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
 
-class JambaForSequenceClassification(GenericForSequenceClassification, JambaPreTrainedModel):
-    pass
+class JambaForSequenceClassification(GenericForSequenceClassification, JambaPreTrainedModel): ...
 
 
 __all__ = ["JambaForCausalLM", "JambaForSequenceClassification", "JambaModel", "JambaPreTrainedModel"]
