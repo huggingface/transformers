@@ -309,6 +309,9 @@ class Qwen2VLConfig(PretrainedConfig):
 
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
+            # We need to pass text kwargs further, otherwise the default BaseClass values (`None`)
+            # will be used to set text config fields.
+            kwargs.update(text_config)
         elif text_config is None:
             # For BC use all kwargs to init `TextConfig`
             self.text_config = self.sub_configs["text_config"](**kwargs)
