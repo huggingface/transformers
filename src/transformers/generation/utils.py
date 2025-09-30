@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import torch
 import torch.distributed as dist
-from huggingface_hub import file_exists
 from packaging import version
 from torch import nn
 
