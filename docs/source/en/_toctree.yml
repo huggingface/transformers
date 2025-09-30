@@ -218,6 +218,11 @@
   title: Quantization
 - isExpanded: false
   sections:
+  - local: kernel_doc/overview
+    title: Kernels in transformers
+  title: Kernels
+- isExpanded: false
+  sections:
   - local: serialization
     title: ONNX
   - local: executorch
