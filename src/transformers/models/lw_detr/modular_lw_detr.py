@@ -831,7 +831,7 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
 
         # batch_size, num_queries, d_model
         query_pos = self.ref_point_head(query_sine_embed)
-        return obj_center, reference_points_inputs, query_pos, query_sine_embed
+        return reference_points_inputs, query_pos
 
     def forward(
         self,
@@ -851,7 +851,7 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
-        obj_center, reference_points_inputs, query_pos, query_sine_embed = self.get_reference(
+        reference_points_inputs, query_pos = self.get_reference(
             reference_points, valid_ratios
         )
 
@@ -894,8 +894,7 @@ class LwDetrModel(DeformableDetrModel):
         self.group_detr = config.group_detr
         self.num_queries = config.num_queries
         hidden_dim = config.d_model
-        query_dim = 4
-        self.reference_point_embed = nn.Embedding(self.num_queries * self.group_detr, query_dim)
+        self.reference_point_embed = nn.Embedding(self.num_queries * self.group_detr, 4)
         self.query_feat = nn.Embedding(self.num_queries * self.group_detr, hidden_dim)
 
         self.decoder = LwDetrDecoder(config)
@@ -912,6 +911,7 @@ class LwDetrModel(DeformableDetrModel):
 
         self.post_init()
 
+    # Copied from modeling_detr.DeformableDetrModel.gen_encoder_output_proposals
     def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
         """Generate the encoder output proposals from encoded enc_output.
 
@@ -1034,7 +1034,7 @@ class LwDetrModel(DeformableDetrModel):
         source_flatten = []
         mask_flatten = []
         spatial_shapes_list = []
-        for level, (source, mask, pos_embed) in enumerate(zip(sources, masks, position_embeddings_list)):
+        for source, mask, pos_embed in zip(sources, masks, position_embeddings_list):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
             spatial_shapes_list.append(spatial_shape)
@@ -1052,8 +1052,6 @@ class LwDetrModel(DeformableDetrModel):
         target = query_feat.unsqueeze(0).expand(batch_size, -1, -1)
         reference_points = reference_points.unsqueeze(0).expand(batch_size, -1, -1)
 
-        enc_outputs_class = None
-        enc_outputs_coord_logits = None
         object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
             source_flatten, ~mask_flatten, spatial_shapes_list
         )
