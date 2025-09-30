@@ -130,58 +130,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
     fill_only = partialmethod(fill_match, must_match=False)
 
-    def override_training_args_from_deepspeed(self, args):
-        """
-        Override TrainingArguments based on DeepSpeed config values to ensure compatibility.
-
-        This method ensures that the DeepSpeed config takes precedence over TrainingArguments
-        defaults when there are conflicts, particularly for mixed precision settings.
-
-        Args:
-            args: TrainingArguments object to potentially modify
-        """
-        # Check precision settings in DeepSpeed config and override TrainingArguments accordingly
-        # Only override defaults, not explicit user settings
-
-        # Check if user explicitly set precision options (we assume defaults are False)
-        user_set_fp16 = args.fp16 is True
-        user_set_bf16 = args.bf16 is True
-
-        if self.is_true("fp16.enabled"):
-            # DeepSpeed config explicitly enables fp16
-            if not user_set_fp16 and not user_set_bf16:
-                # User didn't explicitly set either, so apply DeepSpeed config
-                args.fp16 = True
-                args.bf16 = False
-            elif user_set_bf16 and not user_set_fp16:
-                # User explicitly chose bf16, but DeepSpeed config wants fp16
-                # This is a potential conflict - let user choice win but log a warning
-                pass  # Keep user's bf16=True, fp16=False
-        elif self.is_true("bf16.enabled"):
-            # DeepSpeed config explicitly enables bf16
-            if not user_set_fp16 and not user_set_bf16:
-                # User didn't explicitly set either, so apply DeepSpeed config
-                args.bf16 = True
-                args.fp16 = False
-            elif user_set_fp16 and not user_set_bf16:
-                # User explicitly chose fp16, but DeepSpeed config wants bf16
-                # This is a potential conflict - let user choice win but log a warning
-                pass  # Keep user's fp16=True, bf16=False
-        elif self.is_false("fp16.enabled") and self.is_false("bf16.enabled"):
-            # Both are explicitly disabled in DeepSpeed config
-            if not user_set_fp16 and not user_set_bf16:
-                # User didn't explicitly set either, so apply DeepSpeed config (fp32)
-                args.fp16 = False
-                args.bf16 = False
-
     def trainer_config_process(self, args, auto_find_batch_size=False):
         """
         Adjust the config with `TrainingArguments` values. This stage is run during `TrainingArguments` object
         creation.
         """
-        # First, override TrainingArguments based on DeepSpeed config to ensure compatibility
-        self.override_training_args_from_deepspeed(args)
-
         # DeepSpeed does:
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
         train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
