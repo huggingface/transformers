@@ -264,6 +264,10 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "qwen3_omni_moe_thinker"
+    # Override parent's attribute_map as we use audio_token_id directly, not audio_token_index
+    attribute_map = {}
+
     def __init__(
         self,
         audio_config=None,
