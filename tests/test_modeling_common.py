@@ -4076,8 +4076,7 @@ class ModelTesterMixin:
             # Set sliding window to `True` and check that all tokens beyond window size are masked
             config.use_sliding_window = True
             config_dict = config.to_diff_dict()
-            if hasattr(config, "layer_types"):
-                del config_dict["layer_types"]
+            config_dict.pop("layer_types", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -4094,8 +4093,7 @@ class ModelTesterMixin:
             # Check that all tokens beyond window size are not masked
             config.use_sliding_window = False
             config_dict = config.to_diff_dict()
-            if hasattr(config, "layer_types"):
-                del config_dict["layer_types"]
+            config_dict.pop("layer_types", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
