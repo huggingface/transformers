@@ -126,7 +126,6 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     all_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
@@ -145,7 +144,7 @@ class MllamaVisionText2TextModelTester:
             "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 4,
             "intermediate_size": 37,
@@ -166,7 +165,7 @@ class MllamaVisionText2TextModelTester:
             "intermediate_layers_indices": [0],
             "vision_output_dim": 32,
             "projection_dim": 32,
-            "num_hidden_layers": 6,
+            "num_hidden_layers": 2,
             "num_global_layers": 2,
             "num_attention_heads": 4,
             "intermediate_size": 37,
@@ -281,7 +280,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     )
     pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
     test_torchscript = False
     _is_composite = True
 
@@ -504,6 +502,25 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             del inputs["pixel_values"]
 
             model.generate(input_ids, use_cache=True)
+
+    @pytest.mark.generate
+    def test_left_padding_compatibility(self):
+        # Overwrite -- mllama needs to prepare `cross_attention_mask`, and it must be padded accordingly
+        _, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        input_ids = inputs_dict["input_ids"]
+        cross_attention_mask = inputs_dict["cross_attention_mask"]
+
+        pad_cross_attn_size = (input_ids.shape[0], 32, *cross_attention_mask.shape[2:])
+        extra_cross_attn_mask = torch.zeros(pad_cross_attn_size, dtype=cross_attention_mask.dtype, device=torch_device)
+        padded_cross_attention_mask = torch.cat([extra_cross_attn_mask, cross_attention_mask], dim=1)
+
+        # `cross_attention_mask` is randomly generated in `prepare_config_and_inputs_for_generate`, and it must match
+        # its padded version for the test to be valid -- we need to pass both
+        unpadded_custom_inputs = {"cross_attention_mask": cross_attention_mask}
+        padded_custom_inputs = {"cross_attention_mask": padded_cross_attention_mask}
+        super().test_left_padding_compatibility(
+            unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
+        )
 
 
 @require_torch

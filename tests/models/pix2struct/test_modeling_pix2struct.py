@@ -147,7 +147,6 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Pix2StructVisionModelTester(self)
@@ -315,7 +314,6 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
@@ -414,7 +412,6 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         else {}
     )
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = True
     test_attention_outputs = False
@@ -478,9 +475,6 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 "attention_mask",
                 "decoder_input_ids",
                 "decoder_attention_mask",
-                "head_mask",
-                "decoder_head_mask",
-                "cross_attn_head_mask",
                 "encoder_outputs",
                 "past_key_values",
                 "labels",
@@ -627,6 +621,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:

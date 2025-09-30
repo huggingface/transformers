@@ -35,9 +35,7 @@ The abstract from the paper is the following:
 
 *We tackle the task of conditional music generation. We introduce MusicGen, a single Language Model (LM) that operates over several streams of compressed discrete music representation, i.e., tokens. Unlike prior work, MusicGen is comprised of a single-stage transformer LM together with efficient token interleaving patterns, which eliminates the need for cascading several models, e.g., hierarchically or upsampling. Following this approach, we demonstrate how MusicGen can generate high-quality samples, while being conditioned on textual description or melodic features, allowing better controls over the generated output. We conduct extensive empirical evaluation, considering both automatic and human studies, showing the proposed approach is superior to the evaluated baselines on a standard text-to-music benchmark. Through ablation studies, we shed light over the importance of each of the components comprising MusicGen.*
 
-
 This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the [Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen).
-
 
 ## Difference with [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
 
@@ -45,15 +43,11 @@ There are two key differences with MusicGen:
 1. The audio prompt is used here as a conditional signal for the generated audio sample, whereas it's used for audio continuation in [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen).
 2. Conditional text and audio signals are concatenated to the decoder's hidden states instead of being used as a cross-attention signal, as in MusicGen.
 
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
-
 ## Generation
 
 MusicGen Melody is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly better results than greedy, thus we encourage sampling mode to be used where possible. Sampling is enabled by default, and can be explicitly specified by setting `do_sample=True` in the call to [`MusicgenMelodyForConditionalGeneration.generate`], or by overriding the model's generation config (see below).
 
 Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen Melody. The mono channel versions generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right), and each set of codebooks is decoded independently through the audio compression model. The audio streams for each channel are combined to give the final stereo output.
-
 
 #### Audio Conditional Generation
 
@@ -61,12 +55,13 @@ The model can generate an audio sample conditioned on a text and an audio prompt
 
 In the following examples, we load an audio file using the 🤗 Datasets library, which can be pip installed through the command below:
 
-```
+```bash
 pip install --upgrade pip
 pip install datasets[audio]
 ```
 
 The audio file we are about to use is loaded as follows:
+
 ```python
 >>> from datasets import load_dataset
 
@@ -147,10 +142,9 @@ Or save them as a `.wav` file using a third-party library, e.g. `soundfile`:
 >>> sf.write("musicgen_out.wav", audio_values[0].T.numpy(), sampling_rate)
 ```
 
-
 ### Text-only Conditional Generation
 
-The same [`MusicgenMelodyProcessor`] can be used to pre-process a text-only prompt. 
+The same [`MusicgenMelodyProcessor`] can be used to pre-process a text-only prompt.
 
 ```python
 >>> from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
@@ -167,7 +161,6 @@ The same [`MusicgenMelodyProcessor`] can be used to pre-process a text-only prom
 ```
 
 The `guidance_scale` is used in classifier free guidance (CFG), setting the weighting between the conditional logits (which are predicted from the text prompts) and the unconditional logits (which are predicted from an unconditional or 'null' prompt). Higher guidance scale encourages the model to generate samples that are more closely linked to the input prompt, usually at the expense of poorer audio quality. CFG is enabled by setting `guidance_scale > 1`. For best results, use `guidance_scale=3` (default).
-
 
 You can also generate in batch:
 
@@ -262,7 +255,6 @@ python src/transformers/models/musicgen_melody/convert_musicgen_melody_transform
 Tips:
 * MusicGen is trained on the 32kHz checkpoint of Encodec. You should ensure you use a compatible version of the Encodec model.
 * Sampling mode tends to deliver better results than greedy - you can toggle sampling with the variable `do_sample` in the call to [`MusicgenMelodyForConditionalGeneration.generate`]
-
 
 ## MusicgenMelodyDecoderConfig
 

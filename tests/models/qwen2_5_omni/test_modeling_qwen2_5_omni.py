@@ -99,7 +99,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "vocab_size": 99,
             "hidden_size": 32,
             "intermediate_size": 37,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 2,
             "hidden_act": "silu",
@@ -257,7 +257,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     all_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
     _is_composite = True
     model_split_percents = [0.5, 0.9]
 

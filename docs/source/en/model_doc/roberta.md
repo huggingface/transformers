@@ -28,7 +28,6 @@ rendered properly in your Markdown viewer.
 
 You can find all the original RoBERTa checkpoints under the [Facebook AI](https://huggingface.co/FacebookAI) organization.
 
-
 > [!TIP]
 > Click on the RoBERTa models in the right sidebar for more examples of how to apply RoBERTa to different language tasks.
 
@@ -83,7 +82,7 @@ print(f"The predicted token is: {predicted_token}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers-cli run --task fill-mask --model FacebookAI/roberta-base --device 0
+echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/roberta-base --device 0
 ```
 
 </hfoption>

@@ -144,7 +144,6 @@ class CsmModelTester:
 class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
-    test_headmasking = False
     test_resize_embeddings = False
     test_resize_embeddings_untied = False
 
@@ -362,7 +361,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate(self):
         """
         Tests the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/d25577a357ddcf8f4a8cd0d00baca551, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/d25577a357ddcf8f4a8cd0d00baca551, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         prompt = "<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"
@@ -406,7 +405,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate_no_audio(self):
         """
         Tests the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/aed822f765e928b9612e01b0d8836d69, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/aed822f765e928b9612e01b0d8836d69, which is a script that infers the original model.
         """
 
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
@@ -467,7 +466,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate_multiple_audio(self):
         """
         Test the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/0c94de002e1325abb61d32217f74c0f8, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/0c94de002e1325abb61d32217f74c0f8, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
@@ -526,7 +525,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_1b_model_integration_generate_batched(self):
         """
         Test the generated tokens match the ones from the original model implementation.
-        Such tokens are to be retreived using https://gist.github.com/eustlb/bcc532b53161bc31da3d66cb07ae193f, which is a script that infers the original model.
+        Such tokens are to be retrieved using https://gist.github.com/eustlb/bcc532b53161bc31da3d66cb07ae193f, which is a script that infers the original model.
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 

@@ -55,6 +55,28 @@ class TimmWrapperModelOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
+def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_kwargs):
+    """
+    Creates a timm model and provides a clear error message if the model is not found,
+    suggesting a library update.
+    """
+    try:
+        model = timm.create_model(
+            config.architecture,
+            pretrained=False,
+            **model_kwargs,
+        )
+        return model
+    except RuntimeError as e:
+        if "Unknown model" in str(e):
+            # A good general check for unknown models.
+            raise ImportError(
+                f"The model architecture '{config.architecture}' is not supported in your version of timm ({timm.__version__}). "
+                "Please upgrade timm to a more recent version with `pip install -U timm`."
+            ) from e
+        raise e
+
+
 @auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
@@ -138,7 +160,8 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
-        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0, **extra_init_kwargs)
+        self.features_only = extra_init_kwargs.get("features_only", False)
+        self.timm_model = _create_timm_model_with_error_handling(config, num_classes=0, **extra_init_kwargs)
         self.post_init()
 
     @auto_docstring
@@ -211,20 +234,25 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
 
         pixel_values = pixel_values.to(self.device, self.dtype)
 
-        if output_hidden_states:
-            # to enable hidden states selection
-            if isinstance(output_hidden_states, (list, tuple)):
-                kwargs["indices"] = output_hidden_states
-            last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
-        else:
-            last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
-            hidden_states = None
-
-        if do_pooling:
-            # classification head is not created, applying pooling only
-            pooler_output = self.timm_model.forward_head(last_hidden_state)
-        else:
+        if self.features_only:
+            last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)
+            hidden_states = last_hidden_state if output_hidden_states else None
             pooler_output = None
+        else:
+            if output_hidden_states:
+                # to enable hidden states selection
+                if isinstance(output_hidden_states, (list, tuple)):
+                    kwargs["indices"] = output_hidden_states
+                last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
+            else:
+                last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
+                hidden_states = None
+
+            if do_pooling:
+                # classification head is not created, applying pooling only
+                pooler_output = self.timm_model.forward_head(last_hidden_state)
+            else:
+                pooler_output = None
 
         if not return_dict:
             outputs = (last_hidden_state, pooler_output, hidden_states)
@@ -254,8 +282,8 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             )
 
         extra_init_kwargs = config.model_args or {}
-        self.timm_model = timm.create_model(
-            config.architecture, pretrained=False, num_classes=config.num_labels, **extra_init_kwargs
+        self.timm_model = _create_timm_model_with_error_handling(
+            config, num_classes=config.num_labels, **extra_init_kwargs
         )
         self.num_labels = config.num_labels
         self.post_init()
