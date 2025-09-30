@@ -17,7 +17,7 @@ import unittest
 import tempfile
 
 from transformers import AutoTokenizer, AddedToken, PreTrainedTokenizerFast
-from transformers.models.qwen2 import Qwen2TokenizerFast
+from transformers.models.qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 from transformers.create_fast_tokenizer import SentencePieceExtractor
 from transformers.testing_utils import (
     require_sentencepiece,
