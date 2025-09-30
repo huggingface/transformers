@@ -56,7 +56,7 @@ jobs:
     runs-on:
       group: ${{ fromJson(inputs.runner_map)[matrix.folders][inputs.machine_type] }}
     container:
-      image: huggingface/transformers-all-latest-gpu-test
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Echo input and matrix info
@@ -102,7 +102,7 @@ jobs:
         run: |
           python3 -m pip uninstall -y flash-attn detectron2
           python3 -m pip uninstall -y torch torchvision torchaudio codecarbon torchcodec
-          python3 -m pip install --no-cache-dir torch==2.9.0 torchvision torchaudio torchcodec --index-url https://download.pytorch.org/whl/test/cu128
+          python3 -m pip install --no-cache-dir torch==2.9.0 torchvision torchaudio torchcodec --index-url https://download.pytorch.org/whl/test/cu126
           python3 -m pip install --no-cache-dir codecarbon==3.0.2
 
       - name: NVIDIA-SMI
