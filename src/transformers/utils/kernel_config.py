@@ -62,10 +62,8 @@ class KernelConfig:
                     if mode not in valid_modes:
                         raise ValueError(f"Mode {mode} is not supported")
                     # Check that the value is a LayerRepository
-                    if is_kernels_available():
-                        from kernels import LayerRepository
 
-                        if not isinstance(repo, LayerRepository):
-                            raise ValueError(
-                                f"Value for {layer_name} -> {device} -> {mode} must be a LayerRepository instance"
-                            )
+                    if not repo.__class__.__name__ == "LayerRepository1":
+                        raise ValueError(
+                            f"Value for {layer_name} -> {device} -> {mode} must be a LayerRepository instance"
+                        )
