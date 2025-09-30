@@ -330,7 +330,7 @@ class NllbMoeDenseActDense(nn.Module):
         self.dropout = nn.Dropout(config.activation_dropout)
         self.act = ACT2FN[config.activation_function]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -353,7 +353,7 @@ class NllbMoeExperts(nn.ModuleDict):
         self.moe_token_dropout = config.moe_token_dropout
         self.token_dropout = nn.Dropout(self.moe_token_dropout)
 
-    def forward(self, hidden_states, router_mask, router_probs):
+    def forward(self, hidden_states: torch.Tensor, router_mask: torch.Tensor, router_probs: torch.Tensor):
         final_hidden_states = torch.zeros_like(hidden_states)
         expert_mask = torch.nn.functional.one_hot(router_mask, num_classes=self.num_experts).permute(2, 1, 0)
 
@@ -368,7 +368,7 @@ class NllbMoeExperts(nn.ModuleDict):
                 else:
                     current_hidden_states *= 1 - self.moe_token_dropout
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        return hidden_states
+        return final_hidden_states
 
 
 class NllbMoeSparseMLP(nn.Module):
@@ -540,10 +540,12 @@ class NllbMoeEncoderLayer(GradientCheckpointingLayer):
         self.ff_layer_norm = nn.LayerNorm(config.d_model)
         self.ff_dropout = nn.Dropout(config.activation_dropout)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, _ = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states, _ = self.self_attn(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.attn_dropout(hidden_states)
         hidden_states = residual + hidden_states
         residual = hidden_states
@@ -903,10 +905,10 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             if skip_the_layer:
                 continue
 
-        hidden_states = self.layer_norm(hidden_states)
+        last_hidden_states = self.layer_norm(hidden_states)
 
         return MoEModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states, past_key_values=past_key_values
+            last_hidden_state=last_hidden_states, past_key_values=past_key_values
         )
 
     def _update_causal_mask(
@@ -1064,7 +1066,12 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         )
 
 
-def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
+def load_balancing_loss_func(
+    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
+    num_experts: Optional[int] = None,
+    top_k=2,
+    attention_mask: Optional[torch.Tensor] = None,
+) -> Union[torch.Tensor, int]:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
@@ -1073,34 +1080,72 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     experts is too unbalanced.
 
     Args:
-        router_probs (`torch.Tensor`):
-            Probability assigned to each expert per token. Shape: [batch_size, sequence_length, num_experts].
-        expert_indices (`torch.Tensor`):
-            Indices tensor of shape [batch_size, sequence_length] identifying the selected expert for a given token.
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
 
     Returns:
         The auxiliary loss.
     """
-    num_experts = router_probs.shape[-1]
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
 
-    # cast the expert indices to int64, otherwise one-hot encoding will fail
-    if expert_indices.dtype != torch.int64:
-        expert_indices = expert_indices.to(torch.int64)
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
 
-    if len(expert_indices.shape) == 2:
-        expert_indices = expert_indices.unsqueeze(2)
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
 
-    expert_mask = torch.nn.functional.one_hot(expert_indices, num_experts)
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
 
-    # For a given token, determine if it was routed to a given expert.
-    expert_mask = torch.max(expert_mask, axis=-2).values
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
 
-    # cast to float32 otherwise mean will fail
-    expert_mask = expert_mask.to(torch.float32)
-    tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
 
-    router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
-    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
@@ -1132,7 +1177,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = NllbMoeModel(config)
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
-
+        self.num_experts = config.num_experts
         self.router_z_loss_coef = config.router_z_loss_coef
         self.router_aux_loss_coef = config.router_aux_loss_coef
         # Initialize weights and apply final processing
@@ -1198,13 +1243,12 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
             if output_router_logits:
                 encoder_router_logits = outputs.encoder_router_logits
                 decoder_router_logits = outputs.decoder_router_logits
-
-                # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
-                encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(encoder_router_logits)
-                encoder_aux_loss = load_balancing_loss_func(encoder_router_logits, encoder_expert_indexes)
-
-                decoder_router_logits, decoder_expert_indexes = self._unpack_router_logits(decoder_router_logits)
-                decoder_aux_loss = load_balancing_loss_func(decoder_router_logits, decoder_expert_indexes)
+                encoder_aux_loss = load_balancing_loss_func(
+                    encoder_router_logits, self.num_experts, top_k=2, attention_mask=attention_mask
+                )
+                decoder_aux_loss = load_balancing_loss_func(
+                    decoder_router_logits, self.num_experts, top_k=2, attention_mask=decoder_attention_mask
+                )
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
@@ -1227,19 +1271,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
             encoder_router_logits=outputs.encoder_router_logits,
             decoder_router_logits=outputs.decoder_router_logits,
         )
-
-    def _unpack_router_logits(self, router_outputs):
-        total_router_logits = []
-        total_expert_indexes = []
-        for router_output in router_outputs:
-            if router_output is not None:
-                router_logits, expert_indexes = torch.topk(router_output, 1)
-                total_router_logits.append(router_logits)
-                total_expert_indexes.append(expert_indexes)
-
-        total_router_logits = torch.cat(total_router_logits, dim=1) if len(total_router_logits) > 0 else None
-        total_expert_indexes = torch.stack(total_expert_indexes, dim=1) if len(total_expert_indexes) > 0 else None
-        return total_router_logits, total_expert_indexes
 
 
 __all__ = [
