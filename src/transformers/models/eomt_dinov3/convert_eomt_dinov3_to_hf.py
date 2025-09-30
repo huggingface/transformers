@@ -577,36 +577,42 @@ def _collect_hf_backbone_states(
             mask_logits_list.append(mask_logits)
             class_logits_list.append(class_logits)
 
-            attention_mask = torch.ones(
-                hidden_states.shape[0],
-                hidden_states.shape[1],
-                hidden_states.shape[1],
-                device=hidden_states.device,
-                dtype=torch.bool,
-            )
-
-            interpolated_logits = torch.nn.functional.interpolate(
-                mask_logits,
-                size=model.grid_size,
-                mode="bilinear",
-            ).view(mask_logits.size(0), mask_logits.size(1), -1)
-
-            num_query_tokens = model.config.num_queries
-            encoder_start_tokens = num_query_tokens + model.embeddings.num_prefix_tokens
-            attention_mask[:, :num_query_tokens, encoder_start_tokens:] = interpolated_logits > 0
-
             probs_index = idx - model.num_hidden_layers + model.config.num_blocks
-            attention_mask = model._disable_attention_mask(
-                attention_mask,
-                prob=model.attn_mask_probs[probs_index],
-                num_query_tokens=num_query_tokens,
-                encoder_start_tokens=encoder_start_tokens,
-                device=hidden_states.device,
-            )
+            if model.training or model.attn_mask_probs[probs_index] > 0:
+                attention_mask = torch.ones(
+                    hidden_states.shape[0],
+                    hidden_states.shape[1],
+                    hidden_states.shape[1],
+                    device=hidden_states.device,
+                    dtype=torch.bool,
+                )
 
-            attention_mask = attention_mask[:, None, ...].expand(
-                -1, model.config.num_attention_heads, -1, -1
-            ).to(dtype=hidden_states.dtype)
+                interpolated_logits = torch.nn.functional.interpolate(
+                    mask_logits,
+                    size=model.grid_size,
+                    mode="bilinear",
+                ).view(mask_logits.size(0), mask_logits.size(1), -1)
+
+                num_query_tokens = model.config.num_queries
+                encoder_start_tokens = num_query_tokens + model.embeddings.num_prefix_tokens
+                attention_mask[:, :num_query_tokens, encoder_start_tokens:] = interpolated_logits > 0
+
+                attention_mask = model._disable_attention_mask(
+                    attention_mask,
+                    prob=model.attn_mask_probs[probs_index],
+                    num_query_tokens=num_query_tokens,
+                    encoder_start_tokens=encoder_start_tokens,
+                    device=hidden_states.device,
+                )
+
+                attention_mask = attention_mask[:, None, ...].expand(
+                    -1, model.config.num_attention_heads, -1, -1
+                )
+
+                bool_attention_mask = attention_mask
+                attention_mask = attention_mask.float().masked_fill(~bool_attention_mask, -1e9)
+                if attention_mask.dtype != hidden_states.dtype:
+                    attention_mask = attention_mask.to(dtype=hidden_states.dtype)
 
         hidden_states = layer_module(
             hidden_states,
