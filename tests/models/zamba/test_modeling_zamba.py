@@ -391,13 +391,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        r"""
-        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
-        Mamba block are initialized differently and we tested that in test_initialization
-        """
-        self.skipTest("Cumbersome and redundant for Zamba")
-
     def test_attention_outputs(self):
         r"""
         Overriding the test_attention_outputs test as the Zamba model outputs attention only for its attention layers

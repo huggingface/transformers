@@ -20,13 +20,13 @@ import sys
 import threading
 from logging import (
     CRITICAL,  # NOQA
-    DEBUG,  # NOQA
-    ERROR,  # NOQA
+    DEBUG,
+    ERROR,
     FATAL,  # NOQA
-    INFO,  # NOQA
+    INFO,
     NOTSET,  # NOQA
     WARN,  # NOQA
-    WARNING,  # NOQA
+    WARNING,
 )
 from logging import captureWarnings as _captureWarnings
 from typing import Optional
