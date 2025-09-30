@@ -107,6 +107,7 @@ from .utils import (
     is_torch_xla_available,
     is_torch_xpu_available,
     logging,
+    KernelConfig,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
@@ -4491,6 +4492,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         use_kernels = kwargs.pop("use_kernels", False)
+        kernel_config = kwargs.pop("kernel_config", None)
 
         key_mapping = kwargs.pop("key_mapping", None)
         # Load models with hardcoded key mapping on class for VLMs only, to keep BC and standardize model
@@ -4883,10 +4885,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model.eval()
 
         # check if using kernels
-        print(model.model.layers[0].input_layernorm.kernel_layer_name)
         if use_kernels:
-            model.use_kernels = True
+            if not is_kernels_available():
+                raise ValueError(
+                    "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+                )
+            from kernels import use_kernel_mapping
 
+            if kernel_config is not None and isinstance(kernel_config, KernelConfig):
+                kernel_config.sanitize_kernel_mapping(model)
+
+                with use_kernel_mapping(kernel_config.kernel_mapping):
+                    model.use_kernels = True
+            else:
+                model.use_kernels = True
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
         if model.can_generate() and generation_config is not None:
@@ -5546,14 +5558,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def loss_function(self, value):
         self._loss_function = value
 
-    def kernelize(self):
+    def kernelize(self, mode=None):
         if not is_kernels_available():
             raise ValueError(
                 "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
             )
         from kernels import Device, Mode, kernelize
 
-        mode = Mode.INFERENCE if not self.training else Mode.TRAINING
+        mode = Mode.INFERENCE if not self.training else Mode.TRAINING if mode is None else mode
         kernelize(self, device=Device(type=self.device.type), mode=mode)
         self._use_kernels = True
 
