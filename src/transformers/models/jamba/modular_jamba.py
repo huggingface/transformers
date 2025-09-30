@@ -652,14 +652,8 @@ class JambaPreTrainedModel(PreTrainedModel):
             module.D.data.fill_(1.0)
 
 
+@auto_docstring
 class JambaModel(JambaPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JambaDecoderLayer`]
-
-    Args:
-        config: JambaConfig
-    """
-
     def __init__(self, config: JambaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
