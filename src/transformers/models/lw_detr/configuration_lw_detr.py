@@ -5,9 +5,7 @@
 #                          modular_lw_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from ...configuration_utils import PretrainedConfig
-from ...utils import (
-    logging,
-)
+from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 from .configuration_lw_detr_vit import LwDetrViTConfig
@@ -78,9 +76,6 @@ class LwDetrConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        two_stage (`bool`, *optional*, defaults to `True`):
-            Whether to apply a two-stage detection approach, where region proposals are generated first
-            and then refined by the decoder.
         group_detr (`int`, *optional*, defaults to 13):
             Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
         init_std (`float`, *optional*, defaults to 0.02):
@@ -88,8 +83,6 @@ class LwDetrConfig(PretrainedConfig):
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.
-        bbox_reparam (`bool`, *optional*, defaults to `True`):
-            Whether to use bounding box reparameterization for better training stability.
         class_cost (`float`, *optional*, defaults to 2):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
@@ -161,11 +154,9 @@ class LwDetrConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         position_embedding_type="sine",
-        two_stage=True,
         group_detr: int = 13,
         init_std=0.02,
         disable_custom_kernels=True,
-        bbox_reparam=True,
         # loss
         class_cost=2,
         bbox_cost=5,
@@ -238,9 +229,7 @@ class LwDetrConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         # model
         self.position_embedding_type = position_embedding_type
-        self.two_stage = two_stage
         self.init_std = init_std
-        self.bbox_reparam = bbox_reparam
         self.group_detr = group_detr
         # Loss
         self.auxiliary_loss = auxiliary_loss
